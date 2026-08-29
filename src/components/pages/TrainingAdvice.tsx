@@ -13,6 +13,7 @@ import {
   sortTrainingRecommendations,
 } from "@/components/training-advice/presentation";
 import { Button } from "@/components/ui/button";
+import { useLanguageDemo } from "@/language-demo";
 import type {
   BaseBlueprint,
   OperBoxEntry,
@@ -135,6 +136,8 @@ export function TrainingAdvice({
   requiresAccount = false,
   onOpenCalculator,
 }: TrainingAdviceProps) {
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
   const shouldReduceMotion = useReducedMotion();
   const entries = operbox ?? [];
   const ownedByName = new Map(entries.map((entry) => [entry.name, entry]));
@@ -154,17 +157,17 @@ export function TrainingAdvice({
   if (requiresAccount) {
     return (
       <div className="flex w-full flex-col gap-5 pt-5" data-training-page>
-        <section className="min-w-0" aria-label="训练建议概览">
+        <section className="min-w-0" aria-label={en ? "Training advice overview" : "训练建议概览"}>
           <div className="mb-2 flex min-w-0 items-center gap-2.5">
             <span className="h-7 w-1.5 shrink-0 bg-[#FFD501]" aria-hidden="true" />
-            <h1 className="truncate text-[21px] font-medium leading-none text-[#313131]">训练建议</h1>
+            <h1 className="truncate text-[21px] font-medium leading-none text-[#313131]">{en ? "Training Advice" : "训练建议"}</h1>
           </div>
           <InfraTechnicalCard group="training" className="min-h-[248px]" dataSlot="training-account-required" showEmblem={false}>
             <div className="grid min-h-[216px] place-content-center text-center">
               <CircleAlert className="mx-auto size-8 text-[var(--room-accent)]" aria-hidden="true" />
-              <h2 className="mt-4 text-xl font-semibold">登录后查看练卡建议</h2>
-              <p className="mt-2 max-w-lg text-sm leading-6 text-white/62">当前数据来自自主上传或第三方同步。请前往账号管理登录；匿名状态仍可改用全角色样例生成建议。</p>
-              <Button type="button" className="mx-auto mt-4 h-9 bg-white text-[#272a2b] hover:bg-white/90 max-sm:h-11" onClick={onOpenCalculator}>返回基建计算器</Button>
+              <h2 className="mt-4 text-xl font-semibold">{en ? "Sign in to view training advice" : "登录后查看练卡建议"}</h2>
+              <p className="mt-2 max-w-lg text-sm leading-6 text-white/62">{en ? "Data comes from your upload or a third-party sync. Sign in under Account, or use the full-roster sample without an account." : "当前数据来自自主上传或第三方同步。请前往账号管理登录；匿名状态仍可改用全角色样例生成建议。"}</p>
+              <Button type="button" className="mx-auto mt-4 h-9 bg-white text-[#272a2b] hover:bg-white/90 max-sm:h-11" onClick={onOpenCalculator}>{en ? "Back to calculator" : "返回基建计算器"}</Button>
             </div>
           </InfraTechnicalCard>
         </section>
@@ -174,10 +177,10 @@ export function TrainingAdvice({
 
   return (
     <div className="flex w-full flex-col gap-5 pt-5" data-training-page>
-      <section className="min-w-0" aria-label="训练建议概览">
+      <section className="min-w-0" aria-label={en ? "Training advice overview" : "训练建议概览"}>
         <div className="mb-2 flex min-w-0 items-center gap-2.5">
           <span className="h-7 w-1.5 shrink-0 bg-[#FFD501]" aria-hidden="true" />
-          <h1 className="truncate text-[21px] font-medium leading-none text-[#313131]">训练建议</h1>
+          <h1 className="truncate text-[21px] font-medium leading-none text-[#313131]">{en ? "Training Advice" : "训练建议"}</h1>
           <span className="font-number text-xs text-[#313131]/52">
             {advice ? recommendations.length : actions.length}
           </span>
@@ -186,18 +189,18 @@ export function TrainingAdvice({
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(28rem,0.8fr)] lg:items-end">
             <div>
               <InfraTechnicalHeading icon={<GraduationCap className="size-4" aria-hidden="true" />}>
-                最近一次排班
+                {en ? "Latest schedule" : "最近一次排班"}
               </InfraTechnicalHeading>
               <h2 className="mt-4 text-[23px] font-medium leading-tight tracking-[-0.02em]">
-                根据最近排班整理的培养方向
+                {en ? "Training priorities based on the latest schedule" : "根据最近排班整理的培养方向"}
               </h2>
             </div>
             <div className="grid grid-cols-2 gap-px bg-white/10 sm:grid-cols-4">
               {[
-                ["布局", layout?.template || "—"],
-                ["房间", roomCounts.total || "—"],
-                ["已拥有", entries.length ? ownedTotal : "—"],
-                ["已精二", entries.length ? eliteTotal : "—"],
+                [en ? "Layout" : "布局", layout?.template || "—"],
+                [en ? "Rooms" : "房间", roomCounts.total || "—"],
+                [en ? "Owned" : "已拥有", entries.length ? ownedTotal : "—"],
+                [en ? "Elite 2" : "已精二", entries.length ? eliteTotal : "—"],
               ].map(([label, value]) => (
                 <div key={label} className="min-w-0 bg-black/24 px-3 py-3">
                   <span className="text-[10px] text-white/48">{label}</span>
@@ -208,33 +211,33 @@ export function TrainingAdvice({
               ))}
               {advice ? (
                 <div className="col-span-2 flex flex-wrap items-center gap-x-3 gap-y-1 bg-black/24 px-3 py-2 text-xs text-white/65 sm:col-span-4">
-                  <span>效率</span>
+                  <span>{en ? "Efficiency" : "效率"}</span>
                   <span>
-                    <span className="font-number">{formatPercent(context?.trade_average_efficiency_percent)}</span> 贸易
+                    <span className="font-number">{formatPercent(context?.trade_average_efficiency_percent)}</span> {en ? "Trading" : "贸易"}
                   </span>
                   <span>
-                    <span className="font-number">{formatPercent(context?.manufacturing_average_efficiency_percent)}</span> 制造
+                    <span className="font-number">{formatPercent(context?.manufacturing_average_efficiency_percent)}</span> {en ? "Manufacturing" : "制造"}
                   </span>
                   {context?.dormitory_level_sum != null ? (
-                    <span><span className="font-number">{context.dormitory_level_sum}</span> 宿舍级</span>
+                    <span><span className="font-number">{context.dormitory_level_sum}</span> {en ? "Dorm levels" : "宿舍级"}</span>
                   ) : null}
                   {context?.engineering_robot_count != null ? (
-                    <span><span className="font-number">{context.engineering_robot_count}</span> 机器人</span>
+                    <span><span className="font-number">{context.engineering_robot_count}</span> {en ? "Robots" : "机器人"}</span>
                   ) : null}
                   {context?.meeting_room_max_level != null ? (
-                    <span>会客室 Lv<span className="font-number">{context.meeting_room_max_level}</span></span>
+                    <span>{en ? "Reception Room" : "会客室"} Lv<span className="font-number">{context.meeting_room_max_level}</span></span>
                   ) : null}
                   {context?.has_originium_shard_factory != null ? (
-                    <span>搓玉 {context.has_originium_shard_factory ? "是" : "否"}</span>
+                    <span>{en ? "Originium Shards" : "搓玉"} {context.has_originium_shard_factory ? (en ? "Yes" : "是") : (en ? "No" : "否")}</span>
                   ) : null}
                 </div>
               ) : (
                 <div className="col-span-2 flex flex-wrap items-center gap-x-3 gap-y-1 bg-black/24 px-3 py-2 text-xs text-white/65 sm:col-span-4">
-                  <span>设施</span>
-                  <span><span className="font-number">{roomCounts.trade}</span> 贸易</span>
-                  <span><span className="font-number">{roomCounts.factory}</span> 制造</span>
-                  <span><span className="font-number">{roomCounts.power}</span> 发电</span>
-                  <span><span className="font-number">{roomCounts.dormitory}</span> 宿舍</span>
+                  <span>{en ? "Facilities" : "设施"}</span>
+                  <span><span className="font-number">{roomCounts.trade}</span> {en ? "Trading" : "贸易"}</span>
+                  <span><span className="font-number">{roomCounts.factory}</span> {en ? "Factories" : "制造"}</span>
+                  <span><span className="font-number">{roomCounts.power}</span> {en ? "Power Plants" : "发电"}</span>
+                  <span><span className="font-number">{roomCounts.dormitory}</span> {en ? "Dormitories" : "宿舍"}</span>
                 </div>
               )}
             </div>
@@ -244,10 +247,10 @@ export function TrainingAdvice({
 
       {issues.length ? (
         <InfraTechnicalCard group="manufacture" dataSlot="training-data-check" showEmblem={false}>
-          <div className="flex gap-3 text-sm" aria-label="数据检查问题">
+          <div className="flex gap-3 text-sm" aria-label={en ? "Data validation issues" : "数据检查问题"}>
             <CircleAlert className="mt-0.5 size-5 shrink-0 text-[var(--room-accent)]" aria-hidden="true" />
             <div>
-              <strong className="text-[var(--room-accent)]">还需要补充以下信息</strong>
+              <strong className="text-[var(--room-accent)]">{en ? "More information is required" : "还需要补充以下信息"}</strong>
               <ul className="mt-2 grid gap-1 text-white/72">
                 {issues.map((issue) => <li key={issue}>• {issue}</li>)}
               </ul>
@@ -256,9 +259,9 @@ export function TrainingAdvice({
         </InfraTechnicalCard>
       ) : (
         <InfraTechnicalCard group="power" dataSlot="training-data-check" showEmblem={false}>
-          <div className="flex gap-3 text-sm" aria-label="数据检查">
+          <div className="flex gap-3 text-sm" aria-label={en ? "Data validation" : "数据检查"}>
             <ClipboardCheck className="mt-0.5 size-5 shrink-0 text-[var(--room-accent)]" aria-hidden="true" />
-            <p className="text-white/76">当前基建设施与干员数据已通过基础检查，可以生成排班。</p>
+            <p className="text-white/76">{en ? "Infrastructure and operator data passed the basic checks." : "当前基建设施与干员数据已通过基础检查，可以生成排班。"}</p>
           </div>
         </InfraTechnicalCard>
       )}
@@ -268,7 +271,7 @@ export function TrainingAdvice({
           {advice.newbie_section_status === "shown" && advice.incomplete_newbie.length ? (
             <CollapsibleSection
               accent="bg-[#B8F03A]"
-              title="新手目标"
+              title={en ? "Beginner Goals" : "新手目标"}
               count={advice.incomplete_newbie.length}
               collapsed={Boolean(collapsedSections.newbie)}
               onToggle={() => toggleSection("newbie")}
@@ -286,20 +289,20 @@ export function TrainingAdvice({
           ) : advice.newbie_section_status === "skipped_by_efficiency" ? (
             <InfraTechnicalCard group="power" dataSlot="training-newbie-skipped" showEmblem={false}>
               <p className="text-sm leading-6 text-white/76">
-                当前贸易与制造均效已高于新手门槛，本轮不把基础名单列为优先行动；仍有
+                {en ? "Average trading and manufacturing efficiency already exceeds the beginner threshold. The basic roster is not prioritized this round; " : "当前贸易与制造均效已高于新手门槛，本轮不把基础名单列为优先行动；仍有"}
                 <span className="font-number mx-1 text-[var(--room-accent)]">{advice.incomplete_newbie.length}</span>
-                名干员未完成基础目标。
+                {en ? "operators still have incomplete basic goals." : "名干员未完成基础目标。"}
               </p>
             </InfraTechnicalCard>
           ) : advice.newbie_section_status === "complete" ? (
             <InfraTechnicalCard group="power" dataSlot="training-newbie-complete" showEmblem={false}>
-              <p className="text-sm leading-6 text-white/76">基础练卡目标已完成。</p>
+              <p className="text-sm leading-6 text-white/76">{en ? "Basic training goals are complete." : "基础练卡目标已完成。"}</p>
             </InfraTechnicalCard>
           ) : null}
 
           <CollapsibleSection
             accent="bg-[#29BDF5]"
-            title="练卡建议"
+            title={en ? "Training Recommendations" : "练卡建议"}
             count={recommendations.length}
             collapsed={Boolean(collapsedSections.actions)}
             onToggle={() => toggleSection("actions")}
@@ -318,9 +321,9 @@ export function TrainingAdvice({
             ) : (
               <InfraTechnicalCard group="training" className="min-h-[248px]" dataSlot="training-empty" showEmblem={false}>
                 <div className="grid min-h-[216px] place-content-center text-center">
-                  <h3 className="text-xl font-semibold">暂无优先培养目标</h3>
+                  <h3 className="text-xl font-semibold">{en ? "No priority training targets" : "暂无优先培养目标"}</h3>
                   <p className="mt-2 max-w-lg text-sm leading-6 text-white/62">
-                    当前干员与布局没有需要优先培养的项目，可以继续使用现有排班。
+                    {en ? "No operator or layout requires priority training. You can continue using the current schedule." : "当前干员与布局没有需要优先培养的项目，可以继续使用现有排班。"}
                   </p>
                 </div>
               </InfraTechnicalCard>
@@ -329,7 +332,7 @@ export function TrainingAdvice({
 
           <CollapsibleSection
             accent="bg-[#FFD501]"
-            title="组合进度"
+            title={en ? "Combination Progress" : "组合进度"}
             count={combinations.length}
             collapsed={Boolean(collapsedSections.combinations)}
             onToggle={() => toggleSection("combinations")}
@@ -344,7 +347,7 @@ export function TrainingAdvice({
       ) : (
         <CollapsibleSection
           accent="bg-[#29BDF5]"
-          title="培养建议"
+          title={en ? "Training Recommendations" : "培养建议"}
           count={actions.length}
           collapsed={Boolean(collapsedSections["legacy-actions"])}
           onToggle={() => toggleSection("legacy-actions")}
@@ -365,21 +368,21 @@ export function TrainingAdvice({
               <div className="grid min-h-[216px] gap-6 sm:grid-cols-[minmax(0,1fr)_15rem] sm:items-center">
                 <motion.div className="max-w-xl" initial={{ opacity: 0, x: shouldReduceMotion ? 0 : -12 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: shouldReduceMotion ? 0 : 0.38, ease: [0.23, 1, 0.32, 1] }}>
                   <h3 className="text-xl font-semibold">
-                    {profile ? "本次排班暂无培养建议" : "尚无培养建议"}
+                    {profile ? (en ? "No recommendations for this schedule" : "本次排班暂无培养建议") : (en ? "No training recommendations yet" : "尚无培养建议")}
                   </h3>
                   {profile ? (
                     <p className="mt-2 max-w-lg text-sm leading-6 text-white/62">
-                      当前干员与布局没有需要优先培养的项目，可以继续使用现有排班。
+                      {en ? "No operator or layout requires priority training. You can continue using the current schedule." : "当前干员与布局没有需要优先培养的项目，可以继续使用现有排班。"}
                     </p>
                   ) : null}
                   <div className="mt-5 flex justify-start">
                     <Button type="button" size="dialog" className="bg-white text-[#272a2b] hover:bg-white/90" onClick={onOpenCalculator}>
-                      {profile ? "查看当前排班" : "前往生成排班"}
+                      {profile ? (en ? "View current schedule" : "查看当前排班") : (en ? "Generate a schedule" : "前往生成排班")}
                     </Button>
                   </div>
                 </motion.div>
                 <motion.div className="hidden border-y border-white/12 py-3 sm:block" aria-hidden="true" initial={{ opacity: 0, x: shouldReduceMotion ? 0 : 12 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: shouldReduceMotion ? 0 : 0.38, delay: shouldReduceMotion ? 0 : 0.08, ease: [0.23, 1, 0.32, 1] }}>
-                  {["干员练度扫描", "设施领域分析", "优先级队列"].map((label, index) => (
+                  {(en ? ["Operator progression scan", "Facility analysis", "Priority queue"] : ["干员练度扫描", "设施领域分析", "优先级队列"]).map((label, index) => (
                     <div key={label} className="grid grid-cols-[auto_1fr_auto] items-center gap-2 border-b border-white/8 py-2.5 last:border-0">
                       <span className="font-number text-[10px] text-white/35">0{index + 1}</span>
                       <span className="text-xs text-white/65">{label}</span>

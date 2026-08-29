@@ -21,6 +21,7 @@ import { WorkbenchContext } from "@/workbench-context";
 import { WORKBENCH_PAGE_PATHS, workbenchHref, workbenchPageFromPathname, type AppPage } from "@/workbench-routes";
 import { useWebsiteSession } from "@/website-session";
 import { usePlanTask } from "@/hooks/use-plan-task";
+import { LanguageDemoProvider, LanguageDemoSwitch, useLanguageDemo } from "@/language-demo";
 
 import {
   computePlan,
@@ -213,7 +214,8 @@ function mergeSklandLayout(current: BaseBlueprint, suggestion: BaseBlueprint): B
   };
 }
 
-function WorkbenchApp({ children }: { children: ReactNode }) {
+function WorkbenchAppContent({ children }: { children: ReactNode }) {
+  const { locale } = useLanguageDemo();
   const pathname = usePathname();
   const router = useRouter();
   const page = workbenchPageFromPathname(pathname);
@@ -1680,19 +1682,20 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       </div>
 
       <footer className="app-content-track mt-auto flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border/70 py-5 text-xs text-muted-foreground">
-        <span>非官方、小范围测试中的排班辅助工具</span>
-        <Link prefetch={false} className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/terms">本站服务条款</Link>
-        <Link prefetch={false} className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/privacy">本站隐私政策</Link>
-        <a className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/about" data-about-link>关于我们</a>
+        <span>{locale === "en" ? "Unofficial infrastructure scheduling tool in limited beta" : "非官方、小范围测试中的排班辅助工具"}</span>
+        <Link prefetch={false} className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/terms">{locale === "en" ? "Terms" : "本站服务条款"}</Link>
+        <Link prefetch={false} className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/privacy">{locale === "en" ? "Privacy" : "本站隐私政策"}</Link>
+        <a className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/about" data-about-link>{locale === "en" ? "About" : "关于我们"}</a>
+        <div className="ml-auto shrink-0"><LanguageDemoSwitch /></div>
         <a
           href="https://www.rainyun.com/riic_"
           target="_blank"
           rel="noopener noreferrer"
-          aria-label="由雨云提供计算服务（在新标签页打开雨云官网）"
+          aria-label={locale === "en" ? "Computing services powered by Rainyun (opens in a new tab)" : "由雨云提供计算服务（在新标签页打开雨云官网）"}
           data-rainyun-link
-          className="ml-auto inline-flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-sm px-1 text-[11px] leading-none opacity-70 outline-none transition-[opacity,transform] duration-180 ease-[var(--motion-ease-out)] hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-foreground/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.96] motion-reduce:transition-none motion-reduce:active:scale-100 max-sm:mt-1"
+          className="inline-flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-sm px-1 text-[11px] leading-none opacity-70 outline-none transition-[opacity,transform] duration-180 ease-[var(--motion-ease-out)] hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-foreground/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.96] motion-reduce:transition-none motion-reduce:active:scale-100 max-sm:mt-1"
         >
-          <span className="block leading-none" data-rainyun-copy>由</span>
+          <span className="block leading-none" data-rainyun-copy>{locale === "en" ? "Powered by" : "由"}</span>
           <img
             src="/images/partners/rainyun-logo.png"
             alt=""
@@ -1702,7 +1705,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
             decoding="async"
             className="block h-5 w-14 object-contain sm:h-[23px] sm:w-16"
           />
-          <span className="block leading-none" data-rainyun-copy>提供计算服务</span>
+          <span className="block leading-none" data-rainyun-copy>{locale === "en" ? "computing services" : "提供计算服务"}</span>
         </a>
       </footer>
 
@@ -1791,6 +1794,10 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       </TooltipProvider>
     </AppMotionProvider>
   );
+}
+
+function WorkbenchApp({ children }: { children: ReactNode }) {
+  return <LanguageDemoProvider><WorkbenchAppContent>{children}</WorkbenchAppContent></LanguageDemoProvider>;
 }
 
 export default WorkbenchApp;

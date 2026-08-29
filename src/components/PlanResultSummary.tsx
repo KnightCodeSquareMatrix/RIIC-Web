@@ -15,6 +15,11 @@ import { estimateDailyProduction, type DailyProductionUnavailableReason } from "
 import { dailyProductionGroups, type DailyProductionGroup, type ProductionDetailProduct } from "@/daily-production-presentation";
 import { manufacturePoolReady } from "@/efficiency";
 import { cn } from "@/lib/utils";
+import { useLanguageDemo } from "@/language-demo";
+
+const EN_PRODUCT_LABELS: Record<string, string> = { experience: "Experience", "lmd-orders": "LMD", gold: "Pure Gold", orundum: "Orundum", shards: "Originium Shards" };
+function productLabel(product: { id: string; label: string }, en: boolean) { return en ? EN_PRODUCT_LABELS[product.id] ?? product.label : product.label; }
+function productUnit(unit: string, en: boolean) { return en ? ({ "经验": "EXP", "龙门币": "LMD", "合成玉": "Orundum", "枚": "pcs" }[unit] ?? unit) : unit; }
 import { MOTION_DURATION, MOTION_EASE_OUT } from "@/motion";
 import { formatPlanDuration, relativeMetricDelta, type RotationMetricKind } from "@/rotation-presentation";
 import { countShiftPlacementAdjustments } from "@/skland";
@@ -100,6 +105,8 @@ export function PlanResultSummary({
   onEntranceConsumed?: (revision: string) => void;
   onPerformanceIssue: () => void;
 }) {
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
   const shouldReduceMotion = useReducedMotion();
   const [animateOnMount] = useState(animateEntrance);
   const [detailSection, setDetailSection] = useState<DetailSection>("efficiency");
@@ -113,9 +120,9 @@ export function PlanResultSummary({
   const currentRotation = profile?.rotation;
   const baselineRotation = profile?.baseline_rotation;
   const efficiencyMetrics = [
-    { kind: "trade" as const, label: "贸易产线", value: rotation?.daily.trade ?? currentRotation?.daily_trade_efficiency ?? currentRotation?.daily_trade, baseline: baselineRotation?.daily_trade_efficiency ?? baselineRotation?.daily_trade },
-    { kind: "manu" as const, label: "制造产线", value: rotation?.daily.manufacture ?? currentRotation?.daily_manufacture_efficiency ?? currentRotation?.daily_manu, baseline: baselineRotation?.daily_manufacture_efficiency ?? baselineRotation?.daily_manu },
-    { kind: "power" as const, label: "发电产线", value: rotation?.daily.power ?? currentRotation?.daily_power_efficiency ?? currentRotation?.daily_power, baseline: baselineRotation?.daily_power_efficiency ?? baselineRotation?.daily_power },
+    { kind: "trade" as const, label: en ? "Trading" : "贸易产线", value: rotation?.daily.trade ?? currentRotation?.daily_trade_efficiency ?? currentRotation?.daily_trade, baseline: baselineRotation?.daily_trade_efficiency ?? baselineRotation?.daily_trade },
+    { kind: "manu" as const, label: en ? "Manufacturing" : "制造产线", value: rotation?.daily.manufacture ?? currentRotation?.daily_manufacture_efficiency ?? currentRotation?.daily_manu, baseline: baselineRotation?.daily_manufacture_efficiency ?? baselineRotation?.daily_manu },
+    { kind: "power" as const, label: en ? "Power" : "发电产线", value: rotation?.daily.power ?? currentRotation?.daily_power_efficiency ?? currentRotation?.daily_power, baseline: baselineRotation?.daily_power_efficiency ?? baselineRotation?.daily_power },
   ].filter((metric): metric is { kind: RotationMetricKind; label: string; value: number; baseline: number | undefined } => typeof metric.value === "number");
   const solverDaily = rotation?.daily?.production ?? null;
   const production = rotation && !solverDaily ? estimateDailyProduction({ layout, maa, rotation }) : null;
@@ -140,7 +147,7 @@ export function PlanResultSummary({
     <>
       <motion.section
         className="relative mb-5 overflow-hidden border border-[#313131]/18 bg-[#F3F1EA] text-[#313131] shadow-[0_12px_30px_rgba(35,38,39,0.10)]"
-        aria-label="排班结果摘要"
+        aria-label={en ? "Schedule result summary" : "排班结果摘要"}
         data-plan-summary
         data-plan-result-summary
         data-plan-revision={planRevision}
@@ -159,13 +166,13 @@ export function PlanResultSummary({
         <div key={planRevision} className="grid min-h-[84px] grid-cols-[minmax(10rem,1.05fr)_minmax(0,5fr)] items-stretch max-[820px]:grid-cols-1">
           <motion.button type="button" className={cn("group relative flex min-w-0 items-center justify-between gap-3 overflow-hidden bg-[#272A2B] px-5 py-3 text-left text-white focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-[#FFD800] max-[820px]:row-span-1 max-sm:min-h-16", comparison && "row-span-2")} data-plan-details-trigger="efficiency" data-plan-primary-details-trigger whileHover={shouldReduceMotion ? undefined : { x: 2 }} whileTap={shouldReduceMotion ? undefined : { scale: 0.985 }} onClick={() => openDetails("efficiency")}>
             <motion.span className="min-w-0" data-plan-metric initial={animateOnMount ? { opacity: 0, x: shouldReduceMotion ? 0 : -10 } : false} animate={{ opacity: 1, x: 0 }} transition={{ duration: shouldReduceMotion ? MOTION_DURATION.feedback : 0.36, delay: shouldReduceMotion ? 0 : 0.1, ease: MOTION_EASE_OUT }}>
-              <strong className="block truncate text-lg font-medium"><span className="font-number">{layout.template}</span> 基建方案</strong>
-              <span className="mt-1 block text-[10px] text-white/45">用时 <span className="font-number">{formatPlanDuration(durationMs)}</span> · 点击查看详情</span>
+              <strong className="block truncate text-lg font-medium"><span className="font-number">{layout.template}</span> {en ? "Base Plan" : "基建方案"}</strong>
+              <span className="mt-1 block text-[10px] text-white/45">{en ? "Generated in" : "用时"} <span className="font-number">{formatPlanDuration(durationMs)}</span> · {en ? "View details" : "点击查看详情"}</span>
             </motion.span>
             <ChevronRight className="size-4 shrink-0 text-white/55 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
           </motion.button>
 
-          <div className="grid min-w-0 grid-cols-3 max-sm:grid-cols-2" aria-label="预计日产物" data-daily-production-summary data-production-source={productGroups[0]?.source}>
+          <div className="grid min-w-0 grid-cols-3 max-sm:grid-cols-2" aria-label={en ? "Estimated daily production" : "预计日产物"} data-daily-production-summary data-production-source={productGroups[0]?.source}>
             {productGroups.map((productGroup, index) => (
               <motion.button
                 key={productGroup.id}
@@ -184,20 +191,20 @@ export function PlanResultSummary({
                   transition={{ duration: shouldReduceMotion ? MOTION_DURATION.feedback : 0.36, delay: shouldReduceMotion ? 0 : 0.15 + index * 0.065, ease: MOTION_EASE_OUT }}
                 >
                   <span className="block min-w-0" data-daily-product={productGroup.primary.id}>
-                    <span className="font-number block truncate pr-6 text-[10px] font-medium tracking-[0.06em] text-[#313131]/58">{productGroup.primary.label}</span>
+                    <span className="font-number block truncate pr-6 text-[10px] font-medium tracking-[0.06em] text-[#313131]/58">{productLabel(productGroup.primary, en)}</span>
                     <strong className="font-technical mt-1 flex min-w-0 items-baseline gap-1 leading-none tabular-nums">
                       <span className="truncate text-[clamp(1rem,1.5vw,1.35rem)] font-semibold"><AnimatedNumber value={dailyNumber(productGroup.primary.amount.value)} drift={{ x: 0, y: shouldReduceMotion ? 0 : 8 }} /></span>
-                      {productGroup.primary.amount.value === null ? null : <span className="shrink-0 text-[9px] font-medium text-[#313131]/45">{productGroup.primary.unit}</span>}
+                      {productGroup.primary.amount.value === null ? null : <span className="shrink-0 text-[9px] font-medium text-[#313131]/45">{productUnit(productGroup.primary.unit, en)}</span>}
                     </strong>
                     {productGroup.primary.amount.value === null ? <span className="mt-1 block truncate text-[10px] font-semibold text-amber-800">{unavailableReason(productGroup.primary.amount.unavailableReason)}</span> : null}
                   </span>
                   {productGroup.supporting ? (
                     <span className="mt-2 flex min-w-0 items-center gap-1.5 bg-[#313131]/[0.045] px-1.5 py-1" data-daily-product={productGroup.supporting.id} data-product-role="supporting">
                       <Image src={productGroup.supporting.icon} alt="" width={16} height={16} unoptimized loading="eager" className="size-4 shrink-0 object-contain" aria-hidden="true" />
-                      <span className="min-w-0 flex-1 truncate text-[9px] font-medium text-[#313131]/55">{productGroup.supporting.label}</span>
+                      <span className="min-w-0 flex-1 truncate text-[9px] font-medium text-[#313131]/55">{productLabel(productGroup.supporting, en)}</span>
                       <strong className="font-number flex shrink-0 items-baseline gap-0.5 text-[11px] leading-none tabular-nums">
                         <AnimatedNumber value={dailyNumber(productGroup.supporting.amount.value)} drift={{ x: 0, y: shouldReduceMotion ? 0 : 5 }} />
-                        {productGroup.supporting.amount.value === null ? null : <span className="text-[8px] font-medium text-[#313131]/45">{productGroup.supporting.unit}</span>}
+                        {productGroup.supporting.amount.value === null ? null : <span className="text-[8px] font-medium text-[#313131]/45">{productUnit(productGroup.supporting.unit, en)}</span>}
                       </strong>
                     </span>
                   ) : null}
@@ -238,8 +245,8 @@ export function PlanResultSummary({
         <div className="flex h-full min-h-0 flex-col">
           <Tabs value={activeDetailSection} onValueChange={(value) => setDetailSection(value as DetailSection)} className="min-h-0 flex-1 gap-0">
             <TabsList variant="line" className="w-full justify-start gap-1 border-b border-border/70 px-4 py-0" aria-label="结果详情分类">
-              <TabsTrigger value="efficiency" className="min-h-11 flex-none px-3">产出与提升</TabsTrigger>
-              {comparison ? <TabsTrigger value="comparison" className="min-h-11 flex-none px-3">当前状态匹配</TabsTrigger> : null}
+              <TabsTrigger value="efficiency" className="min-h-11 flex-none px-3">{en ? "Output & Improvements" : "产出与提升"}</TabsTrigger>
+              {comparison ? <TabsTrigger value="comparison" className="min-h-11 flex-none px-3">{en ? "Current Match" : "当前状态匹配"}</TabsTrigger> : null}
             </TabsList>
             <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 pb-6" data-plan-details-section={activeDetailSection}>
               <TabsContent value="efficiency" className="m-0">

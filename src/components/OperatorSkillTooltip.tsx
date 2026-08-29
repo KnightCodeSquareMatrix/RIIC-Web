@@ -11,12 +11,14 @@ import {
   operatorBuildingSkillList,
   type BuildingSkillPresentation,
 } from "@/operatorPortraits";
+import { demoBuildingSkill, useLanguageDemo } from "@/language-demo";
 
 /**
  * 悬停干员头像框时展示该干员全部基建技能的 tooltip。
  * trigger 直接复用干员卡片的头像框元素（有真实盒子），tooltip 固定出现在头像框上边缘中间。
  */
 export function OperatorSkillTooltip({ name, trigger }: { name: string; trigger: ReactElement }) {
+  const { locale } = useLanguageDemo();
   const skills = operatorBuildingSkillList(name);
   if (skills.length === 0) return trigger; // 未知干员：原样渲染，不包 Tooltip
 
@@ -28,8 +30,8 @@ export function OperatorSkillTooltip({ name, trigger }: { name: string; trigger:
         align="center"
         className="max-w-md flex-col items-start gap-2 whitespace-normal px-3 py-2.5 text-left leading-relaxed"
       >
-        {skills.map((skill) => (
-          <SkillBlock key={skill.id} skill={skill} />
+        {skills.map((sourceSkill) => (
+          <SkillBlock key={sourceSkill.id} skill={demoBuildingSkill(sourceSkill.id, locale, sourceSkill) as BuildingSkillPresentation} />
         ))}
       </TooltipContent>
     </Tooltip>

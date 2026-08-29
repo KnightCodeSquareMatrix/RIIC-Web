@@ -43,6 +43,7 @@ import { clearLocalProductData } from "@/persistence";
 import { CloudDataPanel } from "@/components/cloud/CloudDataPanel";
 import type { CloudWorkspaceData, SavedPlanData } from "@/types";
 import { useWebsiteSession } from "@/website-session";
+import { useLanguageDemo } from "@/language-demo";
 
 type AuthMode = "signin" | "signup" | "forgot";
 type AuthStep = "details" | "verify" | "complete";
@@ -82,6 +83,13 @@ export function WebsiteAccountPanel({
   onRestoreSavedPlan,
   onCloudDataChanged,
 }: WebsiteAccountPanelProps) {
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
+  const modeCopy = en ? {
+    signin: { title: "Sign in", description: "Continue with protected data import and scheduling." },
+    signup: { title: "Create account", description: "Enter your details and we will email a 6-digit code." },
+    forgot: { title: "Reset password", description: "Enter your email to receive a reset link valid for one hour." },
+  } : MODE_COPY;
   const { data: session, isPending, refetch } = useWebsiteSession();
   const [mode, setMode] = useState<AuthMode>("signin");
   const [step, setStep] = useState<AuthStep>("details");
@@ -271,7 +279,7 @@ export function WebsiteAccountPanel({
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="truncate text-2xl font-semibold tracking-tight">{session.user.name}</h2>
-                  <Badge variant="secondary"><ShieldCheck />邮箱已验证</Badge>
+                  <Badge variant="secondary"><ShieldCheck />{en ? "Email verified" : "邮箱已验证"}</Badge>
                 </div>
                 <p className="mt-1 break-all text-sm text-muted-foreground">{session.user.email}</p>
               </div>
@@ -389,9 +397,9 @@ export function WebsiteAccountPanel({
           <div className="mb-6 grid size-10 place-items-center rounded-lg bg-primary text-primary-foreground">
             <UserRound className="size-5" aria-hidden="true" />
           </div>
-          <p className="text-xs font-medium tracking-wide text-primary">账号管理</p>
-          <h3 className="mt-2 text-2xl font-semibold tracking-tight">{MODE_COPY[mode].title}</h3>
-          <p className="mt-3 max-w-sm text-sm leading-6 text-muted-foreground">{MODE_COPY[mode].description}</p>
+          <p className="text-xs font-medium tracking-wide text-primary">{en ? "Account" : "账号管理"}</p>
+          <h3 className="mt-2 text-2xl font-semibold tracking-tight">{modeCopy[mode].title}</h3>
+          <p className="mt-3 max-w-sm text-sm leading-6 text-muted-foreground">{modeCopy[mode].description}</p>
         </div>
 
         <CardContent className={mode === "forgot" ? "grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] p-0" : "p-0"}>
@@ -413,7 +421,7 @@ export function WebsiteAccountPanel({
               <div className="grid content-start gap-4 px-5 py-6 sm:px-8 sm:py-8">
                 {mode === "signup" ? (
                   <div className="grid gap-1.5">
-                    <Label htmlFor={`${fieldId}-name`}>昵称</Label>
+                    <Label htmlFor={`${fieldId}-name`}>{en ? "Display name" : "昵称"}</Label>
                     <Input
                       id={`${fieldId}-name`}
                       className={AUTH_INPUT_CLASS}
@@ -425,7 +433,7 @@ export function WebsiteAccountPanel({
                       required
                       minLength={WEBSITE_ACCOUNT_NAME_MIN_LENGTH}
                       maxLength={WEBSITE_ACCOUNT_NAME_MAX_LENGTH}
-                      placeholder="用于网站内显示"
+                      placeholder={en ? "Shown on this website" : "用于网站内显示"}
                       autoComplete="name"
                       aria-invalid={Boolean(nameError)}
                       aria-describedby={`${fieldId}-name-hint`}
@@ -436,13 +444,13 @@ export function WebsiteAccountPanel({
                   </div>
                 ) : null}
                 <div className="grid gap-1.5">
-                  <Label htmlFor={`${fieldId}-email`}>邮箱</Label>
+                  <Label htmlFor={`${fieldId}-email`}>{en ? "Email" : "邮箱"}</Label>
                   <Input className={AUTH_INPUT_CLASS} id={`${fieldId}-email`} value={email} onChange={(event) => setEmail(event.target.value)} required type="email" placeholder="name@example.com" autoComplete="email" />
                 </div>
                 {mode !== "forgot" ? (
                   <div className="grid gap-1.5">
-                    <Label htmlFor={`${fieldId}-password`}>密码</Label>
-                    <Input className={AUTH_INPUT_CLASS} id={`${fieldId}-password`} value={password} onChange={(event) => setPassword(event.target.value)} required type="password" minLength={10} maxLength={128} placeholder="10–128 位" autoComplete={mode === "signup" ? "new-password" : "current-password"} />
+                    <Label htmlFor={`${fieldId}-password`}>{en ? "Password" : "密码"}</Label>
+                    <Input className={AUTH_INPUT_CLASS} id={`${fieldId}-password`} value={password} onChange={(event) => setPassword(event.target.value)} required type="password" minLength={10} maxLength={128} placeholder={en ? "10–128 characters" : "10–128 位"} autoComplete={mode === "signup" ? "new-password" : "current-password"} />
                     {mode === "signup" ? <PasswordStrength value={password} className="mt-1.5" /> : null}
                   </div>
                 ) : null}
@@ -456,16 +464,16 @@ export function WebsiteAccountPanel({
               </div>
               <div className="grid gap-3 border-t px-5 py-4 sm:px-8 sm:py-5">
                 <Button type="submit" size="dialog" className="w-full" disabled={busy}>
-                  {busy ? "正在处理…" : mode === "signup" ? "创建账号并发送验证码" : mode === "forgot" ? "发送重置邮件" : "登录"}
+                  {busy ? en ? "Processing…" : "正在处理…" : mode === "signup" ? en ? "Create account and send code" : "创建账号并发送验证码" : mode === "forgot" ? en ? "Send reset email" : "发送重置邮件" : en ? "Sign in" : "登录"}
                 </Button>
                 <div className="flex min-h-11 flex-wrap items-center justify-center gap-x-1 text-xs">
-                  <Button type="button" size="sm" variant="ghost" onClick={() => chooseMode(mode === "signup" ? "signin" : "signup")}>{mode === "signup" ? "已有账号" : "创建账号"}</Button>
+                  <Button type="button" size="sm" variant="ghost" onClick={() => chooseMode(mode === "signup" ? "signin" : "signup")}>{mode === "signup" ? en ? "I have an account" : "已有账号" : en ? "Create account" : "创建账号"}</Button>
                   {mode === "forgot" ? (
-                    <Button type="button" size="sm" variant="ghost" onClick={() => chooseMode("signin")}><ArrowLeft />返回登录</Button>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => chooseMode("signin")}><ArrowLeft />{en ? "Back to sign in" : "返回登录"}</Button>
                   ) : (
-                    <Button type="button" size="sm" variant="ghost" onClick={() => chooseMode("forgot")}>忘记密码</Button>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => chooseMode("forgot")}>{en ? "Forgot password" : "忘记密码"}</Button>
                   )}
-                  {mode === "signin" ? <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => void sendVerificationCode()}>验证邮箱</Button> : null}
+                  {mode === "signin" ? <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => void sendVerificationCode()}>{en ? "Verify email" : "验证邮箱"}</Button> : null}
                 </div>
               </div>
             </form>
@@ -474,7 +482,7 @@ export function WebsiteAccountPanel({
               <div className="grid content-center gap-5 px-4 py-8 sm:px-8">
                 <div className="text-center">
                   <MailCheck className="mx-auto size-8 text-primary" aria-hidden="true" />
-                  <h3 className="mt-3 font-semibold">输入邮箱验证码</h3>
+                  <h3 className="mt-3 font-semibold">{en ? "Enter email verification code" : "输入邮箱验证码"}</h3>
                   <p className="mt-1 break-all text-sm text-muted-foreground">已发送至 {email}</p>
                 </div>
                 <OtpInput
