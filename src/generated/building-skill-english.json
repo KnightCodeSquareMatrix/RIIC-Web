@@ -2781,19 +2781,19 @@
   },
   "workshop_proc_probability_010": {
     "name": "Skillful Craftsman",
-    "description": "When this Operator is assigned to the Workshop to process <@cc.kw>any material</>, the production rate of byproduct increases by <@cc.vup>50%</>"
+    "description": "When this Operator is assigned to the Workshop to process <@cc.kw>any material</>, the byproduct chance is increased by <@cc.vup>50%</>"
   },
   "workshop_proc_probability_011": {
     "name": "Multifunctional Robotter",
-    "description": "When this Operator is assigned to the Workshop to process <@cc.kw>any material</>, the production rate of byproduct increases by <@cc.vup>50%</>"
+    "description": "When this Operator is assigned to the Workshop to process <@cc.kw>any material</>, the byproduct chance is increased by <@cc.vup>50%</>"
   },
   "workshop_proc_probability_012": {
     "name": "'Alchemy'",
-    "description": "When this Operator is assigned to the Workshop to process <@cc.kw>any material</>, the production rate of byproduct increases by <@cc.vup>50%</>"
+    "description": "When this Operator is assigned to the Workshop to process <@cc.kw>any material</>, the byproduct chance is increased by <@cc.vup>50%</>"
   },
   "workshop_proc_probability_013": {
     "name": "Just Fix It",
-    "description": "When this Operator is assigned to the Workshop to process <@cc.kw>any material</>, the production rate of byproduct increases by <@cc.vup>50%</>"
+    "description": "When this Operator is assigned to the Workshop to process <@cc.kw>any material</>, the byproduct chance is increased by <@cc.vup>50%</>"
   },
   "workshop_proc_probability_020": {
     "name": "Focus β",
