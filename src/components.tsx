@@ -43,6 +43,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
 import { loadClientFeature } from "@/client-lazy-loader";
+import { demoBuildingSkill, demoOperatorName, demoRoomTitle, useLanguageDemo } from "@/language-demo";
 import {
   BUILDING_SKILL_ENHANCED_WORD,
   buildingSkillUnlockLabel,
@@ -155,6 +156,7 @@ export function ProductToggleGroup<T extends string>({
   ariaLabel: string;
   disabledValue?: T;
 }) {
+  const { locale } = useLanguageDemo();
   const roomProductControls = surface === "room" && (tone === "trade" || tone === "factory");
   const compactRoomProductControls = roomProductControls && layout === "compact";
   const fillRoomProductControls = roomProductControls && layout === "fill";
@@ -186,6 +188,7 @@ export function ProductToggleGroup<T extends string>({
         const isOriginiumTrade = tone === "trade" && option.value === "originium";
         const isOriginiumRecipe = tone === "factory" && option.value === "originium";
         const isBattleRecordRecipe = tone === "factory" && option.value === "battle_record";
+        const englishProduct = option.value === "gold" ? (tone === "trade" ? "LMD Order" : "Pure Gold") : option.value === "originium" ? (tone === "trade" ? "Originium Order" : "Originium Shards") : option.value === "battle_record" ? "Battle Records" : option.value === "all" ? "Auto" : undefined;
 
         return (
           <ToggleGroupItem
@@ -207,7 +210,7 @@ export function ProductToggleGroup<T extends string>({
               isBattleRecordRecipe && "product-toggle-battle-record"
             )}
           >
-            {option.label}
+            {locale === "en" && englishProduct ? englishProduct : option.label}
           </ToggleGroupItem>
         );
       })}
@@ -524,17 +527,19 @@ export function LayoutEditor({
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
   onRoomLevelChange: (roomId: string, level: number) => void;
 }) {
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
   const factoryRecipesUnlocked = hasUnlockedFactoryRecipes(layout);
   const roomGroups = [
-    { key: "trade", label: "贸易站", rooms: layout.rooms.filter((room) => room.kind === "trade_post") },
-    { key: "factory", label: "制造站", rooms: layout.rooms.filter((room) => room.kind === "factory") },
-    { key: "power", label: "发电站", rooms: layout.rooms.filter((room) => room.kind === "power_plant") },
-    { key: "function", label: "控制与功能区", rooms: layout.rooms.filter((room) => !["trade_post", "factory", "power_plant", "dormitory"].includes(room.kind)) },
-    { key: "dormitory", label: "宿舍", rooms: layout.rooms.filter((room) => room.kind === "dormitory") },
+    { key: "trade", label: en ? "Trading Posts" : "贸易站", rooms: layout.rooms.filter((room) => room.kind === "trade_post") },
+    { key: "factory", label: en ? "Factories" : "制造站", rooms: layout.rooms.filter((room) => room.kind === "factory") },
+    { key: "power", label: en ? "Power Plants" : "发电站", rooms: layout.rooms.filter((room) => room.kind === "power_plant") },
+    { key: "function", label: en ? "Control & Functional" : "控制与功能区", rooms: layout.rooms.filter((room) => !["trade_post", "factory", "power_plant", "dormitory"].includes(room.kind)) },
+    { key: "dormitory", label: en ? "Dormitories" : "宿舍", rooms: layout.rooms.filter((room) => room.kind === "dormitory") },
   ].filter((group) => group.rooms.length > 0);
 
   return (
-    <Accordion multiple defaultValue={["trade", "factory"]} aria-label="设施设置" className="gap-2.5">
+    <Accordion multiple defaultValue={["trade", "factory"]} aria-label={en ? "Facility settings" : "设施设置"} className="gap-2.5">
       {roomGroups.map((group) => (
         <AccordionItem key={group.key} value={group.key} data-facility-group={group.key}>
           <AccordionTrigger>
@@ -554,8 +559,8 @@ export function LayoutEditor({
               const hasRestrictedProduct = isTrade ? room.level < 3 : isFactory && !factoryRecipesUnlocked;
               const showRestrictionHint = hasRestrictedProduct && (!isFactory || roomIndex === 0);
               const restrictionHint = isTrade
-                ? "开采协力仅限 3 级贸易站"
-                : "需先拥有至少一个 3 级制造站解锁源石碎片配方";
+                ? en ? "Originium Orders require a level 3 Trading Post" : "开采协力仅限 3 级贸易站"
+                : en ? "Unlock Originium Shards by owning at least one level 3 Factory" : "需先拥有至少一个 3 级制造站解锁源石碎片配方";
               const availableProductOptions: Option<TradeOrder | FactoryRecipe>[] = isTrade
                 ? TRADE_ORDER_OPTIONS
                 : isFactory
@@ -564,9 +569,8 @@ export function LayoutEditor({
               const product = productLabel(room);
               const levelMax = maxRoomLevel(room.kind);
               const visualGroup = roomVisualGroupForKind(room.kind);
-              const displayName = group.rooms.length > 1
-                ? `${roomKindLabel(room.kind)} ${roomIndex + 1}`
-                : roomKindLabel(room.kind);
+              const originalName = group.rooms.length > 1 ? `${roomKindLabel(room.kind)} ${roomIndex + 1}` : roomKindLabel(room.kind);
+              const displayName = demoRoomTitle(originalName, visualGroup, locale);
 
               return (
                 <div
@@ -597,7 +601,7 @@ export function LayoutEditor({
                   {activeProduct ? (
                     <div className="col-span-2 sm:col-span-1">
                       <ProductToggleGroup<TradeOrder | FactoryRecipe>
-                        ariaLabel={`${room.id} ${isTrade ? "订单" : "配方"}${hasRestrictedProduct ? `，${restrictionHint}` : ""}`}
+                        ariaLabel={`${displayName} ${isTrade ? (en ? "orders" : "订单") : (en ? "recipe" : "配方")}${hasRestrictedProduct ? `, ${restrictionHint}` : ""}`}
                         value={activeProduct}
                         options={availableProductOptions}
                         columns={isTrade ? 2 : 3}
@@ -634,18 +638,20 @@ export function RunButton({
   plannerReady: boolean;
   onRun: () => void;
 }) {
-  const unavailableLabel = plannerReady ? "请先导入干员数据" : "排班服务暂不可用";
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
+  const unavailableLabel = plannerReady ? (en ? "Import operator data first" : "请先导入干员数据") : (en ? "Planner unavailable" : "排班服务暂不可用");
   return (
     <Button
       size="sm"
       className="h-9 min-w-0 max-sm:h-11 max-sm:px-3 max-sm:text-xs"
-      aria-label={loading ? "计算中" : canRun ? "生成排班" : unavailableLabel}
-      title={!canRun ? (plannerReady ? "请先导入干员数据。" : "排班服务暂不可用，请稍后重试。") : undefined}
+      aria-label={loading ? (en ? "Calculating" : "计算中") : canRun ? (en ? "Generate schedule" : "生成排班") : unavailableLabel}
+      title={!canRun ? (plannerReady ? (en ? "Import operator data first." : "请先导入干员数据。") : (en ? "Planner unavailable. Try again later." : "排班服务暂不可用，请稍后重试。")) : undefined}
       onClick={onRun}
       disabled={!canRun || loading}
     >
       {loading ? <Loader2 className="animate-spin" /> : <Play />}
-      <span>{loading ? "计算中" : canRun ? "生成排班" : "导入后生成"}</span>
+      <span>{loading ? (en ? "Calculating" : "计算中") : canRun ? (en ? "Generate" : "生成排班") : (en ? "Import to generate" : "导入后生成")}</span>
     </Button>
   );
 }
@@ -663,12 +669,14 @@ export function ShiftTabs({
   closest?: number;
   onChange: (index: number) => void;
 }) {
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
   const plans = maaJson?.plans ?? [];
 
   if (plans.length === 0) {
     return (
       <Button type="button" variant="outline" disabled size="sm">
-        等待结果
+        {locale === "en" ? "Awaiting result" : "等待结果"}
       </Button>
     );
   }
@@ -682,8 +690,9 @@ export function ShiftTabs({
       >
         {plans.map((plan, index) => {
           const shift = rotation?.shifts[index];
-          const label = shiftTabLabel(shift, index);
-          const teamSummary = shiftTeamSummary(shift, rotation?.profile ?? DEFAULT_ROTATION_PROFILE);
+          const label = en ? `Shift ${index + 1}${shift ? ` · ${compactNumber(shift.duration_hours)}h` : ""}` : shiftTabLabel(shift, index);
+          const originalTeamSummary = shiftTeamSummary(shift, rotation?.profile ?? DEFAULT_ROTATION_PROFILE);
+          const teamSummary = en && originalTeamSummary ? originalTeamSummary.replaceAll("主力", "Main").replaceAll("替补", "Backup").replaceAll("上班", "working").replaceAll("休息", "resting") : originalTeamSummary;
           return (
             <TabsTrigger
               key={`${plan.name}-${index}`}
@@ -962,13 +971,14 @@ export function LevelDiamonds({
   maxLevel?: number;
   variant?: LevelDiamondVariant;
 }) {
+  const { locale } = useLanguageDemo();
   const count = levelDiamondCount(level);
   if (!count || !level) return null;
 
   return (
     <span
       className="flex shrink-0 items-center gap-1.5"
-      aria-label={`${level} 级，最高 ${maxLevel ?? level} 级`}
+      aria-label={locale === "en" ? `Level ${level}, maximum ${maxLevel ?? level}` : `${level} 级，最高 ${maxLevel ?? level} 级`}
       title={variant === "compact" ? `Lv.${level}/${maxLevel ?? level}` : undefined}
     >
       <span className="level-diamonds" data-variant={variant} aria-hidden="true">
@@ -994,8 +1004,10 @@ export function RoomEfficiencyReadout({
   details?: boolean;
   trend?: ShiftDirection;
 }) {
+  const { locale } = useLanguageDemo();
+  const efficiencyLabel = (label?: string) => locale === "en" && label ? ({ "纯技能": "Skill", "技能效率": "Skill efficiency", "跨设施": "Cross-facility", "综合加成": "Combined bonus", "仓储上限": "Capacity", "订单机制": "Order mechanic", "总充能": "Total charge" }[label] ?? label) : label;
   return (
-    <div className="min-w-0" title={value.details.map((detail) => detail.label ? `${detail.label} ${detail.value}` : detail.value).join(" · ")}>
+    <div className="min-w-0" title={value.details.map((detail) => detail.label ? `${efficiencyLabel(detail.label)} ${detail.value}` : detail.value).join(" · ")}>
       <div className="flex min-w-0 items-center gap-1.5">
         <strong
           className="infra-room-value font-technical shrink-0 text-base font-semibold tabular-nums tracking-[0.01em] text-[var(--room-accent)] max-sm:text-xs"
@@ -1005,7 +1017,7 @@ export function RoomEfficiencyReadout({
         </strong>
         {value.primaryLabel ? (
           <span className="truncate text-xs font-medium text-white/68">
-            <AnimatedText value={value.primaryLabel} trend={trend} />
+            <AnimatedText value={efficiencyLabel(value.primaryLabel) ?? value.primaryLabel} trend={trend} />
           </span>
         ) : null}
       </div>
@@ -1013,7 +1025,7 @@ export function RoomEfficiencyReadout({
         <div className="font-technical mt-1 flex max-h-9 flex-wrap gap-x-2 gap-y-0.5 overflow-hidden text-xs leading-4 tracking-[0.01em] text-white/60 max-sm:max-h-none">
           {value.details.map((detail, index) => (
             <span key={`${detail.kind ?? ""}-${detail.label ?? ""}-${index}`} className={detail.kind === "cross-station" ? "font-semibold text-[#C8F75A]" : undefined}>
-              {value.formula ? <>{detail.operator ? `${detail.operator} ` : ""}<span className="font-number"><AnimatedText value={detail.value} trend={trend} /></span>{detail.label ? ` ${detail.label}` : ""}</> : <>{detail.label} <span className="font-number"><AnimatedText value={detail.value} trend={trend} /></span></>}
+              {value.formula ? <>{detail.operator ? `${detail.operator} ` : ""}<span className="font-number"><AnimatedText value={detail.value} trend={trend} /></span>{detail.label ? ` ${efficiencyLabel(detail.label)}` : ""}</> : <>{efficiencyLabel(detail.label)} <span className="font-number"><AnimatedText value={detail.value} trend={trend} /></span></>}
             </span>
           ))}
         </div>
@@ -1031,6 +1043,8 @@ function RoomEfficiencyDetails({
   compactFactory?: boolean;
   trend?: ShiftDirection;
 }) {
+  const { locale } = useLanguageDemo();
+  const efficiencyLabel = (label?: string) => locale === "en" && label ? ({ "纯技能": "Skill", "技能效率": "Skill efficiency", "跨设施": "Cross-facility", "综合加成": "Combined bonus", "仓储上限": "Capacity", "订单机制": "Order mechanic", "总充能": "Total charge" }[label] ?? label) : label;
   if (!value?.details.length) return null;
 
   return (
@@ -1040,7 +1054,7 @@ function RoomEfficiencyDetails({
         compactFactory && "min-[1800px]:z-10 min-[1800px]:col-start-1 min-[1800px]:row-start-2 min-[1800px]:ml-0 min-[1800px]:flex min-[1800px]:min-w-0 min-[1800px]:max-w-none min-[1800px]:gap-3 min-[1800px]:text-xs",
         value.formula && "flex max-w-[340px] flex-wrap items-baseline gap-x-1.5 gap-y-1 max-[819px]:grid max-[819px]:grid-cols-3"
       )}
-      title={value.details.map((detail) => detail.label ? `${detail.label} ${detail.value}` : detail.value).join(" · ")}
+      title={value.details.map((detail) => detail.label ? `${efficiencyLabel(detail.label)} ${detail.value}` : detail.value).join(" · ")}
     >
       {value.details.map((detail, index) => (
         <span
@@ -1050,7 +1064,7 @@ function RoomEfficiencyDetails({
             detail.kind === "cross-station" && "font-semibold text-[#C8F75A]"
           )}
         >
-          {value.formula ? <>{detail.operator ? `${detail.operator} ` : ""}<span className="font-number"><AnimatedText value={detail.value} trend={trend} /></span>{detail.label ? ` ${detail.label}` : ""}</> : <>{detail.label} <span className="font-number"><AnimatedText value={detail.value} trend={trend} /></span></>}
+          {value.formula ? <>{detail.operator ? `${detail.operator} ` : ""}<span className="font-number"><AnimatedText value={detail.value} trend={trend} /></span>{detail.label ? ` ${efficiencyLabel(detail.label)}` : ""}</> : <>{efficiencyLabel(detail.label)} <span className="font-number"><AnimatedText value={detail.value} trend={trend} /></span></>}
         </span>
       ))}
     </div>
@@ -1068,6 +1082,8 @@ export function RoomProductControls({
   onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
 }) {
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
   if (row.group === "training") {
     return null;
   }
@@ -1082,7 +1098,7 @@ export function RoomProductControls({
     return (
       <div className={cn("w-full", isTrade ? "max-sm:w-fit" : "max-w-[220px]")}>
         <ProductToggleGroup<TradeOrder | FactoryRecipe>
-          ariaLabel={`${row.title} ${isTrade ? "订单" : "配方"}`}
+          ariaLabel={`${demoRoomTitle(row.title, row.group, locale)} ${isTrade ? (en ? "orders" : "订单") : (en ? "recipe" : "配方")}`}
           value={activeProduct}
           options={isTrade ? TRADE_ORDER_OPTIONS : FACTORY_RECIPE_OPTIONS}
           columns={isTrade ? 2 : 4}
@@ -1171,6 +1187,8 @@ function OperatorSlotShell({
 
 function BuildingSkillBadge({ skill }: { skill: NonNullable<RoomRow["operatorSlots"][number]["buildingSkill"]> }) {
   const [open, setOpen] = useState(false);
+  const { locale } = useLanguageDemo();
+  const displaySkill = demoBuildingSkill(skill.id, locale, skill);
   const unlockLabel = buildingSkillUnlockLabel(skill.elite, skill.level, skill.enhanced);
   return (
     <Tooltip open={open} onOpenChange={setOpen}>
@@ -1180,7 +1198,7 @@ function BuildingSkillBadge({ skill }: { skill: NonNullable<RoomRow["operatorSlo
           <button
             type="button"
             className="absolute right-0 top-0 z-10 flex size-10 items-center justify-center border-b border-l border-white/22 bg-black/76 text-white outline-none transition-colors hover:bg-black/88 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#FFD800] max-sm:size-11"
-            aria-label={`基建技能 S${skill.index}：${skill.name}，${unlockLabel}`}
+            aria-label={locale === "en" ? `Infrastructure skill S${skill.index}: ${displaySkill.name}, ${unlockLabel}` : `基建技能 S${skill.index}：${skill.name}，${unlockLabel}`}
             onFocus={() => setOpen(true)}
             onBlur={() => setOpen(false)}
             onClick={() => setOpen(true)}
@@ -1194,7 +1212,7 @@ function BuildingSkillBadge({ skill }: { skill: NonNullable<RoomRow["operatorSlo
         align="end"
         className="max-w-80 flex-col items-start gap-1.5 whitespace-normal px-3 py-2 text-left leading-relaxed"
       >
-        <span className="font-semibold">S<span className="font-number">{skill.index}</span> · {skill.name}</span>
+        <span className="font-semibold">S<span className="font-number">{skill.index}</span> · {displaySkill.name}</span>
         <span className="text-background/72">
           {skill.enhanced ? (
             <>
@@ -1205,7 +1223,7 @@ function BuildingSkillBadge({ skill }: { skill: NonNullable<RoomRow["operatorSlo
             unlockLabel
           )}
         </span>
-        <span>{skill.description}</span>
+        <span>{displaySkill.description}</span>
       </TooltipContent>
     </Tooltip>
   );
@@ -1240,13 +1258,16 @@ export function OperatorSlot({
   searchQuery?: string;
 }) {
   const shouldReduceMotion = useReducedMotion();
+  const { locale } = useLanguageDemo();
+  const displayName = slot ? demoOperatorName(slot.name, locale) : undefined;
+  const displayPositionLabel = locale === "en" ? (positionLabel === "训练位" ? "Trainee" : positionLabel === "协助位" ? "Trainer" : positionLabel) : positionLabel;
   const identity = slot?.name ?? (autofill ? "autofill" : "empty");
   const suppressNativeTitles = showSkillTooltip && slot !== undefined;
   const profession = slot ? operatorProfessionPresentationForCode(slot.profession) : undefined;
   const enterX = shouldReduceMotion ? 0 : shiftDirection * 6;
   const exitX = shouldReduceMotion ? 0 : shiftDirection * -4;
-  const occupantLabel = slot?.name ?? (autofill ? "自动补位" : "空置");
-  const ariaLabel = positionLabel ? `${positionLabel}：${occupantLabel}` : occupantLabel;
+  const occupantLabel = displayName ?? (autofill ? (locale === "en" ? "Auto-fill" : "自动补位") : (locale === "en" ? "Empty" : "空置"));
+  const ariaLabel = displayPositionLabel ? `${displayPositionLabel}: ${occupantLabel}` : occupantLabel;
   const searchMatched = Boolean(slot && searchQuery && slot.name.toLocaleLowerCase("zh-CN").includes(searchQuery));
   const frameClassName = slot
     ? "border-[#7F7F7F] bg-[#3C3C3C] shadow-[inset_0_0_18px_rgba(255,255,255,0.16)]"
@@ -1290,7 +1311,7 @@ export function OperatorSlot({
                   <>
                     <img
                       src={slot.portrait}
-                      alt={slot.name}
+                      alt={displayName ?? slot.name}
                       width={portraitSize}
                       height={portraitSize}
                       loading="lazy"
@@ -1309,7 +1330,7 @@ export function OperatorSlot({
                   </>
                 ) : (
                   <div className="flex h-full items-center justify-center bg-[#4B4B4B] px-2 text-center text-xs font-semibold text-white">
-                    <AnimatedText value={slot.name} trend={shiftDirection} />
+                    <AnimatedText value={displayName ?? slot.name} trend={shiftDirection} />
                   </div>
                 )}
                 {slot.buildingSkill ? (
@@ -1349,14 +1370,14 @@ export function OperatorSlot({
           <OperatorSkillTooltip name={slot.name} trigger={frame} />
         </Suspense>
       ) : undefined}
-      label={slot ? <AnimatedText value={slot.name} trend={shiftDirection} /> : autofill ? "自动补位" : "占"}
+      label={slot ? <AnimatedText value={displayName ?? slot.name} trend={shiftDirection} /> : autofill ? (locale === "en" ? "Auto-fill" : "自动补位") : (locale === "en" ? "Slot" : "占")}
       labelClassName={slot
         ? (searchMatched ? "bg-[#FFD501] px-1 text-[#202020]" : "text-white")
         : autofill
           ? "text-white/55"
           : "text-transparent select-none"}
-      positionLabel={positionLabel}
-      title={suppressNativeTitles ? undefined : slot?.label}
+      positionLabel={displayPositionLabel}
+      title={suppressNativeTitles ? undefined : displayName ?? slot?.label}
     />
   );
 
@@ -1400,6 +1421,8 @@ export function ScheduleBoard({
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
   onViewModeChange?: (viewMode: "list" | "compact") => void;
 }) {
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [hiddenGroups, setHiddenGroups] = useState<Record<string, boolean>>({});
   const [viewMode, setViewMode] = useState<ScheduleViewMode | null>(null);
@@ -1444,7 +1467,7 @@ export function ScheduleBoard({
   if (rows.length === 0) {
     return (
       <div className="flex min-h-[420px] items-center justify-center border-y border-dashed border-border/70 py-6 text-center text-sm text-muted-foreground">
-        没有可展示的布局房间。
+        {en ? "No rooms to display." : "没有可展示的布局房间。"}
       </div>
     );
   }
@@ -1514,15 +1537,15 @@ export function ScheduleBoard({
               }}
             >
               <TabsList>
-                <TabsTrigger value="compact">一图流布局</TabsTrigger>
-                <TabsTrigger value="list">列表式布局</TabsTrigger>
+                <TabsTrigger value="compact">{en ? "Overview" : "一图流布局"}</TabsTrigger>
+                <TabsTrigger value="list">{en ? "List" : "列表式布局"}</TabsTrigger>
               </TabsList>
             </Tabs>
           ) : null}
           {viewControlsSlot}
           {viewMode === "list" && hiddenAuxiliaryCount ? (
             <Button type="button" variant="ghost" size="sm" onClick={restoreHiddenAuxiliaryGroups}>
-              恢复已隐藏（<span className="font-number">{hiddenAuxiliaryCount}</span>）
+              {en ? "Restore hidden" : "恢复已隐藏"}（<span className="font-number">{hiddenAuxiliaryCount}</span>）
             </Button>
           ) : null}
           {viewMode === "list" && auxiliaryGroups.length ? (
@@ -1536,7 +1559,7 @@ export function ScheduleBoard({
                 >
                   <ChevronDown className="size-4" />
                 </motion.span>
-                {allAuxiliaryCollapsed ? "展开辅助设施" : "一键折叠辅助设施"}
+                {allAuxiliaryCollapsed ? (en ? "Expand auxiliary facilities" : "展开辅助设施") : (en ? "Collapse auxiliary facilities" : "一键折叠辅助设施")}
               </Button>
               {mobileActionsSlot ? <div className="min-w-0 flex-1 md:hidden">{mobileActionsSlot}</div> : null}
             </div>
@@ -1575,6 +1598,8 @@ export function ScheduleBoard({
           <>
           {rowGroups.map((group) => {
         const visual = roomVisualFor(group.rows[0]?.group ?? "default");
+        const firstGroup = group.rows[0]?.group ?? "";
+        const displayGroupLabel = en ? ({ control: "Control Center", trading: "Trading Posts", manufacture: "Factories", power: "Power Plants", dormitory: "Dormitories", meeting: "Reception Room", hire: "Office", processing: "Workshop", training: "Training Room" }[firstGroup] ?? (group.label === "功能设施" ? "Functional Facilities" : group.label)) : group.label;
         const groupStyle = {
           "--room-accent": visual.accent,
         } as CSSProperties;
@@ -1584,7 +1609,7 @@ export function ScheduleBoard({
         if (hiddenGroups[group.label]) return null;
 
         return (
-          <section key={group.label} className="min-w-0" aria-label={group.label} style={groupStyle}>
+          <section key={group.label} className="min-w-0" aria-label={displayGroupLabel} style={groupStyle}>
             <div className="mb-2 flex min-w-0 items-center justify-between gap-3">
               <button
                 type="button"
@@ -1593,7 +1618,7 @@ export function ScheduleBoard({
                 onClick={() => setCollapsedGroups((current) => ({ ...current, [group.label]: !current[group.label] }))}
               >
                 <span className="infra-room-accent h-7 w-1.5 shrink-0 bg-[var(--room-accent)]" aria-hidden="true" />
-                <h3 className="truncate text-[21px] font-medium leading-none text-[#313131]">{group.label}</h3>
+                <h3 className="truncate text-[21px] font-medium leading-none text-[#313131]">{displayGroupLabel}</h3>
                 <span className="font-number text-xs text-[#313131]/56">{group.rows.length}</span>
                 <motion.span
                   className="flex size-4 shrink-0 items-center justify-center text-[#313131]/45"
@@ -1612,7 +1637,7 @@ export function ScheduleBoard({
                   className="shrink-0 text-muted-foreground"
                   onClick={() => setHiddenGroups((current) => ({ ...current, [group.label]: true }))}
                 >
-                  暂不显示
+                  {en ? "Hide" : "暂不显示"}
                 </Button>
               ) : null}
             </div>
@@ -1680,7 +1705,7 @@ export function ScheduleBoard({
                           <div>
                             <div className="flex items-center gap-2.5 max-sm:gap-1.5">
                               <div className={cn("font-number min-w-0 truncate font-medium tracking-[-0.02em] text-white [text-shadow:0_2px_3px_rgba(0,0,0,0.75)]", listRoomTitleSizeClass())}>
-                                {row.title}
+                                {demoRoomTitle(row.title, row.group, locale)}
                               </div>
                               <LevelDiamonds level={row.level} maxLevel={layoutRoom ? maxRoomLevel(layoutRoom.kind) : row.level} />
                             </div>
@@ -1755,7 +1780,7 @@ export function ScheduleBoard({
                             variant="ghost"
                             size="icon-sm"
                             className="border border-white/10 bg-[#3C3C3C]/55 text-white/70 hover:bg-[#4B4B4B] hover:text-white disabled:cursor-not-allowed disabled:opacity-45 max-sm:size-11"
-                            aria-label={`${row.title} 反馈排班问题`}
+                            aria-label={en ? `${demoRoomTitle(row.title, row.group, locale)} report schedule issue` : `${row.title} 反馈排班问题`}
                             disabled={feedbackDisabled}
                             onClick={() => onIssue(row)}
                           >
@@ -1764,7 +1789,11 @@ export function ScheduleBoard({
                           </span>
                         }
                       />
-                      <TooltipContent side="left">{feedbackDisabled ? "全角色导入为体验数据，不能提交反馈" : "反馈排班问题"}</TooltipContent>
+                      <TooltipContent side="left">
+                        {feedbackDisabled
+                          ? en ? "Sample data cannot submit feedback" : "全角色导入为体验数据，不能提交反馈"
+                          : en ? "Report schedule issue" : "反馈排班问题"}
+                      </TooltipContent>
                     </Tooltip>
                   </div>
                 );

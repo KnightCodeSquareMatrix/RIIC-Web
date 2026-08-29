@@ -20,6 +20,7 @@ const PRODUCT_LABELS: Record<TrainingAdviceProduct, string> = {
   general_manufacturing: "制造",
   originium_shards: "源石碎片",
 };
+const PRODUCT_LABELS_EN: Record<TrainingAdviceProduct, string> = { trade: "Trading", gold: "Pure Gold", experience: "Battle Records", general_manufacturing: "Manufacturing", originium_shards: "Originium Shards" };
 
 const FACILITY_LABELS: Record<string, string> = {
   trade_station: "贸易站",
@@ -32,6 +33,7 @@ const FACILITY_LABELS: Record<string, string> = {
   training_room: "训练室",
   workshop: "加工站",
 };
+const FACILITY_LABELS_EN: Record<string, string> = { trade_station: "Trading Post", manufacturing_station: "Factory", power_station: "Power Plant", control_center: "Control Center", dormitory: "Dormitory", meeting_room: "Reception Room", office: "Office", training_room: "Training Room", workshop: "Workshop" };
 
 const STATE_LABELS: Record<TrainingAdviceCombinationState, string> = {
   complete: "已完成",
@@ -40,6 +42,7 @@ const STATE_LABELS: Record<TrainingAdviceCombinationState, string> = {
   missing_important: "缺失重要",
   needs_review: "待核对",
 };
+const STATE_LABELS_EN: Record<TrainingAdviceCombinationState, string> = { complete: "Complete", needs_training: "Needs training", missing_core: "Missing core", missing_important: "Missing key member", needs_review: "Needs review" };
 
 const MEMBER_PROGRESS_LABELS: Record<TrainingAdviceMemberProgress, string> = {
   ready: "就绪",
@@ -47,6 +50,7 @@ const MEMBER_PROGRESS_LABELS: Record<TrainingAdviceMemberProgress, string> = {
   owned_needs_training: "需培养",
   needs_review: "待核对",
 };
+const MEMBER_PROGRESS_LABELS_EN: Record<TrainingAdviceMemberProgress, string> = { ready: "Ready", missing: "Missing", owned_needs_training: "Needs training", needs_review: "Needs review" };
 
 const MEMBER_ROLE_LABELS: Record<TrainingAdviceMemberRole, string> = {
   core: "核心",
@@ -54,6 +58,7 @@ const MEMBER_ROLE_LABELS: Record<TrainingAdviceMemberRole, string> = {
   secondary: "次级",
   hanger: "挂件",
 };
+const MEMBER_ROLE_LABELS_EN: Record<TrainingAdviceMemberRole, string> = { core: "Core", important: "Important", secondary: "Secondary", hanger: "Support" };
 
 const PRIORITY_LABELS: Record<TrainingAdvicePriority, string> = {
   newbie_four_star_elite_one: "四星精一",
@@ -68,6 +73,7 @@ const PRIORITY_LABELS: Record<TrainingAdvicePriority, string> = {
   lower_priority_core: "次优先核心",
   high_efficiency_standalone: "高效单卡",
 };
+const PRIORITY_LABELS_EN: Record<TrainingAdvicePriority, string> = { newbie_four_star_elite_one: "4★ Elite 1", flagship_newbie: "Beginner flagship", other_newbie: "Beginner support", owned_tailor: "Owned fit", automation_must_train: "Automation essential", small_high_efficiency_core: "Efficient team core", small_high_efficiency_important: "Efficient key member", system_single_core_gap: "Missing system core", other_important: "Other important", lower_priority_core: "Lower-priority core", high_efficiency_standalone: "Efficient standalone" };
 
 const REASON_LABELS: Record<TrainingAdviceReason, string> = {
   newbie_required: "新手必需",
@@ -75,6 +81,7 @@ const REASON_LABELS: Record<TrainingAdviceReason, string> = {
   combination_important: "组合重要",
   standalone: "独立推荐",
 };
+const REASON_LABELS_EN: Record<TrainingAdviceReason, string> = { newbie_required: "Beginner essential", combination_core: "Combination core", combination_important: "Combination key", standalone: "Standalone" };
 
 const ACQUISITION_LABELS: Record<TrainingAdviceAcquisitionKind, string> = {
   shop: "商店",
@@ -83,68 +90,70 @@ const ACQUISITION_LABELS: Record<TrainingAdviceAcquisitionKind, string> = {
   redeem_code: "兑换码",
   integrated_strategy: "集成战略",
 };
+const ACQUISITION_LABELS_EN: Record<TrainingAdviceAcquisitionKind, string> = { shop: "Shop", public_recruitment: "Recruitment", event: "Event", redeem_code: "Redemption code", integrated_strategy: "Integrated Strategies" };
 
 const CONDITION_STATUS_LABELS: Record<TrainingAdviceConditionEvaluation["status"], string> = {
   satisfied: "已满足",
   unsatisfied: "未满足",
   unknown: "待确认",
 };
+const CONDITION_STATUS_LABELS_EN: Record<TrainingAdviceConditionEvaluation["status"], string> = { satisfied: "Satisfied", unsatisfied: "Not satisfied", unknown: "To confirm" };
 
-export function trainingProductLabel(product?: TrainingAdviceProduct): string {
-  return product ? PRODUCT_LABELS[product] : "综合";
+export function trainingProductLabel(product?: TrainingAdviceProduct, en = false): string {
+  return product ? (en ? PRODUCT_LABELS_EN : PRODUCT_LABELS)[product] : (en ? "General" : "综合");
 }
 
 export function trainingProductGroup(product?: TrainingAdviceProduct): string {
   return product === "trade" ? "trading" : "manufacture";
 }
 
-export function trainingScaleLabel(scale?: TrainingCombination["scale"]): string {
-  if (scale === "system") return "体系组合";
-  if (scale === "small") return "小型组合";
+export function trainingScaleLabel(scale?: TrainingCombination["scale"], en = false): string {
+  if (scale === "system") return en ? "System combination" : "体系组合";
+  if (scale === "small") return en ? "Small combination" : "小型组合";
   return scale ?? "—";
 }
 
-export function trainingFacilityLabel(facility: string): string {
-  return FACILITY_LABELS[facility] ?? facility;
+export function trainingFacilityLabel(facility: string, en = false): string {
+  return (en ? FACILITY_LABELS_EN : FACILITY_LABELS)[facility] ?? facility;
 }
 
-export function trainingCombinationStateLabel(state?: TrainingAdviceCombinationState): string {
-  return state ? STATE_LABELS[state] : "未知";
+export function trainingCombinationStateLabel(state?: TrainingAdviceCombinationState, en = false): string {
+  return state ? (en ? STATE_LABELS_EN : STATE_LABELS)[state] : (en ? "Unknown" : "未知");
 }
 
-export function trainingLevelText(target?: TrainingAdviceTarget | TrainingAdviceState): string {
+export function trainingLevelText(target?: TrainingAdviceTarget | TrainingAdviceState, en = false): string {
   if (!target) return "—";
   if ("kind" in target) {
-    if (target.kind === "no_requirement") return "无需额外培养";
-    if (target.kind === "derive_from_skill_binding") return "按技能解锁要求";
-    if (target.kind === "needs_review") return "目标待核对";
+    if (target.kind === "no_requirement") return en ? "No additional training" : "无需额外培养";
+    if (target.kind === "derive_from_skill_binding") return en ? "Use skill unlock requirement" : "按技能解锁要求";
+    if (target.kind === "needs_review") return en ? "Target needs review" : "目标待核对";
   }
   if (typeof target.elite !== "number") return "—";
-  return target.level ? `精${target.elite} Lv${target.level}` : `精${target.elite}`;
+  return target.level ? `${en ? "Elite" : "精"}${target.elite} Lv${target.level}` : `${en ? "Elite" : "精"}${target.elite}`;
 }
 
-export function trainingMemberProgressLabel(progress?: TrainingAdviceMemberProgress): string {
-  return progress ? MEMBER_PROGRESS_LABELS[progress] : "未知";
+export function trainingMemberProgressLabel(progress?: TrainingAdviceMemberProgress, en = false): string {
+  return progress ? (en ? MEMBER_PROGRESS_LABELS_EN : MEMBER_PROGRESS_LABELS)[progress] : (en ? "Unknown" : "未知");
 }
 
-export function trainingMemberRoleLabel(role?: TrainingAdviceMemberRole): string {
-  return role ? MEMBER_ROLE_LABELS[role] : "—";
+export function trainingMemberRoleLabel(role?: TrainingAdviceMemberRole, en = false): string {
+  return role ? (en ? MEMBER_ROLE_LABELS_EN : MEMBER_ROLE_LABELS)[role] : "—";
 }
 
-export function trainingPriorityLabel(priority?: TrainingAdvicePriority): string {
-  return priority ? PRIORITY_LABELS[priority] : "基础目标";
+export function trainingPriorityLabel(priority?: TrainingAdvicePriority, en = false): string {
+  return priority ? (en ? PRIORITY_LABELS_EN : PRIORITY_LABELS)[priority] : (en ? "Basic goal" : "基础目标");
 }
 
-export function trainingReasonLabel(reason?: TrainingAdviceReason): string {
-  return reason ? REASON_LABELS[reason] : "基础目标";
+export function trainingReasonLabel(reason?: TrainingAdviceReason, en = false): string {
+  return reason ? (en ? REASON_LABELS_EN : REASON_LABELS)[reason] : (en ? "Basic goal" : "基础目标");
 }
 
-export function trainingAcquisitionLabel(kind: TrainingAdviceAcquisitionKind): string {
-  return ACQUISITION_LABELS[kind];
+export function trainingAcquisitionLabel(kind: TrainingAdviceAcquisitionKind, en = false): string {
+  return (en ? ACQUISITION_LABELS_EN : ACQUISITION_LABELS)[kind];
 }
 
-export function trainingConditionStatusLabel(status: TrainingAdviceConditionEvaluation["status"]): string {
-  return CONDITION_STATUS_LABELS[status];
+export function trainingConditionStatusLabel(status: TrainingAdviceConditionEvaluation["status"], en = false): string {
+  return (en ? CONDITION_STATUS_LABELS_EN : CONDITION_STATUS_LABELS)[status];
 }
 
 export function sortTrainingCombinations(

@@ -19,6 +19,7 @@ import { PlanResultSummarySkeleton } from "@/components/PlanResultSummarySkeleto
 import type { FactoryRecipe, TradeOrder } from "@/blueprint";
 import { loadClientFeature } from "@/client-lazy-loader";
 import { cn } from "@/lib/utils";
+import { demoOperatorName, useLanguageDemo } from "@/language-demo";
 import type { ShiftDirection } from "@/motion";
 import { onboardingStepStatuses, shouldShowAnonymousSampleTrial } from "@/onboarding";
 import type { RoomRow } from "@/schedule";
@@ -72,24 +73,26 @@ function RunButton({
   runCooldownSeconds: number;
   onRun: () => void;
 }) {
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
   const unavailableLabel = runCooldownSeconds > 0
-    ? `请等待 ${runCooldownSeconds} 秒后重试`
+    ? en ? `Retry in ${runCooldownSeconds} seconds` : `请等待 ${runCooldownSeconds} 秒后重试`
     : requiresAccount
-    ? "请先登录网站账号"
+    ? en ? "Sign in first" : "请先登录网站账号"
     : plannerReady
-      ? "请先导入干员数据"
-      : "排班服务尚未就绪";
+      ? en ? "Import operator data first" : "请先导入干员数据"
+      : en ? "Planner unavailable" : "排班服务尚未就绪";
   return (
     <Button
       size="sm"
       className="h-9 min-w-0 max-sm:h-11 max-sm:px-3 max-sm:text-xs"
-      aria-label={runCooldownSeconds > 0 ? unavailableLabel : canRun || hasBox ? "生成排班" : unavailableLabel}
+      aria-label={runCooldownSeconds > 0 ? unavailableLabel : canRun || hasBox ? (en ? "Generate schedule" : "生成排班") : unavailableLabel}
       title={runCooldownSeconds > 0 || (!canRun && !(requiresAccount && hasBox && plannerReady)) ? unavailableLabel : undefined}
       onClick={onRun}
       disabled={runCooldownSeconds > 0 || (!canRun && !(requiresAccount && hasBox && plannerReady))}
     >
       <Play />
-      <span>{runCooldownSeconds > 0 ? `${runCooldownSeconds} 秒后重试` : requiresAccount && hasBox ? "登录后生成" : !plannerReady ? "排班服务未就绪" : canRun ? "生成排班" : "导入后生成"}</span>
+      <span>{runCooldownSeconds > 0 ? en ? `Retry in ${runCooldownSeconds}s` : `${runCooldownSeconds} 秒后重试` : requiresAccount && hasBox ? en ? "Sign in to generate" : "登录后生成" : !plannerReady ? en ? "Planner unavailable" : "排班服务未就绪" : canRun ? en ? "Generate" : "生成排班" : en ? "Import to generate" : "导入后生成"}</span>
     </Button>
   );
 }
@@ -121,6 +124,8 @@ function CalculatorStartPanel({
   onOpenSetup: () => void;
   onDismissOnboarding: () => void;
 }) {
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
   const statuses = onboardingStepStatuses({
     authenticated: websiteAuthenticated,
     hasPersonalBox,
@@ -128,30 +133,38 @@ function CalculatorStartPanel({
   });
   const steps = [
     {
-      title: "登录网站账号",
-      eyebrow: "网站账号",
-      description: websiteAuthenticated ? "账号状态已确认，可以继续导入个人数据。" : "保护个人 BOX、排班记录与后续同步。",
+      title: en ? "Sign in" : "登录网站账号",
+      eyebrow: en ? "Account" : "网站账号",
+      description: en
+        ? websiteAuthenticated ? "Account confirmed. You can now import your data." : "Protect your BOX, schedules, and future sync."
+        : websiteAuthenticated ? "账号状态已确认，可以继续导入个人数据。" : "保护个人 BOX、排班记录与后续同步。",
       group: "control",
     },
     {
-      title: "导入自己的 BOX",
-      eyebrow: "干员数据",
-      description: hasPersonalBox ? "个人 BOX 已就绪，可以配置布局并生成方案。" : "支持自主上传或第三方同步。",
+      title: en ? "Import your BOX" : "导入自己的 BOX",
+      eyebrow: en ? "Operators" : "干员数据",
+      description: en
+        ? hasPersonalBox ? "Your BOX is ready. Configure the base and generate a plan." : "Upload your data or sync through a third party."
+        : hasPersonalBox ? "个人 BOX 已就绪，可以配置布局并生成方案。" : "支持自主上传或第三方同步。",
       group: "trading",
     },
     {
-      title: "生成第一份方案",
-      eyebrow: "三班排班",
-      description: "得到三班排班、关键房间提示与 MAA 文件。",
+      title: en ? "Generate your first plan" : "生成第一份方案",
+      eyebrow: en ? "Base schedule" : "三班排班",
+      description: en ? "Get three shifts, key room notes, and an MAA file." : "得到三班排班、关键房间提示与 MAA 文件。",
       group: "manufacture",
     },
   ] as const;
   const personalActionLabel = runCooldownSeconds > 0 && websiteAuthenticated && hasPersonalBox
-    ? `${runCooldownSeconds} 秒后可重试`
+    ? en ? `Retry in ${runCooldownSeconds}s` : `${runCooldownSeconds} 秒后可重试`
+    : en
+    ? !websiteAuthenticated
+      ? hasPersonalBox ? "Sign in and continue" : "Sign in and import BOX"
+      : hasPersonalBox && !plannerReady ? "Planner unavailable" : hasPersonalBox ? "Generate first plan" : "Import your BOX"
     : !websiteAuthenticated
     ? hasPersonalBox ? "登录并继续生成" : "登录并导入 BOX"
     : hasPersonalBox && !plannerReady ? "排班服务未就绪" : hasPersonalBox ? "生成第一份方案" : "导入自己的 BOX";
-  const personalActionAriaLabel = hasPersonalBox ? "生成排班" : "配置Box与布局";
+  const personalActionAriaLabel = hasPersonalBox ? (en ? "Generate schedule" : "生成排班") : (en ? "Configure Box and layout" : "配置Box与布局");
   const personalPlanUnavailable = websiteAuthenticated && hasPersonalBox && !plannerReady;
   const showAnonymousSampleTrial = shouldShowAnonymousSampleTrial({
     authenticated: websiteAuthenticated,
@@ -170,7 +183,7 @@ function CalculatorStartPanel({
         onClick={hasPersonalBox && websiteAuthenticated ? onRun : onStartPersonalFlow}
       >
         {loading && hasPersonalBox ? <Loader2 className="animate-spin" /> : <Play />}
-        {loading && hasPersonalBox ? "正在生成第一份方案…" : personalActionLabel}
+        {loading && hasPersonalBox ? en ? "Generating your first plan…" : "正在生成第一份方案…" : personalActionLabel}
       </Button>
       {hasPersonalBox ? (
         <div className="inline-flex min-w-0 max-sm:[&_[data-skland-account-control]]:rounded-l-none" data-calculator-setup-group>
@@ -191,7 +204,7 @@ function CalculatorStartPanel({
       ) : null}
       {!hasPersonalBox && accountControl ? <div className="self-center">{accountControl}</div> : null}
       <Button type="button" variant="ghost" className="min-h-11" disabled={sampleLoading} onClick={onDismissOnboarding}>
-        暂时跳过引导
+        {en ? "Skip for now" : "暂时跳过引导"}
       </Button>
     </div>
   );
@@ -207,11 +220,13 @@ function CalculatorStartPanel({
       <div className="relative mx-auto flex w-full max-w-5xl flex-col justify-center">
         <ol
           className="grid w-full gap-3 md:grid-cols-2 xl:grid-cols-3"
-          aria-label="生成个人排班的步骤"
+          aria-label={en ? "Steps to generate your schedule" : "生成个人排班的步骤"}
         >
             {steps.map((step, index) => {
               const status = statuses[index];
-              const statusLabel = status === "complete" ? "已完成" : status === "current" ? "当前步骤" : "待开始";
+              const statusLabel = en
+                ? status === "complete" ? "Complete" : status === "current" ? "Current" : "Not started"
+                : status === "complete" ? "已完成" : status === "current" ? "当前步骤" : "待开始";
               return (
                 <li
                   key={step.title}
@@ -364,6 +379,8 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     onDownloadMaa,
     onClearResultNotice, onDismissResultClearWarning,
   } = props;
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
   const [shortcutGuideOpen, setShortcutGuideOpen] = useState(false);
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [operatorQuery, setOperatorQuery] = useState("");
@@ -396,7 +413,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
       data-calculator-export-actions={placement}
     >
       <Button type="button" size="sm" variant="outline" disabled={!result?.maa} onClick={onDownloadMaa}>
-        <Download />导出到 MAA
+        <Download />{en ? "Export to MAA" : "导出到 MAA"}
       </Button>
     </div>
   );
@@ -409,8 +426,8 @@ export function InfraCalculator(props: InfraCalculatorProps) {
           ref={searchInputRef}
           value={operatorQuery}
           onChange={(event) => setOperatorQuery(event.target.value)}
-          placeholder="搜索排班中的干员或房间"
-          aria-label="搜索排班中的干员或房间"
+          placeholder={en ? "Search operators or rooms in this schedule" : "搜索排班中的干员或房间"}
+          aria-label={en ? "Search operators or rooms in this schedule" : "搜索排班中的干员或房间"}
           className="h-9 pr-10 pl-9 max-sm:h-11"
         />
         {operatorQuery ? (
@@ -429,8 +446,8 @@ export function InfraCalculator(props: InfraCalculatorProps) {
         size="icon-lg"
         variant="outline"
         className="hidden size-9 sm:inline-flex"
-        aria-label="查看快捷键"
-        title="查看快捷键"
+        aria-label={en ? "Keyboard shortcuts" : "查看快捷键"}
+        title={en ? "Keyboard shortcuts" : "查看快捷键"}
         onClick={() => setShortcutGuideOpen(true)}
       >
         <Keyboard />
@@ -472,14 +489,14 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                 {renderSearch()}
                 <details className="relative min-w-0 sm:hidden" data-calculator-more-tools>
                   <summary className="flex h-11 cursor-pointer list-none items-center justify-center gap-2 border border-border bg-background px-3 text-sm font-medium marker:content-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFD800]">
-                    <Ellipsis className="size-4" aria-hidden="true" />更多工具
+                    <Ellipsis className="size-4" aria-hidden="true" />{en ? "More tools" : "更多工具"}
                   </summary>
                   <div className="absolute left-0 top-[calc(100%+0.35rem)] z-30 grid w-[min(18rem,calc(100vw-1.5rem))] gap-2 border border-border bg-background p-2 shadow-lg">
                     <Button type="button" variant="ghost" className="h-11 justify-start" onClick={onOpenSetup}>
-                      <Settings2 />配置Box与布局
+                      <Settings2 />{en ? "Configure BOX & base" : "配置Box与布局"}
                     </Button>
                     <Button type="button" variant="ghost" className="h-11 justify-start" onClick={() => setShortcutGuideOpen(true)}>
-                      <Keyboard />查看快捷键
+                      <Keyboard />{en ? "Keyboard shortcuts" : "查看快捷键"}
                     </Button>
                   </div>
                 </details>
@@ -491,11 +508,11 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                     className={accountControl
                       ? "h-9 min-w-0 rounded-r-none max-sm:hidden"
                       : "h-9 min-w-0 max-sm:hidden"}
-                    aria-label="配置Box与布局"
+                    aria-label={en ? "Configure BOX and base" : "配置Box与布局"}
                     onClick={onOpenSetup}
                   >
                     <Settings2 />
-                    配置Box与布局
+                    {en ? "Configure BOX & base" : "配置Box与布局"}
                   </Button>
                   {accountControl}
                 </div>
@@ -586,11 +603,11 @@ export function InfraCalculator(props: InfraCalculatorProps) {
               shiftInfoSlot={(
                 <div className="flex flex-wrap items-center justify-end gap-2 max-sm:w-full max-sm:justify-between" data-shift-actions>
                   {fiammettaTarget ? (
-                    <span className="flex h-7 items-center gap-1 rounded-[min(var(--radius-md),12px)] border border-[#016E65]/30 bg-[#016E65]/10 px-2.5 text-[0.8rem] text-[#016E65] shadow-xs max-sm:h-11" title={`菲亚梅塔恢复 ${fiammettaTarget}`}>
+                    <span className="flex h-7 items-center gap-1 rounded-[min(var(--radius-md),12px)] border border-[#016E65]/30 bg-[#016E65]/10 px-2.5 text-[0.8rem] text-[#016E65] shadow-xs max-sm:h-11" title={en ? `Fiammetta restores ${demoOperatorName(fiammettaTarget, locale)}` : `菲亚梅塔恢复 ${fiammettaTarget}`}>
                       <span className="size-5 shrink-0 overflow-hidden rounded-full border border-[#016E65]/25 bg-[#272A2B]">
                         {fiammettaPortrait ? <img src={fiammettaPortrait} alt="" className="size-full object-cover" /> : <HeartPulse className="m-1 size-3 text-[#016E65]" />}
                       </span>
-                      <span className="whitespace-nowrap"><span className="text-[#016E65]/70">换心情</span> {fiammettaTarget}</span>
+                      <span className="whitespace-nowrap"><span className="text-[#016E65]/70">{en ? "Morale recovery" : "换心情"}</span> {demoOperatorName(fiammettaTarget, locale)}</span>
                     </span>
                   ) : null}
                   <ShiftTabs

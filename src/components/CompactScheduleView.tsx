@@ -31,6 +31,7 @@ import {
 import type { RoomRow } from "@/schedule";
 import type { BaseBlueprint, MaaPlan } from "@/types";
 import type { ShiftDirection } from "@/motion";
+import { demoRoomTitle, useLanguageDemo } from "@/language-demo";
 
 export interface CompactScheduleViewProps {
   rows: RoomRow[];
@@ -77,6 +78,9 @@ function CompactRoomCard({
   className?: string;
   style?: CSSProperties;
 }) {
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
+  const efficiencyLabel = (label?: string) => en && label ? ({ "纯技能": "Skill", "技能效率": "Skill efficiency", "跨设施": "Cross-facility", "综合加成": "Combined bonus", "仓储上限": "Capacity", "订单机制": "Order mechanic", "总充能": "Total charge" }[label] ?? label) : label;
   const isTrade = layoutRoom?.kind === "trade_post";
   const isFactory = layoutRoom?.kind === "factory";
   const isPower = row.group === "power";
@@ -92,7 +96,7 @@ function CompactRoomCard({
   const header = (
     <div className={COMPACT_HEADER_CLASS}>
       <span className="infra-room-accent h-5 w-1 shrink-0 bg-[var(--room-accent)]" aria-hidden="true" />
-      <span className={`${COMPACT_ROOM_TITLE_CLASS} font-number`}>{row.title}</span>
+      <span className={`${COMPACT_ROOM_TITLE_CLASS} font-number`}>{demoRoomTitle(row.title, row.group, locale)}</span>
       <LevelDiamonds
         level={row.level}
         maxLevel={layoutRoom ? maxRoomLevel(layoutRoom.kind) : row.level}
@@ -101,18 +105,18 @@ function CompactRoomCard({
         {isTrade ? (() => {
           const order = tradeOrderFor(layoutRoom!);
           const accent = compactTradeAccent(order);
-          const label = order === "gold" ? "龙门商法" : order === "originium" ? "开采协力" : order;
+          const label = order === "gold" ? en ? "LMD Order" : "龙门商法" : order === "originium" ? en ? "Originium Order" : "开采协力" : order;
           return (
-            <div className={`ml-auto flex h-7 w-[90px] items-center justify-center rounded border px-2 text-xs ${accent}`}>
+            <div className={`ml-auto flex h-7 items-center justify-center rounded border px-2 text-xs ${en ? "w-[118px]" : "w-[90px]"} ${accent}`}>
               {label}
             </div>
           );
         })() : isFactory ? (() => {
           const recipe = factoryRecipeFor(layoutRoom!);
           const accent = compactFactoryAccent(recipe);
-          const label = recipe === "all" ? "自动选择" : recipe === "gold" ? "贵金属" : recipe === "battle_record" ? "作战记录" : recipe === "originium" ? "源石碎片" : recipe;
+          const label = recipe === "all" ? en ? "Auto" : "自动选择" : recipe === "gold" ? en ? "Pure Gold" : "贵金属" : recipe === "battle_record" ? en ? "Battle Record" : "作战记录" : recipe === "originium" ? en ? "Originium Shard" : "源石碎片" : recipe;
           return (
-            <div className={`ml-auto flex h-7 w-[90px] items-center justify-center rounded border px-2 text-xs ${accent}`}>
+            <div className={`ml-auto flex h-7 items-center justify-center rounded border px-2 text-xs ${en ? "w-[118px]" : "w-[90px]"} ${accent}`}>
               {label}
             </div>
           );
@@ -133,7 +137,7 @@ function CompactRoomCard({
           </span>
           {efficiency.details.map((detail, index) => (
             <span key={`${detail.label ?? ""}-${index}`} className={`font-number ${detail.kind === "cross-station" ? "text-[#C8F75A]" : ""}`}>
-              {efficiency.formula ? <>{detail.operator ? `${detail.operator} ` : ""}<AnimatedText value={detail.value} trend={shiftDirection} /> {detail.label}</> : <>/ {detail.label} <AnimatedText value={detail.value} trend={shiftDirection} /></>}
+              {efficiency.formula ? <>{detail.operator ? `${detail.operator} ` : ""}<AnimatedText value={detail.value} trend={shiftDirection} /> {efficiencyLabel(detail.label)}</> : <>/ {efficiencyLabel(detail.label)} <AnimatedText value={detail.value} trend={shiftDirection} /></>}
             </span>
           ))}
         </div>
@@ -146,7 +150,7 @@ function CompactRoomCard({
   ) : null;
   const emptyWorkstationState = !efficiency && (row.group === "trading" || row.group === "manufacture") ? (
     <div className="font-technical text-xs tracking-[0.01em] text-white/38">
-      等待排班
+      {en ? "Awaiting schedule" : "等待排班"}
     </div>
   ) : null;
   const efficiencyContent = efficiencyBlock ?? emptyWorkstationState;

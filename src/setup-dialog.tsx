@@ -16,6 +16,7 @@ import { FiammettaSettings } from "@/components/FiammettaSettings";
 import { WizardSteps } from "@/components/interior/wizard-steps";
 import { hasSetupConfigurationChanged } from "@/setup-configuration";
 import { useWebsiteSession } from "@/website-session";
+import { useLanguageDemo } from "@/language-demo";
 
 import type { FactoryRecipe, PowerBudget, TradeOrder } from "./blueprint";
 import { FileDrop, LayoutEditor, PresetSelector } from "./components";
@@ -125,6 +126,8 @@ export function SetupDialog({
   onFinish,
   onSkip,
 }: SetupDialogProps) {
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
   const { data: websiteSession } = useWebsiteSession();
   const [step, setStep] = useState<SetupStep>("box");
   const [stepDirection, setStepDirection] = useState(0);
@@ -263,8 +266,8 @@ export function SetupDialog({
         >
           <div data-setup-top className="px-4 pb-3 pt-4 sm:px-7 sm:pb-4 sm:pt-6">
             <div className="flex min-h-9 items-center gap-3 pr-12">
-              <DialogTitle>排班设置</DialogTitle>
-              {configurationChanged ? <span className="border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800">配置已修改</span> : null}
+              <DialogTitle>{en ? "Schedule Settings" : "排班设置"}</DialogTitle>
+              {configurationChanged ? <span className="border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800">{en ? "Modified" : "配置已修改"}</span> : null}
             </div>
             <WizardSteps
               steps={[
@@ -428,9 +431,9 @@ export function SetupDialog({
                 ) : null}
 
                 <details className="setup-quiet-details">
-                  <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">数据管理</summary>
+                  <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">{en ? "Data management" : "数据管理"}</summary>
                   <div className="flex flex-wrap items-center justify-between gap-3 py-3">
-                    <span className="text-xs text-muted-foreground">数据在此浏览器保存 <span className="font-number">30</span> 天。</span>
+                    <span className="text-xs text-muted-foreground">{en ? <>Data is stored in this browser for <span className="font-number">30</span> days.</> : <>数据在此浏览器保存 <span className="font-number">30</span> 天。</>}</span>
                     <Button type="button" variant="outline" className="min-h-11" onClick={() => setClearConfirmOpen(true)}>
                       <Trash2 />清除本地数据
                     </Button>
@@ -460,7 +463,7 @@ export function SetupDialog({
                     transition={reducedMotion ? { duration: 0 } : PANEL_TRANSITION}
                   >
                     <section className="grid gap-3" aria-labelledby="setup-preset-title">
-                      <h3 id="setup-preset-title" className="text-sm font-semibold">布局预设</h3>
+                      <h3 id="setup-preset-title" className="text-sm font-semibold">{en ? "Base presets" : "布局预设"}</h3>
                       <PresetSelector presets={presets} selected={preset} onSelect={handlePresetSelect} />
                     </section>
 
@@ -478,7 +481,7 @@ export function SetupDialog({
                     </div>
 
                     <details className="setup-quiet-details pt-1">
-                      <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">高级工具</summary>
+                      <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">{en ? "Advanced tools" : "高级工具"}</summary>
                       <div className="grid gap-2 py-3 sm:grid-cols-2">
                         <Label pressable className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-[4px] border border-dashed text-sm font-medium text-muted-foreground transition-[color,border-color,background-color] duration-[var(--motion-duration-state)] ease-[var(--motion-ease-out)] hover:border-primary hover:bg-muted/40 hover:text-primary">
                           <Upload className="size-4" />导入布局
@@ -539,12 +542,12 @@ export function SetupDialog({
         <footer data-setup-footer className="setup-dialog-footer flex w-full min-w-0 flex-nowrap items-center justify-end gap-1.5 px-4 pb-4 pt-2 sm:gap-2 sm:px-7 sm:pb-7 sm:pt-3">
           {step === "box" ? (
             <>
-              <Button className="max-sm:min-w-16 sm:min-w-[88px]" size="dialog" type="button" variant="ghost" onClick={onSkip}>稍后</Button>
-              <Button size="dialog" type="button" disabled={!hasBox} onClick={goToBasics}>继续</Button>
+              <Button className="max-sm:min-w-16 sm:min-w-[88px]" size="dialog" type="button" variant="ghost" onClick={onSkip}>{en ? "Later" : "稍后"}</Button>
+              <Button size="dialog" type="button" disabled={!hasBox} onClick={goToBasics}>{en ? "Continue" : "继续"}</Button>
             </>
           ) : step === "layout" ? (
             <>
-              <Button className="max-sm:min-w-16 sm:min-w-[88px]" size="dialog" type="button" variant="ghost" onClick={goToBox}>上一步</Button>
+              <Button className="max-sm:min-w-16 sm:min-w-[88px]" size="dialog" type="button" variant="ghost" onClick={goToBox}>{en ? "Back" : "上一步"}</Button>
               <Button size="dialog" type="button" onClick={reviewFacilities}>
                 {mustReviewFacilities ? "检查设施" : "继续"}
               </Button>
@@ -564,8 +567,8 @@ export function SetupDialog({
                     : `电力不足 ${powerBudget.consumed - powerBudget.generated} · ${powerBudget.consumed}/${powerBudget.generated}`}
                 </span>
               </span>
-              <Button className="max-sm:min-w-16 sm:min-w-[88px]" size="dialog" type="button" variant="ghost" onClick={goToBasics}>上一步</Button>
-              <Button className="shrink-0" size="dialog" type="button" disabled={!powerBudget.ok} onClick={onFinish}><Check />完成</Button>
+              <Button className="max-sm:min-w-16 sm:min-w-[88px]" size="dialog" type="button" variant="ghost" onClick={goToBasics}>{en ? "Back" : "上一步"}</Button>
+              <Button className="shrink-0" size="dialog" type="button" disabled={!powerBudget.ok} onClick={onFinish}><Check />{en ? "Done" : "完成"}</Button>
             </>
           )}
         </footer>
@@ -574,7 +577,7 @@ export function SetupDialog({
       <Dialog open={clearConfirmOpen} onOpenChange={setClearConfirmOpen}>
         <DialogContent layer="nested" className="max-w-[min(460px,calc(100vw-2rem))]">
           <DialogHeader>
-            <DialogTitle>清除本地数据？</DialogTitle>
+            <DialogTitle>{en ? "Clear local data?" : "清除本地数据？"}</DialogTitle>
             <DialogDescription>
               {CLIENT_SKLAND_ENABLED
                 ? "将删除此浏览器中的布局、干员数据、最近排班和提示偏好。森空岛登录状态不会退出。"
@@ -582,7 +585,7 @@ export function SetupDialog({
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button className="max-sm:min-w-16 sm:min-w-[88px]" type="button" size="dialog" variant="ghost" onClick={() => setClearConfirmOpen(false)}>保留数据</Button>
+            <Button className="max-sm:min-w-16 sm:min-w-[88px]" type="button" size="dialog" variant="ghost" onClick={() => setClearConfirmOpen(false)}>{en ? "Keep data" : "保留数据"}</Button>
             <Button
               type="button"
               size="dialog"
@@ -600,12 +603,12 @@ export function SetupDialog({
       <Dialog open={closeConfirmOpen} onOpenChange={setCloseConfirmOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>关闭排班设置？</DialogTitle>
-            <DialogDescription>配置修改已保存在本地。关闭后需要重新生成排班，结果才会按新配置更新。</DialogDescription>
+            <DialogTitle>{en ? "Close schedule settings?" : "关闭排班设置？"}</DialogTitle>
+            <DialogDescription>{en ? "Changes are saved locally. Generate the schedule again to apply them." : "配置修改已保存在本地。关闭后需要重新生成排班，结果才会按新配置更新。"}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => setCloseConfirmOpen(false)}>继续编辑</Button>
-            <Button type="button" onClick={() => { setCloseConfirmOpen(false); onOpenChange(false); }}>关闭设置</Button>
+            <Button type="button" variant="ghost" onClick={() => setCloseConfirmOpen(false)}>{en ? "Keep editing" : "继续编辑"}</Button>
+            <Button type="button" onClick={() => { setCloseConfirmOpen(false); onOpenChange(false); }}>{en ? "Close settings" : "关闭设置"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
