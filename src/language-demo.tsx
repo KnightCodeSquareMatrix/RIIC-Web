@@ -1,13 +1,23 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import operatorEnglishNamesJson from "./generated/operator-english-names.json" with { type: "json" };
-import buildingSkillEnglishJson from "./generated/building-skill-english.json" with { type: "json" };
-import buildingSkillEnglishManualJson from "./generated/building-skill-english-manual.json" with { type: "json" };
+import type { EnglishCatalog } from "./language-demo-data";
 
 export type DemoLocale = "zh" | "en";
 
 const STORAGE_KEY = "infra-demo-locale";
+let englishCatalog: EnglishCatalog | null = null;
+let englishCatalogRequest: Promise<EnglishCatalog> | null = null;
+
+function loadEnglishCatalog() {
+  if (englishCatalog) return Promise.resolve(englishCatalog);
+  englishCatalogRequest ??= import("./language-demo-data").then(({ ENGLISH_CATALOG }) => {
+    englishCatalog = ENGLISH_CATALOG;
+    return englishCatalog;
+  });
+  return englishCatalogRequest;
+}
+
 const LanguageDemoContext = createContext<{
   locale: DemoLocale;
   setLocale: (locale: DemoLocale) => void;
@@ -15,12 +25,22 @@ const LanguageDemoContext = createContext<{
 
 export function LanguageDemoProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<DemoLocale>("zh");
+  const [, setEnglishSkillVersion] = useState(0);
 
   useEffect(() => {
     try {
       if (window.localStorage.getItem(STORAGE_KEY) === "en") setLocaleState("en");
     } catch { /* Demo 仍可在当前会话切换。 */ }
   }, []);
+
+  useEffect(() => {
+    if (locale !== "en" || englishCatalog) return;
+    let active = true;
+    void loadEnglishCatalog().then(() => {
+      if (active) setEnglishSkillVersion((version) => version + 1);
+    });
+    return () => { active = false; };
+  }, [locale]);
 
   function setLocale(nextLocale: DemoLocale) {
     setLocaleState(nextLocale);
@@ -37,50 +57,27 @@ export function useLanguageDemo() {
   return context;
 }
 
-const ENGLISH_ROOM_LABELS: Record<string, string> = {
-  control: "Control Center",
-  trading: "Trading Post",
-  manufacture: "Factory",
-  power: "Power Plant",
-  dormitory: "Dormitory",
-  meeting: "Reception Room",
-  hire: "Office",
-  processing: "Workshop",
-  training: "Training Room",
-};
-
 export function demoRoomTitle(title: string, group: string, locale: DemoLocale) {
   if (locale !== "en") return title;
-  const label = ENGLISH_ROOM_LABELS[group];
+  const label = englishCatalog?.roomLabels[group];
   if (!label) return title;
   const index = title.match(/\d+\s*$/)?.[0]?.trim();
   return index ? `${label} ${index}` : label;
 }
 
-const OPERATOR_ENGLISH_NAMES = operatorEnglishNamesJson as Record<string, string>;
-const OPERATOR_ENGLISH_FALLBACKS: Record<string, string> = {
-  "予愿安洁莉娜": "Angelina the Wishful", "焰狐龙梓兰": "Flaming Espinas Orchid", "雷狼龙S空爆": "Zinogre S Catapult",
-  "怒潮凛冬": "Raging Tide Zima", "凯尔希·思衡托": "Kal'tsit Sincero", "罗德岛隐秘队": "Rhodes Island Covert Team",
-  "伯塔尼": "Botany", "乌啾": "Ujou", "裂响": "Tanya", "维伊": "Veen", "GALLUS²": "GALLUS²", "可露希尔": "Closure",
-  "谬因": "Aphris", "机械师": "McNist", "佩德洛": "Pedro", "珊比": "Thumpy", "时隙": "Timeslot", "嘉辛塔": "Jacinta",
-};
-
 export function demoOperatorName(name: string, locale: DemoLocale) {
   if (locale !== "en") return name;
-  return OPERATOR_ENGLISH_NAMES[name] ?? OPERATOR_ENGLISH_FALLBACKS[name] ?? name;
+  return englishCatalog?.operatorNames[name] ?? name;
 }
-
-const BUILDING_SKILL_ENGLISH = {
-  ...(buildingSkillEnglishJson as Record<string, { name: string; description: string }>),
-  ...(buildingSkillEnglishManualJson as Record<string, { name: string; description: string }>),
-};
 
 export function demoBuildingSkill<T extends { name: string; description: string; descriptionRich?: string }>(id: string, locale: DemoLocale, fallback: T): T {
   if (locale !== "en") return fallback;
-  const translated = BUILDING_SKILL_ENGLISH[id];
+  const translated = englishCatalog?.buildingSkills[id];
   return translated
     ? { ...fallback, name: translated.name, description: translated.description, descriptionRich: translated.description } as T
-    : { ...fallback, name: "Infrastructure Skill", description: "English data is not available yet.", descriptionRich: "English data is not available yet." } as T;
+    : englishCatalog
+      ? { ...fallback, name: "Infrastructure Skill", description: "English data is not available yet.", descriptionRich: "English data is not available yet." } as T
+      : fallback;
 }
 
 export function LanguageDemoSwitch() {
