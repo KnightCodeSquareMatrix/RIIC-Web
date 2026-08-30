@@ -153,7 +153,7 @@ test("public deployment automation is repository-bound, opt-in, and secret-safe"
   assert.match(qualityWorkflow, /git merge-base --is-ancestor "\$HEAD_SHA" refs\/remotes\/origin\/develop/);
   assert.match(qualityWorkflow, /github\.event_name == 'push'[\s\S]+needs\.quality\.result == 'success'[\s\S]+needs\.changes\.outputs\.deploy_required == 'true'[\s\S]+vars\.DEPLOY_AUTOMATION_ENABLED == '1'[\s\S]+github\.repository == 'KnightCodeSquareMatrix\/RIIC-Web'/);
   assert.match(deployWorkflow, /github\.event_name == 'push'[\s\S]+vars\.DEPLOY_AUTOMATION_ENABLED == '1'[\s\S]+github\.repository == 'KnightCodeSquareMatrix\/RIIC-Web'/);
-  assert.match(deployWorkflow, /DEPLOY_PREPARE_HELPER_CONTRACT: "2"[\s\S]+DEPLOY_RELEASE_HELPER_CONTRACT: "2"/);
+  assert.match(deployWorkflow, /DEPLOY_APPROVED_SOLVER_SHA256: \$\{\{ vars\.DEPLOY_APPROVED_SOLVER_SHA256 \}\}[\s\S]+DEPLOY_EXPECTED_REPOSITORY: KnightCodeSquareMatrix\/RIIC-Web[\s\S]+DEPLOY_PREPARE_HELPER_CONTRACT: "2"[\s\S]+DEPLOY_RELEASE_HELPER_CONTRACT: "3"/);
   assert.match(deployWorkflow, /DEPLOY_PUBLIC_HEALTH_URL: \$\{\{ secrets\.DEPLOY_PUBLIC_HEALTH_URL \}\}/);
   assert.doesNotMatch(deployWorkflow, /DEPLOY_PUBLIC_HEALTH_URL: \$\{\{ vars\./);
   assert.match(preflightWorkflow, /Preflight is read-only: no archive, release directory, symlink switch, or service restart was requested/);
@@ -161,10 +161,12 @@ test("public deployment automation is repository-bound, opt-in, and secret-safe"
   assert.match(preflightWorkflow, /PREFLIGHT_MODE: \$\{\{ inputs\.mode \}\}/);
   assert.match(preflightWorkflow, /DEPLOY_ENVIRONMENT: \$\{\{ inputs\.environment \}\}/);
   assert.match(preflightWorkflow, /if \[\[ "\$PREFLIGHT_MODE" == "cutover-ready" \]\][\s\S]+test "\$actual_contract" = "\$expected_contract"/);
-  assert.match(preflightWorkflow, /sudo -n \/usr\/local\/sbin\/arknights-infra-deploy[\s\S]+--preflight "\$deployment_environment" "\$app_root"/);
+  assert.match(preflightWorkflow, /DEPLOY_APPROVED_SOLVER_SHA256: \$\{\{ vars\.DEPLOY_APPROVED_SOLVER_SHA256 \}\}[\s\S]+DEPLOY_RELEASE_HELPER_CONTRACT: "3"/);
+  assert.match(preflightWorkflow, /sudo -n \/usr\/local\/sbin\/arknights-infra-deploy[\s\S]+--preflight "\$deployment_environment" "\$app_root"[\s\S]+"\$expected_repository" "\$approved_solver_sha256"/);
   assert.match(preflightWorkflow, /solver_source=not-inspected-root-only/);
   assert.doesNotMatch(preflightWorkflow, /current_release\/\.env\.production\.local|current_release="\$\(readlink/);
   assert.match(deployWorkflow, /printf '%s\\n' "\$DEPLOY_PUBLIC_HEALTH_URL" \| ssh[\s\S]+'\$public_health_argument'/);
+  assert.match(deployWorkflow, /'\$DEPLOY_EXPECTED_REPOSITORY'[\s\S]+'\$DEPLOY_APPROVED_SOLVER_SHA256'/);
   assert.doesNotMatch(deployWorkflow, /'\$DEPLOY_PUBLIC_HEALTH_URL'/);
   assert.match(deployWorkflow, /Remove SSH credentials from the runner[\s\S]+rm -f -- "\$HOME\/\.ssh\/id_ed25519" "\$HOME\/\.ssh\/known_hosts"/);
   assert.match(deployWorkflow, /Verify public response compression[\s\S]+DEPLOY_SSH_PRIVATE_KEY: ""[\s\S]+node scripts\/verify-public-compression\.mjs/);

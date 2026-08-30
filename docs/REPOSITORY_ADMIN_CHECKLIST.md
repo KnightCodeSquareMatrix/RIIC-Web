@@ -48,6 +48,7 @@ Enter these non-sensitive variables separately in each Environment:
 - `DEPLOY_INTERNAL_PORT`
 - `DEPLOY_DEBUG_TOOLS_ENABLED`
 - `DEPLOY_RATE_LIMIT_ENABLED`
+- `DEPLOY_APPROVED_SOLVER_SHA256`
 
 Do not copy values out of old GitHub secrets; re-enter them from the owner-controlled secure store. In particular, the development health URL is an Environment secret, never a repository variable or committed value.
 
@@ -60,7 +61,7 @@ Restrict `development` to `develop`. Restrict `production` to `main` and require
 - [ ] Run `Deployment preflight` in `baseline` mode for a read-only report of the legacy helper, cache, current solver, Worker fingerprint, and disk state.
 - [ ] After private server maintenance, rerun preflight in `cutover-ready` mode.
 
-The cutover-ready preflight requires a root-owned `shared/bin` solver and independent SHA-256 sidecar, checks the current release's configured digest, and compares both with the solver's Worker `ping` fingerprint. Prepare those private server assets from the owner-controlled release record; never derive and trust a digest solely from a runtime-user-writable file.
+Set `DEPLOY_APPROVED_SOLVER_SHA256` to the independently verified digest of the approved shared solver for each Environment. The cutover-ready preflight requires a root-owned `shared/bin` solver and independent SHA-256 sidecar, verifies the Environment-approved digest, and compares both with the solver's Worker `ping` fingerprint. Prepare those private server assets from the owner-controlled release record; never derive and trust a digest solely from a runtime-user-writable file.
 - [ ] Disable automatic deployment in the old private repository before setting the public repository variable to `1`.
 - [ ] Change `deploy/PUBLIC_DEPLOYMENT_SOURCE` in a PR to `public-automation-v1` and merge it to `develop`. This path is intentionally classified as deploy-required.
 - [ ] Complete development acceptance, then create a same-repository `release/develop-to-main-YYYYMMDD` PR.
