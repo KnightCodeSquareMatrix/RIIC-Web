@@ -9,6 +9,7 @@
     "dev:full": "npm run dev",
     "build": "next build",
     "postbuild": "node scripts/prepare-standalone.mjs",
+    "release:stage": "node scripts/stage-standalone-release.mjs",
     "check:bundle-budget": "node scripts/check-bundle-budget.mjs",
     "check:build-traces": "node scripts/check-build-traces.mjs",
     "check:production-client": "node scripts/check-production-client.mjs",

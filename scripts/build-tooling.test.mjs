@@ -25,17 +25,28 @@ test("production builds prepare a solver-free standalone runtime with static ass
   const nextConfig = await readRepoFile("next.config.ts");
   const prepareStandalone = await readRepoFile("scripts/prepare-standalone.mjs");
   const startStandalone = await readRepoFile("scripts/start-standalone.mjs");
+  const stageStandalone = await readRepoFile("scripts/stage-standalone-release.mjs");
 
   assert.match(nextConfig, /output: "standalone"/);
   assert.equal(packageJson.scripts.postbuild, "node scripts/prepare-standalone.mjs");
   assert.equal(packageJson.scripts.start, "node scripts/start-standalone.mjs");
+  assert.equal(packageJson.scripts["release:stage"], "node scripts/stage-standalone-release.mjs");
   assert.match(prepareStandalone, /standaloneRoot, "public"/);
   assert.match(prepareStandalone, /standaloneRoot, "\.next", "static"/);
   assert.match(prepareStandalone, /\["infra-cli", "infra-cli\.exe"\]/);
+  assert.match(prepareStandalone, /\["\.env", "\.env\.production", "\.env\.local", "\.env\.production\.local"\]/);
   assert.match(prepareStandalone, /standalone website output must not contain/);
+  assert.match(prepareStandalone, /node_modules\/drizzle-orm/);
+  assert.match(prepareStandalone, /scripts\/migrate-db\.mts/);
+  assert.match(prepareStandalone, /scripts\/check-auth-readiness\.mts/);
   assert.match(startStandalone, /ARKNIGHTS_INFRA_HOSTNAME \|\| "0\.0\.0\.0"/);
   assert.match(startStandalone, /process\.env\.PORT = String\(numericPort\)/);
   assert.match(startStandalone, /\.next\/standalone\/server\.js/);
+  assert.match(stageStandalone, /kind: "riic-web-standalone"/);
+  assert.match(stageStandalone, /standalone release root must not contain/);
+  assert.match(stageStandalone, /\["bin\/infra-cli", "infra-cli"\]/);
+  assert.match(stageStandalone, /\["\.env\.production\.local", "\.env\.production\.local"\]/);
+  assert.match(stageStandalone, /dereference: true/);
 });
 
 test("CI enforces route and document preload JavaScript budgets after building", async () => {
