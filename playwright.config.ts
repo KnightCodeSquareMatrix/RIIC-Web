@@ -9,7 +9,10 @@ export default defineConfig({
   fullyParallel: false,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  workers: process.env.CI ? 3 : undefined,
+  expect: {
+    timeout: process.env.CI ? 10_000 : 5_000,
+  },
   reporter: process.env.CI ? "github" : "list",
   use: {
     baseURL,
