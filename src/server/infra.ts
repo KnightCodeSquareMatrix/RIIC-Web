@@ -45,6 +45,7 @@ import {
 } from "./business-records";
 import { isBusinessDatabaseReadEnabled, isBusinessFileFallbackEnabled } from "./business-config";
 import { InfraCliServeClient, type JsonRecord, type ServeResult } from "./serve-client";
+import { registerProcessCleanup } from "./process-cleanup";
 
 type PlanRequestBody = {
   layout: BaseBlueprint;
@@ -520,18 +521,7 @@ function stopServeClient(reason: string) {
 function registerServeClientCleanup() {
   if (globalForInfra.__infraCliCleanupRegistered) return;
   globalForInfra.__infraCliCleanupRegistered = true;
-
-  process.once("SIGINT", () => {
-    stopServeClient("收到 SIGINT，正在关闭 infra-cli serve。");
-    process.exit(130);
-  });
-  process.once("SIGTERM", () => {
-    stopServeClient("收到 SIGTERM，正在关闭 infra-cli serve。");
-    process.exit(143);
-  });
-  process.once("exit", () => {
-    stopServeClient("进程退出，正在关闭 infra-cli serve。");
-  });
+  registerProcessCleanup(process, stopServeClient);
 }
 
 registerServeClientCleanup();
