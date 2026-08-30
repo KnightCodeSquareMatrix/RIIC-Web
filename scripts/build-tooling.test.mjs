@@ -105,10 +105,11 @@ test("public deployment automation is repository-bound, opt-in, and secret-safe"
   assert.match(preflightWorkflow, /Preflight is read-only: no archive, release directory, symlink switch, or service restart was requested/);
   assert.match(preflightWorkflow, /mode:[\s\S]+baseline[\s\S]+cutover-ready/);
   assert.match(preflightWorkflow, /PREFLIGHT_MODE: \$\{\{ inputs\.mode \}\}/);
+  assert.match(preflightWorkflow, /DEPLOY_ENVIRONMENT: \$\{\{ inputs\.environment \}\}/);
   assert.match(preflightWorkflow, /if \[\[ "\$PREFLIGHT_MODE" == "cutover-ready" \]\][\s\S]+test "\$actual_contract" = "\$expected_contract"/);
-  assert.match(preflightWorkflow, /expected_digest_file="\$app_root\/shared\/bin\/infra-cli\.sha256"/);
-  assert.match(preflightWorkflow, /test "\$solver_sha256" = "\$expected_solver_sha256"/);
-  assert.match(preflightWorkflow, /supported_plan_schema_versions[\s\S]+worker_sha256[\s\S]+expected_solver_sha256/);
+  assert.match(preflightWorkflow, /sudo -n \/usr\/local\/sbin\/arknights-infra-deploy[\s\S]+--preflight "\$deployment_environment" "\$app_root"/);
+  assert.match(preflightWorkflow, /solver_source=not-inspected-root-only/);
+  assert.doesNotMatch(preflightWorkflow, /current_release\/\.env\.production\.local|current_release="\$\(readlink/);
   assert.match(deployWorkflow, /printf '%s\\n' "\$DEPLOY_PUBLIC_HEALTH_URL" \| ssh[\s\S]+'\$public_health_argument'/);
   assert.doesNotMatch(deployWorkflow, /'\$DEPLOY_PUBLIC_HEALTH_URL'/);
   assert.match(deployWorkflow, /Remove SSH credentials from the runner[\s\S]+rm -f -- "\$HOME\/\.ssh\/id_ed25519" "\$HOME\/\.ssh\/known_hosts"/);
