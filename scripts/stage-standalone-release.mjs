@@ -35,9 +35,11 @@ const requiredBuildFiles = [
   ".next/standalone/server.js",
   ".next/standalone/public",
   ".next/standalone/.next/static",
+  ".next/standalone/scripts/backfill-business-data.mts",
   ".next/standalone/scripts/migrate-db.mts",
   ".next/standalone/scripts/check-auth-readiness.mts",
   ".next/standalone/src/server/auth/config.ts",
+  ".next/standalone/src/server/business-backfill.ts",
   ".next/standalone/drizzle",
   ".next/standalone/node_modules/drizzle-orm",
 ];
