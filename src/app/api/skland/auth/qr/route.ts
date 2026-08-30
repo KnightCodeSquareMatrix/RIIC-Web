@@ -19,14 +19,14 @@ export async function POST(request: Request) {
   const startedAt = performance.now();
   try {
     assertSklandFeatureEnabled();
-    await requireWebsiteSession(request);
+    const website = await requireWebsiteSession(request);
     assertSklandAvailable(request);
     assertSameOrigin(request);
+    enforceRateLimit("skland-qr-account", website.user.id, 30, 10 * 60_000);
     const ip = requestClientIp(request);
-    enforceRateLimit("skland-qr", ip, 10, 10 * 60_000);
     const body = await readJsonBody(request, 16 * 1024) as { consent?: unknown } | null;
     if (!isCurrentPolicyConsent(body?.consent)) throw new PublicApiError("AIC-AUTH-2005");
-    return successResponse(await startScan(ip, body.consent), requestId);
+    return successResponse(await startScan(website.user.id, ip, body.consent), requestId);
   } catch (error) {
     return sklandErrorResponse(error, requestId, "/api/skland/auth/qr", startedAt);
   }
