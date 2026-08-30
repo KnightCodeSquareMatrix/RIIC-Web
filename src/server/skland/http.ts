@@ -29,6 +29,7 @@ import {
   unsealSklandAccountIndex,
   websiteUserOwnerTag,
 } from "./session";
+import { publicCodeForSklandServiceError } from "./http-error";
 
 export interface SklandAccountStore {
   accounts: SklandStoredAccount[];
@@ -276,17 +277,8 @@ export function sklandErrorResponse(
     return failureResponse(new PublicApiError("AIC-AUTH-2002"), requestId, route, startedAt);
   }
   if (error instanceof SklandServiceError) {
-    const code =
-      error.code === "AUTH_EXPIRED"
-        ? "AIC-AUTH-2001"
-        : error.code === "RATE_LIMITED"
-          ? "AIC-RATE-6001"
-          : error.code === "INSECURE"
-            ? "AIC-AUTH-2002"
-            : error.code === "NOT_CONFIGURED" || error.code === "UNAVAILABLE"
-              ? "AIC-AUTH-2003"
-              : "AIC-REQ-1001";
+    const code = publicCodeForSklandServiceError(error.code);
     return failureResponse(new PublicApiError(code), requestId, route, startedAt);
   }
-  return failureResponse(new PublicApiError("AIC-AUTH-2003"), requestId, route, startedAt);
+  return failureResponse(new PublicApiError("AIC-SYS-5000"), requestId, route, startedAt);
 }

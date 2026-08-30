@@ -44,7 +44,11 @@ import {
   type PrivateArtifactDescriptor,
 } from "./business-records";
 import { isBusinessDatabaseReadEnabled, isBusinessFileFallbackEnabled } from "./business-config";
-import { InfraCliServeClient, type JsonRecord, type ServeResult } from "./serve-client";
+import {
+  InfraCliServeClient,
+  type JsonRecord,
+  type ServeResult,
+} from "./serve-client";
 import { registerProcessCleanup } from "./process-cleanup";
 
 type PlanRequestBody = {
@@ -66,10 +70,14 @@ const feedbackRoot = path.resolve(/* turbopackIgnore: true */ process.env.BETA_F
 const cliRunRoot = path.resolve(/* turbopackIgnore: true */ process.env.BETA_CLI_RUN_DIR || path.join(storageRoot, "cli-runs"));
 const cliReleaseRoot = path.resolve(/* turbopackIgnore: true */ process.env.BETA_CLI_RELEASE_DIR || path.join(storageRoot, "cli-releases"));
 const activeCliPath = path.join(storageRoot, "active-cli.json");
-const timeoutMs = Number(process.env.BETA_CLI_TIMEOUT_MS || 120_000);
+const timeoutMs = Number(process.env.BETA_CLI_TIMEOUT_MS || 180_000);
 const PRIVATE_RECORD_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const PRIVATE_MAINTENANCE_INTERVAL_MS = 60 * 60 * 1000;
+const PLAN_CACHE_SOLVER_IDENTITY_TTL_MS = 60_000;
+const PLAN_CACHE_SOLVER_IDENTITY_RETRY_MS = 5_000;
 const legacySklandPurgeMarker = path.join(storageRoot, ".skland-legacy-purge-v1.json");
+let cachedPlanCacheSolverIdentity: { value: SolverObservation | null; expiresAt: number } | null = null;
+let planCacheSolverIdentityTask: Promise<SolverObservation | null> | null = null;
 
 function cliCandidates() {
   const platformCliName = process.platform === "win32" ? "infra-cli.exe" : "infra-cli";
@@ -497,7 +505,8 @@ function formatPlanFailure({
 }
 
 const globalForInfra = globalThis as typeof globalThis & {
-  __infraCliServeClient?: InfraCliServeClient;
+  __infraCliHealthServeClient?: InfraCliServeClient;
+  __infraCliPlanServeClient?: InfraCliServeClient;
   __infraCliCleanupRegistered?: boolean;
   __infraPrivateMaintenance?: {
     lastCompletedAt: number;
@@ -505,17 +514,27 @@ const globalForInfra = globalThis as typeof globalThis & {
   };
 };
 
-function getServeClient() {
-  globalForInfra.__infraCliServeClient ??= new InfraCliServeClient({
+function serveClientOptions() {
+  return {
     resolveCliPath,
     resolveRuntimeDataDir,
     timeoutMs,
-  });
-  return globalForInfra.__infraCliServeClient;
+  };
+}
+
+function getHealthServeClient() {
+  globalForInfra.__infraCliHealthServeClient ??= new InfraCliServeClient(serveClientOptions());
+  return globalForInfra.__infraCliHealthServeClient;
+}
+
+function getPlanServeClient() {
+  globalForInfra.__infraCliPlanServeClient ??= new InfraCliServeClient(serveClientOptions());
+  return globalForInfra.__infraCliPlanServeClient;
 }
 
 function stopServeClient(reason: string) {
-  globalForInfra.__infraCliServeClient?.stop(reason);
+  globalForInfra.__infraCliHealthServeClient?.stop(reason);
+  globalForInfra.__infraCliPlanServeClient?.stop(reason);
 }
 
 function registerServeClientCleanup() {
@@ -540,21 +559,22 @@ export async function getHealth(): Promise<HealthApiResponse> {
       }
     })();
     const dataPath = cliPath ? resolveRuntimeDataDir(cliPath) : null;
-    let serve: NonNullable<HealthApiResponse["serve"]> = getServeClient().info();
+    const healthServeClient = getHealthServeClient();
+    let serve: NonNullable<HealthApiResponse["serve"]> = healthServeClient.info();
     let serveError = runnableCandidate
       ? null
       : candidates.find((candidate) => candidate.exists && candidate.reason)?.reason ?? "未找到可运行的 infra-cli。";
 
     if (cliPath) {
       try {
-        const pingResult = await getServeClient().ping();
+        const pingResult = await healthServeClient.ping();
         const planCompute = inspectPlanComputeCapability(pingResult.response);
         const deploymentReadiness = inspectSolverDeploymentReadiness(
           planCompute,
           process.env.INFRA_CLI_EXPECTED_SHA256
         );
         serve = {
-          ...getServeClient().info(),
+          ...healthServeClient.info(),
           protocolMode: planCompute.supported ? "plan.compute" : "legacy",
           planCompute,
         };
@@ -600,15 +620,39 @@ export async function getHealth(): Promise<HealthApiResponse> {
 }
 
 export async function getPlanCacheSolverIdentity(): Promise<SolverObservation | null> {
+  const now = Date.now();
+  if (cachedPlanCacheSolverIdentity && cachedPlanCacheSolverIdentity.expiresAt > now) {
+    return cachedPlanCacheSolverIdentity.value;
+  }
+
+  if (planCacheSolverIdentityTask) return planCacheSolverIdentityTask;
+  const serveClient = getHealthServeClient();
+  if (serveClient.info().busy) return cachedPlanCacheSolverIdentity?.value ?? null;
+
+  const task = (async () => {
+    let value: SolverObservation | null = null;
+    try {
+      resolveCliPath();
+      const ping = await serveClient.ping();
+      const capability = inspectPlanComputeCapability(ping.response);
+      if (capability.supported && capability.solverExecutableSha256) {
+        const readiness = inspectSolverDeploymentReadiness(capability, process.env.INFRA_CLI_EXPECTED_SHA256);
+        if (readiness.ready) value = createSolverObservation(capability, new Date().toISOString());
+      }
+    } catch {
+      value = null;
+    }
+    cachedPlanCacheSolverIdentity = {
+      value,
+      expiresAt: Date.now() + (value ? PLAN_CACHE_SOLVER_IDENTITY_TTL_MS : PLAN_CACHE_SOLVER_IDENTITY_RETRY_MS),
+    };
+    return value;
+  })();
+  planCacheSolverIdentityTask = task;
   try {
-    resolveCliPath();
-    const ping = await getServeClient().ping();
-    const capability = inspectPlanComputeCapability(ping.response);
-    if (!capability.supported || !capability.solverExecutableSha256) return null;
-    const readiness = inspectSolverDeploymentReadiness(capability, process.env.INFRA_CLI_EXPECTED_SHA256);
-    return readiness.ready ? createSolverObservation(capability, new Date().toISOString()) : null;
-  } catch {
-    return null;
+    return await task;
+  } finally {
+    if (planCacheSolverIdentityTask === task) planCacheSolverIdentityTask = null;
   }
 }
 
@@ -741,7 +785,8 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
     await writeJson(layoutPath, body.layout);
     await writeJson(operboxPath, body.operbox);
 
-    const pingResult = await getServeClient().ping();
+    const serveClient = getPlanServeClient();
+    const pingResult = await serveClient.ping();
     const planCompute = inspectPlanComputeCapability(pingResult.response);
     solver = createSolverObservation(planCompute, new Date().toISOString());
     let serveResult: ServeResult;
@@ -757,7 +802,7 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
     let responseValidationError: string | undefined;
 
     if (planCompute.supported) {
-      serveResult = await getServeClient().send("plan.compute", createPlanComputeParams({
+      serveResult = await serveClient.send("plan.compute", createPlanComputeParams({
         layout: body.layout,
         operbox: body.operbox,
         sourceName: body.sourceName,
@@ -780,7 +825,7 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
       if (profileJson) await writeJson(profilePath, profileJson);
       if (maaJson) await writeJson(maaPath, maaJson);
     } else {
-      serveResult = await getServeClient().send("plan", {
+      serveResult = await serveClient.send("plan", {
         layout: layoutPath,
         operbox: operboxPath,
         profile_out: profilePath,
