@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import test from "node:test";
 import { URL } from "node:url";
 
@@ -75,6 +75,11 @@ test("Next and the verified deployment keep real public GET responses compressed
 
 test("CI gates releases on Chromium and schedules the full WebKit suite", async () => {
   const workflow = await readRepoFile(".github/workflows/frontend-quality.yml");
+  const playwrightConfig = await readRepoFile("playwright.config.ts");
+  const e2eFiles = await readdir(new URL("../e2e/", import.meta.url));
+  const readinessSpecs = e2eFiles.filter((file) => /^production-readiness-.+\.spec\.ts$/.test(file));
+  const readinessTestCount = (await Promise.all(readinessSpecs.map((file) => readRepoFile(`e2e/${file}`))))
+    .reduce((count, source) => count + (source.match(/^test\(/gm)?.length ?? 0), 0);
 
   assert.match(workflow, /browser_e2e:[\s\S]+npm run test:e2e[\s\S]+npm run test:e2e:production-profile/);
   assert.match(workflow, /webkit_e2e:[\s\S]+github\.event_name == 'schedule'[\s\S]+npm run test:e2e:webkit/);
@@ -82,6 +87,12 @@ test("CI gates releases on Chromium and schedules the full WebKit suite", async 
   assert.doesNotMatch(workflow, /quality:[\s\S]+needs: \[[^\]]*webkit_e2e/);
   assert.match(workflow, /deploy:[\s\S]+needs: \[changes, quality\]/);
   assert.match(workflow, /cancel-in-progress: \$\{\{ github\.event_name == 'pull_request' \}\}/);
+  assert.equal(readinessSpecs.length, 4);
+  assert.equal(readinessTestCount, 77);
+  assert.equal(e2eFiles.includes("production-readiness.spec.ts"), false);
+  assert.match(playwrightConfig, /fullyParallel: false/);
+  assert.match(playwrightConfig, /workers: process\.env\.CI \? 3 : undefined/);
+  assert.match(playwrightConfig, /timeout: process\.env\.CI \? 10_000 : 5_000/);
 });
 
 test("CI change scope keeps one required quality gate and fails closed", async () => {
