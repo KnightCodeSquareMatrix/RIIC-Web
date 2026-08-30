@@ -59,7 +59,7 @@ npm run dev
 chmod +x bin/infra-cli
 ```
 
-首次部署时，可把 Linux 制品放到应用根目录的 `shared/bin/infra-cli`；后续 release 会复用共享制品，或在共享制品不存在时沿用当前 release 的求解器。服务器上也不要从不可信来源下载或执行二进制。
+服务器部署只使用应用根目录中由 root 管理的 `shared/bin/infra-cli`，并校验独立的 SHA-256 sidecar、GitHub Environment 批准摘要和 Worker 指纹。网站 release 不得携带 `bin/infra-cli`，共享制品缺失或校验不一致时部署会直接失败，因此发布网站不会替换或降级求解器。服务器上也不要从不可信来源下载或执行二进制。
 
 如需单独指定求解器数据目录，可设置 `ARKNIGHTS_INFRA_DATA_DIR`。启动应用后访问 `/api/health`，成功信封中的 `data.plannerReady: true` 表示排班服务可用。
 

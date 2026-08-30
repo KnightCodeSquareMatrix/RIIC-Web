@@ -42,8 +42,10 @@ jobs:
       DEPLOY_INTERNAL_PORT: ${{ vars.DEPLOY_INTERNAL_PORT }}
       DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
       PREFLIGHT_MODE: ${{ inputs.mode }}
+      DEPLOY_APPROVED_SOLVER_SHA256: ${{ vars.DEPLOY_APPROVED_SOLVER_SHA256 }}
+      DEPLOY_EXPECTED_REPOSITORY: KnightCodeSquareMatrix/RIIC-Web
       DEPLOY_PREPARE_HELPER_CONTRACT: "2"
-      DEPLOY_RELEASE_HELPER_CONTRACT: "2"
+      DEPLOY_RELEASE_HELPER_CONTRACT: "3"
 
     steps:
       - name: Validate preflight configuration
@@ -62,6 +64,10 @@ jobs:
           test "$DEPLOY_RUN_USER" != "root"
           [[ "$DEPLOY_INTERNAL_PORT" =~ ^[0-9]{2,5}$ ]]
           [[ "$PREFLIGHT_MODE" == "baseline" || "$PREFLIGHT_MODE" == "cutover-ready" ]]
+          test "$DEPLOY_EXPECTED_REPOSITORY" = "KnightCodeSquareMatrix/RIIC-Web"
+          if [[ "$PREFLIGHT_MODE" == "cutover-ready" ]]; then
+            [[ "$DEPLOY_APPROVED_SOLVER_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          fi
 
       - name: Configure SSH
         shell: bash
@@ -116,11 +122,14 @@ jobs:
 
           timeout --kill-after=10s 60s ssh "${ssh_options[@]}" \
             "${DEPLOY_SSH_USER}@${DEPLOY_HOST}" \
-            bash -s -- "$DEPLOY_APP_ROOT" "$PREFLIGHT_MODE" "$DEPLOY_ENVIRONMENT" <<'REMOTE'
+            bash -s -- "$DEPLOY_APP_ROOT" "$PREFLIGHT_MODE" "$DEPLOY_ENVIRONMENT" \
+              "$DEPLOY_EXPECTED_REPOSITORY" "$DEPLOY_APPROVED_SOLVER_SHA256" <<'REMOTE'
           set -euo pipefail
           app_root="$1"
           preflight_mode="$2"
           deployment_environment="$3"
+          expected_repository="$4"
+          approved_solver_sha256="$5"
           cache_repository="/var/cache/arknights-infra-deploy/repository.git"
           expected_origin="https://github.com/KnightCodeSquareMatrix/RIIC-Web.git"
           cutover_ready=0
@@ -146,7 +155,8 @@ jobs:
 
           if [[ "$cutover_ready" == "1" ]]; then
             sudo -n /usr/local/sbin/arknights-infra-deploy \
-              --preflight "$deployment_environment" "$app_root"
+              --preflight "$deployment_environment" "$app_root" \
+              "$expected_repository" "$approved_solver_sha256"
           else
             available_kib="$(df -Pk "$app_root" | awk 'NR == 2 { print $4 }')"
             [[ "$available_kib" =~ ^[0-9]+$ ]]
