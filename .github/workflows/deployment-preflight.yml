@@ -45,7 +45,7 @@ jobs:
       DEPLOY_APPROVED_SOLVER_SHA256: ${{ vars.DEPLOY_APPROVED_SOLVER_SHA256 }}
       DEPLOY_EXPECTED_REPOSITORY: KnightCodeSquareMatrix/RIIC-Web
       DEPLOY_PREPARE_HELPER_CONTRACT: "2"
-      DEPLOY_RELEASE_HELPER_CONTRACT: "3"
+      DEPLOY_RELEASE_HELPER_CONTRACT: "4"
 
     steps:
       - name: Validate preflight configuration
