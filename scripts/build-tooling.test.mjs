@@ -37,8 +37,10 @@ test("production builds prepare a solver-free standalone runtime with static ass
   assert.match(prepareStandalone, /\["\.env", "\.env\.production", "\.env\.local", "\.env\.production\.local"\]/);
   assert.match(prepareStandalone, /standalone website output must not contain/);
   assert.match(prepareStandalone, /node_modules\/drizzle-orm/);
+  assert.match(prepareStandalone, /scripts\/backfill-business-data\.mts/);
   assert.match(prepareStandalone, /scripts\/migrate-db\.mts/);
   assert.match(prepareStandalone, /scripts\/check-auth-readiness\.mts/);
+  assert.match(prepareStandalone, /src\/server\/business-backfill\.ts/);
   assert.match(startStandalone, /ARKNIGHTS_INFRA_HOSTNAME \|\| "0\.0\.0\.0"/);
   assert.match(startStandalone, /process\.env\.PORT = String\(numericPort\)/);
   assert.match(startStandalone, /\.next\/standalone\/server\.js/);

@@ -10,9 +10,11 @@ const standaloneRoot = path.join(nextRoot, "standalone");
 const operationalRuntimeEntries = [
   "drizzle",
   "node_modules/drizzle-orm",
+  "scripts/backfill-business-data.mts",
   "scripts/check-auth-readiness.mts",
   "scripts/migrate-db.mts",
   "src/server/auth/config.ts",
+  "src/server/business-backfill.ts",
 ];
 
 async function isFile(filePath) {
