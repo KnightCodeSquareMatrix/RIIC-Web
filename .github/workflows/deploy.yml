@@ -35,8 +35,10 @@ jobs:
       DEPLOY_PUBLIC_HEALTH_URL: ${{ secrets.DEPLOY_PUBLIC_HEALTH_URL }}
       DEPLOY_DEBUG_TOOLS_ENABLED: ${{ vars.DEPLOY_DEBUG_TOOLS_ENABLED || '0' }}
       DEPLOY_RATE_LIMIT_ENABLED: ${{ vars.DEPLOY_RATE_LIMIT_ENABLED || '1' }}
+      DEPLOY_APPROVED_SOLVER_SHA256: ${{ vars.DEPLOY_APPROVED_SOLVER_SHA256 }}
+      DEPLOY_EXPECTED_REPOSITORY: KnightCodeSquareMatrix/RIIC-Web
       DEPLOY_PREPARE_HELPER_CONTRACT: "2"
-      DEPLOY_RELEASE_HELPER_CONTRACT: "2"
+      DEPLOY_RELEASE_HELPER_CONTRACT: "3"
 
     steps:
       - name: Checkout verified commit
@@ -66,6 +68,8 @@ jobs:
           [[ "$DEPLOY_PREVIOUS_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$DEPLOY_DEBUG_TOOLS_ENABLED" =~ ^[01]$ ]]
           [[ "$DEPLOY_RATE_LIMIT_ENABLED" =~ ^[01]$ ]]
+          [[ "$DEPLOY_APPROVED_SOLVER_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          test "$DEPLOY_EXPECTED_REPOSITORY" = "KnightCodeSquareMatrix/RIIC-Web"
           [[ "$DEPLOY_PREPARE_HELPER_CONTRACT" =~ ^[1-9][0-9]*$ ]]
           [[ "$DEPLOY_RELEASE_HELPER_CONTRACT" =~ ^[1-9][0-9]*$ ]]
           if [[ "$DEPLOYMENT_ENV" == "production" ]]; then
@@ -296,7 +300,9 @@ jobs:
             '$DEPLOY_INTERNAL_PORT' \
             '$public_health_argument' \
             '$DEPLOY_DEBUG_TOOLS_ENABLED' \
-            '$DEPLOY_RATE_LIMIT_ENABLED'"
+            '$DEPLOY_RATE_LIMIT_ENABLED' \
+            '$DEPLOY_EXPECTED_REPOSITORY' \
+            '$DEPLOY_APPROVED_SOLVER_SHA256'"
 
       - name: Remove SSH credentials from the runner
         if: always()
