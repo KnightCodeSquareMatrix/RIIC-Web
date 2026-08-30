@@ -1,0 +1,21 @@
+* text=auto eol=lf
+
+*.sh text eol=lf
+.github/workflows/*.yml text eol=lf
+
+*.exe binary
+*.gif binary
+*.gz binary
+*.ico binary
+*.jpeg binary
+*.jpg binary
+*.otf binary
+*.pdf binary
+*.png binary
+*.ttf binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.xlsx binary
+*.zip binary
+bin/infra-cli binary

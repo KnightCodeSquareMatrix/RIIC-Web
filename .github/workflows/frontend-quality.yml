@@ -1,0 +1,442 @@
+name: Frontend quality
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_webkit:
+        description: Run the full WebKit compatibility suite
+        required: false
+        default: true
+        type: boolean
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+  schedule:
+    - cron: "23 18 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-quality-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  BETA_DEBUG_TOOLS_ENABLED: "0"
+  BETA_RATE_LIMIT_ENABLED: "0"
+  BETA_TRUST_PROXY_HEADERS: "0"
+  DATABASE_URL: postgresql://arknights_test_runtime:runtime-test-only@127.0.0.1:5432/arknights_auth_test
+  DATABASE_MIGRATION_URL: postgresql://arknights_test_migration:migration-test-only@127.0.0.1:5432/arknights_auth_test
+  AUTH_INTEGRATION_DATABASE_URL: postgresql://arknights_test_runtime:runtime-test-only@127.0.0.1:5432/arknights_auth_test
+  BETTER_AUTH_SECRET: integration-test-secret-at-least-32-bytes-long
+  BETTER_AUTH_URL: https://auth.integration.test
+  RESEND_API_KEY: re_test_not_used
+  AUTH_EMAIL_FROM: Authentication Test <auth@example.test>
+
+jobs:
+  pull_request_policy:
+    name: Pull request policy
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout release ancestry
+        if: github.event_name == 'pull_request' && github.base_ref == 'main'
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Enforce the main release lane
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          EXPECTED_REPOSITORY: KnightCodeSquareMatrix/RIIC-Web
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "pull_request" && "$BASE_REF" == "main" ]]; then
+            test "$HEAD_REPOSITORY" = "$EXPECTED_REPOSITORY"
+            [[ "$HEAD_REF" == release/* ]]
+            [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]
+            git fetch --no-tags origin develop:refs/remotes/origin/develop
+            git merge-base --is-ancestor "$HEAD_SHA" refs/remotes/origin/develop
+          fi
+
+  changes:
+    name: Change scope
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      scope: ${{ steps.scope.outputs.scope }}
+      reason: ${{ steps.scope.outputs.reason }}
+      documentation_only: ${{ steps.scope.outputs.documentation_only }}
+      run_core: ${{ steps.scope.outputs.run_core }}
+      run_browser: ${{ steps.scope.outputs.run_browser }}
+      deploy_required: ${{ steps.scope.outputs.deploy_required }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22
+
+      - name: Classify changed paths
+        id: scope
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          changed_files="$RUNNER_TEMP/changed-files.zlist"
+          : > "$changed_files"
+          classifier=(
+            node scripts/ci-change-scope.mjs
+            --input "$changed_files"
+            --github-output "$GITHUB_OUTPUT"
+            --summary "$GITHUB_STEP_SUMMARY"
+          )
+
+          if [[ "$EVENT_NAME" == "pull_request" ]] \
+            && [[ "$PR_BASE_SHA" =~ ^[0-9a-f]{40}$ ]] \
+            && [[ "$PR_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] \
+            && git cat-file -e "${PR_BASE_SHA}^{commit}" \
+            && git cat-file -e "${PR_HEAD_SHA}^{commit}"; then
+            git diff --name-only -z "$PR_BASE_SHA...$PR_HEAD_SHA" > "$changed_files"
+            "${classifier[@]}"
+          elif [[ "$EVENT_NAME" == "push" ]] \
+            && [[ "$PUSH_BEFORE_SHA" =~ ^[0-9a-f]{40}$ ]] \
+            && [[ "$PUSH_BEFORE_SHA" != "0000000000000000000000000000000000000000" ]] \
+            && [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] \
+            && git cat-file -e "${PUSH_BEFORE_SHA}^{commit}" \
+            && git cat-file -e "${HEAD_SHA}^{commit}"; then
+            git diff --name-only -z "$PUSH_BEFORE_SHA..$HEAD_SHA" > "$changed_files"
+            "${classifier[@]}"
+          else
+            "${classifier[@]}" --force-full
+          fi
+
+  repository_hygiene:
+    name: Public repository hygiene
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22
+
+      - name: Reject private paths and sensitive content
+        run: npm run check:public-repository
+
+  checks:
+    name: Core checks
+    needs: changes
+    if: needs.changes.outputs.run_core == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:18.4@sha256:a02db8cac496f15b094798a38254f14d6e00741f709360e5e00bb6668ea31636
+        env:
+          POSTGRES_DB: arknights_auth_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres-test-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d arknights_auth_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate public database deployment files
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp deploy/postgres/example.env deploy/postgres/production.env
+          cp deploy/postgres/example.env deploy/postgres/development.env
+          docker compose -f deploy/postgres/compose.yml config >/dev/null
+          bash -n deploy/postgres/init-roles.sh deploy/postgres/backup.sh
+          rm -f deploy/postgres/production.env deploy/postgres/development.env
+
+      - name: Initialize limited database roles
+        run: |
+          docker run --rm --network host \
+            -v "$PWD/deploy/postgres/init-roles.sh:/init-roles.sh:ro" \
+            -e PGHOST=127.0.0.1 \
+            -e PGPORT=5432 \
+            -e PGPASSWORD=postgres-test-only \
+            -e POSTGRES_DB=arknights_auth_test \
+            -e POSTGRES_USER=postgres \
+            -e AUTH_RUNTIME_USER=arknights_test_runtime \
+            -e AUTH_RUNTIME_PASSWORD=runtime-test-only \
+            -e AUTH_MIGRATION_USER=arknights_test_migration \
+            -e AUTH_MIGRATION_PASSWORD=migration-test-only \
+            -e AUTH_BACKUP_USER=arknights_test_backup \
+            -e AUTH_BACKUP_PASSWORD=backup-test-only \
+            postgres:18.4@sha256:a02db8cac496f15b094798a38254f14d6e00741f709360e5e00bb6668ea31636 \
+            sh /init-roles.sh
+
+      - name: Verify committed database migrations
+        run: |
+          npm run db:generate
+          git diff --exit-code -- drizzle
+
+      - name: Apply committed authentication migrations
+        run: npm run db:migrate
+
+      - name: Authentication runtime readiness
+        run: npm run auth:check
+
+      - name: Verify limited database grants and backup access
+        shell: bash
+        run: |
+          set -euo pipefail
+          backup_url='postgresql://arknights_test_backup@127.0.0.1:5432/arknights_auth_test'
+          runtime_url='postgresql://arknights_test_runtime@127.0.0.1:5432/arknights_auth_test'
+          image='postgres:18.4@sha256:a02db8cac496f15b094798a38254f14d6e00741f709360e5e00bb6668ea31636'
+          docker run --rm --network host -e PGPASSWORD=backup-test-only "$image" \
+            psql "$backup_url" -v ON_ERROR_STOP=1 -c 'SELECT count(*) FROM drizzle.__drizzle_migrations;'
+          if docker run --rm --network host -e PGPASSWORD=backup-test-only "$image" \
+            psql "$backup_url" -v ON_ERROR_STOP=1 -c 'DELETE FROM "user" WHERE false;'; then
+            echo 'backup role unexpectedly has write access' >&2
+            exit 1
+          fi
+          if docker run --rm --network host -e PGPASSWORD=runtime-test-only "$image" \
+            psql "$runtime_url" -v ON_ERROR_STOP=1 -c 'CREATE TABLE public.runtime_must_not_create (id integer);'; then
+            echo 'runtime role unexpectedly has DDL access' >&2
+            exit 1
+          fi
+          docker run --rm --network host \
+            -e PGPASSWORD=backup-test-only \
+            "$image" \
+            pg_dump --format=custom --no-owner --no-acl "$backup_url" >/dev/null
+
+      - name: PostgreSQL authentication integration
+        run: npm run test:auth-integration
+
+      - name: Security audit
+        run: npm run audit:security
+
+      - name: Generated asset consistency
+        run: npm run assets:check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: API contract tests
+        run: npm run test:api-contract
+
+      - name: Shift comparison tests
+        run: npm run test:shift-comparison
+
+      - name: Production build
+        env:
+          APP_DEPLOYMENT_ENV: production
+          SKLAND_FEATURE_ENABLED: "1"
+          DATABASE_URL: ""
+          DATABASE_MIGRATION_URL: ""
+          BETTER_AUTH_SECRET: ""
+          BETTER_AUTH_URL: ""
+          RESEND_API_KEY: ""
+          AUTH_EMAIL_FROM: ""
+        run: npm run build
+
+      - name: Initial bundle budget
+        run: npm run check:bundle-budget
+
+      - name: Production output tracing
+        run: npm run check:build-traces
+
+      - name: Production client feature boundary
+        env:
+          APP_DEPLOYMENT_ENV: production
+          SKLAND_FEATURE_ENABLED: "1"
+        run: npm run check:production-client
+
+  browser_e2e:
+    name: E2E (chromium)
+    needs: changes
+    if: needs.changes.outputs.run_browser == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.1-noble@sha256:c091b21d9fae78c76e85cd4356431e9b018402f172a214fc7d7a5e9a7e29d8ac
+      options: --user 1001
+    env:
+      DATABASE_URL: postgresql://arknights_e2e:e2e-test-only@postgres:5432/arknights_auth_test
+      DATABASE_MIGRATION_URL: postgresql://arknights_e2e:e2e-test-only@postgres:5432/arknights_auth_test
+      AUTH_INTEGRATION_DATABASE_URL: postgresql://arknights_e2e:e2e-test-only@postgres:5432/arknights_auth_test
+    services:
+      postgres:
+        image: postgres:18.4@sha256:a02db8cac496f15b094798a38254f14d6e00741f709360e5e00bb6668ea31636
+        env:
+          POSTGRES_DB: arknights_auth_test
+          POSTGRES_USER: arknights_e2e
+          POSTGRES_PASSWORD: e2e-test-only
+        options: >-
+          --health-cmd "pg_isready -U arknights_e2e -d arknights_auth_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply committed authentication migrations
+        run: npm run db:migrate
+
+      - name: Chromium end-to-end tests
+        run: npm run test:e2e
+
+      - name: Production profile enabled boundary
+        run: npm run test:e2e:production-profile
+
+  webkit_e2e:
+    name: Scheduled WebKit compatibility
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run_webkit)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.1-noble@sha256:c091b21d9fae78c76e85cd4356431e9b018402f172a214fc7d7a5e9a7e29d8ac
+      options: --user 1001
+    env:
+      DATABASE_URL: postgresql://arknights_e2e:e2e-test-only@postgres:5432/arknights_auth_test
+      DATABASE_MIGRATION_URL: postgresql://arknights_e2e:e2e-test-only@postgres:5432/arknights_auth_test
+      AUTH_INTEGRATION_DATABASE_URL: postgresql://arknights_e2e:e2e-test-only@postgres:5432/arknights_auth_test
+    services:
+      postgres:
+        image: postgres:18.4@sha256:a02db8cac496f15b094798a38254f14d6e00741f709360e5e00bb6668ea31636
+        env:
+          POSTGRES_DB: arknights_auth_test
+          POSTGRES_USER: arknights_e2e
+          POSTGRES_PASSWORD: e2e-test-only
+        options: >-
+          --health-cmd "pg_isready -U arknights_e2e -d arknights_auth_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply committed authentication migrations
+        run: npm run db:migrate
+
+      - name: WebKit end-to-end tests
+        run: npm run test:e2e:webkit
+
+  quality:
+    name: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [pull_request_policy, changes, repository_hygiene, checks, browser_e2e]
+    if: always() && github.event_name != 'schedule'
+    steps:
+      - name: Verify all required jobs passed
+        env:
+          POLICY_RESULT: ${{ needs.pull_request_policy.result }}
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          HYGIENE_RESULT: ${{ needs.repository_hygiene.result }}
+          CHECKS_RESULT: ${{ needs.checks.result }}
+          BROWSER_E2E_RESULT: ${{ needs.browser_e2e.result }}
+          RUN_CORE: ${{ needs.changes.outputs.run_core }}
+          RUN_BROWSER: ${{ needs.changes.outputs.run_browser }}
+          DEPLOY_REQUIRED: ${{ needs.changes.outputs.deploy_required }}
+        run: |
+          set -euo pipefail
+          test "$POLICY_RESULT" = "success"
+          test "$CHANGES_RESULT" = "success"
+          test "$HYGIENE_RESULT" = "success"
+          [[ "$DEPLOY_REQUIRED" == "true" || "$DEPLOY_REQUIRED" == "false" ]]
+
+          verify_result() {
+            local required="$1"
+            local actual="$2"
+            local label="$3"
+            [[ "$required" == "true" || "$required" == "false" ]]
+            if [[ "$required" == "true" ]]; then
+              test "$actual" = "success"
+            else
+              test "$actual" = "skipped"
+            fi
+            printf '%s required=%s result=%s\n' "$label" "$required" "$actual"
+          }
+
+          verify_result "$RUN_CORE" "$CHECKS_RESULT" core
+          verify_result "$RUN_BROWSER" "$BROWSER_E2E_RESULT" browser
+
+  deploy:
+    needs: [changes, quality]
+    if: >-
+      github.event_name == 'push' &&
+      (github.ref_name == 'main' || github.ref_name == 'develop') &&
+      needs.quality.result == 'success' &&
+      needs.changes.outputs.deploy_required == 'true' &&
+      vars.DEPLOY_AUTOMATION_ENABLED == '1' &&
+      github.repository == 'KnightCodeSquareMatrix/RIIC-Web'
+    uses: ./.github/workflows/deploy.yml
+    secrets: inherit

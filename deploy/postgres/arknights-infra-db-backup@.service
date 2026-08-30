@@ -1,0 +1,17 @@
+[Unit]
+Description=Encrypted PostgreSQL authentication backup (%i)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=arkbackup
+Group=arkbackup
+Environment=HOME=/var/lib/arkbackup
+EnvironmentFile=/etc/arknights-infra/db-backup-%i.env
+ExecStart=/usr/local/sbin/arknights-infra-db-backup
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/backups/arknights-infra /var/lib/arkbackup

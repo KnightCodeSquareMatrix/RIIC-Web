@@ -1,0 +1,18 @@
+# Sensitive repository, release, authentication, and API boundaries
+/.github/CODEOWNERS @KnightCodeSquareMatrix
+/.github/workflows/ @KnightCodeSquareMatrix
+/deploy/ @KnightCodeSquareMatrix
+/package.json @KnightCodeSquareMatrix
+/package-lock.json @KnightCodeSquareMatrix
+/next.config.ts @KnightCodeSquareMatrix
+/scripts/check-public-repository.mjs @KnightCodeSquareMatrix
+/scripts/ci-change-scope.mjs @KnightCodeSquareMatrix
+/scripts/verify-public-compression.mjs @KnightCodeSquareMatrix
+/src/app/api/ @KnightCodeSquareMatrix
+/src/server/auth/ @KnightCodeSquareMatrix
+/src/server/db/ @KnightCodeSquareMatrix
+/src/server/infra.ts @KnightCodeSquareMatrix
+/src/server/plan-protocol.ts @KnightCodeSquareMatrix
+/src/server/public-plan.ts @KnightCodeSquareMatrix
+/src/internal-field-safety.ts @KnightCodeSquareMatrix
+/src/training-advice-contract.ts @KnightCodeSquareMatrix

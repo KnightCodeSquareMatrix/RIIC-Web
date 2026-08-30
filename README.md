@@ -1,0 +1,146 @@
+# 可露希尔基建终端
+
+面向《明日方舟》玩家的基建排班 Web 应用。导入干员数据、配置基建布局后，应用会调用独立的 `infra-cli` 求解服务生成三班排班，并提供效率概览、练卡建议和 MAA JSON 导出。
+
+- 在线地址：[riic.autos](https://riic.autos)
+- 前端仓库：[KnightCodeSquareMatrix/RIIC-Web](https://github.com/KnightCodeSquareMatrix/RIIC-Web)
+- 问题反馈：[GitHub Issues](https://github.com/KnightCodeSquareMatrix/RIIC-Web/issues)
+
+本仓库只包含 Next.js 应用、API 边界和协议适配，不包含排班搜索算法、干员技能数据逻辑或求解器源码。
+
+## 功能
+
+- 导入 MAA `Arknights_OperBox_Export.json` 和兼容的一图流 xlsx
+- 配置 243、153、333、252、342 等基建布局与设施等级
+- 生成三班排班，查看房间效率、换班调整和预计日产出
+- 按练度与基建收益查看练卡建议
+- 查询基建技能与适用设施
+- 对比当前进驻与排班计划，并导出 MAA JSON
+- 可选的森空岛二维码授权、状态同步、网站账号和云端工作区
+
+森空岛、网站账号和云同步都由部署者显式配置。未启用这些能力时，样例数据、布局配置、技能查询和已接入求解器的排班流程仍可独立使用。
+
+## 技术栈
+
+- Next.js 16 App Router
+- React 19 与 TypeScript
+- Tailwind CSS 4、shadcn/ui、Base UI
+- Better Auth、Drizzle ORM 与 PostgreSQL
+- `skland-kit`，仅用于可选的森空岛二维码授权
+- 外部长驻进程 `infra-cli serve`
+
+页面和 `/api/*` 由同一个 Next.js 服务提供，不需要单独启动 Express 或 Vite 服务。
+
+## 本地运行
+
+需要 Node.js 22 和 npm。
+
+```bash
+git clone https://github.com/KnightCodeSquareMatrix/RIIC-Web.git
+cd RIIC-Web
+npm install
+npm run dev
+```
+
+开发服务默认监听 `http://127.0.0.1:5174`。
+
+应用可以在没有数据库和邮件服务的情况下完成安装与构建。账号、邮件验证、云同步和森空岛能力需要额外配置，变量示例见 [`.env.example`](./.env.example)。
+
+## 配置求解器
+
+本仓库不分发 `infra-cli` 二进制。请从你有权访问的求解器项目构建与当前协议兼容的版本，并使用下面一种方式提供：
+
+1. Linux 放到 `bin/infra-cli`，Windows 放到 `bin/infra-cli.exe`；
+2. 通过 `INFRA_CLI_PATH` 指向本机可执行文件。
+
+这两个路径已经加入 `.gitignore`，避免把私有或平台相关的构建制品提交到仓库。Linux 文件需要可执行权限：
+
+```bash
+chmod +x bin/infra-cli
+```
+
+首次部署时，可把 Linux 制品放到应用根目录的 `shared/bin/infra-cli`；后续 release 会复用共享制品，或在共享制品不存在时沿用当前 release 的求解器。服务器上也不要从不可信来源下载或执行二进制。
+
+如需单独指定求解器数据目录，可设置 `ARKNIGHTS_INFRA_DATA_DIR`。启动应用后访问 `/api/health`，成功信封中的 `data.plannerReady: true` 表示排班服务可用。
+
+排班结果必须经过 [`src/server/public-plan.ts`](./src/server/public-plan.ts) 的白名单映射。不要把求解器的命令、路径、标准输出、标准错误或内部诊断对象直接返回给浏览器。
+
+## 可选服务
+
+复制示例配置后再替换占位值，不要提交真实配置：
+
+```bash
+cp .env.example .env.local
+```
+
+常用变量：
+
+| 变量 | 用途 |
+| --- | --- |
+| `APP_DEPLOYMENT_ENV` | `development` 或 `production` |
+| `SKLAND_FEATURE_ENABLED` | production 中只有精确值 `1` 才启用森空岛 |
+| `SKLAND_SESSION_SECRET` | 森空岛会话加密密钥，至少 32 字节 |
+| `BETA_PUBLIC_ORIGIN` | 公开写请求允许的完整 Origin |
+| `SKLAND_PUBLIC_ORIGIN` | 森空岛会话流允许的完整 Origin |
+| `DATABASE_URL` | 运行时 PostgreSQL 连接串 |
+| `DATABASE_MIGRATION_URL` | 数据库迁移连接串 |
+| `BETTER_AUTH_SECRET` | 网站 Session 签名密钥，至少 32 字节 |
+| `BETTER_AUTH_URL` | 网站账号对外 Origin |
+| `RESEND_API_KEY` | 邮件验证与密码重置 |
+| `ACCOUNT_CLOUD_SYNC_ENABLED` | 是否开放账号云同步 |
+
+生产环境应使用 HTTPS、长期稳定的随机密钥、最小权限数据库账号，并把配置放在部署平台的密钥管理中。
+
+## 数据与隐私边界
+
+- 森空岛只提供官方二维码授权，不接收账号密码或短信验证码。
+- 森空岛凭据使用 AES-256-GCM 封装在 HttpOnly Cookie 中，不写入 localStorage、运行记录或反馈。
+- 排班 API 只公开白名单字段；调试字段在 production 强制关闭。
+- 运行记录、反馈、云工作区和分析数据各有独立的最小化与保留策略。
+- 提交 Issue 时不要附带 MAA Box、Cookie、令牌、数据库连接串、真实用户信息或服务端日志。
+
+公开的数据范围见 [森空岛数据能力矩阵](./docs/SKLAND_DATA_CAPABILITIES.md)，页面中的服务条款与隐私政策位于 [`src/app/terms`](./src/app/terms) 和 [`src/app/privacy`](./src/app/privacy)。
+
+## 项目结构
+
+| 路径 | 内容 |
+| --- | --- |
+| `src/app` | App Router 页面与 API route handlers |
+| `src/components` | 页面、布局和业务组件 |
+| `src/components/ui` | 通用 UI primitives |
+| `src/server` | API 契约、求解器客户端、认证与持久化边界 |
+| `src/layouts` | 基建布局预设 |
+| `drizzle` | 数据库 schema 迁移 |
+| `public` | 静态图片与第三方素材快照 |
+| `scripts` | 构建、公开测试、资源同步和仓库卫生检查 |
+
+求解器协议与公共 DTO 的说明见 [Frontend Serve Guide](./docs/FRONTEND_SERVE_GUIDE.md)。
+
+## 开发与检查
+
+```bash
+npm run check
+npm run audit:security
+npm run build
+```
+
+`npm run check` 会执行公开仓库卫生检查、生成资源校验、ESLint、单元测试和 API 契约测试。浏览器测试可分别通过 `npm run test:e2e`、`npm run test:e2e:production-profile` 和 `npm run test:e2e:webkit` 运行。涉及数据库 schema 的改动，应先设置 `DATABASE_MIGRATION_URL`，再执行：
+
+```bash
+npm run db:generate
+npm run db:migrate
+```
+
+所有功能和修复 PR 都应提交到 `develop`；`main` 只接收维护者从同仓库 `release/**` 分支发起的发布 PR。完整流程见 [CONTRIBUTING.md](./CONTRIBUTING.md)。不要把本地环境文件、求解器二进制、运行记录、用户数据或浏览器自动化产物加入提交。
+
+## 第三方素材
+
+干员头像、基建技能图标、游戏名称和描述属于其各自权利人。本项目不主张对《明日方舟》素材的所有权，来源、固定版本和字体许可见 [THIRD_PARTY_ASSETS.md](./THIRD_PARTY_ASSETS.md)。
+
+本项目是非官方社区工具，与上海鹰角网络科技有限公司、Hypergryph 或《明日方舟》官方没有隶属或背书关系。
+
+## 许可证
+
+本项目自有代码按 [PolyForm Noncommercial License 1.0.0](./LICENSE.md) 提供。你可以为非商业目的使用、研究、修改和分发代码；商业使用需要另行取得相关权利人的书面许可。
+
+这是一份“源码可用、限制商业用途”的软件许可证，不是 OSI 认可的开源许可证。第三方依赖、字体和游戏素材继续适用各自的许可证或权利声明，不因本项目许可证而改变。

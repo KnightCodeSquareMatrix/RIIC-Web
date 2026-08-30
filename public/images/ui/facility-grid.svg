@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
+  <g fill="none" stroke="#fff" stroke-width=".7" opacity=".36">
+    <path d="M0 0h96M0 24h96M0 48h96M0 72h96M0 96h96"/>
+    <path d="M0 0v96M24 0v96M48 0v96M72 0v96M96 0v96"/>
+  </g>
+  <g fill="none" stroke="#fff" stroke-width=".65" opacity=".28">
+    <path d="m0 0 24 24M24 0 0 24M24 0l24 24M48 0 24 24M48 0l24 24M72 0 48 24M72 0l24 24M96 0 72 24"/>
+    <path d="m0 24 24 24M24 24 0 48M24 24l24 24M48 24 24 48M48 24l24 24M72 24 48 48M72 24l24 24M96 24 72 48"/>
+    <path d="m0 48 24 24M24 48 0 72M24 48l24 24M48 48 24 72M48 48l24 24M72 48 48 72M72 48l24 24M96 48 72 72"/>
+    <path d="m0 72 24 24M24 72 0 96M24 72l24 24M48 72 24 96M48 72l24 24M72 72 48 96M72 72l24 24M96 72 72 96"/>
+  </g>
+  <g fill="#fff">
+    <circle cx="0" cy="0" r="1.15"/>
+    <circle cx="24" cy="0" r="1.15"/>
+    <circle cx="48" cy="0" r="1.15"/>
+    <circle cx="72" cy="0" r="1.15"/>
+    <circle cx="96" cy="0" r="1.15"/>
+    <circle cx="0" cy="24" r="1.15"/>
+    <circle cx="24" cy="24" r="1.15"/>
+    <circle cx="48" cy="24" r="1.15"/>
+    <circle cx="72" cy="24" r="1.15"/>
+    <circle cx="96" cy="24" r="1.15"/>
+    <circle cx="0" cy="48" r="1.15"/>
+    <circle cx="24" cy="48" r="1.15"/>
+    <circle cx="48" cy="48" r="1.15"/>
+    <circle cx="72" cy="48" r="1.15"/>
+    <circle cx="96" cy="48" r="1.15"/>
+    <circle cx="0" cy="72" r="1.15"/>
+    <circle cx="24" cy="72" r="1.15"/>
+    <circle cx="48" cy="72" r="1.15"/>
+    <circle cx="72" cy="72" r="1.15"/>
+    <circle cx="96" cy="72" r="1.15"/>
+    <circle cx="0" cy="96" r="1.15"/>
+    <circle cx="24" cy="96" r="1.15"/>
+    <circle cx="48" cy="96" r="1.15"/>
+    <circle cx="72" cy="96" r="1.15"/>
+    <circle cx="96" cy="96" r="1.15"/>
+  </g>
+</svg>

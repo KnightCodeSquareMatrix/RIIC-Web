@@ -1,0 +1,31 @@
+name: arknights-infra-databases
+
+x-postgres: &postgres
+  image: postgres:18.4@sha256:a02db8cac496f15b094798a38254f14d6e00741f709360e5e00bb6668ea31636
+  restart: unless-stopped
+  healthcheck:
+    test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+    interval: 10s
+    timeout: 5s
+    retries: 10
+  security_opt: ["no-new-privileges:true"]
+
+services:
+  production:
+    <<: *postgres
+    env_file: production.env
+    ports: ["127.0.0.1:55432:5432"]
+    volumes:
+      - production-data:/var/lib/postgresql
+      - ./init-roles.sh:/docker-entrypoint-initdb.d/10-roles.sh:ro
+  development:
+    <<: *postgres
+    env_file: development.env
+    ports: ["127.0.0.1:55433:5432"]
+    volumes:
+      - development-data:/var/lib/postgresql
+      - ./init-roles.sh:/docker-entrypoint-initdb.d/10-roles.sh:ro
+
+volumes:
+  production-data:
+  development-data:

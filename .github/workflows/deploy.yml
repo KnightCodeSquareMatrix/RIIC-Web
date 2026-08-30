@@ -1,0 +1,317 @@
+name: Deploy verified branch
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    if: >-
+      github.event_name == 'push' &&
+      (github.ref_name == 'main' || github.ref_name == 'develop') &&
+      vars.DEPLOY_AUTOMATION_ENABLED == '1' &&
+      github.repository == 'KnightCodeSquareMatrix/RIIC-Web'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    environment:
+      name: ${{ github.ref_name == 'main' && 'production' || 'development' }}
+    concurrency:
+      group: deploy-${{ github.ref_name }}
+      cancel-in-progress: false
+    env:
+      DEPLOYMENT_ENV: ${{ github.ref_name == 'main' && 'production' || 'development' }}
+      DEPLOY_SHA: ${{ github.sha }}
+      DEPLOY_PREVIOUS_SHA: ${{ github.event.before }}
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
+      DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+      DEPLOY_SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+      DEPLOY_APP_ROOT: ${{ vars.DEPLOY_APP_ROOT }}
+      DEPLOY_SERVICE: ${{ vars.DEPLOY_SERVICE }}
+      DEPLOY_RUN_USER: ${{ vars.DEPLOY_RUN_USER || 'arkinfra' }}
+      DEPLOY_INTERNAL_PORT: ${{ vars.DEPLOY_INTERNAL_PORT }}
+      DEPLOY_PUBLIC_HEALTH_URL: ${{ secrets.DEPLOY_PUBLIC_HEALTH_URL }}
+      DEPLOY_DEBUG_TOOLS_ENABLED: ${{ vars.DEPLOY_DEBUG_TOOLS_ENABLED || '0' }}
+      DEPLOY_RATE_LIMIT_ENABLED: ${{ vars.DEPLOY_RATE_LIMIT_ENABLED || '1' }}
+      DEPLOY_PREPARE_HELPER_CONTRACT: "2"
+      DEPLOY_RELEASE_HELPER_CONTRACT: "2"
+
+    steps:
+      - name: Checkout verified commit
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate deployment configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$DEPLOY_SHA"
+          test -n "$DEPLOY_HOST"
+          test -n "$DEPLOY_SSH_USER"
+          test -n "$DEPLOY_SSH_PRIVATE_KEY"
+          test -n "$DEPLOY_SSH_KNOWN_HOSTS"
+          [[ "$DEPLOY_HOST" =~ ^[A-Za-z0-9._-]+$ ]]
+          [[ "$DEPLOY_SSH_USER" =~ ^[A-Za-z0-9_-]+$ ]]
+          test "$DEPLOY_SSH_USER" != "root"
+          [[ "$DEPLOY_APP_ROOT" =~ ^/opt/arknights-infra(-[A-Za-z0-9._-]+)?$ ]]
+          [[ "$DEPLOY_SERVICE" =~ ^arknights-infra(-[A-Za-z0-9_.@-]+)?$ ]]
+          [[ "$DEPLOY_RUN_USER" =~ ^[A-Za-z0-9_-]+$ ]]
+          test "$DEPLOY_RUN_USER" != "root"
+          [[ "$DEPLOY_INTERNAL_PORT" =~ ^[0-9]{2,5}$ ]]
+          [[ "$DEPLOY_PREVIOUS_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$DEPLOY_DEBUG_TOOLS_ENABLED" =~ ^[01]$ ]]
+          [[ "$DEPLOY_RATE_LIMIT_ENABLED" =~ ^[01]$ ]]
+          [[ "$DEPLOY_PREPARE_HELPER_CONTRACT" =~ ^[1-9][0-9]*$ ]]
+          [[ "$DEPLOY_RELEASE_HELPER_CONTRACT" =~ ^[1-9][0-9]*$ ]]
+          if [[ "$DEPLOYMENT_ENV" == "production" ]]; then
+            test "$DEPLOY_APP_ROOT" = "/opt/arknights-infra"
+            test "$DEPLOY_SERVICE" = "arknights-infra"
+          else
+            [[ "$DEPLOY_APP_ROOT" =~ ^/opt/arknights-infra-[A-Za-z0-9._-]+$ ]]
+            [[ "$DEPLOY_SERVICE" =~ ^arknights-infra-[A-Za-z0-9_.@-]+$ ]]
+          fi
+          if [[ -n "$DEPLOY_PUBLIC_HEALTH_URL" ]]; then
+            public_health_url_pattern='^https?://[A-Za-z0-9._:/?&=%-]+$'
+            [[ "$DEPLOY_PUBLIC_HEALTH_URL" =~ $public_health_url_pattern ]]
+          fi
+
+      - name: Configure SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_SSH_PRIVATE_KEY" > "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "$DEPLOY_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"
+
+      - name: Verify installed deployment helper contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh_options=(
+            -o BatchMode=yes
+            -o ConnectTimeout=15
+            -o ConnectionAttempts=2
+            -o ServerAliveInterval=15
+            -o ServerAliveCountMax=3
+          )
+
+          verify_helper() {
+            local label="$1"
+            local helper_path="$2"
+            local expected_contract="$3"
+            local metadata actual_contract artifact_sha256
+
+            metadata="$(timeout --kill-after=5s 30s ssh "${ssh_options[@]}" \
+              "${DEPLOY_SSH_USER}@${DEPLOY_HOST}" \
+              "test -f '$helper_path' && test ! -L '$helper_path' && stat -c '%U:%G:%a' -- '$helper_path'")"
+            if [[ "$metadata" != "root:root:755" ]]; then
+              echo "$label helper must be a root:root 0755 regular file; received: $metadata" >&2
+              exit 1
+            fi
+
+            actual_contract="$(timeout --kill-after=5s 30s ssh "${ssh_options[@]}" \
+              "${DEPLOY_SSH_USER}@${DEPLOY_HOST}" \
+              "'$helper_path' --contract-version")"
+            if [[ "$actual_contract" != "$expected_contract" ]]; then
+              echo "$label helper contract mismatch: expected $expected_contract, received $actual_contract" >&2
+              exit 1
+            fi
+
+            artifact_sha256="$(timeout --kill-after=5s 30s ssh "${ssh_options[@]}" \
+              "${DEPLOY_SSH_USER}@${DEPLOY_HOST}" \
+              "sha256sum -- '$helper_path' | cut -d ' ' -f 1")"
+            [[ "$artifact_sha256" =~ ^[0-9a-f]{64}$ ]]
+            printf '%s helper contract=%s sha256=%s\n' "$label" "$actual_contract" "$artifact_sha256" \
+              >> "$GITHUB_STEP_SUMMARY"
+          }
+
+          verify_helper prepare /usr/local/sbin/arknights-infra-prepare-release \
+            "$DEPLOY_PREPARE_HELPER_CONTRACT"
+          verify_helper deploy /usr/local/sbin/arknights-infra-deploy \
+            "$DEPLOY_RELEASE_HELPER_CONTRACT"
+
+      - name: Prepare or upload release archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          prepare_started_at="$(date +%s)"
+          deploy_tree_sha="$(git rev-parse 'HEAD^{tree}')"
+          remote_archive="/tmp/arknights-infra-${DEPLOYMENT_ENV}-${DEPLOY_SHA}.tar.gz"
+          remote_bundle="/tmp/arknights-infra-${DEPLOYMENT_ENV}-${DEPLOY_SHA}.bundle"
+          local_bundle="release-${DEPLOY_SHA}.bundle"
+          ssh_options=(
+            -o BatchMode=yes
+            -o ConnectTimeout=15
+            -o ConnectionAttempts=2
+            -o ServerAliveInterval=15
+            -o ServerAliveCountMax=3
+          )
+
+          run_remote_prepare() {
+            local bundle_path="${1:-}"
+            local remote_command="/usr/local/sbin/arknights-infra-prepare-release \
+              '$DEPLOYMENT_ENV' \
+              '$DEPLOY_SHA' \
+              '$deploy_tree_sha' \
+              '$remote_archive'"
+            if [[ -n "$bundle_path" ]]; then
+              remote_command+=" '$bundle_path'"
+            fi
+            timeout --kill-after=10s 90s ssh "${ssh_options[@]}" \
+              "${DEPLOY_SSH_USER}@${DEPLOY_HOST}" \
+              "$remote_command"
+          }
+
+          is_temporary_failure() {
+            [[ "$1" -eq 75 || "$1" -eq 124 || "$1" -eq 137 ]]
+          }
+
+          set +e
+          run_remote_prepare
+          prepare_status=$?
+          set -e
+
+          transport_mode="git-cache"
+          fallback_reason="none"
+          bundle_base_source="not-needed"
+          transfer_bytes=0
+          release_prepared=0
+          if [[ "$prepare_status" -eq 0 ]]; then
+            release_prepared=1
+          elif ! is_temporary_failure "$prepare_status"; then
+            echo "Release preparation failed with non-recoverable status $prepare_status." >&2
+            exit "$prepare_status"
+          else
+            fallback_reason="temporary-cache-or-github-failure"
+          fi
+
+          if [[ "$release_prepared" -eq 0 ]]; then
+            bundle_ready=0
+            bundle_base_sha=""
+            bundle_base_source="none"
+            remote_cache_base="$(timeout --kill-after=5s 30s ssh "${ssh_options[@]}" \
+              "${DEPLOY_SSH_USER}@${DEPLOY_HOST}" \
+              "git --git-dir=/var/cache/arknights-infra-deploy/repository.git rev-parse 'refs/arknights-infra/environments/$DEPLOYMENT_ENV'" \
+              2>/dev/null || true)"
+            if [[ "$remote_cache_base" =~ ^[0-9a-f]{40}$ ]] \
+              && [[ "$remote_cache_base" != "$DEPLOY_SHA" ]] \
+              && git cat-file -e "${remote_cache_base}^{commit}" \
+              && git merge-base --is-ancestor "$remote_cache_base" HEAD; then
+              bundle_base_sha="$remote_cache_base"
+              bundle_base_source="server-cache"
+            elif [[ "$DEPLOY_PREVIOUS_SHA" != "0000000000000000000000000000000000000000" ]] \
+              && git cat-file -e "${DEPLOY_PREVIOUS_SHA}^{commit}" \
+              && git merge-base --is-ancestor "$DEPLOY_PREVIOUS_SHA" HEAD; then
+              bundle_base_sha="$DEPLOY_PREVIOUS_SHA"
+              bundle_base_source="previous-push"
+            fi
+
+            if [[ -n "$bundle_base_sha" ]]; then
+              if git bundle create "$local_bundle" HEAD "^$bundle_base_sha"; then
+                bundle_ready=1
+              else
+                fallback_reason="incremental-bundle-create-failed"
+              fi
+            else
+              fallback_reason="incremental-base-unavailable"
+            fi
+
+            if [[ "$bundle_ready" -eq 1 ]]; then
+              bundle_bytes="$(stat -c '%s' "$local_bundle")"
+              set +e
+              timeout --kill-after=10s 1500s scp "${ssh_options[@]}" \
+                "$local_bundle" \
+                "${DEPLOY_SSH_USER}@${DEPLOY_HOST}:$remote_bundle"
+              bundle_transfer_status=$?
+              set -e
+
+              if [[ "$bundle_transfer_status" -eq 0 ]]; then
+                transfer_bytes="$(( transfer_bytes + bundle_bytes ))"
+                set +e
+                run_remote_prepare "$remote_bundle"
+                bundle_prepare_status=$?
+                set -e
+                if [[ "$bundle_prepare_status" -eq 0 ]]; then
+                  transport_mode="git-bundle"
+                  transfer_bytes="$bundle_bytes"
+                  release_prepared=1
+                elif is_temporary_failure "$bundle_prepare_status"; then
+                  fallback_reason="incremental-bundle-incomplete"
+                else
+                  echo "Incremental bundle failed validation with status $bundle_prepare_status." >&2
+                  exit "$bundle_prepare_status"
+                fi
+              else
+                fallback_reason="incremental-bundle-transfer-failed"
+                timeout --kill-after=5s 30s ssh "${ssh_options[@]}" \
+                  "${DEPLOY_SSH_USER}@${DEPLOY_HOST}" \
+                  "rm -f -- '$remote_bundle'" || true
+              fi
+            fi
+          fi
+
+          if [[ "$release_prepared" -eq 0 ]]; then
+            transport_mode="scp-archive"
+            git archive --format=tar.gz --output="release-${DEPLOY_SHA}.tar.gz" HEAD
+            archive_transfer_bytes="$(stat -c '%s' "release-${DEPLOY_SHA}.tar.gz")"
+            transfer_bytes="$(( transfer_bytes + archive_transfer_bytes ))"
+            timeout --kill-after=10s 1500s scp "${ssh_options[@]}" \
+              "release-${DEPLOY_SHA}.tar.gz" \
+              "${DEPLOY_SSH_USER}@${DEPLOY_HOST}:$remote_archive"
+          fi
+
+          archive_bytes="$(timeout --kill-after=5s 30s ssh "${ssh_options[@]}" \
+            "${DEPLOY_SSH_USER}@${DEPLOY_HOST}" "stat -c '%s' '$remote_archive'")"
+          prepare_elapsed_seconds="$(( $(date +%s) - prepare_started_at ))"
+          {
+            echo "### Release transport"
+            echo
+            echo "| Environment | SHA | Mode | Bundle base | Seconds | Transferred bytes | Archive bytes | Fallback reason |"
+            echo "| --- | --- | --- | --- | ---: | ---: | ---: | --- |"
+            echo "| $DEPLOYMENT_ENV | \`${DEPLOY_SHA:0:12}\` | $transport_mode | $bundle_base_source | $prepare_elapsed_seconds | $transfer_bytes | $archive_bytes | $fallback_reason |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Deploy and verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          public_health_argument=""
+          if [[ -n "$DEPLOY_PUBLIC_HEALTH_URL" ]]; then
+            public_health_argument="@stdin"
+          fi
+          printf '%s\n' "$DEPLOY_PUBLIC_HEALTH_URL" | ssh -o BatchMode=yes "${DEPLOY_SSH_USER}@${DEPLOY_HOST}" \
+            "sudo -n /usr/local/sbin/arknights-infra-deploy \
+            '$DEPLOYMENT_ENV' \
+            '$DEPLOY_SHA' \
+            '/tmp/arknights-infra-${DEPLOYMENT_ENV}-${DEPLOY_SHA}.tar.gz' \
+            '$DEPLOY_APP_ROOT' \
+            '$DEPLOY_SERVICE' \
+            '$DEPLOY_RUN_USER' \
+            '$DEPLOY_INTERNAL_PORT' \
+            '$public_health_argument' \
+            '$DEPLOY_DEBUG_TOOLS_ENABLED' \
+            '$DEPLOY_RATE_LIMIT_ENABLED'"
+
+      - name: Remove SSH credentials from the runner
+        if: always()
+        shell: bash
+        run: rm -f -- "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"
+
+      - name: Verify public response compression
+        if: env.DEPLOY_PUBLIC_HEALTH_URL != ''
+        env:
+          DEPLOY_HOST: ""
+          DEPLOY_SSH_USER: ""
+          DEPLOY_SSH_PRIVATE_KEY: ""
+          DEPLOY_SSH_KNOWN_HOSTS: ""
+          DEPLOY_APP_ROOT: ""
+          DEPLOY_SERVICE: ""
+          DEPLOY_RUN_USER: ""
+          DEPLOY_INTERNAL_PORT: ""
+        run: node scripts/verify-public-compression.mjs

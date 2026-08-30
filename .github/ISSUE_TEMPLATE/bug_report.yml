@@ -1,0 +1,46 @@
+name: Bug report
+description: 报告可复现的产品问题
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: 安全漏洞请不要使用此表单，请阅读 SECURITY.md 并私密报告。
+  - type: textarea
+    id: problem
+    attributes:
+      label: 问题描述
+      description: 说明实际结果与期望结果。
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤
+      description: 请使用公开样例或脱敏数据，不要附带 Cookie、token、真实用户数据或服务器日志。
+    validations:
+      required: true
+  - type: input
+    id: revision
+    attributes:
+      label: 版本或提交
+      placeholder: 页面显示的版本或 40 位公开 commit SHA
+  - type: dropdown
+    id: browser
+    attributes:
+      label: 浏览器
+      options:
+        - Chromium / Chrome / Edge
+        - WebKit / Safari
+        - Firefox
+        - 其他
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: 数据检查
+      options:
+        - label: 我已确认内容中没有凭据、Cookie、token、私钥、真实用户数据或内部地址
+          required: true

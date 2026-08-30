@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily encrypted PostgreSQL authentication backup (%i)
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=2h
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,11 @@
+{
+  "excludedDirectories": [
+    "bin/data",
+    "docs",
+    "public",
+    "server/storage"
+  ],
+  "excludedFiles": [
+    "THIRD_PARTY_ASSETS.md"
+  ]
+}

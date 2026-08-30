@@ -1,0 +1,254 @@
+name: Sync arkntools assets
+
+on:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+    inputs:
+      allow_removals:
+        description: "Allow confirmed removals from managed asset directories"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-arkntools-assets
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    if: github.repository == 'KnightCodeSquareMatrix/RIIC-Web'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      changed: ${{ steps.changes.outputs.changed }}
+    steps:
+      - name: Checkout frontend without credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: develop
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Checkout public arkntools data
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: arkntools/arknights-toolbox-data
+          path: .tmp/arkntools-data
+          fetch-depth: 1
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /assets/data/character.json
+            /assets/data/building.json
+            /assets/locales/cn/character.json
+            /assets/locales/cn/building.json
+            /assets/locales/cn/term.json
+            /assets/img/building_skill
+            /assets/img/item/2003.png
+            /assets/img/item/4001.png
+            /LICENSE
+            /package.json
+
+      - name: Checkout game resource avatars
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: yuanyan3060/ArknightsGameResource
+          path: .tmp/arknights-game-resource
+          fetch-depth: 1
+          filter: blob:none
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /avatar/char_*.png
+            /item/DIAMOND_SHD.png
+            /item/MTL_DIAMOND_SHD.png
+            /item/MTL_GOLD3.png
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Capture previous generated catalogs
+        shell: bash
+        run: |
+          git show HEAD:src/generated/arkntools/operator-catalog.json > "$RUNNER_TEMP/operators-before.json" || printf '[]\n' > "$RUNNER_TEMP/operators-before.json"
+          git show HEAD:src/generated/arkntools/building-skill-catalog.json > "$RUNNER_TEMP/skills-before.json" || printf '{}\n' > "$RUNNER_TEMP/skills-before.json"
+
+      - name: Read upstream commit
+        id: upstream
+        shell: bash
+        run: |
+          echo "sha=$(git -C .tmp/arkntools-data rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "avatars_sha=$(git -C .tmp/arknights-game-resource rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Generate and validate assets
+        shell: bash
+        run: |
+          arguments=(--source .tmp/arkntools-data --source-sha "${{ steps.upstream.outputs.sha }}")
+          arguments+=(--portraits-source .tmp/arknights-game-resource --portraits-source-sha "${{ steps.upstream.outputs.avatars_sha }}")
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.allow_removals }}" == "true" ]]; then
+            arguments+=(--allow-removals)
+          fi
+          npm run assets:sync:arkntools -- "${arguments[@]}"
+
+      - name: Run pre-PR quality gates
+        run: |
+          npm run check
+          npm run build
+
+      - name: Detect generated changes
+        id: changes
+        shell: bash
+        run: |
+          if [[ -n "$(git status --porcelain -- public/images/operator-portraits public/images/building-skills public/images/products src/generated/arkntools)" ]]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No arkntools asset changes for ${{ steps.upstream.outputs.sha }}." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Build reviewed publication artifact
+        if: steps.changes.outputs.changed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          publication="$RUNNER_TEMP/arkntools-publication"
+          install -d -m 0700 "$publication"
+          node scripts/arkntools-pr-summary.mjs \
+            --before-operators "$RUNNER_TEMP/operators-before.json" \
+            --before-skills "$RUNNER_TEMP/skills-before.json" \
+            > "$publication/pull-request-body.md"
+          git add -- public/images/operator-portraits public/images/building-skills public/images/products src/generated/arkntools
+          if git ls-files -s -- public/images/operator-portraits public/images/building-skills public/images/products src/generated/arkntools \
+            | awk '$1 != "100644" { found = 1 } END { exit found ? 0 : 1 }'; then
+            echo "Managed asset paths must contain only regular non-executable files." >&2
+            exit 1
+          fi
+          git diff --cached --binary --full-index > "$publication/managed.patch"
+          test -s "$publication/managed.patch"
+          patch_bytes="$(stat -c '%s' "$publication/managed.patch")"
+          (( patch_bytes <= 104857600 ))
+          printf '%s\n' "${{ steps.upstream.outputs.sha }}" > "$publication/upstream-sha"
+          cat "$publication/pull-request-body.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload publication artifact
+        if: steps.changes.outputs.changed == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: arkntools-publication-${{ github.run_id }}
+          path: ${{ runner.temp }}/arkntools-publication
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Report generation failure
+        if: failure()
+        shell: bash
+        run: |
+          echo "## arkntools 资源生成失败" >> "$GITHUB_STEP_SUMMARY"
+          echo "写权限未授予本 job，未创建或更新任何远端分支。" >> "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    needs: generate
+    if: needs.generate.result == 'success' && needs.generate.outputs.changed == 'true' && github.repository == 'KnightCodeSquareMatrix/RIIC-Web'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+    env:
+      BASE_BRANCH: develop
+      UPDATE_BRANCH: automation/arkntools-assets
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout publication base
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: develop
+          fetch-depth: 0
+
+      - name: Download reviewed publication artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: arkntools-publication-${{ github.run_id }}
+          path: ${{ runner.temp }}/arkntools-publication
+
+      - name: Apply and validate managed patch without executing repository code
+        shell: bash
+        run: |
+          set -euo pipefail
+          publication="$RUNNER_TEMP/arkntools-publication"
+          test -d "$publication"
+          test ! -L "$publication"
+          for artifact in managed.patch pull-request-body.md upstream-sha; do
+            test -f "$publication/$artifact"
+            test ! -L "$publication/$artifact"
+          done
+          test "$(find "$publication" -mindepth 1 -maxdepth 1 -type f | wc -l)" -eq 3
+          test -z "$(find "$publication" -mindepth 1 -maxdepth 1 ! -type f -print -quit)"
+          patch_bytes="$(stat -c '%s' "$publication/managed.patch")"
+          (( patch_bytes > 0 && patch_bytes <= 104857600 ))
+          git apply --check --index "$publication/managed.patch"
+          git apply --index "$publication/managed.patch"
+          changed_count=0
+          while IFS= read -r -d '' changed_path; do
+            case "$changed_path" in
+              public/images/operator-portraits/*|public/images/building-skills/*|public/images/products/*|src/generated/arkntools/*) ;;
+              *) echo "Publication artifact changed a forbidden path: $changed_path" >&2; exit 1 ;;
+            esac
+            changed_count=$((changed_count + 1))
+          done < <(git diff --cached --name-only -z)
+          (( changed_count > 0 ))
+          if git ls-files -s -- public/images/operator-portraits public/images/building-skills public/images/products src/generated/arkntools \
+            | awk '$1 != "100644" { found = 1 } END { exit found ? 0 : 1 }'; then
+            echo "Managed asset paths must contain only regular non-executable files." >&2
+            exit 1
+          fi
+
+      - name: Commit and push managed update branch
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin "$UPDATE_BRANCH:refs/remotes/origin/$UPDATE_BRANCH" || true
+          git switch -C "$UPDATE_BRANCH"
+          git commit -m "chore: 同步 arkntools 干员资源"
+          git push --force-with-lease origin "HEAD:$UPDATE_BRANCH"
+
+      - name: Create or refresh pull request
+        id: pull-request
+        shell: bash
+        run: |
+          body="$RUNNER_TEMP/arkntools-publication/pull-request-body.md"
+          number="$(gh pr list --base "$BASE_BRANCH" --head "$UPDATE_BRANCH" --state open --json number --jq '.[0].number // empty')"
+          if [[ -z "$number" ]]; then
+            gh pr create \
+              --base "$BASE_BRANCH" \
+              --head "$UPDATE_BRANCH" \
+              --title "chore: 同步 arkntools 干员素材与基建技能" \
+              --body-file "$body"
+          else
+            gh pr edit "$number" \
+              --title "chore: 同步 arkntools 干员素材与基建技能" \
+              --body-file "$body"
+          fi
+
+      - name: Dispatch full frontend quality workflow
+        shell: bash
+        run: gh workflow run frontend-quality.yml --ref "$UPDATE_BRANCH"
+
+      - name: Report publication failure
+        if: failure()
+        shell: bash
+        run: |
+          echo "## arkntools 资源发布失败" >> "$GITHUB_STEP_SUMMARY"
+          echo "未创建或刷新自动资源 PR；develop 中最后一次已验证资源保持不变。" >> "$GITHUB_STEP_SUMMARY"

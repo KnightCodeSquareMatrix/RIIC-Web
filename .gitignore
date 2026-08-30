@@ -1,0 +1,63 @@
+# Dependencies and build output
+node_modules/
+.next/
+dist/
+out/
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
+
+# Local environment files and credentials
+.env
+.env.*
+!.env.example
+*.local
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+deploy/postgres/*.env
+!deploy/postgres/example.env
+
+# Runtime data and private solver artifacts
+server/feedback/
+server/storage/
+bin/data/
+bin/infra-cli
+bin/infra-cli.exe
+
+# Test, coverage, and browser automation output
+.playwright-cli/
+.playwright-mcp/
+playwright-report/
+test-results/
+coverage/
+.nyc_output/
+*.lcov
+junit*.xml
+
+# Internal agent instructions and private maintenance notes
+AGENTS.md
+**/AGENTS.md
+**/AGENTS.override.md
+docs/internal/
+docs/superpowers/
+docs/AUTHENTICATION_DATABASE.md
+docs/BUSINESS_DATA_STORAGE.md
+docs/DEVELOPMENT_GUIDE.md
+docs/DEVELOPMENT_RELEASE_GUARDRAILS.md
+docs/FRONTEND_PRODUCTION_READINESS_REPORT.md
+docs/INFRA_CLI_ADVICE_REPORT.md
+docs/LOGIN_USER_FLOW_PHASES_2_3_PLAN.md
+docs/PRODUCTION_RELEASE_RUNBOOK.md
+docs/UPDATE_SOLVER.md
+
+# Temporary files and generated local artifacts
+.tmp/
+output/
+fixtures/*.xlsx
+fixtures/*.xls
+*:Zone.Identifier
+.DS_Store
+Thumbs.db
