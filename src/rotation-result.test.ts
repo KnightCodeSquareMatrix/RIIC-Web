@@ -21,6 +21,7 @@ test("plan.compute rotation keeps the worker profile and daily summary while whi
       active_teams: ["alpha", "gamma", 7],
       resting_team: "beta",
       assignment: { rooms: ["private solver detail"] },
+      notes: ["private solver note"],
       efficiencies: {
         trade_efficiency: 2.4,
         manufacture_efficiency: 5.5,
@@ -71,6 +72,7 @@ test("plan.compute rotation keeps the worker profile and daily summary while whi
   });
   assert.equal("efficiencies" in rotation.shifts[0], false);
   assert.equal("assignment" in rotation.shifts[0], false);
+  assert.equal("notes" in rotation.shifts[0], false);
   assert.equal("future_internal" in rotation, false);
 });
 

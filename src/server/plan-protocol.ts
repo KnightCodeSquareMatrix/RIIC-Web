@@ -1,6 +1,9 @@
 import type {
+  BaseBlueprint,
   MaaJson,
   OperBoxEntry,
+  PlanComputeParams,
+  RotationProfile,
   SolverObservation,
   TrainingAdviceReport,
   TrainingRoomSchedule,
@@ -37,6 +40,31 @@ export type PlanComputePayload = {
   trainingRoom?: TrainingRoomSchedule;
   trainingAdvice: TrainingAdviceReport;
 };
+
+export function createPlanComputeParams(input: {
+  layout: BaseBlueprint;
+  operbox: OperBoxEntry[];
+  sourceName?: string | null;
+  rotation: RotationProfile;
+  fiammettaEnable?: boolean;
+}): PlanComputeParams {
+  return {
+    schema_version: PLAN_SCHEMA_VERSION,
+    layout: input.layout,
+    operbox: input.operbox,
+    labels: {
+      layout: input.layout.template,
+      operbox: input.sourceName ?? null,
+    },
+    options: {
+      rotation: input.rotation,
+      top: 20,
+      system_preferences: {},
+      maa_title: `${input.sourceName ?? "Arknights InfraCalc"} · ${input.layout.template}`,
+      fiammetta_enable: input.fiammettaEnable ?? true,
+    },
+  };
+}
 
 export function isProtocolRecord(value: unknown): value is ProtocolRecord {
   return value !== null && typeof value === "object" && !Array.isArray(value);
