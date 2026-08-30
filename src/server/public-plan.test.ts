@@ -115,6 +115,7 @@ function internalResult(): PlanApiResponse {
         weighted_manu: 2.1,
         weighted_power: 0.55,
         assignment: { private: true },
+        notes: ["private solver note"],
         efficiencies: { raw: true },
       }],
       daily: {
@@ -189,6 +190,7 @@ test("production public plan data recursively excludes internal fields", () => {
       "resultPath",
       "future_internal",
       "assignment",
+      "notes",
       "efficiencies",
       "solver",
       "plan_contract_sha256",

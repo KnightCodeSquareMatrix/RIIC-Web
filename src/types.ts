@@ -931,7 +931,7 @@ export interface FeedbackApiResponse {
 }
 
 export interface PlanComputeParams {
-  schema_version: 1;
+  schema_version: 3;
   layout: BaseBlueprint;
   operbox: OperBoxEntry[];
   labels?: {
@@ -943,6 +943,7 @@ export interface PlanComputeParams {
     top?: number;
     system_preferences?: Record<string, string>;
     maa_title?: string | null;
+    fiammetta_enable?: boolean;
   };
 }
 
