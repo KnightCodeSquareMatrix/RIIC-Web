@@ -19,13 +19,21 @@ import {
   type SklandPolicyConsent,
   type SklandSessionPayload,
 } from "./session";
+import {
+  findReusableScan,
+  hasScanStartCapacity,
+  scanActorKey,
+  SCAN_TTL_MS,
+  type ScanStartResult,
+} from "./scan-admission";
 
-const SCAN_TTL_MS = 10 * 60 * 1000;
 const SCAN_TTL_SECONDS = SCAN_TTL_MS / 1000;
 const TOKEN_REFRESH_MS = 20 * 60 * 1000;
 
 type PendingScan = {
   client: Client;
+  actorKey: string;
+  scanUrl: string;
   createdAt: number;
   lastPollAt: number;
   policyConsent: SklandPolicyConsent;
@@ -36,14 +44,17 @@ type RateEntry = { timestamps: number[] };
 declare global {
   var __infraCalcSklandScans: Map<string, PendingScan> | undefined;
   var __infraCalcSklandRate: Map<string, RateEntry> | undefined;
+  var __infraCalcSklandScanStarts: Map<string, Promise<ScanStartResult>> | undefined;
   var __infraCalcSklandDeviceIdCache: DeviceIdCache | undefined;
 }
 
 const pendingScans = globalThis.__infraCalcSklandScans ?? new Map<string, PendingScan>();
 const rateEntries = globalThis.__infraCalcSklandRate ?? new Map<string, RateEntry>();
+const scanStartTasks = globalThis.__infraCalcSklandScanStarts ?? new Map<string, Promise<ScanStartResult>>();
 const deviceIdCache = globalThis.__infraCalcSklandDeviceIdCache ?? new DeviceIdCache();
 globalThis.__infraCalcSklandScans = pendingScans;
 globalThis.__infraCalcSklandRate = rateEntries;
+globalThis.__infraCalcSklandScanStarts = scanStartTasks;
 globalThis.__infraCalcSklandDeviceIdCache = deviceIdCache;
 
 export class SklandServiceError extends Error {
@@ -78,6 +89,12 @@ function assertRate(key: string, limit: number, windowMs: number, now = Date.now
   if (current.length >= limit) throw new SklandServiceError("RATE_LIMITED", "操作过于频繁，请稍后再试。", 429);
   current.push(now);
   rateEntries.set(key, { timestamps: current });
+}
+
+export function assertScanStartCapacity(activeStarts: number): void {
+  if (!hasScanStartCapacity(activeStarts)) {
+    throw new SklandServiceError("RATE_LIMITED", "二维码生成请求正在排队，请稍后再试。", 429);
+  }
 }
 
 function publicError(error: unknown): SklandServiceError {
@@ -189,12 +206,35 @@ export function requestIp(request: Request): string {
 }
 
 export async function startScan(
+  websiteUserId: string,
   ip: string,
   consent: SklandPolicyConsentRequest
-): Promise<{ scanId: string; scanUrl: string; expiresInSeconds: number }> {
+): Promise<ScanStartResult> {
   cleanupScans();
-  assertRate(`scan:${ip}`, 10, 10 * 60 * 1000);
-  assertRate("scan:global", 50, 10 * 60 * 1000);
+  const actorKey = scanActorKey(websiteUserId);
+  const reusable = findReusableScan(pendingScans, actorKey, consent);
+  if (reusable) return reusable;
+
+  const activeTask = scanStartTasks.get(actorKey);
+  if (activeTask) return activeTask;
+
+  assertScanStartCapacity(scanStartTasks.size);
+  assertRate(`scan:actor:${actorKey}`, 5, 10 * 60 * 1000);
+  assertRate(`scan:ip:${ip}`, 10, 10 * 60 * 1000);
+
+  const task = createScan(actorKey, consent);
+  scanStartTasks.set(actorKey, task);
+  try {
+    return await task;
+  } finally {
+    if (scanStartTasks.get(actorKey) === task) scanStartTasks.delete(actorKey);
+  }
+}
+
+async function createScan(
+  actorKey: string,
+  consent: SklandPolicyConsentRequest
+): Promise<ScanStartResult> {
   try {
     const client = createClient({ timeout: 30_000 });
     const result = await deviceIdCache.run(
@@ -202,14 +242,17 @@ export async function startScan(
       STORAGE_DID_KEY,
       () => client.collections.hypergryph.generateScanLoginUrl()
     );
+    const createdAt = Date.now();
     pendingScans.set(result.scanId, {
       client,
-      createdAt: Date.now(),
+      actorKey,
+      scanUrl: result.scanUrl,
+      createdAt,
       lastPollAt: 0,
       policyConsent: {
         termsVersion: consent.termsVersion,
         privacyVersion: consent.privacyVersion,
-        acceptedAt: Date.now(),
+        acceptedAt: createdAt,
       },
     });
     return { ...result, expiresInSeconds: SCAN_TTL_SECONDS };
