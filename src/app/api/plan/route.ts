@@ -8,9 +8,9 @@ import {
   assertPlanCollectionLimits,
   assertSameOrigin,
   createRequestId,
-  enforceRateLimit,
   failureResponse,
   normalizeFiammettaEnable,
+  planAccountAdmissionClass,
   PublicApiError,
   readJsonBody,
   requestClientIp,
@@ -92,8 +92,6 @@ export async function POST(request: Request) {
     const includeDebug = new URL(request.url).searchParams.get("beta") === "1";
     assertSameOrigin(request);
     const ip = requestClientIp(request);
-    enforceRateLimit("plan", ip, 20, 10 * 60_000, "AIC-PLAN-3002");
-    release = acquirePlanSlot(ip);
 
     const body = await readJsonBody(request, 2 * 1024 * 1024) as {
       layout?: BaseBlueprint;
@@ -104,12 +102,15 @@ export async function POST(request: Request) {
       fiammetta_enable?: unknown;
     };
     let websiteUserId: string | null = null;
+    let websiteAccountClass: "new" | "established" | null = null;
     if (planAccessMode(body.boxSource, body.operbox !== undefined) === "trusted-sample") {
       const sample = await (await import("@/server/infra")).getSampleOperbox();
       body.operbox = sample.operbox as OperBoxEntry[];
       body.sourceName = "243 全精二示例";
     } else {
-      websiteUserId = (await requireWebsiteSession(request)).user.id;
+      const websiteSession = await requireWebsiteSession(request);
+      websiteUserId = websiteSession.user.id;
+      websiteAccountClass = planAccountAdmissionClass(websiteSession.user);
     }
     const layoutErrors = validateLayoutJson(body?.layout);
     if (layoutErrors.length || !body.layout) {
@@ -242,6 +243,14 @@ export async function POST(request: Request) {
         if (cache.kind === "lease") cacheLease = cache;
       }
     }
+    // Only an actual cache miss occupies scarce solver capacity. Authentication,
+    // validation and cache hits must remain available while another plan runs.
+    if (!websiteUserId || !websiteAccountClass) {
+      throw new PublicApiError("AIC-AUTH-2008", {
+        message: "请登录网站账号后再发起新的排班计算；未登录仍可使用已有缓存。",
+      });
+    }
+    release = acquirePlanSlot({ ip, accountId: websiteUserId, accountClass: websiteAccountClass });
     runResult = await runPlan({ layout: body.layout, operbox, sourceName, rotation, fiammettaEnable, dataOwnerTag });
     const publicResult = toPublicPlanData(
       runResult,

@@ -347,6 +347,7 @@ export class InfraCliServeClient {
       cliPath: this.cliPath,
       pid: this.child?.pid ?? null,
       running: Boolean(this.child && !this.child.killed),
+      busy: Boolean(this.activeKey),
       restartCount: this.restartCount,
     };
   }
