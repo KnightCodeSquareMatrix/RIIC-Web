@@ -289,6 +289,7 @@ export interface InfraCalculatorProps {
     queuePosition: number | null;
     etaSeconds: number | null;
     pollStopped: boolean;
+    error: string | null;
     resumeDisabled: boolean;
     resumeCountdown: number;
     onResumePoll: () => void;
@@ -465,6 +466,9 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                 </div>
                 {loading ? (
                   <div className="flex items-center gap-2">
+                    {taskQueue?.error ? (
+                      <span className="text-xs text-red-300">{taskQueue.error}</span>
+                    ) : null}
                     {taskQueue?.pollStopped ? (
                       <div className="relative">
                         <Button

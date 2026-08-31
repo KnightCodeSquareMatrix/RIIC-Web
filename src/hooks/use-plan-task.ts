@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { cancelPlanTask, pollPlanTask, type PlanTaskStatus } from "@/api";
+import { ApiClientError, cancelPlanTask, pollPlanTask, type PlanTaskStatus } from "@/api";
 import type { PublicPlanData } from "@/types";
 
 const STORAGE_KEY = "aic-plan-task-v1";
@@ -159,8 +159,33 @@ export function usePlanTask({ onDone, onFailed }: PlanTaskOptions) {
         setState((current) => ({ ...current, pollStopped: true }));
         startResumeCooldown();
       }
-    } catch {
+    } catch (error) {
       if (taskIdRef.current !== taskId) return;
+      if (error instanceof ApiClientError) {
+        // 任务已不存在/已过期：终态处理，清 localStorage 并提示重新生成。
+        if (error.code === "AIC-REQ-1001") {
+          const message = "任务不存在或已过期，请重新生成排班。";
+          finish({ status: "failed", error: message });
+          onFailedRef.current(message);
+          return;
+        }
+        // 归属/来源异常：终态处理。
+        if (error.code === "AIC-AUTH-2002") {
+          const message = "任务状态异常，请刷新页面后重试。";
+          finish({ status: "failed", error: message });
+          onFailedRef.current(message);
+          return;
+        }
+        // 登录过期：保留任务与 localStorage，停止轮询，提示重新登录后刷新恢复。
+        if (error.code === "AIC-AUTH-2001") {
+          clearTimer();
+          setState((current) => ({
+            ...current,
+            error: "登录已过期，请重新登录后刷新页面继续查询。",
+          }));
+          return;
+        }
+      }
       // 网络异常：按同一退避节奏继续，最后停住交给"查询进度"。
       if (attempt < BACKOFF_MS.length) {
         timerRef.current = setTimeout(() => void pollOnceRef.current(taskId, attempt + 1), BACKOFF_MS[attempt]);
@@ -169,7 +194,7 @@ export function usePlanTask({ onDone, onFailed }: PlanTaskOptions) {
         startResumeCooldown();
       }
     }
-  }, [finish, startResumeCooldown]);
+  }, [clearTimer, finish, startResumeCooldown]);
   useEffect(() => {
     pollOnceRef.current = pollOnce;
   }, [pollOnce]);

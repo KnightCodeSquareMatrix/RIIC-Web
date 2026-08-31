@@ -1517,6 +1517,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
         queuePosition: planTask.queuePosition,
         etaSeconds: planTask.etaSeconds,
         pollStopped: planTask.pollStopped,
+        error: planTask.error,
         resumeDisabled: planTask.resumeDisabled,
         resumeCountdown: planTask.resumeCountdown,
         onResumePoll: planTask.resume,
