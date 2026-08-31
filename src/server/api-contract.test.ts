@@ -445,3 +445,15 @@ test("worker loads the sealed release environment before evaluating runtime modu
   assert.equal(runtimeImport > envLoad, true);
   assert.equal(source.includes('from "./plan-worker-runtime.mts"'), false);
 });
+
+test("the client keeps the synchronous fallback only when health reports that the queue is disabled", async () => {
+  const source = await readFile(new URL("../../src/App.tsx", import.meta.url), "utf8");
+  const healthFlag = source.indexOf("setTaskQueueEnabled(Boolean(health.taskQueue?.enabled))");
+  const fallback = source.indexOf("if (!taskQueueEnabled)");
+  const synchronousCall = source.indexOf("await computePlan(payload)", fallback);
+  const queueCall = source.indexOf("await submitPlanTask(payload)", synchronousCall);
+  assert.equal(healthFlag > 0, true);
+  assert.equal(fallback > healthFlag, true);
+  assert.equal(synchronousCall > fallback, true);
+  assert.equal(queueCall > synchronousCall, true);
+});

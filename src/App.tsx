@@ -23,6 +23,7 @@ import { useWebsiteSession } from "@/website-session";
 import { usePlanTask } from "@/hooks/use-plan-task";
 
 import {
+  computePlan,
   deleteAllSklandAccountData,
   deleteSklandAccount,
   getHealth,
@@ -282,6 +283,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   const [result, setResult] = useState<PublicPlanData | null>(null);
   const [loading, setLoading] = useState(false);
   const [cliReady, setCliReady] = useState(false);
+  const [taskQueueEnabled, setTaskQueueEnabled] = useState(false);
   const [apiError, setApiError] = useState<DisplayError | null>(null);
   const [storageNotice, setStorageNotice] = useState<DisplayError | null>(null);
   const [activeShift, setActiveShift] = useState(0);
@@ -571,6 +573,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
         if (cancelled) return;
         setSklandConfigured(Boolean(CLIENT_SKLAND_ENABLED && health.skland?.available));
         setSklandDisabledReason(CLIENT_SKLAND_ENABLED ? health.skland?.message ?? null : null);
+        setTaskQueueEnabled(Boolean(health.taskQueue?.enabled));
         if (health.plannerReady) {
           setCliReady(true);
           setApiError(null);
@@ -917,14 +920,19 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
 
     try {
       trackTelemetry({ type: "interaction", name: "plan_submit", page: "calculator" });
-      const submitted = await submitPlanTask({
+      const payload = {
         layout: planLayout,
         operbox: normalizeOperboxEntries(planInput.operbox),
         sourceName: planInput.sourceName,
         boxSource: planInput.boxSource,
         rotation: rotationProfile,
         fiammetta_enable: effectiveFiammettaSetting(planInput.operbox, rotationProfile, fiammettaEnabled),
-      });
+      };
+      if (!taskQueueEnabled) {
+        planTask.complete(await computePlan(payload));
+        return true;
+      }
+      const submitted = await submitPlanTask(payload);
       if (submitted.status === "done") planTask.complete(submitted.result);
       else planTask.begin(submitted.taskId);
       return true;
@@ -1465,6 +1473,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     try {
       const health = await getHealth();
       setCliReady(health.plannerReady);
+      setTaskQueueEnabled(Boolean(health.taskQueue?.enabled));
       setApiError(
         health.plannerReady
           ? null
