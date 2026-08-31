@@ -3,6 +3,7 @@ import { validateLayoutJson } from "@/layout-validation";
 import { assertOperbox } from "@/operbox";
 import { normalizePersistedPlanData } from "@/persistence";
 import {
+  acquireAnonymousSamplePlanSlot,
   acquirePlanSlot,
   assertFiammettaEnableCompatible,
   assertPlanCollectionLimits,
@@ -104,7 +105,8 @@ export async function POST(request: Request) {
     };
     let websiteUserId: string | null = null;
     let websiteAccountClass: "new" | "established" | null = null;
-    if (planAccessMode(body.boxSource, body.operbox !== undefined) === "trusted-sample") {
+    const accessMode = planAccessMode(body.boxSource, body.operbox !== undefined);
+    if (accessMode === "trusted-sample") {
       const sample = await (await import("@/server/infra")).getSampleOperbox();
       body.operbox = sample.operbox as OperBoxEntry[];
       body.sourceName = "243 全精二示例";
@@ -252,14 +254,19 @@ export async function POST(request: Request) {
         if (cache.kind === "lease") cacheLease = cache;
       }
     }
-    // Only an actual cache miss occupies scarce solver capacity. Authentication,
-    // validation and cache hits must remain available while another plan runs.
+    // Only an actual cache miss occupies scarce solver capacity. The anonymous
+    // onboarding trial is restricted to the server-owned sample and a dedicated,
+    // lower-priority admission; personal inputs still require a website account.
     if (!websiteUserId || !websiteAccountClass) {
-      throw new PublicApiError("AIC-AUTH-2008", {
-        message: "请登录网站账号后再发起新的排班计算；未登录仍可使用已有缓存。",
-      });
+      if (accessMode !== "trusted-sample" || includeDebug) {
+        throw new PublicApiError("AIC-AUTH-2008", {
+          message: "请登录网站账号后再发起新的排班计算；未登录仍可使用可信示例。",
+        });
+      }
+      release = acquireAnonymousSamplePlanSlot({ ip });
+    } else {
+      release = acquirePlanSlot({ ip, accountId: websiteUserId, accountClass: websiteAccountClass });
     }
-    release = acquirePlanSlot({ ip, accountId: websiteUserId, accountClass: websiteAccountClass });
     runResult = await runPlan({ layout: body.layout, operbox, sourceName, rotation, fiammettaEnable, dataOwnerTag });
     const publicResult = toPublicPlanData(
       runResult,
