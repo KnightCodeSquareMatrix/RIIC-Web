@@ -1,9 +1,8 @@
-// Node 类型剥离运行 .ts 脚本时的路径别名 loader hooks：
-// 解析 @/ 别名，并为相对导入补齐 .ts / .tsx / index.ts 扩展名。
-// 由 register-hooks.mjs 注册。
 import { stat } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL, URL } from "node:url";
+
+const projectRoot = fileURLToPath(new URL("../", import.meta.url));
 
 async function isFile(target) {
   try {
@@ -14,11 +13,11 @@ async function isFile(target) {
 }
 
 export async function resolve(specifier, context, nextResolve) {
-  let target = null;
+  let target;
   if (specifier.startsWith("@/")) {
-    target = path.join(process.cwd(), "src", specifier.slice(2));
+    target = path.join(projectRoot, "src", specifier.slice(2));
   } else if (specifier.startsWith("./") || specifier.startsWith("../")) {
-    const parent = context.parentURL ? fileURLToPath(context.parentURL) : process.cwd();
+    const parent = context.parentURL ? fileURLToPath(context.parentURL) : projectRoot;
     target = path.resolve(path.dirname(parent), specifier);
   } else {
     return nextResolve(specifier, context);

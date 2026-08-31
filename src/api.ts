@@ -75,7 +75,7 @@ function nonApiResponseError(path: string, response: Response): ApiClientError {
   });
 }
 
-async function requestData<T>(path: string, init?: RequestInit): Promise<T> {
+export async function requestData<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
     response = await fetch(path, init);
@@ -137,50 +137,6 @@ export function computePlan(payload: {
     body: JSON.stringify(requestPayload),
     signal: options.signal,
   });
-}
-
-export type PlanTaskStatus = "pending" | "running" | "done" | "failed" | "cancelled";
-
-export type PlanTaskSubmitData = {
-  taskId: string;
-  status: PlanTaskStatus;
-  queuePosition: number;
-  etaSeconds: number;
-};
-
-export type PlanTaskPollData = {
-  taskId: string;
-  status: PlanTaskStatus;
-  queuePosition?: number;
-  etaSeconds?: number;
-  result?: PublicPlanData;
-  error?: string | null;
-};
-
-export function submitPlanTask(payload: {
-  layout: BaseBlueprint;
-  operbox: OperBoxEntry[];
-  sourceName: string | null;
-  boxSource: "skland" | "maa" | "sample";
-  rotation: RotationProfile;
-  fiammetta_enable?: boolean;
-}): Promise<PlanTaskSubmitData> {
-  const requestPayload = payload.boxSource === "sample"
-    ? { layout: payload.layout, sourceName: payload.sourceName, boxSource: payload.boxSource, rotation: payload.rotation, fiammetta_enable: payload.fiammetta_enable }
-    : payload;
-  return requestData("/api/tasks", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(requestPayload),
-  });
-}
-
-export function pollPlanTask(taskId: string): Promise<PlanTaskPollData> {
-  return requestData(`/api/tasks/${encodeURIComponent(taskId)}`);
-}
-
-export function cancelPlanTask(taskId: string): Promise<{ taskId: string; cancelled: boolean }> {
-  return requestData(`/api/tasks/${encodeURIComponent(taskId)}`, { method: "DELETE" });
 }
 
 export function getHealth(): Promise<PublicHealthData> {

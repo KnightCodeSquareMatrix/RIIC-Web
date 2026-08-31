@@ -24,6 +24,7 @@ export default function PrivacyPage() {
           <li>网站账号资料保留至你主动注销或我们依法删除；Session 保留至到期、退出、密码重置、封禁或主动撤销。注销会删除网站账号、全部 Session 和关联的业务数据。</li>
           <li>登录后只有在你确认当前版本政策时，本站才会自动同步 MAA Box、布局、设置、有限工作区版本和排班历史；拒绝或尚未确认时维持纯本地模式。</li>
           <li>MAA Box 使用逐条独立数据密钥与 AES-<span className="font-number">256</span>-GCM 信封加密；主密钥只存在于服务端配置，不写入数据库、日志或备份。布局与排班结果在入库前继续经过字段白名单清理。</li>
+          <li>登录用户提交的个人排班任务会把布局、Box 和设置作为一体化 AES-<span className="font-number">256</span>-GCM 密文排队；任务与结果最多保留 <span className="font-number">24</span> 小时，浏览器只接收公开结果白名单。</li>
           <li>云端工作区版本最多保留 <span className="font-number">10</span> 份且不超过 <span className="font-number">30</span> 天；普通排班最多保留 <span className="font-number">5</span> 条并滚动保留 <span className="font-number">30</span> 天，另可固定最多 <span className="font-number">5</span> 条长期保存。</li>
           <li>你可以撤销同步同意或删除云端数据；这会删除工作区、Box 密文、排班历史和相关缓存引用。浏览器仍可按你的选择保留清理后的本地副本。</li>
           {sklandEnabled ? <li>森空岛 UID、昵称、Box、凭据和完整状态快照始终不会写入业务数据库；只额外保存不可逆的绑定标识和授权时间。</li> : null}

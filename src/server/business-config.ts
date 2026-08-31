@@ -1,3 +1,5 @@
+import "server-only";
+
 const MINIMUM_SECRET_BYTES = 32;
 
 export const BUSINESS_DATA_TTL_MS = 30 * 24 * 60 * 60 * 1000;

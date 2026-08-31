@@ -1,4 +1,5 @@
 import {
+  admitPlanStart,
   assertFiammettaEnableCompatible,
   assertPlanCollectionLimits,
   assertSameOrigin,
@@ -12,15 +13,17 @@ import {
   successResponse,
 } from "@/server/api-contract";
 import { requireWebsiteSession } from "@/server/auth/authorization";
-import { getSampleOperbox } from "@/server/infra";
 import { validateLayoutJson } from "@/layout-validation";
 import { assertOperbox } from "@/operbox";
-import { planAccessMode } from "@/server/plan-access";
 import { createPlanTask, userHasActivePlanTask, PLAN_TASK_ETA_PER_TASK_SECONDS } from "@/server/plan-task";
+import { ensurePlanTaskWorkerStarted } from "@/server/plan-task-worker";
 import { safeDisplayName } from "@/server/public-plan";
 import { isRotationProfile } from "@/rotation-settings";
+import { isAccountCloudSyncEnabled, workspaceMasterKeys } from "@/server/business-config";
+import { accountDataConsent } from "@/server/data-consent";
 import { activeSklandAccount, readSklandAccountStore } from "@/server/skland/http";
 import { sklandDataOwnerTag } from "@/server/skland/session";
+import { planOperboxContentHmac } from "@/server/workspace-crypto";
 import type { BaseBlueprint, OperBoxEntry, RotationProfile } from "@/types";
 
 export const runtime = "nodejs";
@@ -62,15 +65,19 @@ export async function POST(request: Request) {
     enforceRateLimit("plan-submit", ip, 20, 10 * 60_000, "AIC-PLAN-3002");
 
     const body = await readJsonBody(request, 2 * 1024 * 1024) as SubmitBody | null;
-    let userId: string | null = null;
-    if (planAccessMode(body?.boxSource, body?.operbox !== undefined) === "trusted-sample") {
-      const sample = await getSampleOperbox();
-      body!.operbox = sample.operbox as OperBoxEntry[];
-      body!.sourceName = "243 全精二示例";
-    } else {
-      userId = (await requireWebsiteSession(request)).user.id;
-    }
     if (!body) throw new PublicApiError("AIC-REQ-1001");
+    if (body.boxSource !== "sample" && body.boxSource !== "maa" && body.boxSource !== "skland") {
+      throw new PublicApiError("AIC-REQ-1001", {
+        fieldErrors: [{ path: "boxSource", code: "invalid_source", message: "排班数据来源无效。" }],
+      });
+    }
+    if (body.boxSource === "sample") {
+      throw new PublicApiError("AIC-REQ-1001", {
+        fieldErrors: [{ path: "boxSource", code: "unsupported_source", message: "示例排班请使用即时计算接口。" }],
+      });
+    }
+    const session = await requireWebsiteSession(request);
+    const userId = session.user.id;
 
     const layoutErrors = validateLayoutJson(body.layout);
     if (layoutErrors.length || !body.layout) {
@@ -117,7 +124,7 @@ export async function POST(request: Request) {
       });
     }
     const sourceName = safeDisplayName(body.sourceName, "已导入的干员数据");
-    const sourceType = body.boxSource === "skland" ? "skland" : body.boxSource === "sample" ? "sample" : "maa";
+    const sourceType = body.boxSource === "skland" ? "skland" : "maa";
     let dataOwnerTag: string | null = null;
     if (body.boxSource === "skland") {
       const account = activeSklandAccount(await readSklandAccountStore());
@@ -125,7 +132,7 @@ export async function POST(request: Request) {
     }
 
     // 并发限制：登录用户同一时间最多一条 pending/running（数据库唯一索引兜底）。
-    if (userId && await userHasActivePlanTask(userId)) {
+    if (await userHasActivePlanTask(userId)) {
       throw new PublicApiError("AIC-PLAN-3005");
     }
 
@@ -140,6 +147,17 @@ export async function POST(request: Request) {
       });
     }
 
+    let operboxContentHmac: string | null = null;
+    let operboxHmacKeyVersion: string | null = null;
+    if (sourceType === "maa" && isAccountCloudSyncEnabled() && (await accountDataConsent(userId)).current) {
+      const { activeVersion, keys } = workspaceMasterKeys();
+      const activeKey = keys.get(activeVersion);
+      if (!activeKey) throw new Error("Active workspace key is unavailable.");
+      operboxContentHmac = planOperboxContentHmac({ userId, operbox: ownedOperbox, masterKey: activeKey });
+      operboxHmacKeyVersion = activeVersion;
+    }
+
+    admitPlanStart({ ip, accountId: userId });
     let task;
     try {
       task = await createPlanTask({
@@ -155,15 +173,18 @@ export async function POST(request: Request) {
           roomCount: body.layout.rooms.length,
           operatorCount: ownedOperbox.length,
           dataOwnerTag,
+          operboxContentHmac,
+          operboxHmacKeyVersion,
         },
       });
     } catch (error) {
       // 预检查和插入之间存在竞态窗口时，唯一索引兜底会抛 23505，转成友好提示。
-      if (userId && isUniqueViolation(error)) {
+      if (isUniqueViolation(error)) {
         throw new PublicApiError("AIC-PLAN-3005");
       }
       throw error;
     }
+    ensurePlanTaskWorkerStarted();
 
     return successResponse({
       taskId: task.id,

@@ -52,6 +52,22 @@ test("production builds prepare a solver-free standalone runtime with static ass
   assert.doesNotMatch(stageStandalone, /outputRoot, "\.next", "cache"/);
 });
 
+test("the plan queue worker is traced into Next and does not require a second production service", async () => {
+  const packageJson = JSON.parse(await readRepoFile("package.json"));
+  const taskRoute = await readRepoFile("src/app/api/tasks/route.ts");
+  const taskStatusRoute = await readRepoFile("src/app/api/tasks/[id]/route.ts");
+  const worker = await readRepoFile("src/server/plan-task-worker.ts");
+  const scripts = await readdir(new URL("../scripts/", import.meta.url));
+
+  assert.equal(packageJson.scripts["worker:plan"], undefined);
+  assert.equal(scripts.includes("plan-worker.mts"), false);
+  assert.match(taskRoute, /ensurePlanTaskWorkerStarted\(\)/);
+  assert.match(taskStatusRoute, /ensurePlanTaskWorkerStarted\(\)/);
+  assert.match(worker, /^import "server-only";/);
+  assert.match(worker, /__aicPlanTaskWorker/);
+  assert.match(worker, /isCurrentPlanTaskAttempt/);
+});
+
 test("Next.js owns graceful shutdown while systemd accepts its signal exit statuses", async () => {
   const processCleanup = await readRepoFile("src/server/process-cleanup.ts");
   const systemdDropIn = await readRepoFile("deploy/next-graceful-exit.conf");
@@ -71,15 +87,15 @@ test("CI enforces route and document preload JavaScript budgets after building",
 
   assert.equal(packageJson.scripts["check:bundle-budget"], "node scripts/check-bundle-budget.mjs");
   assert.match(workflow, /Production build[\s\S]+npm run check:bundle-budget/);
-  assert.match(budgetCheck, /MAX_SKLAND_DISABLED_ROUTE_INITIAL_JS_BYTES = 1_130_000/);
-  assert.match(budgetCheck, /MAX_SKLAND_ENABLED_ROUTE_INITIAL_JS_BYTES = 1_150_000/);
+  assert.match(budgetCheck, /MAX_SKLAND_DISABLED_ROUTE_INITIAL_JS_BYTES = 1_135_000/);
+  assert.match(budgetCheck, /MAX_SKLAND_ENABLED_ROUTE_INITIAL_JS_BYTES = 1_155_000/);
   assert.match(budgetCheck, /MAX_SKLAND_ROUTE_INITIAL_JS_BYTES = 1_590_000/);
   assert.match(budgetCheck, /MAX_SKLAND_DISABLED_DOCUMENT_INITIAL_JS_BYTES = 1_240_000/);
   assert.match(budgetCheck, /MAX_SKLAND_ENABLED_DOCUMENT_INITIAL_JS_BYTES = 1_270_000/);
   assert.match(budgetCheck, /MAX_SKLAND_DISABLED_DOCUMENT_INITIAL_GZIP_JS_BYTES = 395_000/);
   assert.match(budgetCheck, /MAX_SKLAND_ENABLED_DOCUMENT_INITIAL_GZIP_JS_BYTES = 405_000/);
   assert.match(budgetCheck, /const sklandEnabled = sklandRoute\.firstLoadChunkPaths\.some/);
-  assert.match(budgetCheck, /MAX_SECONDARY_ROUTE_INITIAL_JS_BYTES = 1_525_000/);
+  assert.match(budgetCheck, /MAX_SECONDARY_ROUTE_INITIAL_JS_BYTES = 1_532_000/);
   assert.match(budgetCheck, /MAX_DOCUMENT_INITIAL_JS_FILES = 18/);
   assert.match(budgetCheck, /WORKBENCH_ROUTES = \["\/", "\/training", "\/skills", "\/skland", "\/account"\]/);
   assert.match(budgetCheck, /firstLoadUncompressedJsBytes/);

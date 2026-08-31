@@ -29,7 +29,7 @@ import {
   getSampleOperbox,
   getSklandAccounts,
   refreshSklandStatus,
-  submitPlanTask,
+  computePlan,
   saveFeedback,
   selectSklandRole,
   toDisplayError,
@@ -282,6 +282,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   const [sampleLoading, setSampleLoading] = useState(false);
   const [result, setResult] = useState<PublicPlanData | null>(null);
   const [loading, setLoading] = useState(false);
+  const planAbortRef = useRef<AbortController | null>(null);
   const [cliReady, setCliReady] = useState(false);
   const [apiError, setApiError] = useState<DisplayError | null>(null);
   const [storageNotice, setStorageNotice] = useState<DisplayError | null>(null);
@@ -317,6 +318,8 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       setApiError(displayError("AIC-PLAN-3004", message));
     },
   });
+  const activePlanTaskId = planTask.taskId;
+  const cancelActivePlanTask = planTask.cancel;
 
   useEffect(() => {
     if (planTask.status === "cancelled") setLoading(false);
@@ -485,14 +488,19 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && loading) {
-        planTask.cancel();
-        setLoading(false);
+      if (event.key !== "Escape" || !loading) return;
+      if (activePlanTaskId) {
+        void cancelActivePlanTask().then((cancelled) => {
+          if (cancelled) setLoading(false);
+        });
+        return;
       }
+      planAbortRef.current?.abort();
+      setLoading(false);
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [loading, planTask]);
+  }, [activePlanTaskId, cancelActivePlanTask, loading]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -905,6 +913,11 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     }
     preloadProductIcons();
     setLoading(true);
+    const controller = boxSource === "sample" ? new AbortController() : null;
+    if (controller) {
+      planAbortRef.current?.abort();
+      planAbortRef.current = controller;
+    }
     setResultClearNotice(null);
     setInputError(null);
     setApiError(null);
@@ -912,7 +925,31 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
 
     try {
       trackTelemetry({ type: "interaction", name: "plan_submit", page: "calculator" });
-      const submitted = await submitPlanTask({
+      if (boxSource === "sample") {
+        const response = await computePlan({
+          layout: planLayout,
+          operbox: normalizeOperboxEntries(operbox),
+          sourceName: fileName,
+          boxSource,
+          rotation: rotationProfile,
+          fiammetta_enable: effectiveFiammettaEnabled,
+        }, { signal: controller?.signal });
+        trackTelemetry({ type: "interaction", name: "plan_response", page: "calculator" });
+        trackTelemetry({
+          type: "performance",
+          name: "plan_result",
+          page: "calculator",
+          durationMs: typeof response.durationMs === "number" ? response.durationMs : undefined,
+        });
+        setCliReady(true);
+        setActiveShift(0);
+        setResult(response);
+        completeOnboarding();
+        setLayout((current) => resolvePlanPresentationLayout(current, response));
+        return;
+      }
+      const { submitPlanTaskRequest } = await import("@/plan-task-poller");
+      const submitted = await submitPlanTaskRequest({
         layout: planLayout,
         operbox: normalizeOperboxEntries(operbox),
         sourceName: fileName,
@@ -922,13 +959,28 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       });
       planTask.begin(submitted.taskId);
     } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
       setApiError(toDisplayError(error, "排班请求失败，请稍后重试。"));
       setLoading(false);
+    } finally {
+      if (controller && planAbortRef.current === controller) {
+        planAbortRef.current = null;
+        setLoading(false);
+      }
     }
   }
 
   function handleCancelRun() {
-    planTask.cancel();
+    if (planTask.taskId) {
+      void planTask.cancel().then((cancelled) => {
+        if (!cancelled) return;
+        setLoading(false);
+        setApiError(null);
+      });
+      return;
+    }
+    planAbortRef.current?.abort();
+    planAbortRef.current = null;
     setLoading(false);
     setApiError(null);
   }
@@ -1518,8 +1570,6 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
         etaSeconds: planTask.etaSeconds,
         pollStopped: planTask.pollStopped,
         error: planTask.error,
-        resumeDisabled: planTask.resumeDisabled,
-        resumeCountdown: planTask.resumeCountdown,
         onResumePoll: planTask.resume,
       } : null,
       animatePlanEntrance,

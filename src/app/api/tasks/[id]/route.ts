@@ -12,6 +12,7 @@ import {
   planQueuePosition,
   PLAN_TASK_ETA_PER_TASK_SECONDS,
 } from "@/server/plan-task";
+import { ensurePlanTaskWorkerStarted } from "@/server/plan-task-worker";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,6 +34,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     assertSameOrigin(request);
     const { id: taskId } = await params;
     const task = await authorizeTask(taskId, request);
+    if (task.status === "pending" || task.status === "running") ensurePlanTaskWorkerStarted();
     if (task.status === "pending") {
       const queuePosition = await planQueuePosition(taskId);
       return successResponse({

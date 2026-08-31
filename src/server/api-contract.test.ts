@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   __resetRequestGuardsForTests,
   acquirePlanSlot,
+  admitPlanStart,
   assertEmptyBody,
   assertFiammettaEnableCompatible,
   assertPlanCollectionLimits,
@@ -371,6 +372,34 @@ test("plan start windows limit accounts and shared IPs without charging rejected
       (error: unknown) => error instanceof PublicApiError
         && error.code === "AIC-PLAN-3002"
         && Boolean(error.retryAfter)
+    );
+  } finally {
+    __resetRequestGuardsForTests();
+  }
+});
+
+test("queued tasks use the same account and shared-IP start windows without reserving an in-process slot", () => {
+  __resetRequestGuardsForTests();
+  try {
+    for (let index = 0; index < MAX_PLAN_STARTS_PER_ACCOUNT; index += 1) {
+      admitPlanStart({ ip: "queue-account-ip", accountId: "queue-account" });
+    }
+    assert.throws(
+      () => admitPlanStart({ ip: "queue-account-ip", accountId: "queue-account" }),
+      (error: unknown) => error instanceof PublicApiError
+        && error.code === "AIC-PLAN-3002"
+        && Boolean(error.retryAfter),
+    );
+
+    __resetRequestGuardsForTests();
+    for (let index = 0; index < MAX_PLAN_STARTS_PER_IP; index += 1) {
+      admitPlanStart({ ip: "queue-shared-ip", accountId: `queue-account-${index}` });
+    }
+    assert.throws(
+      () => admitPlanStart({ ip: "queue-shared-ip", accountId: "queue-rejected" }),
+      (error: unknown) => error instanceof PublicApiError
+        && error.code === "AIC-PLAN-3002"
+        && Boolean(error.retryAfter),
     );
   } finally {
     __resetRequestGuardsForTests();

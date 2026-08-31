@@ -340,6 +340,28 @@ function recordPlanStart(key: string, now: number): void {
   guardState.planStarts.set(key, timestamps);
 }
 
+export function admitPlanStart({
+  ip,
+  accountId,
+}: {
+  ip: string;
+  accountId: string;
+}): void {
+  const now = Date.now();
+  prunePlanStarts(now);
+  const accountStartKey = `account:${accountId}`;
+  const ipStartKey = `ip:${ip}`;
+  const retryAfter = Math.max(
+    planStartRetryAfter(accountStartKey, MAX_PLAN_STARTS_PER_ACCOUNT, now) ?? 0,
+    planStartRetryAfter(ipStartKey, MAX_PLAN_STARTS_PER_IP, now) ?? 0,
+  );
+  if (retryAfter > 0) {
+    throw new PublicApiError("AIC-PLAN-3002", { retryAfter });
+  }
+  recordPlanStart(accountStartKey, now);
+  recordPlanStart(ipStartKey, now);
+}
+
 export function acquirePlanSlot({
   ip,
   accountId,
@@ -362,24 +384,12 @@ export function acquirePlanSlot({
     throw new PublicApiError("AIC-PLAN-3002", { retryAfter: 5 });
   }
 
-  const now = Date.now();
-  prunePlanStarts(now);
-  const accountStartKey = `account:${accountId}`;
-  const ipStartKey = `ip:${ip}`;
-  const retryAfter = Math.max(
-    planStartRetryAfter(accountStartKey, MAX_PLAN_STARTS_PER_ACCOUNT, now) ?? 0,
-    planStartRetryAfter(ipStartKey, MAX_PLAN_STARTS_PER_IP, now) ?? 0,
-  );
-  if (retryAfter > 0) {
-    throw new PublicApiError("AIC-PLAN-3002", { retryAfter });
-  }
+  admitPlanStart({ ip, accountId });
 
   guardState.planAccounts.add(accountId);
   if (accountClass === "new") guardState.planNewAccounts.add(accountId);
   guardState.planIpCounts.set(ip, activeForIp + 1);
   guardState.planGlobal += 1;
-  recordPlanStart(accountStartKey, now);
-  recordPlanStart(ipStartKey, now);
   let released = false;
   return () => {
     if (released) return;

@@ -2,12 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { ApiClientError, cancelPlanTask, pollPlanTask, type PlanTaskStatus } from "@/api";
+import type { PlanTaskPoller } from "@/plan-task-poller";
 import type { PublicPlanData } from "@/types";
 
 const STORAGE_KEY = "aic-plan-task-v1";
-const BACKOFF_MS = [2_000, 4_000, 8_000, 16_000, 32_000];
-const RESUME_COOLDOWN_SECONDS = 30;
+type PlanTaskStatus = "pending" | "running" | "done" | "failed" | "cancelled";
 
 export type PlanTaskUiState = {
   taskId: string | null;
@@ -24,246 +23,127 @@ type PlanTaskOptions = {
   onFailed: (message: string) => void;
 };
 
-function readStoredTaskId(): string | null {
+const initialState: PlanTaskUiState = {
+  taskId: null,
+  status: null,
+  queuePosition: null,
+  etaSeconds: null,
+  pollStopped: false,
+  result: null,
+  error: null,
+};
+
+function storedTaskId(): string | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as { taskId?: unknown };
-    return typeof parsed.taskId === "string" && parsed.taskId ? parsed.taskId : null;
+    const value = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null") as { taskId?: unknown } | null;
+    return typeof value?.taskId === "string" && value.taskId ? value.taskId : null;
   } catch {
     return null;
   }
 }
 
-function writeStoredTaskId(taskId: string) {
+function storeTaskId(taskId: string | null): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ taskId, savedAt: Date.now() }));
+    if (taskId) localStorage.setItem(STORAGE_KEY, JSON.stringify({ taskId, savedAt: Date.now() }));
+    else localStorage.removeItem(STORAGE_KEY);
   } catch {
-    // localStorage 不可用时降级为纯内存轮询。
-  }
-}
-
-function clearStoredTaskId() {
-  try {
-    localStorage.removeItem(STORAGE_KEY);
-  } catch {
-    // ignore
+    // The queue still works in memory when browser storage is unavailable.
   }
 }
 
 export function usePlanTask({ onDone, onFailed }: PlanTaskOptions) {
-  const [state, setState] = useState<PlanTaskUiState>({
-    taskId: null,
-    status: null,
-    queuePosition: null,
-    etaSeconds: null,
-    pollStopped: false,
-    result: null,
-    error: null,
-  });
-  const [resumeDisabled, setResumeDisabled] = useState(false);
-  const [resumeCountdown, setResumeCountdown] = useState(0);
-
+  const [state, setState] = useState(initialState);
   const taskIdRef = useRef<string | null>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollerRef = useRef<PlanTaskPoller | null>(null);
+  const restoredRef = useRef(false);
   const onDoneRef = useRef(onDone);
   const onFailedRef = useRef(onFailed);
-  const restoredRef = useRef(false);
 
   useEffect(() => {
     onDoneRef.current = onDone;
-  }, [onDone]);
-  useEffect(() => {
     onFailedRef.current = onFailed;
-  }, [onFailed]);
+  }, [onDone, onFailed]);
 
-  const clearTimer = useCallback(() => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-  }, []);
-
-  const stopResumeCooldown = useCallback(() => {
-    if (cooldownRef.current) {
-      clearInterval(cooldownRef.current);
-      cooldownRef.current = null;
-    }
-    setResumeDisabled(false);
-    setResumeCountdown(0);
-  }, []);
-
-  const startResumeCooldown = useCallback(() => {
-    if (cooldownRef.current) clearInterval(cooldownRef.current);
-    setResumeDisabled(true);
-    setResumeCountdown(RESUME_COOLDOWN_SECONDS);
-    cooldownRef.current = setInterval(() => {
-      setResumeCountdown((previous) => {
-        if (previous <= 1) {
-          if (cooldownRef.current) clearInterval(cooldownRef.current);
-          cooldownRef.current = null;
-          setResumeDisabled(false);
-          return 0;
-        }
-        return previous - 1;
-      });
-    }, 1_000);
-  }, []);
-
-  const finish = useCallback((next: Partial<PlanTaskUiState> & { status: PlanTaskStatus }) => {
-    clearTimer();
-    stopResumeCooldown();
-    clearStoredTaskId();
+  const finish = useCallback((status: PlanTaskStatus, result: PublicPlanData | null, error: string | null) => {
+    pollerRef.current?.dispose();
+    pollerRef.current = null;
     taskIdRef.current = null;
-    setState((current) => ({
-      ...current,
-      taskId: null,
-      queuePosition: null,
-      etaSeconds: null,
-      pollStopped: false,
-      result: null,
-      error: null,
-      ...next,
-    }));
-  }, [clearTimer, stopResumeCooldown]);
+    storeTaskId(null);
+    setState({ ...initialState, status, result, error });
+    if (status === "done" && result) onDoneRef.current(result);
+    if (status === "failed" && error) onFailedRef.current(error);
+  }, []);
 
-  const pollOnceRef = useRef<(taskId: string, attempt: number) => Promise<void>>(async () => undefined);
-  const pollOnce = useCallback(async (taskId: string, attempt: number) => {
+  const startPolling = useCallback(async (taskId: string) => {
+    const { startPlanTaskPoller } = await import("@/plan-task-poller");
     if (taskIdRef.current !== taskId) return;
-    try {
-      const data = await pollPlanTask(taskId);
-      if (taskIdRef.current !== taskId) return;
-      if (data.status === "done") {
-        const result = data.result ?? null;
-        finish({ status: "done", result, error: null });
-        if (result) onDoneRef.current(result);
-        return;
-      }
-      if (data.status === "failed" || data.status === "cancelled") {
-        const message = data.error ?? (data.status === "cancelled" ? "任务已取消。" : "排班失败，请重试。");
-        finish({ status: data.status, error: message });
-        if (data.status === "failed") onFailedRef.current(message);
-        return;
-      }
-      setState((current) => ({
+    pollerRef.current?.dispose();
+    pollerRef.current = startPlanTaskPoller(taskId, {
+      onProgress: (progress) => setState((current) => ({ ...current, ...progress })),
+      onDone: (result) => finish("done", result, null),
+      onTerminal: (status, message) => finish(status, null, message),
+      onStopped: (error) => setState((current) => ({
         ...current,
-        status: data.status,
-        queuePosition: data.queuePosition ?? current.queuePosition,
-        etaSeconds: data.etaSeconds ?? current.etaSeconds,
-        pollStopped: false,
-      }));
-      if (attempt < BACKOFF_MS.length) {
-        timerRef.current = setTimeout(() => void pollOnceRef.current(taskId, attempt + 1), BACKOFF_MS[attempt]);
-      } else {
-        setState((current) => ({ ...current, pollStopped: true }));
-        startResumeCooldown();
-      }
-    } catch (error) {
-      if (taskIdRef.current !== taskId) return;
-      if (error instanceof ApiClientError) {
-        // 任务已不存在/已过期：终态处理，清 localStorage 并提示重新生成。
-        if (error.code === "AIC-REQ-1001") {
-          const message = "任务不存在或已过期，请重新生成排班。";
-          finish({ status: "failed", error: message });
-          onFailedRef.current(message);
-          return;
-        }
-        // 归属/来源异常：终态处理。
-        if (error.code === "AIC-AUTH-2002") {
-          const message = "任务状态异常，请刷新页面后重试。";
-          finish({ status: "failed", error: message });
-          onFailedRef.current(message);
-          return;
-        }
-        // 登录过期：保留任务与 localStorage，停止轮询，提示重新登录后刷新恢复。
-        if (error.code === "AIC-AUTH-2001") {
-          clearTimer();
-          setState((current) => ({
-            ...current,
-            error: "登录已过期，请重新登录后刷新页面继续查询。",
-          }));
-          return;
-        }
-      }
-      // 网络异常：按同一退避节奏继续，最后停住交给"查询进度"。
-      if (attempt < BACKOFF_MS.length) {
-        timerRef.current = setTimeout(() => void pollOnceRef.current(taskId, attempt + 1), BACKOFF_MS[attempt]);
-      } else {
-        setState((current) => ({ ...current, pollStopped: true, error: "网络异常，请点击查询进度。" }));
-        startResumeCooldown();
-      }
-    }
-  }, [clearTimer, finish, startResumeCooldown]);
-  useEffect(() => {
-    pollOnceRef.current = pollOnce;
-  }, [pollOnce]);
+        pollStopped: true,
+        ...(error ? { error } : {}),
+      })),
+    });
+  }, [finish]);
 
   const begin = useCallback((taskId: string) => {
-    clearTimer();
-    stopResumeCooldown();
+    pollerRef.current?.dispose();
     taskIdRef.current = taskId;
-    writeStoredTaskId(taskId);
+    storeTaskId(taskId);
     setState({
+      ...initialState,
       taskId,
       status: "pending",
       queuePosition: 1,
       etaSeconds: 2,
-      pollStopped: false,
-      result: null,
-      error: null,
     });
-    void pollOnce(taskId, 0);
-  }, [clearTimer, pollOnce, stopResumeCooldown]);
+    void startPolling(taskId);
+  }, [startPolling]);
 
   const resume = useCallback(() => {
     const taskId = taskIdRef.current;
     if (!taskId) return;
-    stopResumeCooldown();
-    clearTimer();
     setState((current) => ({ ...current, pollStopped: false, error: null }));
-    void pollOnce(taskId, 0);
-  }, [clearTimer, pollOnce, stopResumeCooldown]);
+    if (pollerRef.current) pollerRef.current.resume();
+    else void startPolling(taskId);
+  }, [startPolling]);
 
-  const cancel = useCallback(() => {
+  const cancel = useCallback(async () => {
     const taskId = taskIdRef.current;
-    clearTimer();
-    stopResumeCooldown();
-    taskIdRef.current = null;
-    clearStoredTaskId();
-    setState({
-      taskId: null,
-      status: "cancelled",
-      queuePosition: null,
-      etaSeconds: null,
-      pollStopped: false,
-      result: null,
-      error: null,
-    });
-    if (taskId) void cancelPlanTask(taskId).catch(() => undefined);
-  }, [clearTimer, stopResumeCooldown]);
+    if (!taskId) return false;
+    try {
+      const { cancelPlanTaskRequest } = await import("@/plan-task-poller");
+      const response = await cancelPlanTaskRequest(taskId);
+      if (taskIdRef.current !== taskId) return false;
+      if (!response.cancelled) {
+        setState((current) => ({
+          ...current,
+          error: response.reason === "running"
+            ? "任务已经开始计算，暂时无法取消；将继续查询结果。"
+            : "任务当前无法取消，请刷新页面确认状态。",
+        }));
+        return false;
+      }
+      finish("cancelled", null, null);
+      return true;
+    } catch {
+      setState((current) => ({ ...current, error: "取消任务失败，将继续查询结果。" }));
+      return false;
+    }
+  }, [finish]);
 
-  // 只在真正挂载（刷新/重新打开）时从 localStorage 恢复轮询；
-  // 切换侧边栏子页面不触发恢复。
   useEffect(() => {
     if (restoredRef.current) return;
     restoredRef.current = true;
-    const stored = readStoredTaskId();
-    if (stored) begin(stored);
+    const taskId = storedTaskId();
+    if (taskId) begin(taskId);
   }, [begin]);
 
-  // 卸载清理。
-  useEffect(() => () => {
-    clearTimer();
-    if (cooldownRef.current) clearInterval(cooldownRef.current);
-  }, [clearTimer]);
+  useEffect(() => () => pollerRef.current?.dispose(), []);
 
-  return {
-    ...state,
-    resumeDisabled,
-    resumeCountdown,
-    begin,
-    resume,
-    cancel,
-  };
+  return { ...state, begin, resume, cancel };
 }

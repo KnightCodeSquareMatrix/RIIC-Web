@@ -290,8 +290,6 @@ export interface InfraCalculatorProps {
     etaSeconds: number | null;
     pollStopped: boolean;
     error: string | null;
-    resumeDisabled: boolean;
-    resumeCountdown: number;
     onResumePoll: () => void;
   } | null;
   animatePlanEntrance: boolean;
@@ -477,20 +475,11 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                           size="sm"
                           className="h-9 max-sm:h-11"
                           onClick={taskQueue.onResumePoll}
-                          disabled={taskQueue.resumeDisabled}
                           aria-label="查询进度"
                         >
                           <RefreshCw />
                           查询进度
                         </Button>
-                        {taskQueue.resumeCountdown > 0 ? (
-                          <span
-                            className="pointer-events-none absolute inset-0 grid place-items-center rounded-md bg-black/45 text-lg font-semibold text-white"
-                            aria-hidden="true"
-                          >
-                            {taskQueue.resumeCountdown}
-                          </span>
-                        ) : null}
                       </div>
                     ) : null}
                     <Button type="button" variant="destructive" className="h-9 max-sm:h-11" onClick={() => setCancelConfirmOpen(true)} aria-label="取消任务">
