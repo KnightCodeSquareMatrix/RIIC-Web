@@ -114,7 +114,7 @@ jobs:
           BETTER_AUTH_URL: ""
           RESEND_API_KEY: ""
           AUTH_EMAIL_FROM: ""
-        run: npm run build
+        run: npm run build && npm run worker:build
 
       - name: Stage and archive standalone release
         shell: bash

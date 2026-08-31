@@ -3,6 +3,7 @@
 // 由 register-hooks.mjs 注册。
 import { stat } from "node:fs/promises";
 import path from "node:path";
+import { cwd } from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 async function isFile(target) {
@@ -14,11 +15,11 @@ async function isFile(target) {
 }
 
 export async function resolve(specifier, context, nextResolve) {
-  let target = null;
+  let target;
   if (specifier.startsWith("@/")) {
-    target = path.join(process.cwd(), "src", specifier.slice(2));
+    target = path.join(cwd(), "src", specifier.slice(2));
   } else if (specifier.startsWith("./") || specifier.startsWith("../")) {
-    const parent = context.parentURL ? fileURLToPath(context.parentURL) : process.cwd();
+    const parent = context.parentURL ? fileURLToPath(context.parentURL) : cwd();
     target = path.resolve(path.dirname(parent), specifier);
   } else {
     return nextResolve(specifier, context);
