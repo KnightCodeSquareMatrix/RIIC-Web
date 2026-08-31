@@ -1,5 +1,5 @@
-export const LEGAL_EFFECTIVE_DATE = "2026-08-21";
-export const PRIVACY_EFFECTIVE_DATE = "2026-08-27";
+export const LEGAL_EFFECTIVE_DATE = "2026-08-31";
+export const PRIVACY_EFFECTIVE_DATE = "2026-08-31";
 export const TERMS_VERSION = "2026-08-21-cloud-workspace";
 export const PRIVACY_VERSION = "2026-08-27-detailed-telemetry";
 

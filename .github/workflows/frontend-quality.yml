@@ -10,6 +10,7 @@ on:
         type: boolean
   pull_request:
     branches: [main, develop]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   push:
     branches: [main, develop]
   schedule:
@@ -57,14 +58,20 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
           EXPECTED_REPOSITORY: KnightCodeSquareMatrix/RIIC-Web
+          DIRECT_MAIN_RELEASE: ${{ contains(github.event.pull_request.labels.*.name, 'direct-main-release') && '1' || '0' }}
         run: |
           set -euo pipefail
           if [[ "$EVENT_NAME" == "pull_request" && "$BASE_REF" == "main" ]]; then
             test "$HEAD_REPOSITORY" = "$EXPECTED_REPOSITORY"
             [[ "$HEAD_REF" == release/* ]]
             [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]
-            git fetch --no-tags origin develop:refs/remotes/origin/develop
-            git merge-base --is-ancestor "$HEAD_SHA" refs/remotes/origin/develop
+            [[ "$DIRECT_MAIN_RELEASE" =~ ^[01]$ ]]
+            if [[ "$DIRECT_MAIN_RELEASE" == "1" ]]; then
+              echo "Maintainer-authorized direct main release; develop ancestry is intentionally skipped."
+            else
+              git fetch --no-tags origin develop:refs/remotes/origin/develop
+              git merge-base --is-ancestor "$HEAD_SHA" refs/remotes/origin/develop
+            fi
           fi
 
   changes:

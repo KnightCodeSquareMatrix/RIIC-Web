@@ -737,6 +737,7 @@ export interface SklandStatusSnapshot {
 
 export interface SklandAuthMethods {
   qr: true;
+  credential: true;
 }
 
 export interface SklandBindingSummary {
@@ -993,6 +994,7 @@ export type AppErrorCode =
   | "AIC-AUTH-2007"
   | "AIC-AUTH-2008"
   | "AIC-AUTH-2009"
+  | "AIC-AUTH-2010"
   | "AIC-PLAN-3001"
   | "AIC-PLAN-3002"
   | "AIC-PLAN-3003"

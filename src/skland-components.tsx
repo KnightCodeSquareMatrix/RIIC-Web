@@ -1,22 +1,44 @@
 "use client";
 
-import Link from "next/link";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { ExternalLink, LoaderCircle, RefreshCw, ScanLine, ShieldCheck } from "lucide-react";
+import dynamic from "next/dynamic";
+import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import {
+  ExternalLink,
+  KeyRound,
+  LoaderCircle,
+  RefreshCw,
+  ScanLine,
+  ShieldCheck,
+} from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 
 import { pollSklandQr, startSklandQr, toDisplayError } from "@/api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardTitle } from "@/components/ui/card";
+import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { buildSklandAppOpenUrl } from "@/skland-auth-url";
+import {
+  currentSklandPolicyConsent,
+  SklandPolicyConsent,
+} from "@/skland-policy-consent";
 import type { SklandSessionData } from "@/types";
-import { PRIVACY_VERSION, TERMS_VERSION } from "@/legal-policy";
 
 const SKLAND_QR_POLL_INTERVAL_MS = 6_000;
+const SklandCredentialPanel = dynamic(
+  () => import("@/skland-credential-panel").then((module) => module.SklandCredentialPanel),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex min-h-32 items-center justify-center gap-2 text-sm text-muted-foreground" role="status">
+        <LoaderCircle className="animate-spin motion-reduce:animate-none" />正在加载凭证导入…
+      </div>
+    ),
+  },
+);
 
 type ScanState = "idle" | "loading" | "waiting" | "scanned" | "expired";
+type AuthMethod = "qr" | "credential";
 
 interface SklandLoginPanelProps {
   configured: boolean;
@@ -34,6 +56,7 @@ export function SklandLoginPanel({
   dialogPresentation = false,
 }: SklandLoginPanelProps) {
   const sklandAppOpenUrl = buildSklandAppOpenUrl();
+  const [authMethod, setAuthMethod] = useState<AuthMethod>("qr");
   const [scanId, setScanId] = useState<string | null>(null);
   const [scanUrl, setScanUrl] = useState<string | null>(null);
   const [scanState, setScanState] = useState<ScanState>("idle");
@@ -42,10 +65,10 @@ export function SklandLoginPanel({
   const [preparingSlow, setPreparingSlow] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
-  const termsId = useId();
-  const privacyId = useId();
+  const authTabsId = useId();
   const createQrPromiseRef = useRef<Promise<void> | null>(null);
   const mountedRef = useRef(true);
+  const consentReady = termsAccepted && privacyAccepted;
 
   useEffect(() => {
     mountedRef.current = true;
@@ -63,12 +86,7 @@ export function SklandLoginPanel({
       setScanUrl(null);
       setScanExpiresAt(null);
       try {
-        const result = await startSklandQr({
-          termsAccepted: true,
-          privacyAccepted: true,
-          termsVersion: TERMS_VERSION,
-          privacyVersion: PRIVACY_VERSION,
-        });
+        const result = await startSklandQr(currentSklandPolicyConsent());
         if (!mountedRef.current) return;
         setScanId(result.scanId);
         setScanUrl(result.scanUrl);
@@ -113,7 +131,7 @@ export function SklandLoginPanel({
   }, [scanExpiresAt, scanId]);
 
   useEffect(() => {
-    if (!scanId) return;
+    if (!scanId || authMethod !== "qr") return;
     let cancelled = false;
     let timer: number | null = null;
     const poll = async () => {
@@ -121,14 +139,15 @@ export function SklandLoginPanel({
         const result = await pollSklandQr(scanId);
         if (cancelled) return;
         if (
-          result.status === "authenticated" &&
-          result.scheduleSnapshot &&
-          result.accounts &&
-          result.activeAccountId
+          result.status === "authenticated"
+          && result.scheduleSnapshot
+          && result.accounts
+          && result.activeAccountId
         ) {
           onAuthenticated({
             authenticated: true,
             configured: true,
+            authMethods: { qr: true, credential: true },
             accounts: result.accounts,
             activeAccountId: result.activeAccountId,
             bindingCount: result.bindingCount ?? result.accounts.length,
@@ -163,306 +182,166 @@ export function SklandLoginPanel({
       cancelled = true;
       if (timer !== null) window.clearTimeout(timer);
     };
-  }, [onAuthenticated, scanId]);
+  }, [authMethod, onAuthenticated, scanId]);
 
   useEffect(() => {
     if (
-      dialogPresentation ||
-      !configured ||
-      !termsAccepted ||
-      !privacyAccepted ||
-      scanError ||
-      (scanState !== "idle" && scanState !== "expired")
+      authMethod !== "qr"
+      || dialogPresentation
+      || !configured
+      || !consentReady
+      || scanError
+      || (scanState !== "idle" && scanState !== "expired")
     ) {
       return;
     }
     void createQr();
-  }, [
-    configured,
-    createQr,
-    dialogPresentation,
-    privacyAccepted,
-    scanError,
-    scanState,
-    termsAccepted,
-  ]);
+  }, [authMethod, configured, consentReady, createQr, dialogPresentation, scanError, scanState]);
+
+  function handleAuthTabKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
+    const nextMethod = event.key === "ArrowLeft" || event.key === "ArrowUp" || event.key === "Home"
+      ? "qr"
+      : event.key === "ArrowRight" || event.key === "ArrowDown" || event.key === "End"
+        ? "credential"
+        : null;
+    if (!nextMethod) return;
+    event.preventDefault();
+    setAuthMethod(nextMethod);
+    window.requestAnimationFrame(() => document.getElementById(`${authTabsId}-${nextMethod}-tab`)?.focus());
+  }
 
   const pageStatusText = scanState === "loading"
-    ? preparingSlow
-      ? "正在连接登录服务，请稍候…"
-      : "正在生成二维码…"
+    ? preparingSlow ? "正在连接登录服务，请稍候…" : "正在生成二维码…"
     : scanState === "scanned"
       ? "已扫码，正在等待森空岛 App 确认并完成登录…"
       : scanState === "expired"
-        ? "二维码已过期，正在刷新…"
+        ? dialogPresentation ? "二维码已过期，请重新生成。" : "二维码已过期，正在刷新…"
         : scanUrl
           ? "请使用森空岛 App 扫描二维码"
-          : "勾选下方两项授权后显示二维码";
-
-  if (!dialogPresentation) {
-    return (
-      <div
-        className={cn("grid w-full justify-items-center", className)}
-        data-skland-login-panel
-      >
-        {!configured ? (
-          <Alert className="w-full max-w-md text-start">
-            <AlertDescription>
-              {disabledReason ?? "当前未开放森空岛登录，可继续使用 MAA 导入。"}
-            </AlertDescription>
-          </Alert>
-        ) : (
-          <div className="grid w-full max-w-md justify-items-center gap-5" data-skland-login-qr>
-            <div
-              className="grid size-52 place-items-center rounded-xl bg-white p-3 ring-1 ring-black/10 sm:size-56"
-              data-skland-qr-visual
-            >
-              {scanState === "scanned" ? (
-                <LoaderCircle
-                  className="size-9 animate-spin text-muted-foreground motion-reduce:animate-none"
-                  aria-hidden="true"
-                  data-skland-login-progress
-                />
-              ) : scanUrl ? (
-                <QRCodeSVG
-                  value={scanUrl}
-                  size={196}
-                  className="size-full"
-                  title="森空岛登录二维码"
-                  role="img"
-                  aria-label="森空岛登录二维码"
-                />
-              ) : scanState === "loading" ? (
-                <LoaderCircle className="size-8 animate-spin text-muted-foreground" aria-hidden="true" />
-              ) : (
-                <ScanLine className="size-12 text-muted-foreground" aria-hidden="true" />
-              )}
-            </div>
-
-            <p className="text-center text-sm leading-6 text-muted-foreground" role="status" aria-live="polite">
-              {pageStatusText}
-            </p>
-
-            {scanError ? (
-              <Alert className="w-full text-start" variant="destructive">
-                <AlertDescription>{scanError}</AlertDescription>
-              </Alert>
-            ) : null}
-
-            <div className="grid w-full gap-3 text-start text-xs leading-5 text-muted-foreground">
-              <div className="flex items-start gap-2">
-                <input
-                  id={termsId}
-                  type="checkbox"
-                  checked={termsAccepted}
-                  onChange={(event) => setTermsAccepted(event.target.checked)}
-                  className="mt-1 size-4 shrink-0 accent-primary"
-                />
-                <label htmlFor={termsId}>
-                  我已阅读并同意
-                  <Link className="mx-1 font-medium text-foreground underline underline-offset-4" href="/terms" target="_blank">本站服务条款</Link>
-                  。
-                </label>
-              </div>
-              <div className="flex items-start gap-2">
-                <input
-                  id={privacyId}
-                  type="checkbox"
-                  checked={privacyAccepted}
-                  onChange={(event) => setPrivacyAccepted(event.target.checked)}
-                  className="mt-1 size-4 shrink-0 accent-primary"
-                />
-                <label htmlFor={privacyId}>
-                  我已阅读
-                  <Link className="mx-1 font-medium text-foreground underline underline-offset-4" href="/privacy" target="_blank">本站隐私政策</Link>
-                  ，并授权本站处理森空岛凭证、角色、干员与基建数据。
-                </label>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  const statusText = scanState === "loading"
-    ? preparingSlow
-      ? "正在连接鹰角登录服务，首次准备可能需要更久。"
-      : "正在生成二维码…"
-    : scanState === "scanned"
-      ? "已扫码，正在等待森空岛确认并完成登录。"
-      : scanState === "expired"
-        ? "二维码已过期，请重新生成。"
-        : scanUrl
-          ? "等待森空岛扫码授权…"
-          : "二维码不会自动生成，准备好后再开始登录。";
-  const mobileStatusText = scanState === "loading"
-    ? preparingSlow
-      ? "正在连接登录服务…"
-      : "正在生成二维码…"
-    : scanState === "scanned"
-      ? "已扫码，正在等待确认并完成登录…"
-      : scanState === "expired"
-        ? "二维码已过期，请重新生成。"
-        : scanUrl
-          ? "等待扫码确认…"
-          : "点击按钮生成二维码。";
+          : dialogPresentation ? "准备好后生成二维码。" : "勾选下方两项授权后显示二维码";
 
   return (
     <Card
       className={cn(
-        dialogPresentation
-          ? "w-full overflow-hidden rounded-none border-0 bg-transparent shadow-none ring-0"
-          : "surface-shadow w-full overflow-hidden rounded-none ring-0",
-        className
+        "w-full overflow-hidden rounded-none border-0 bg-transparent shadow-none ring-0",
+        className,
       )}
       data-skland-login-panel
     >
-      <div className="grid md:grid-cols-[minmax(0,1fr)_22rem]">
-        <div className="px-6 py-7 md:px-8 md:py-9" data-skland-login-copy>
-          <div className="mb-5 flex size-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <ScanLine className="size-5" aria-hidden="true" />
+      <div className="grid gap-5 px-5 pb-6 pt-5 sm:px-7 sm:pb-7">
+        <div className="flex items-start gap-3" data-skland-auth-copy>
+          <div className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+            {authMethod === "qr" ? <ScanLine className="size-5" aria-hidden="true" /> : <KeyRound className="size-5" aria-hidden="true" />}
           </div>
-          <CardTitle className={dialogPresentation ? "text-lg" : "text-xl"}>登录森空岛账号</CardTitle>
-          <div className="mt-7 grid gap-4 text-sm text-muted-foreground" data-ui-number-font>
-            <p className="flex items-start gap-2">
-              <ShieldCheck className="mt-0.5 size-4 shrink-0 text-emerald-600" aria-hidden="true" />
-              <span>登录信息会加密保存在你的浏览器中，7 天后自动失效；本站不会另行长期保存。</span>
-            </p>
-            <CardDescription className="w-full text-pretty leading-6">
-              <span className="md:hidden">打开森空岛 App 扫码登录，成功后同步排班与状态中心数据。</span>
-              <span className="hidden md:inline">
-                打开森空岛 App，扫描页面中的二维码完成登录。登录成功后会同步当前角色的干员、基建布局和状态中心完整数据。
-              </span>
+          <div className="min-w-0">
+            <CardTitle className={dialogPresentation ? "text-lg" : "text-xl"}>登录森空岛账号</CardTitle>
+            <CardDescription className="mt-1 text-pretty leading-6">
+              登录信息经加密写入 HttpOnly Cookie，并在授权成功 7 天后固定失效。
             </CardDescription>
           </div>
         </div>
 
-        <CardContent
-          className="order-first grid min-h-64 place-items-center px-6 py-7 md:order-none md:min-h-80 md:px-8"
-          data-skland-login-qr
-        >
-          {!configured ? (
-            <Alert>
-              <AlertDescription>
-                {disabledReason ?? "当前未开放森空岛登录，可继续使用 MAA 导入。"}
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <div className="grid w-full place-items-center gap-4">
-              {scanUrl || scanState === "loading" ? (
-                <div className="grid size-52 place-items-center rounded-xl bg-white p-3 ring-1 ring-black/10 sm:size-56">
-                  {scanState === "scanned" ? (
-                    <LoaderCircle
-                      className="size-9 animate-spin text-muted-foreground motion-reduce:animate-none"
-                      aria-hidden="true"
-                      data-skland-login-progress
-                    />
-                  ) : scanUrl ? (
-                    <QRCodeSVG
-                      value={scanUrl}
-                      size={196}
-                      className="size-full"
-                      title="森空岛登录二维码"
-                      role="img"
-                      aria-label="森空岛登录二维码"
-                    />
-                  ) : (
-                    <LoaderCircle className="size-8 animate-spin text-muted-foreground" aria-hidden="true" />
+        {!configured ? (
+          <Alert>
+            <AlertDescription>{disabledReason ?? "当前未开放森空岛登录，可继续使用 MAA 导入。"}</AlertDescription>
+          </Alert>
+        ) : (
+          <div>
+            <div className="grid min-h-11 w-full grid-cols-2 rounded-lg bg-muted p-1 text-muted-foreground" role="tablist" aria-label="森空岛登录方式">
+              {(["qr", "credential"] as const).map((method) => (
+                <button
+                  key={method}
+                  id={`${authTabsId}-${method}-tab`}
+                  type="button"
+                  role="tab"
+                  aria-selected={authMethod === method}
+                  aria-controls={`${authTabsId}-${method}-panel`}
+                  tabIndex={authMethod === method ? 0 : -1}
+                  className={cn(
+                    "flex min-h-9 items-center justify-center gap-2 rounded-md px-3 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                    authMethod === method && "bg-background text-foreground shadow-sm",
                   )}
-                </div>
-              ) : (
-                <div className="grid size-36 place-items-center rounded-full bg-muted text-muted-foreground">
-                  <ScanLine className="size-12" aria-hidden="true" />
-                </div>
-              )}
+                  onClick={() => setAuthMethod(method)}
+                  onKeyDown={handleAuthTabKeyDown}
+                >
+                  {method === "qr" ? <><ScanLine />扫码登录</> : <><KeyRound />凭证导入</>}
+                </button>
+              ))}
+            </div>
 
-              <p className="text-center text-sm leading-6 text-muted-foreground" role="status" aria-live="polite">
-                <span className="md:hidden">{mobileStatusText}</span>
-                <span className="hidden md:inline">{statusText}</span>
-              </p>
-
-              {scanError ? (
-                <Alert variant="destructive">
-                  <AlertDescription>{scanError}</AlertDescription>
-                </Alert>
-              ) : null}
-
-              <div className="grid w-full gap-3 text-xs leading-5 text-muted-foreground">
-                <div className="flex items-start gap-2">
-                  <input
-                    id={termsId}
-                    type="checkbox"
-                    checked={termsAccepted}
-                    onChange={(event) => setTermsAccepted(event.target.checked)}
-                    className="mt-1 size-4 shrink-0 accent-primary"
+            {authMethod === "qr" ? (
+            <div id={`${authTabsId}-qr-panel`} role="tabpanel" aria-labelledby={`${authTabsId}-qr-tab`} className="mt-4">
+              <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_15rem] md:items-center" data-skland-login-qr>
+                <div className="order-2 grid gap-4 md:order-1">
+                  <p className="flex items-start gap-2 text-sm leading-6 text-muted-foreground">
+                    <ShieldCheck className="mt-1 size-4 shrink-0 text-emerald-600" aria-hidden="true" />
+                    <span>推荐方式。打开森空岛 App 扫描二维码，确认后同步当前角色的干员、基建与状态中心数据。</span>
+                  </p>
+                  <SklandPolicyConsent
+                    termsAccepted={termsAccepted}
+                    privacyAccepted={privacyAccepted}
+                    onTermsChange={setTermsAccepted}
+                    onPrivacyChange={setPrivacyAccepted}
                   />
-                  <label htmlFor={termsId}>
-                    我已阅读并同意
-                    <Link className="mx-1 font-medium text-foreground underline underline-offset-4" href="/terms" target="_blank">本站服务条款</Link>
-                    。
-                  </label>
+                  {scanError ? <Alert variant="destructive"><AlertDescription>{scanError}</AlertDescription></Alert> : null}
+                  {scanUrl ? (
+                    <div className="grid gap-2 sm:hidden">
+                      <Button
+                        nativeButton={false}
+                        render={<a data-motion-pressable href={sklandAppOpenUrl} target="_blank" rel="noreferrer" />}
+                        size={dialogPresentation ? "dialog" : "default"}
+                        className="w-full"
+                      >
+                        <ExternalLink />打开森空岛 App
+                      </Button>
+                      <p className="text-pretty text-center text-xs leading-5 text-muted-foreground">
+                        请用森空岛扫描二维码；必要时可在另一台设备展示。
+                      </p>
+                    </div>
+                  ) : null}
+                  {!scanUrl || scanState === "expired" || scanError ? (
+                    <Button
+                      type="button"
+                      size={dialogPresentation ? "dialog" : "default"}
+                      className={cn("w-full sm:w-fit", dialogPresentation && "sm:w-[196px]")}
+                      variant={scanState === "idle" && !scanError ? "default" : "outline"}
+                      disabled={scanState === "loading" || !consentReady}
+                      onClick={() => void createQr()}
+                    >
+                      {scanState === "loading" ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}
+                      {scanState === "idle" && !scanError ? "生成登录二维码" : "重新生成二维码"}
+                    </Button>
+                  ) : null}
                 </div>
-                <div className="flex items-start gap-2">
-                  <input
-                    id={privacyId}
-                    type="checkbox"
-                    checked={privacyAccepted}
-                    onChange={(event) => setPrivacyAccepted(event.target.checked)}
-                    className="mt-1 size-4 shrink-0 accent-primary"
-                  />
-                  <label htmlFor={privacyId}>
-                    我已阅读
-                    <Link className="mx-1 font-medium text-foreground underline underline-offset-4" href="/privacy" target="_blank">本站隐私政策</Link>
-                    ，并同意本站为登录和生成排班处理我的森空岛凭证、角色、干员与基建数据。
-                  </label>
+
+                <div className="order-1 grid place-items-center gap-3 md:order-2">
+                  <div className="grid size-52 place-items-center rounded-xl bg-white p-3 ring-1 ring-black/10 sm:size-56 md:size-52" data-skland-qr-visual>
+                    {scanState === "scanned" ? (
+                      <LoaderCircle className="size-9 animate-spin text-muted-foreground motion-reduce:animate-none" aria-hidden="true" data-skland-login-progress />
+                    ) : scanUrl ? (
+                      <QRCodeSVG value={scanUrl} size={196} className="size-full" title="森空岛登录二维码" role="img" aria-label="森空岛登录二维码" />
+                    ) : scanState === "loading" ? (
+                      <LoaderCircle className="size-8 animate-spin text-muted-foreground motion-reduce:animate-none" aria-hidden="true" />
+                    ) : (
+                      <ScanLine className="size-12 text-muted-foreground" aria-hidden="true" />
+                    )}
+                  </div>
+                  <p className="text-center text-sm leading-6 text-muted-foreground" role="status" aria-live="polite">{pageStatusText}</p>
                 </div>
               </div>
-
-              {scanUrl ? (
-                <div className="grid w-full gap-2 sm:hidden">
-                  <Button
-                    nativeButton={false}
-                    render={(
-                      <a
-                        data-motion-pressable
-                        href={sklandAppOpenUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                      />
-                    )}
-                    size={dialogPresentation ? "dialog" : "default"}
-                    className="w-full"
-                  >
-                    <ExternalLink />打开森空岛 App
-                  </Button>
-                  <p className="text-pretty text-center text-xs leading-5 text-muted-foreground">
-                    请用森空岛扫描上方二维码；必要时可在另一台设备展示。
-                  </p>
-                </div>
-              ) : null}
-
-              {!scanUrl || scanState === "expired" || scanError ? (
-                <Button
-                  type="button"
-                  size={dialogPresentation ? "dialog" : "default"}
-                  className={dialogPresentation ? undefined : "h-11 min-w-36"}
-                  variant={scanState === "idle" && !scanError ? "default" : "outline"}
-                  disabled={scanState === "loading" || !termsAccepted || !privacyAccepted}
-                  onClick={() => void createQr()}
-                >
-                  {scanState === "loading" ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}
-                  <span className="md:hidden">
-                    {scanState === "idle" && !scanError ? "生成二维码" : "重新生成"}
-                  </span>
-                  <span className="hidden md:inline">
-                    {scanState === "idle" && !scanError ? "生成登录二维码" : "重新生成二维码"}
-                  </span>
-                </Button>
-              ) : null}
             </div>
-          )}
-        </CardContent>
+            ) : null}
+
+            {authMethod === "credential" ? (
+            <div id={`${authTabsId}-credential-panel`} role="tabpanel" aria-labelledby={`${authTabsId}-credential-tab`} className="mt-4" data-skland-credential-panel>
+              <SklandCredentialPanel
+                dialogPresentation={dialogPresentation}
+                onAuthenticated={onAuthenticated}
+              />
+            </div>
+            ) : null}
+          </div>
+        )}
       </div>
     </Card>
   );

@@ -22,7 +22,7 @@ Only the personal-repository owner, `KnightCodeSquareMatrix`, can complete the a
 - [ ] Allow GitHub Actions to create pull requests so the narrowly scoped asset-sync workflow can update `develop`.
 - [ ] Enable private vulnerability reporting and the relevant GitHub security checks.
 
-The `quality` workflow also rejects every pull request to `main` unless its head is a `release/**` branch in this same repository and that head commit is already reachable from `develop`. External and ordinary feature PRs target `develop`.
+The `quality` workflow also rejects every pull request to `main` unless its head is a `release/**` branch in this same repository. By default, that head commit must already be reachable from `develop`; a maintainer-applied `direct-main-release` label may explicitly waive only the ancestry check while preserving all remaining quality jobs. External and ordinary feature PRs target `develop`.
 
 ## Deployment configuration
 
