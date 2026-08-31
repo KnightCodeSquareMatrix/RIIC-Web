@@ -1172,9 +1172,11 @@ for (const viewport of [
   { width: 1440, height: 900 },
 ]) {
   test(`website account registration is reachable and explains consent at ${viewport.width}px`, async ({ page }) => {
+    let signUpRequests = 0;
     await page.unroute("**/api/auth/get-session");
     await page.route("**/api/auth/get-session", (route) => route.fulfill({ status: 200, contentType: "application/json", body: "null" }));
     await page.route("**/api/auth/sign-up/email", async (route) => {
+      signUpRequests += 1;
       const body = route.request().postDataJSON() as { email?: string; password?: string };
       expect(body.email).toBe(`account-${viewport.width}@example.test`);
       expect(body.password).toBe("secure-password-1");
@@ -1219,12 +1221,19 @@ for (const viewport of [
     await expect(accountPanel.getByText("2–20 个字符，可使用中文、英文字母、数字、空格、下划线和短横线。", { exact: true })).toBeVisible();
     await accountPanel.getByRole("textbox", { name: "邮箱", exact: true }).fill(`account-${viewport.width}@example.test`);
     await page.getByLabel("密码", { exact: true }).fill("secure-password-1");
+    await page.getByLabel("确认密码", { exact: true }).fill("different-password-1");
     await page.getByLabel("昵称").fill("博士😀");
     await page.getByRole("button", { name: "创建账号并发送验证码" }).click();
     await expect(accountPanel.getByText(/昵称只能使用中文、英文字母、数字/)).toBeVisible();
     await page.getByLabel("昵称").fill("测试用户");
     await expect(accountPanel.getByRole("meter", { name: "密码强度" })).toHaveAttribute("aria-valuetext", "强");
     await page.getByRole("button", { name: "创建账号并发送验证码" }).click();
+    await expect(accountPanel.getByText("两次输入的密码不一致。", { exact: true })).toBeVisible();
+    expect(signUpRequests).toBe(0);
+    await page.getByLabel("确认密码", { exact: true }).fill("secure-password-1");
+    await expect(accountPanel.getByText("两次输入的密码不一致。", { exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: "创建账号并发送验证码" }).click();
+    expect(signUpRequests).toBe(1);
     await expect(accountPanel.locator("[data-wizard-steps]")).toHaveCount(0);
     for (const [index, digit] of [..."123456"].entries()) {
       await accountPanel.getByRole("textbox", { name: `邮箱验证码第 ${index + 1} 位，共 6 位` }).fill(digit);

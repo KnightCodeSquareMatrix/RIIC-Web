@@ -75,6 +75,11 @@ function formatSessionExpiry(value: unknown): string | null {
   return new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(date);
 }
 
+function passwordConfirmationError(password: string, confirmation: string): string | null {
+  if (!confirmation) return "请再次输入密码。";
+  return password === confirmation ? null : "两次输入的密码不一致。";
+}
+
 export function WebsiteAccountPanel({
   onSessionChanged,
   loadingMode = "page",
@@ -89,6 +94,8 @@ export function WebsiteAccountPanel({
   const [nameError, setNameError] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [confirmPasswordError, setConfirmPasswordError] = useState<string | null>(null);
   const [deletePassword, setDeletePassword] = useState("");
   const [otp, setOtp] = useState("");
   const [otpStatus, setOtpStatus] = useState<OtpStatus>("idle");
@@ -111,6 +118,8 @@ export function WebsiteAccountPanel({
     setMode(nextMode);
     setStep("details");
     setPassword("");
+    setConfirmPassword("");
+    setConfirmPasswordError(null);
     setNameError(null);
     setOtp("");
     setOtpStatus("idle");
@@ -156,6 +165,14 @@ export function WebsiteAccountPanel({
     if (validatedName?.error) {
       setNameError(validatedName.error);
       return;
+    }
+    if (mode === "signup") {
+      const confirmationError = passwordConfirmationError(password, confirmPassword);
+      if (confirmationError) {
+        setConfirmPasswordError(confirmationError);
+        return;
+      }
+      setConfirmPasswordError(null);
     }
     setBusy(true);
     setError(null);
@@ -442,8 +459,58 @@ export function WebsiteAccountPanel({
                 {mode !== "forgot" ? (
                   <div className="grid gap-1.5">
                     <Label htmlFor={`${fieldId}-password`}>密码</Label>
-                    <Input className={AUTH_INPUT_CLASS} id={`${fieldId}-password`} value={password} onChange={(event) => setPassword(event.target.value)} required type="password" minLength={10} maxLength={128} placeholder="10–128 位" autoComplete={mode === "signup" ? "new-password" : "current-password"} />
+                    <Input
+                      className={AUTH_INPUT_CLASS}
+                      id={`${fieldId}-password`}
+                      value={password}
+                      onChange={(event) => {
+                        const nextPassword = event.target.value;
+                        setPassword(nextPassword);
+                        if (confirmPasswordError && mode === "signup") {
+                          setConfirmPasswordError(passwordConfirmationError(nextPassword, confirmPassword));
+                        }
+                      }}
+                      required
+                      type="password"
+                      minLength={10}
+                      maxLength={128}
+                      placeholder="10–128 位"
+                      autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                    />
                     {mode === "signup" ? <PasswordStrength value={password} className="mt-1.5" /> : null}
+                  </div>
+                ) : null}
+                {mode === "signup" ? (
+                  <div className="grid gap-1.5">
+                    <Label htmlFor={`${fieldId}-confirm-password`}>确认密码</Label>
+                    <Input
+                      className={AUTH_INPUT_CLASS}
+                      id={`${fieldId}-confirm-password`}
+                      value={confirmPassword}
+                      onChange={(event) => {
+                        const nextConfirmation = event.target.value;
+                        setConfirmPassword(nextConfirmation);
+                        if (confirmPasswordError) {
+                          setConfirmPasswordError(passwordConfirmationError(password, nextConfirmation));
+                        }
+                      }}
+                      onBlur={() => setConfirmPasswordError(passwordConfirmationError(password, confirmPassword))}
+                      required
+                      type="password"
+                      minLength={10}
+                      maxLength={128}
+                      placeholder="再次输入密码"
+                      autoComplete="new-password"
+                      aria-invalid={Boolean(confirmPasswordError)}
+                      aria-describedby={`${fieldId}-confirm-password-hint`}
+                    />
+                    <p
+                      id={`${fieldId}-confirm-password-hint`}
+                      role={confirmPasswordError ? "alert" : undefined}
+                      className={`text-xs leading-5 ${confirmPasswordError ? "text-destructive" : "text-muted-foreground"}`}
+                    >
+                      {confirmPasswordError ?? "请再次输入上面的密码。"}
+                    </p>
                   </div>
                 ) : null}
                 {mode === "signup" ? (
