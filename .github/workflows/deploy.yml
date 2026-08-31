@@ -31,7 +31,7 @@ jobs:
       DEPLOY_RATE_LIMIT_ENABLED: ${{ vars.DEPLOY_RATE_LIMIT_ENABLED || '1' }}
       DEPLOY_APPROVED_SOLVER_SHA256: ${{ vars.DEPLOY_APPROVED_SOLVER_SHA256 }}
       DEPLOY_EXPECTED_REPOSITORY: KnightCodeSquareMatrix/RIIC-Web
-      DEPLOY_RELEASE_HELPER_CONTRACT: "4"
+      DEPLOY_RELEASE_HELPER_CONTRACT: "5"
 
     steps:
       - name: Checkout verified commit
