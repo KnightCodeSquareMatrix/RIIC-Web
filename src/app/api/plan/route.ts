@@ -93,7 +93,7 @@ export async function POST(request: Request) {
   try {
     const includeDebug = new URL(request.url).searchParams.get("beta") === "1";
     assertSameOrigin(request);
-    if (isPlanTaskQueueEnabled()) throw new PublicApiError("AIC-PLAN-3001");
+    const taskQueueEnabled = isPlanTaskQueueEnabled();
     const ip = requestClientIp(request);
 
     const body = await readJsonBody(request, 2 * 1024 * 1024) as {
@@ -107,6 +107,9 @@ export async function POST(request: Request) {
     let websiteUserId: string | null = null;
     let websiteAccountClass: "new" | "established" | null = null;
     const accessMode = planAccessMode(body.boxSource, body.operbox !== undefined);
+    if (taskQueueEnabled && accessMode !== "trusted-sample") {
+      throw new PublicApiError("AIC-PLAN-3001");
+    }
     if (accessMode === "trusted-sample") {
       const sample = await (await import("@/server/infra")).getSampleOperbox();
       body.operbox = sample.operbox as OperBoxEntry[];

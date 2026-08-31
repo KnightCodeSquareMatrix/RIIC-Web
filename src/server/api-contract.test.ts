@@ -495,13 +495,15 @@ test("task queue keeps anonymous samples cache-only and applies persistent authe
   assert.equal(source.includes("cacheReferenceUserId = sourceType === \"sample\" ? null : userId"), true);
 });
 
-test("task queue disables the legacy synchronous solver endpoint", async () => {
+test("task queue keeps only the trusted sample on the bounded synchronous endpoint", async () => {
   const source = await readFile(new URL("../app/api/plan/route.ts", import.meta.url), "utf8");
   const originGuard = source.indexOf("assertSameOrigin(request)");
-  const queueGuard = source.indexOf("if (isPlanTaskQueueEnabled())");
+  const accessMode = source.indexOf("const accessMode = planAccessMode");
+  const queueGuard = source.indexOf('if (taskQueueEnabled && accessMode !== "trusted-sample")');
   const solverCall = source.indexOf("runResult = await runPlan");
   assert.equal(source.includes('throw new PublicApiError("AIC-PLAN-3001")'), true);
   assert.equal(queueGuard > originGuard, true);
+  assert.equal(queueGuard > accessMode, true);
   assert.equal(queueGuard < solverCall, true);
 });
 
@@ -527,10 +529,10 @@ test("worker loads the sealed release environment before evaluating runtime modu
   assert.equal(source.includes('from "./plan-worker-runtime.mts"'), false);
 });
 
-test("the client keeps the synchronous fallback only when health reports that the queue is disabled", async () => {
+test("the client keeps trusted samples synchronous while personal plans follow queue health", async () => {
   const source = await readFile(new URL("../../src/App.tsx", import.meta.url), "utf8");
   const healthFlag = source.indexOf("setTaskQueueEnabled(Boolean(health.taskQueue?.enabled))");
-  const fallback = source.indexOf("if (!taskQueueEnabled)");
+  const fallback = source.indexOf('if (!taskQueueEnabled || payload.boxSource === "sample")');
   const synchronousCall = source.indexOf("await computePlan(payload)", fallback);
   const queueCall = source.indexOf("await submitPlanTask(payload)", synchronousCall);
   assert.equal(healthFlag > 0, true);
