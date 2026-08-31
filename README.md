@@ -124,7 +124,7 @@ npm run audit:security
 npm run build
 ```
 
-`npm run check` 会执行公开仓库卫生检查、生成资源校验、ESLint、单元测试和 API 契约测试。浏览器测试可分别通过 `npm run test:e2e`、`npm run test:e2e:production-profile` 和 `npm run test:e2e:webkit` 运行。涉及数据库 schema 的改动，应先设置 `DATABASE_MIGRATION_URL`，再执行：
+`npm run check` 会执行公开仓库卫生检查、生成资源校验、ESLint、单元测试和 API 契约测试。浏览器测试可分别通过 `npm run test:e2e`、`npm run test:e2e:production-profile` 和 `npm run test:e2e:webkit` 运行。`npm run build` 会准备不含求解器的 `.next/standalone` 运行目录，并补齐 `public` 与 `.next/static`；生产启动脚本会使用这一目录。涉及数据库 schema 的改动，应先设置 `DATABASE_MIGRATION_URL`，再执行：
 
 ```bash
 npm run db:generate

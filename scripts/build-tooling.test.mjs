@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import test from "node:test";
 import { URL } from "node:url";
 
@@ -18,6 +18,49 @@ test("Next.js commands use the default Turbopack bundler", async () => {
   assert.doesNotMatch(packageJson.scripts.dev, /--webpack\b/);
   assert.doesNotMatch(playwrightConfig, /--webpack\b/);
   assert.doesNotMatch(productionPlaywrightConfig, /--webpack\b/);
+});
+
+test("production builds prepare a solver-free standalone runtime with static assets", async () => {
+  const packageJson = JSON.parse(await readRepoFile("package.json"));
+  const nextConfig = await readRepoFile("next.config.ts");
+  const prepareStandalone = await readRepoFile("scripts/prepare-standalone.mjs");
+  const startStandalone = await readRepoFile("scripts/start-standalone.mjs");
+  const stageStandalone = await readRepoFile("scripts/stage-standalone-release.mjs");
+
+  assert.match(nextConfig, /output: "standalone"/);
+  assert.equal(packageJson.scripts.postbuild, "node scripts/prepare-standalone.mjs");
+  assert.equal(packageJson.scripts.start, "node scripts/start-standalone.mjs");
+  assert.equal(packageJson.scripts["release:stage"], "node scripts/stage-standalone-release.mjs");
+  assert.match(prepareStandalone, /standaloneRoot, "public"/);
+  assert.match(prepareStandalone, /standaloneRoot, "\.next", "static"/);
+  assert.match(prepareStandalone, /\["infra-cli", "infra-cli\.exe"\]/);
+  assert.match(prepareStandalone, /\["\.env", "\.env\.production", "\.env\.local", "\.env\.production\.local"\]/);
+  assert.match(prepareStandalone, /standalone website output must not contain/);
+  assert.match(prepareStandalone, /node_modules\/drizzle-orm/);
+  assert.match(prepareStandalone, /scripts\/backfill-business-data\.mts/);
+  assert.match(prepareStandalone, /scripts\/migrate-db\.mts/);
+  assert.match(prepareStandalone, /scripts\/check-auth-readiness\.mts/);
+  assert.match(prepareStandalone, /src\/server\/business-backfill\.ts/);
+  assert.match(startStandalone, /ARKNIGHTS_INFRA_HOSTNAME \|\| "0\.0\.0\.0"/);
+  assert.match(startStandalone, /process\.env\.PORT = String\(numericPort\)/);
+  assert.match(startStandalone, /\.next\/standalone\/server\.js/);
+  assert.match(stageStandalone, /kind: "riic-web-standalone"/);
+  assert.match(stageStandalone, /standalone release root must not contain/);
+  assert.match(stageStandalone, /\["bin\/infra-cli", "infra-cli"\]/);
+  assert.match(stageStandalone, /\["\.env\.production\.local", "\.env\.production\.local"\]/);
+  assert.match(stageStandalone, /dereference: true/);
+});
+
+test("Next.js owns graceful shutdown while systemd accepts its signal exit statuses", async () => {
+  const processCleanup = await readRepoFile("src/server/process-cleanup.ts");
+  const systemdDropIn = await readRepoFile("deploy/next-graceful-exit.conf");
+  const systemdGuide = await readRepoFile("deploy/SYSTEMD.md");
+
+  assert.doesNotMatch(processCleanup, /SIGINT|SIGTERM/);
+  assert.match(processCleanup, /target\.once\("exit", onExit\)/);
+  assert.equal(systemdDropIn, "[Service]\nSuccessExitStatus=130 143\n");
+  assert.match(systemdGuide, /drain in-flight requests/);
+  assert.match(systemdGuide, /systemctl daemon-reload/);
 });
 
 test("CI enforces route and document preload JavaScript budgets after building", async () => {
@@ -57,6 +100,11 @@ test("Next and the verified deployment keep real public GET responses compressed
 
 test("CI gates releases on Chromium and schedules the full WebKit suite", async () => {
   const workflow = await readRepoFile(".github/workflows/frontend-quality.yml");
+  const playwrightConfig = await readRepoFile("playwright.config.ts");
+  const e2eFiles = await readdir(new URL("../e2e/", import.meta.url));
+  const readinessSpecs = e2eFiles.filter((file) => /^production-readiness-.+\.spec\.ts$/.test(file));
+  const readinessTestCount = (await Promise.all(readinessSpecs.map((file) => readRepoFile(`e2e/${file}`))))
+    .reduce((count, source) => count + (source.match(/^test\(/gm)?.length ?? 0), 0);
 
   assert.match(workflow, /browser_e2e:[\s\S]+npm run test:e2e[\s\S]+npm run test:e2e:production-profile/);
   assert.match(workflow, /webkit_e2e:[\s\S]+github\.event_name == 'schedule'[\s\S]+npm run test:e2e:webkit/);
@@ -64,6 +112,12 @@ test("CI gates releases on Chromium and schedules the full WebKit suite", async 
   assert.doesNotMatch(workflow, /quality:[\s\S]+needs: \[[^\]]*webkit_e2e/);
   assert.match(workflow, /deploy:[\s\S]+needs: \[changes, quality\]/);
   assert.match(workflow, /cancel-in-progress: \$\{\{ github\.event_name == 'pull_request' \}\}/);
+  assert.equal(readinessSpecs.length, 4);
+  assert.equal(readinessTestCount, 77);
+  assert.equal(e2eFiles.includes("production-readiness.spec.ts"), false);
+  assert.match(playwrightConfig, /fullyParallel: false/);
+  assert.match(playwrightConfig, /workers: process\.env\.CI \? 3 : undefined/);
+  assert.match(playwrightConfig, /timeout: process\.env\.CI \? 10_000 : 5_000/);
 });
 
 test("CI change scope keeps one required quality gate and fails closed", async () => {
