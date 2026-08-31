@@ -32,7 +32,7 @@ export class ApiClientError extends Error implements DisplayError {
   readonly retryable: boolean;
   readonly fieldErrors?: ApiFailure["error"]["fieldErrors"];
 
-  constructor(error: ApiFailure["error"]) {
+  constructor(error: DisplayError) {
     super(error.message);
     this.name = "ApiClientError";
     this.code = error.code;
@@ -46,7 +46,31 @@ function networkError(): ApiClientError {
   return new ApiClientError({
     code: "AIC-SYS-5000",
     message: "无法连接服务，请检查网络后重试。",
-    requestId: crypto.randomUUID(),
+    retryable: true,
+  });
+}
+
+function nonApiResponseError(path: string, response: Response): ApiClientError {
+  const requestId = response.headers.get("X-Request-Id") ?? undefined;
+  if (response.status === 429) {
+    const retryAfter = response.headers.get("Retry-After")?.trim();
+    const retryAfterSeconds = retryAfter && /^\d+$/.test(retryAfter)
+      ? Number.parseInt(retryAfter, 10)
+      : null;
+    return new ApiClientError({
+      code: path === "/api/plan" ? "AIC-PLAN-3002" : "AIC-RATE-6001",
+      message: retryAfterSeconds !== null
+        ? `请求过于频繁，请等待 ${retryAfterSeconds} 秒后重试。`
+        : "请求过于频繁，请稍后重试。",
+      requestId,
+      retryable: true,
+    });
+  }
+
+  return new ApiClientError({
+    code: "AIC-SYS-5000",
+    message: "服务返回了无法识别的响应，请稍后重试。",
+    requestId,
     retryable: true,
   });
 }
@@ -63,12 +87,7 @@ async function requestData<T>(path: string, init?: RequestInit): Promise<T> {
   const body = (await response.json().catch(() => null)) as ApiResponse<T> | null;
   if (body?.success === true) return body.data;
   if (body?.success === false) throw new ApiClientError(body.error);
-  throw new ApiClientError({
-    code: "AIC-SYS-5000",
-    message: "服务返回了无法识别的响应，请稍后重试。",
-    requestId: response.headers.get("X-Request-Id") ?? crypto.randomUUID(),
-    retryable: true,
-  });
+  throw nonApiResponseError(path, response);
 }
 
 function sklandApiPath(path: string): string {
@@ -76,7 +95,6 @@ function sklandApiPath(path: string): string {
   throw new ApiClientError({
     code: "AIC-AUTH-2007",
     message: "当前站点不提供此功能。",
-    requestId: crypto.randomUUID(),
     retryable: false,
   });
 }

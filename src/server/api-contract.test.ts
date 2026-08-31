@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
@@ -12,7 +13,14 @@ import {
   ERROR_DEFINITIONS,
   failureResponse,
   healthHttpStatus,
+  MAX_CONCURRENT_AUTHENTICATED_PLAN_ADMISSIONS,
+  MAX_CONCURRENT_NEW_ACCOUNT_PLAN_ADMISSIONS,
+  MAX_CONCURRENT_PLAN_ACCOUNTS_PER_IP,
+  MAX_PLAN_STARTS_PER_ACCOUNT,
+  MAX_PLAN_STARTS_PER_IP,
   normalizeFiammettaEnable,
+  planAccountAdmissionClass,
+  PLAN_ESTABLISHED_ACCOUNT_AGE_MS,
   PublicApiError,
   readJsonBody,
   successResponse,
@@ -237,7 +245,7 @@ test("fiammetta enable conflicts with the dedicated Fiammetta rotation", () => {
   );
 });
 
-test("rate limiting and plan concurrency return retryable 429 errors", () => {
+test("rate limiting returns retryable 429 errors", () => {
   const previous = process.env.BETA_RATE_LIMIT_ENABLED;
   process.env.BETA_RATE_LIMIT_ENABLED = "1";
   __resetRequestGuardsForTests();
@@ -249,17 +257,133 @@ test("rate limiting and plan concurrency return retryable 429 errors", () => {
         && error.code === "AIC-RATE-6001"
         && Boolean(error.retryAfter)
     );
-
-    const release = acquirePlanSlot("ip");
-    assert.throws(
-      () => acquirePlanSlot("ip"),
-      (error: unknown) => error instanceof PublicApiError && error.code === "AIC-PLAN-3002"
-    );
-    release();
-    assert.doesNotThrow(() => acquirePlanSlot("ip")());
   } finally {
     if (previous === undefined) delete process.env.BETA_RATE_LIMIT_ENABLED;
     else process.env.BETA_RATE_LIMIT_ENABLED = previous;
     __resetRequestGuardsForTests();
   }
+});
+
+test("authenticated plan admission is account-primary and IP-secondary", () => {
+  __resetRequestGuardsForTests();
+  try {
+    assert.equal(MAX_CONCURRENT_AUTHENTICATED_PLAN_ADMISSIONS, 5);
+    assert.equal(MAX_CONCURRENT_NEW_ACCOUNT_PLAN_ADMISSIONS, 3);
+    assert.equal(MAX_CONCURRENT_PLAN_ACCOUNTS_PER_IP, 2);
+
+    const releaseFirst = acquirePlanSlot({ ip: "shared-ip", accountId: "account-a", accountClass: "established" });
+    assert.throws(
+      () => acquirePlanSlot({ ip: "other-ip", accountId: "account-a", accountClass: "established" }),
+      (error: unknown) => error instanceof PublicApiError && error.code === "AIC-PLAN-3002"
+    );
+
+    const releaseSecond = acquirePlanSlot({ ip: "shared-ip", accountId: "account-b", accountClass: "established" });
+    assert.throws(
+      () => acquirePlanSlot({ ip: "shared-ip", accountId: "account-c", accountClass: "established" }),
+      (error: unknown) => error instanceof PublicApiError && error.code === "AIC-PLAN-3002"
+    );
+
+    releaseSecond();
+    releaseFirst();
+  } finally {
+    __resetRequestGuardsForTests();
+  }
+});
+
+test("established accounts can use reserved capacity without opening it to fresh registrations", () => {
+  __resetRequestGuardsForTests();
+  try {
+    const newAccountReleases = Array.from(
+      { length: MAX_CONCURRENT_NEW_ACCOUNT_PLAN_ADMISSIONS },
+      (_, index) => acquirePlanSlot({
+        ip: `new-ip-${index}`,
+        accountId: `new-account-${index}`,
+        accountClass: "new",
+      }),
+    );
+    assert.throws(
+      () => acquirePlanSlot({ ip: "new-ip-rejected", accountId: "new-account-rejected", accountClass: "new" }),
+      (error: unknown) => error instanceof PublicApiError && error.code === "AIC-PLAN-3002",
+    );
+
+    const establishedReleases = Array.from(
+      { length: MAX_CONCURRENT_AUTHENTICATED_PLAN_ADMISSIONS - MAX_CONCURRENT_NEW_ACCOUNT_PLAN_ADMISSIONS },
+      (_, index) => acquirePlanSlot({
+        ip: `established-ip-${index}`,
+        accountId: `established-account-${index}`,
+        accountClass: "established",
+      }),
+    );
+    assert.throws(
+      () => acquirePlanSlot({ ip: "established-ip-rejected", accountId: "established-account-rejected", accountClass: "established" }),
+      (error: unknown) => error instanceof PublicApiError && error.code === "AIC-PLAN-3002",
+    );
+
+    establishedReleases.forEach((release) => release());
+    newAccountReleases.forEach((release) => release());
+  } finally {
+    __resetRequestGuardsForTests();
+  }
+});
+
+test("plan account admission class requires verified email and a server-observed 24 hour age", () => {
+  const now = Date.parse("2026-08-31T00:00:00.000Z");
+  assert.equal(PLAN_ESTABLISHED_ACCOUNT_AGE_MS, 24 * 60 * 60_000);
+  assert.equal(planAccountAdmissionClass({
+    createdAt: new Date(now - PLAN_ESTABLISHED_ACCOUNT_AGE_MS),
+    emailVerified: true,
+  }, now), "established");
+  assert.equal(planAccountAdmissionClass({
+    createdAt: new Date(now - PLAN_ESTABLISHED_ACCOUNT_AGE_MS + 1),
+    emailVerified: true,
+  }, now), "new");
+  assert.equal(planAccountAdmissionClass({
+    createdAt: new Date(now - PLAN_ESTABLISHED_ACCOUNT_AGE_MS),
+    emailVerified: false,
+  }, now), "new");
+  assert.equal(planAccountAdmissionClass({
+    createdAt: new Date(Number.NaN),
+    emailVerified: true,
+  }, now), "new");
+});
+
+test("plan start windows limit accounts and shared IPs without charging rejected attempts", () => {
+  __resetRequestGuardsForTests();
+  try {
+    assert.equal(MAX_PLAN_STARTS_PER_ACCOUNT, 3);
+    for (let index = 0; index < MAX_PLAN_STARTS_PER_ACCOUNT; index += 1) {
+      acquirePlanSlot({ ip: "account-ip", accountId: "account-a", accountClass: "established" })();
+    }
+    assert.throws(
+      () => acquirePlanSlot({ ip: "account-ip", accountId: "account-a", accountClass: "established" }),
+      (error: unknown) => error instanceof PublicApiError
+        && error.code === "AIC-PLAN-3002"
+        && Boolean(error.retryAfter)
+    );
+
+    __resetRequestGuardsForTests();
+    assert.equal(MAX_PLAN_STARTS_PER_IP, 8);
+    for (let index = 0; index < MAX_PLAN_STARTS_PER_IP; index += 1) {
+      acquirePlanSlot({ ip: "shared-ip", accountId: `account-${index}`, accountClass: "established" })();
+    }
+    assert.throws(
+      () => acquirePlanSlot({ ip: "shared-ip", accountId: "account-rejected", accountClass: "established" }),
+      (error: unknown) => error instanceof PublicApiError
+        && error.code === "AIC-PLAN-3002"
+        && Boolean(error.retryAfter)
+    );
+  } finally {
+    __resetRequestGuardsForTests();
+  }
+});
+
+test("anonymous plan requests are cache-only and authenticated admission follows cache lookup", async () => {
+  const source = await readFile(new URL("../app/api/plan/route.ts", import.meta.url), "utf8");
+  const anonymousGuard = source.indexOf("if (!websiteUserId || !websiteAccountClass)");
+  const admission = source.indexOf("release = acquirePlanSlot({ ip, accountId: websiteUserId, accountClass: websiteAccountClass })");
+  assert.equal(anonymousGuard > source.indexOf("await resolvePlanCache"), true);
+  assert.equal(anonymousGuard < admission, true);
+  assert.equal(admission > source.indexOf("await readJsonBody"), true);
+  assert.equal(admission > source.indexOf("await resolvePlanCache"), true);
+  assert.equal(admission < source.indexOf("runResult = await runPlan"), true);
 });
