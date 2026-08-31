@@ -38,7 +38,9 @@ export function AdminUsers({
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [roleChange, setRoleChange] = useState<RoleChange | null>(null);
   const [sessionsByUser, setSessionsByUser] = useState<Record<string, AdminSessionData[] | undefined>>({});
-  const executableSha256 = solverFingerprint?.solverExecutableSha256 ?? null;
+  const executableSha256 = solverFingerprint?.pong
+    ? solverFingerprint.solverExecutableSha256
+    : null;
 
   const load = useCallback(async (search: string) => {
     setLoading(true);
@@ -119,26 +121,27 @@ export function AdminUsers({
       <section className="rounded-xl border p-4" data-admin-solver-status>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h2 className="font-medium">线上求解器</h2>
-            <p className="mt-1 text-xs text-muted-foreground">当前 Worker 实际返回的可执行文件指纹</p>
+            <h2 className="font-medium">线上求解器指纹</h2>
+            <p className="mt-1 text-xs text-muted-foreground">实时读取当前 Worker 的 ping 响应，不读取网站本地 ELF 文件</p>
           </div>
           <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${plannerReady ? "bg-emerald-50 text-emerald-700" : "bg-destructive/10 text-destructive"}`}>
             {plannerReady ? "运行中" : "未就绪"}
           </span>
         </div>
-        <p className="mt-4 text-xs text-muted-foreground">Linux ELF SHA-256</p>
+        <p className="mt-4 text-xs text-muted-foreground">ping.result.solver_executable_sha256</p>
         <code
           className="mt-1 block break-all rounded-lg bg-muted/50 px-3 py-2 font-mono text-xs leading-5"
           data-solver-fingerprint={executableSha256 ?? "unavailable"}
+          data-solver-fingerprint-source="ping.result.solver_executable_sha256"
         >
-          {executableSha256 ?? "Worker 未返回有效指纹"}
+          {executableSha256 ?? "Worker ping 未返回有效的 solver_executable_sha256"}
         </code>
 
         <details className="group mt-3 border-t pt-2" data-solver-fingerprint-details>
           <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-4 rounded-lg px-2 text-sm outline-none transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
             <span>
-              <span className="block font-medium">完整 Worker 指纹</span>
-              <span className="mt-0.5 block text-xs text-muted-foreground">构建身份、协议能力与各版本契约</span>
+              <span className="block font-medium">完整 ping 指纹</span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">Worker 构建身份、协议能力与各版本契约</span>
             </span>
             <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
               <span className="group-open:hidden">展开</span>
