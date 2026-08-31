@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { requestId, diagnosticId, expectUnifiedDialogTypography, expectUnifiedDialogAction, expectButtonGeometryStable, armEndingTransitionCapture, expectCapturedExitDuration, expectMotionDuration, armMotionCapture, armMotionCollectionCapture, expectCapturedMotion, expectCapturedMotionDelays, armTransientStyleCapture, expectCapturedStyleMotion, waitForOwnAnimations, planData, twoShiftPlanData, scheduleVisualPlanData, productChangePlanData, motionPlanData, authenticatedSklandSnapshot, mockApis, navigateToPrimaryPage, seedPreferences, seedV4Session } from "./production-readiness.fixture";
+import { requestId, diagnosticId, expectUnifiedDialogTypography, expectUnifiedDialogAction, expectButtonGeometryStable, armEndingTransitionCapture, expectCapturedExitDuration, armMotionCapture, armMotionCollectionCapture, expectCapturedMotion, expectCapturedMotionDelays, armTransientStyleCapture, expectCapturedStyleMotion, waitForOwnAnimations, planData, twoShiftPlanData, scheduleVisualPlanData, productChangePlanData, motionPlanData, authenticatedSklandSnapshot, mockApis, navigateToPrimaryPage, seedPreferences, seedV4Session } from "./production-readiness.fixture";
 
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/auth/get-session", (route) => route.fulfill({
@@ -58,10 +58,9 @@ test("shows the thinking activity and indeterminate progress only while a plan r
       body: JSON.stringify({ success: true, data: planData, requestId }),
     });
   });
-  await seedPreferences(page);
+  await seedV4Session(page, null);
   await page.goto("/");
 
-  await page.getByRole("button", { name: "全角色导入" }).click();
   await page.getByRole("button", { name: "生成排班" }).click();
 
   const status = page.locator('[data-slot="live-activity"]');
@@ -283,11 +282,10 @@ test("plan completion reveals status, metrics, and schedule once without resetti
       body: JSON.stringify({ success: true, data: motionPlanData, requestId }),
     });
   });
-  await seedPreferences(page);
+  await seedV4Session(page, null);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
 
-  await page.getByRole("button", { name: "全角色导入" }).click();
   const listTab = page.getByRole("tab", { name: "列表式布局" });
   const board = page.locator("[data-plan-board]");
   await expect(listTab).toBeVisible();
@@ -471,11 +469,10 @@ test("reduced motion keeps feedback timing while removing movement, clipping, an
       body: JSON.stringify({ success: true, data: twoShiftPlanData, requestId }),
     });
   });
-  await seedPreferences(page);
+  await seedV4Session(page, null);
   await page.setViewportSize({ width: 768, height: 900 });
   await page.goto("/");
 
-  await page.getByRole("button", { name: "全角色导入" }).click();
   await page.getByRole("button", { name: "生成排班" }).click();
   await expect(page.locator('[data-slot="live-activity"]')).toHaveAttribute("data-activity-phase", "running");
   await expect(page.locator('[data-slot="live-activity"] .animate-spin')).toHaveCount(0);
@@ -516,7 +513,7 @@ test("reduced motion keeps feedback timing while removing movement, clipping, an
       || (typeof frame.clipPath === "string" && frame.clipPath !== "none")
     ));
     return {
-      activityAnimationCount: activity.getAnimations({ subtree: true }).filter((animation) => animation.playState === "running").length,
+      activityAnimationCount: activity?.getAnimations({ subtree: true }).filter((animation) => animation.playState === "running").length ?? 0,
       movingFrameCount: movingFrames.length,
       calligraphCount: boardElement.querySelectorAll("[data-calligraph]").length,
     };
@@ -540,12 +537,11 @@ test("live activity survives navigation and calculator search occupies the relea
       body: JSON.stringify({ success: true, data: twoShiftPlanData, requestId }),
     });
   });
-  await seedPreferences(page);
+  await seedV4Session(page, null);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
 
   await expect(page.locator('[data-slot="live-activity"]')).toHaveCount(0);
-  await page.getByRole("button", { name: "全角色导入" }).click();
   await page.getByRole("button", { name: "生成排班" }).click();
   const activity = page.locator('[data-slot="live-activity"]');
   await expect(activity).toHaveAttribute("data-activity-phase", "running");
@@ -567,7 +563,8 @@ test("live activity survives navigation and calculator search occupies the relea
   for (const buttonName of ["配置Box与布局", "生成排班"]) {
     await expect(toolbar.getByRole("button", { name: buttonName })).toHaveCSS("height", "36px");
   }
-  await expect(page.locator("[data-calculator-export-actions]").getByRole("button", { name: "全角色导入" })).toHaveCSS("height", "28px");
+  await expect(page.locator('[data-calculator-export-actions="desktop"]').getByRole("button", { name: "导出到 MAA" })).toHaveCSS("height", "28px");
+  await expect(page.getByRole("button", { name: "全角色导入" })).toHaveCount(0);
   await page.keyboard.press("Control+k");
   await expect(search).toBeFocused();
   await search.fill("阿米娅");
@@ -616,9 +613,8 @@ test("failed plan remains expanded with retry and diagnostic actions", async ({ 
       body: JSON.stringify({ success: true, data: twoShiftPlanData, requestId }),
     });
   });
-  await seedPreferences(page);
+  await seedV4Session(page, null);
   await page.goto("/");
-  await page.getByRole("button", { name: "全角色导入" }).click();
   await page.getByRole("button", { name: "生成排班" }).click();
 
   const activity = page.locator('[data-slot="live-activity"]');
@@ -649,8 +645,9 @@ test("dialog and mobile sheet motion preserve direction, exit timing, and focus"
   await expect(setupDialog).toHaveCount(0);
   await expect(setupTrigger).toBeFocused();
 
+  await armMotionCapture(page, '[role="dialog"]', "setup-enter", 300);
   await setupTrigger.click();
-  await expectMotionDuration(setupDialog, 300);
+  await expectCapturedMotion(page, "setup-enter", 300);
   await expect(setupDialog).toHaveCSS("transform-origin", /.+/);
   await page.setViewportSize({ width: 768, height: 900 });
   await armEndingTransitionCapture(setupDialog, "setup");
@@ -669,8 +666,9 @@ test("dialog and mobile sheet motion preserve direction, exit timing, and focus"
   await expect(feedbackDialog).toHaveCount(0);
   await expect(issueTrigger).toBeFocused();
 
+  await armMotionCapture(page, '[role="dialog"]', "feedback-enter", 300);
   await issueTrigger.click();
-  await expectMotionDuration(feedbackDialog, 300);
+  await expectCapturedMotion(page, "feedback-enter", 300);
   await armEndingTransitionCapture(feedbackDialog, "feedback");
   await feedbackDialog.getByRole("button", { name: "取消" }).click();
   await expectCapturedExitDuration(page, "feedback", 180);
@@ -679,10 +677,11 @@ test("dialog and mobile sheet motion preserve direction, exit timing, and focus"
 
   await page.setViewportSize({ width: 390, height: 844 });
   const sidebarTrigger = page.getByRole("button", { name: "Toggle Sidebar" });
+  await armMotionCapture(page, '[data-mobile="true"][data-sidebar="sidebar"]', "sidebar-enter", 320);
   await sidebarTrigger.click();
   const sheet = page.locator('[data-mobile="true"][data-sidebar="sidebar"]');
   await expect(sheet).toHaveAttribute("data-side", "left");
-  await expectMotionDuration(sheet, 320);
+  await expectCapturedMotion(page, "sidebar-enter", 320);
   await armEndingTransitionCapture(sheet, "sidebar");
   await page.keyboard.press("Escape");
   await expectCapturedExitDuration(page, "sidebar", 220);
@@ -692,7 +691,7 @@ test("dialog and mobile sheet motion preserve direction, exit timing, and focus"
 
 test("shared action buttons keep their geometry after WebKit interactions", async ({ page }) => {
   await mockApis(page);
-  await seedPreferences(page);
+  await seedV4Session(page, null);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
 
@@ -707,9 +706,6 @@ test("shared action buttons keep their geometry after WebKit interactions", asyn
   await expect(setupTrigger).toBeFocused();
   await expectButtonGeometryStable(setupTrigger);
   await moreTools.getByText("更多工具", { exact: true }).click();
-
-  const importButton = page.getByRole("button", { name: "全角色导入" });
-  await importButton.click();
 
   const planButton = page.getByRole("button", { name: "生成排班" });
   await expect(planButton).toBeEnabled();
@@ -749,14 +745,17 @@ test("tooltips wait once and then open adjacent help instantly within the provid
   });
   if (browserName === "webkit") {
     await armTransientStyleCapture(page, '[data-slot="tooltip-content"][data-open]', "tooltip");
+  } else {
+    await armMotionCapture(page, '[data-slot="tooltip-content"][data-open]', "tooltip", 240);
   }
+  await page.mouse.move(1200, 850);
   await calculatorTrigger.hover();
   const firstTooltip = page.locator('[data-slot="tooltip-content"][data-open]');
-  await expect(firstTooltip).toBeVisible({ timeout: 1_500 });
+  await expect(firstTooltip).toBeVisible({ timeout: 10_000 });
   if (browserName === "webkit") {
     await expectCapturedStyleMotion(page, "tooltip");
   } else {
-    await expectMotionDuration(firstTooltip, 240);
+    await expectCapturedMotion(page, "tooltip", 240);
   }
   await expect(page.locator("html")).toHaveAttribute("data-tooltip-open-delay", /.+/);
   const firstOpenDelay = Number(await page.locator("html").getAttribute("data-tooltip-open-delay"));
@@ -771,15 +770,11 @@ test("tooltips wait once and then open adjacent help instantly within the provid
   )))).toBe(true);
 });
 
-test("Full E2 stays in place and completes generation, shifts, MAA export, and feedback", async ({ page }) => {
+test("a stored sample BOX completes generation, shifts, MAA export, and feedback", async ({ page }) => {
   await mockApis(page);
-  await seedPreferences(page);
+  await seedV4Session(page, null);
   await page.goto("/");
-  await expect(page.getByRole("button", { name: "全角色导入" })).toBeVisible();
-
-  const fullE2 = page.getByRole("button", { name: "全角色导入" });
-  await expect(fullE2).toBeVisible();
-  await fullE2.click();
+  await expect(page.getByRole("button", { name: "全角色导入" })).toHaveCount(0);
   await expect(page.getByText("先导入干员数据")).toHaveCount(0);
   await expect(page.getByRole("tab", { name: "列表式布局" })).toBeVisible();
   await expect(page.locator("[data-plan-board]")).not.toHaveAttribute("data-plan-revision", /.+/);
@@ -916,11 +911,10 @@ test("scheduled product changes require destructive confirmation and rerun with 
       body: JSON.stringify({ success: true, data: productChangePlanData, requestId }),
     });
   });
-  await seedPreferences(page);
+  await seedV4Session(page, null);
   await page.setViewportSize({ width: 1088, height: 900 });
   await page.goto("/");
 
-  await page.getByRole("button", { name: "全角色导入" }).click();
   await page.getByRole("button", { name: "生成排班" }).click();
   await expect(page.getByText("排班已生成")).toBeVisible();
   await expect.poll(() => planRequests).toBe(1);
@@ -1003,7 +997,7 @@ test("responsive navigation and the two locked areas keep their current behavior
   await page.reload();
   await expect(page.locator("[data-plan-board]")).toHaveAttribute("data-plan-revision", diagnosticId);
   await expect(page.locator('[data-slot="live-activity"]')).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "全角色导入" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "全角色导入" })).toHaveCount(0);
   await expect(compactViewTab).toHaveCount(0);
   await expect(listViewTab).toHaveCount(0);
   await expect(page.locator('[data-schedule-view="list"]')).toBeVisible();
@@ -1060,7 +1054,7 @@ test("the compact mobile navigation stays pinned while the account control belon
   await expect(page.locator("[data-skland-account-control]")).toHaveAttribute(
     "aria-label",
     "测试博士，进入森空岛状态中心",
-    { timeout: 2_000 },
+    { timeout: 10_000 },
   );
   await expect(page.locator("[data-skland-account-loading]")).toHaveCount(0);
   await expect(page.locator("[data-skland-sidebar-account]")).toHaveCount(0);

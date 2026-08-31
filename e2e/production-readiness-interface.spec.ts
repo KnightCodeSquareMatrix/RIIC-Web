@@ -111,6 +111,45 @@ test("fresh MAA import requires one facility review before completion", async ({
   await expect(dialog.getByRole("button", { name: "完成", exact: true })).toBeEnabled();
 });
 
+test("setup always reopens on operator data, including from the Skland overview", async ({ page }) => {
+  await mockApis(page, {
+    sklandConfigured: true,
+    sklandSnapshot: authenticatedSklandSnapshot,
+  });
+  await seedV4Session(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+
+  const setupTrigger = page.getByRole("button", { name: "配置Box与布局" }).first();
+  await setupTrigger.click();
+  const dialog = page.getByRole("dialog");
+  const boxStep = dialog.getByRole("button", { name: /第 1 步，共 3 步：干员数据/ });
+  await expect(boxStep).toHaveAttribute("aria-current", "step");
+  await dialog.getByRole("button", { name: "继续", exact: true }).click();
+  await expect(dialog.getByRole("button", { name: /第 2 步，共 3 步：布局/ })).toHaveAttribute("aria-current", "step");
+  await dialog.getByRole("button", { name: "Close" }).click();
+  await expect(dialog).toHaveCount(0);
+
+  await setupTrigger.click();
+  await expect(boxStep).toHaveAttribute("aria-current", "step");
+  await dialog.getByRole("button", { name: "Close" }).click();
+
+  await openSklandOverview(page);
+  await page.getByRole("button", { name: "继续配置布局", exact: true }).click();
+  await expect(dialog).toBeVisible();
+  await expect(boxStep).toHaveAttribute("aria-current", "step");
+});
+
+test("setup with an empty BOX starts on operator data", async ({ page }) => {
+  await mockApis(page);
+  await seedPreferences(page);
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "配置Box与布局" }).first().click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("button", { name: /第 1 步，共 3 步：干员数据/ })).toHaveAttribute("aria-current", "step");
+});
+
 test("setup exposes and persists only worker-supported rotation profiles", async ({ page }) => {
   await mockApis(page);
   await seedV4Session(page);
@@ -167,7 +206,7 @@ test("setup exposes and persists only worker-supported rotation profiles", async
   await expect(dialog.locator("#setup-import-options")).toBeVisible();
   await expect(dialog).toHaveCSS("height", "660px");
   await dialog.getByRole("button", { name: "收起", exact: true }).click();
-  await dialog.getByRole("button", { name: /第 2 步，共 3 步：布局/ }).click();
+  await dialog.getByRole("button", { name: "继续", exact: true }).click();
   const layoutStepListBox = await stepList.boundingBox();
   expect(layoutStepListBox?.y ?? -1).toBeCloseTo(initialStepListBox?.y ?? -1, 0);
   const completedDataStep = dialog.getByRole("button", { name: /第 1 步，共 3 步：干员数据/ });
@@ -230,7 +269,7 @@ test("layout level controls clamp edits and expose the power-safe 342 defaults",
 
   await page.getByRole("button", { name: "配置Box与布局" }).first().click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByRole("button", { name: /第 2 步，共 3 步：布局/ }).click();
+  await dialog.getByRole("button", { name: "继续", exact: true }).click();
 
   await dialog.getByRole("button", { name: /^342/ }).click();
   await expect(dialog.getByRole("button", { name: "检查设施", exact: true })).toBeVisible();
@@ -322,20 +361,15 @@ test("calculator owns scheduling controls and training advice uses a single tech
   await expect(page.locator('[data-workbench-hydrated="true"]')).toBeVisible();
 
   const calculatorControls = page.locator("[data-calculator-controls]");
-  const fullE2 = page.locator('[data-calculator-export-actions="desktop"] [data-full-e2]');
   await expect(calculatorControls).toBeVisible();
   const exportMaa = page.getByRole("button", { name: "导出到 MAA" });
-  const desktopExportHeights = await Promise.all([
-    fullE2.evaluate((element) => element.getBoundingClientRect().height),
-    exportMaa.evaluate((element) => element.getBoundingClientRect().height),
-  ]);
-  expect(desktopExportHeights[0]).toBe(desktopExportHeights[1]);
+  await expect(exportMaa).toHaveCSS("height", "28px");
   const controlOrder = await calculatorControls.locator("button").allTextContents();
   expect(controlOrder.at(-1)).toContain("生成排班");
   expect(controlOrder.some((label) => label.includes("全角色导入"))).toBe(false);
   const exportOrder = await page.locator("[data-calculator-export-actions]").locator("button").allTextContents();
-  expect(exportOrder[0]).toContain("全角色导入");
-  expect(exportOrder[1]).toContain("导出到 MAA");
+  expect(exportOrder).toHaveLength(2);
+  expect(exportOrder.every((label) => label.includes("导出到 MAA"))).toBe(true);
 
   await page.getByRole("button", { name: "练卡建议" }).click();
   await expect(calculatorControls).toHaveCount(0);
@@ -365,7 +399,7 @@ test("calculator owns scheduling controls and training advice uses a single tech
   await page.getByRole("button", { name: "Toggle Sidebar" }).click();
   await page.getByRole("button", { name: "基建计算器" }).click();
   const mobileHeights = await Promise.all([
-    page.locator('[data-calculator-export-actions="mobile"] [data-full-e2]').evaluate((element) => element.getBoundingClientRect().height),
+    page.locator('[data-calculator-export-actions="mobile"]').getByRole("button", { name: "导出到 MAA" }).evaluate((element) => element.getBoundingClientRect().height),
     page.getByRole("button", { name: "生成排班" }).evaluate((element) => element.getBoundingClientRect().height),
   ]);
   expect(Math.min(...mobileHeights)).toBeGreaterThanOrEqual(44 - 0.01);
