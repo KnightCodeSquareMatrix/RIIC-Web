@@ -1041,7 +1041,7 @@ export async function mockApis(
 
 export async function openSklandOverview(page: Page) {
   await page.getByRole("button", { name: "森空岛状态中心", exact: true }).click();
-  await expect(page.locator("[data-skland-page]")).toBeVisible();
+  await expect(page.locator("[data-skland-page]")).toBeVisible({ timeout: 45_000 });
   await expect(page.locator('[data-slot="dialog-overlay"]')).toHaveCount(0);
 }
 

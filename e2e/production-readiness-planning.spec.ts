@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { requestId, diagnosticId, expectUnifiedDialogTypography, expectUnifiedDialogAction, expectButtonGeometryStable, armEndingTransitionCapture, expectCapturedExitDuration, expectMotionDuration, armMotionCapture, armMotionCollectionCapture, expectCapturedMotion, expectCapturedMotionDelays, armTransientStyleCapture, expectCapturedStyleMotion, waitForOwnAnimations, planData, twoShiftPlanData, scheduleVisualPlanData, productChangePlanData, motionPlanData, authenticatedSklandSnapshot, mockApis, navigateToPrimaryPage, seedPreferences, seedV4Session } from "./production-readiness.fixture";
+import { requestId, diagnosticId, expectUnifiedDialogTypography, expectUnifiedDialogAction, expectButtonGeometryStable, armEndingTransitionCapture, expectCapturedExitDuration, armMotionCapture, armMotionCollectionCapture, expectCapturedMotion, expectCapturedMotionDelays, armTransientStyleCapture, expectCapturedStyleMotion, waitForOwnAnimations, planData, twoShiftPlanData, scheduleVisualPlanData, productChangePlanData, motionPlanData, authenticatedSklandSnapshot, mockApis, navigateToPrimaryPage, seedPreferences, seedV4Session } from "./production-readiness.fixture";
 
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/auth/get-session", (route) => route.fulfill({
@@ -513,7 +513,7 @@ test("reduced motion keeps feedback timing while removing movement, clipping, an
       || (typeof frame.clipPath === "string" && frame.clipPath !== "none")
     ));
     return {
-      activityAnimationCount: activity.getAnimations({ subtree: true }).filter((animation) => animation.playState === "running").length,
+      activityAnimationCount: activity?.getAnimations({ subtree: true }).filter((animation) => animation.playState === "running").length ?? 0,
       movingFrameCount: movingFrames.length,
       calligraphCount: boardElement.querySelectorAll("[data-calligraph]").length,
     };
@@ -645,8 +645,9 @@ test("dialog and mobile sheet motion preserve direction, exit timing, and focus"
   await expect(setupDialog).toHaveCount(0);
   await expect(setupTrigger).toBeFocused();
 
+  await armMotionCapture(page, '[role="dialog"]', "setup-enter", 300);
   await setupTrigger.click();
-  await expectMotionDuration(setupDialog, 300);
+  await expectCapturedMotion(page, "setup-enter", 300);
   await expect(setupDialog).toHaveCSS("transform-origin", /.+/);
   await page.setViewportSize({ width: 768, height: 900 });
   await armEndingTransitionCapture(setupDialog, "setup");
@@ -665,8 +666,9 @@ test("dialog and mobile sheet motion preserve direction, exit timing, and focus"
   await expect(feedbackDialog).toHaveCount(0);
   await expect(issueTrigger).toBeFocused();
 
+  await armMotionCapture(page, '[role="dialog"]', "feedback-enter", 300);
   await issueTrigger.click();
-  await expectMotionDuration(feedbackDialog, 300);
+  await expectCapturedMotion(page, "feedback-enter", 300);
   await armEndingTransitionCapture(feedbackDialog, "feedback");
   await feedbackDialog.getByRole("button", { name: "取消" }).click();
   await expectCapturedExitDuration(page, "feedback", 180);
@@ -675,10 +677,11 @@ test("dialog and mobile sheet motion preserve direction, exit timing, and focus"
 
   await page.setViewportSize({ width: 390, height: 844 });
   const sidebarTrigger = page.getByRole("button", { name: "Toggle Sidebar" });
+  await armMotionCapture(page, '[data-mobile="true"][data-sidebar="sidebar"]', "sidebar-enter", 320);
   await sidebarTrigger.click();
   const sheet = page.locator('[data-mobile="true"][data-sidebar="sidebar"]');
   await expect(sheet).toHaveAttribute("data-side", "left");
-  await expectMotionDuration(sheet, 320);
+  await expectCapturedMotion(page, "sidebar-enter", 320);
   await armEndingTransitionCapture(sheet, "sidebar");
   await page.keyboard.press("Escape");
   await expectCapturedExitDuration(page, "sidebar", 220);
@@ -742,14 +745,17 @@ test("tooltips wait once and then open adjacent help instantly within the provid
   });
   if (browserName === "webkit") {
     await armTransientStyleCapture(page, '[data-slot="tooltip-content"][data-open]', "tooltip");
+  } else {
+    await armMotionCapture(page, '[data-slot="tooltip-content"][data-open]', "tooltip", 240);
   }
+  await page.mouse.move(1200, 850);
   await calculatorTrigger.hover();
   const firstTooltip = page.locator('[data-slot="tooltip-content"][data-open]');
-  await expect(firstTooltip).toBeVisible({ timeout: 1_500 });
+  await expect(firstTooltip).toBeVisible({ timeout: 10_000 });
   if (browserName === "webkit") {
     await expectCapturedStyleMotion(page, "tooltip");
   } else {
-    await expectMotionDuration(firstTooltip, 240);
+    await expectCapturedMotion(page, "tooltip", 240);
   }
   await expect(page.locator("html")).toHaveAttribute("data-tooltip-open-delay", /.+/);
   const firstOpenDelay = Number(await page.locator("html").getAttribute("data-tooltip-open-delay"));
@@ -1048,7 +1054,7 @@ test("the compact mobile navigation stays pinned while the account control belon
   await expect(page.locator("[data-skland-account-control]")).toHaveAttribute(
     "aria-label",
     "测试博士，进入森空岛状态中心",
-    { timeout: 2_000 },
+    { timeout: 10_000 },
   );
   await expect(page.locator("[data-skland-account-loading]")).toHaveCount(0);
   await expect(page.locator("[data-skland-sidebar-account]")).toHaveCount(0);

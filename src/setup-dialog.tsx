@@ -301,7 +301,7 @@ export function SetupDialog({
                     <div className="flex min-w-0 items-center gap-3">
                       <Database className="size-4 shrink-0 text-primary" aria-hidden="true" />
                       <div className="min-w-0">
-                        <h3 id="setup-current-data-title" className="truncate text-sm font-semibold">{currentDataLabel}</h3>
+                        <h3 id="setup-current-data-title" className="font-number truncate text-sm font-semibold">{currentDataLabel}</h3>
                         <p className="mt-0.5 truncate text-xs text-muted-foreground">
                           <span className="font-number">{operbox?.length ?? 0}</span> 名干员 · <span className="font-number">{ownedCount}</span> 名可用
                         </p>

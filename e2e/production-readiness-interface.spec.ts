@@ -125,7 +125,7 @@ test("setup always reopens on operator data, including from the Skland overview"
   const dialog = page.getByRole("dialog");
   const boxStep = dialog.getByRole("button", { name: /第 1 步，共 3 步：干员数据/ });
   await expect(boxStep).toHaveAttribute("aria-current", "step");
-  await dialog.getByRole("button", { name: /第 2 步，共 3 步：布局/ }).click();
+  await dialog.getByRole("button", { name: "继续", exact: true }).click();
   await expect(dialog.getByRole("button", { name: /第 2 步，共 3 步：布局/ })).toHaveAttribute("aria-current", "step");
   await dialog.getByRole("button", { name: "Close" }).click();
   await expect(dialog).toHaveCount(0);
@@ -206,7 +206,7 @@ test("setup exposes and persists only worker-supported rotation profiles", async
   await expect(dialog.locator("#setup-import-options")).toBeVisible();
   await expect(dialog).toHaveCSS("height", "660px");
   await dialog.getByRole("button", { name: "收起", exact: true }).click();
-  await dialog.getByRole("button", { name: /第 2 步，共 3 步：布局/ }).click();
+  await dialog.getByRole("button", { name: "继续", exact: true }).click();
   const layoutStepListBox = await stepList.boundingBox();
   expect(layoutStepListBox?.y ?? -1).toBeCloseTo(initialStepListBox?.y ?? -1, 0);
   const completedDataStep = dialog.getByRole("button", { name: /第 1 步，共 3 步：干员数据/ });
@@ -269,7 +269,7 @@ test("layout level controls clamp edits and expose the power-safe 342 defaults",
 
   await page.getByRole("button", { name: "配置Box与布局" }).first().click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByRole("button", { name: /第 2 步，共 3 步：布局/ }).click();
+  await dialog.getByRole("button", { name: "继续", exact: true }).click();
 
   await dialog.getByRole("button", { name: /^342/ }).click();
   await expect(dialog.getByRole("button", { name: "检查设施", exact: true })).toBeVisible();

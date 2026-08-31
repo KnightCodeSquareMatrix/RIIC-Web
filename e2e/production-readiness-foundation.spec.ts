@@ -282,7 +282,7 @@ test("completed onboarding returns to the empty schedule after changing the layo
   await expect(page.locator("[data-plan-board]")).toBeVisible();
   await page.getByRole("button", { name: "配置Box与布局" }).first().click();
   const setupDialog = page.getByRole("dialog");
-  await setupDialog.getByRole("button", { name: /第 2 步，共 3 步：布局/ }).click();
+  await setupDialog.getByRole("button", { name: "继续", exact: true }).click();
   await setupDialog.getByRole("button", { name: /^342/ }).click();
   await setupDialog.getByRole("button", { name: "Close" }).click();
   await page.getByRole("dialog", { name: "关闭排班设置？" })
