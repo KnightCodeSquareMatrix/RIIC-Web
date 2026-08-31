@@ -1,10 +1,18 @@
 "use client";
 
-import { Download, Ellipsis, FlaskConical, HeartPulse, Keyboard, Loader2, Play, Search, Settings2, X } from "lucide-react";
+import { Download, Ellipsis, FlaskConical, HeartPulse, Keyboard, Loader2, Play, RefreshCw, Search, Settings2, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { ScheduleBoard, ShiftTabs } from "@/components";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { PlanResultSummarySkeleton } from "@/components/PlanResultSummarySkeleton";
 
@@ -302,6 +310,15 @@ export interface InfraCalculatorProps {
   plannerReady: boolean;
   websiteAuthenticated: boolean;
   showOnboarding: boolean;
+  taskQueue?: {
+    queuePosition: number | null;
+    etaSeconds: number | null;
+    pollStopped: boolean;
+    error: string | null;
+    resumeDisabled: boolean;
+    resumeCountdown: number;
+    onResumePoll: () => void;
+  } | null;
   animatePlanEntrance: boolean;
   animateEmptyScheduleEntrance: boolean;
   onPlanEntranceConsumed: (revision: string) => void;
@@ -330,7 +347,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     activePlan, closestComparison,
     resultClearNotice,
     feedbackResult,
-    sampleLoading, loading, canRun, hasBox, hasPersonalBox, plannerReady, websiteAuthenticated, showOnboarding, animatePlanEntrance, animateEmptyScheduleEntrance, onPlanEntranceConsumed, requiresAccount = false, accountControl,
+    sampleLoading, loading, canRun, hasBox, hasPersonalBox, plannerReady, websiteAuthenticated, showOnboarding, taskQueue, animatePlanEntrance, animateEmptyScheduleEntrance, onPlanEntranceConsumed, requiresAccount = false, accountControl,
     onRunSampleTrial, onStartPersonalFlow, onDismissOnboarding, onOpenSetup, onRun, onCancelRun,
     onSetActiveShift, onMarkIssue, onPerformanceIssue,
     onFactoryRecipeChange, onTradeOrderChange,
@@ -338,6 +355,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     onClearResultNotice, onDismissResultClearWarning,
   } = props;
   const [shortcutGuideOpen, setShortcutGuideOpen] = useState(false);
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [operatorQuery, setOperatorQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [shiftDirection, setShiftDirection] = useState<ShiftDirection>(0);
@@ -472,10 +490,39 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                   {accountControl}
                 </div>
                 {loading ? (
-                  <Button type="button" variant="destructive" className="h-9 max-sm:h-11" onClick={onCancelRun} aria-label="取消计算">
-                    <Loader2 className="animate-spin" />
-                    取消计算
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    {taskQueue?.error ? (
+                      <span className="text-xs text-red-300">{taskQueue.error}</span>
+                    ) : null}
+                    {taskQueue?.pollStopped ? (
+                      <div className="relative">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-9 max-sm:h-11"
+                          onClick={taskQueue.onResumePoll}
+                          disabled={taskQueue.resumeDisabled}
+                          aria-label="查询进度"
+                        >
+                          <RefreshCw />
+                          查询进度
+                        </Button>
+                        {taskQueue.resumeCountdown > 0 ? (
+                          <span
+                            className="pointer-events-none absolute inset-0 grid place-items-center rounded-md bg-black/45 text-lg font-semibold text-white"
+                            aria-hidden="true"
+                          >
+                            {taskQueue.resumeCountdown}
+                          </span>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    <Button type="button" variant="destructive" className="h-9 max-sm:h-11" onClick={() => setCancelConfirmOpen(true)} aria-label="取消任务">
+                      <Loader2 className="animate-spin" />
+                      取消任务
+                    </Button>
+                  </div>
                 ) : <RunButton canRun={canRun} hasBox={hasBox} plannerReady={plannerReady} requiresAccount={requiresAccount} onRun={onRun} />}
               </div>
             ) : null}
@@ -577,6 +624,27 @@ export function InfraCalculator(props: InfraCalculatorProps) {
       ) : null}
       <Suspense fallback={null}>
         <ShortcutGuideDialog open={shortcutGuideOpen} onOpenChange={setShortcutGuideOpen} />
+        <Dialog open={cancelConfirmOpen} onOpenChange={setCancelConfirmOpen}>
+          <DialogContent className="gap-5 max-sm:px-4 sm:max-w-sm sm:p-6">
+            <DialogHeader className="gap-1.5 px-1 sm:px-2">
+              <DialogTitle className="text-lg font-semibold">取消当前任务？</DialogTitle>
+              <DialogDescription className="text-sm leading-6">
+                取消当前任务会退出排队，后续生成排班需要重新排队。
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="gap-2">
+              <Button type="button" variant="outline" onClick={() => setCancelConfirmOpen(false)}>
+                继续等待
+              </Button>
+              <Button type="button" variant="destructive" onClick={() => {
+                setCancelConfirmOpen(false);
+                onCancelRun();
+              }}>
+                确认取消
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </Suspense>
     </>
   );

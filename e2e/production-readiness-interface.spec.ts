@@ -237,14 +237,12 @@ test("setup exposes and persists only worker-supported rotation profiles", async
   await expect(page.getByRole("option", { name: /一天两换/ })).toHaveCount(1);
   await expect(page.getByRole("option", { name: /自定义/ })).toHaveCount(0);
   await expect(page.getByRole("option")).toHaveCount(3);
-  await rotationTrigger.fill("一天两换");
-  await expect(page.getByRole("option")).toHaveCount(1);
-  await rotationTrigger.press("Enter");
+  await expect(rotationTrigger).toHaveJSProperty("readOnly", true);
+  await page.getByRole("option", { name: /一天两换/ }).click();
   await expect(rotationTrigger).toHaveValue("一天两换 · 12/12/12");
   await rotationTrigger.click();
   await expect(page.locator('[data-slot="combobox-content"]')).toBeVisible();
-  await rotationTrigger.fill("不存在的方案");
-  await expect(page.getByText("没有匹配的换班方式", { exact: true })).toBeVisible();
+  await expect(page.getByRole("option")).toHaveCount(3);
   await rotationTrigger.press("Escape");
   await expect(rotationTrigger).toHaveValue("一天两换 · 12/12/12");
   await expect(dialog.getByText("完整循环 24 小时")).toHaveCount(0);

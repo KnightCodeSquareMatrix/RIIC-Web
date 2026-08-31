@@ -210,12 +210,15 @@ test("public deployment automation is repository-bound, opt-in, and secret-safe"
 
 test("deploy builds and transfers a verified solver-free standalone artifact", async () => {
   const deployWorkflow = await readRepoFile(".github/workflows/deploy.yml");
+  const qualityWorkflow = await readRepoFile(".github/workflows/frontend-quality.yml");
 
   assert.match(deployWorkflow, /Use Node\.js 22[\s\S]+actions\/setup-node@[0-9a-f]{40}[\s\S]+node-version: 22/);
   assert.match(deployWorkflow, /Resolve verified release identity[\s\S]+git rev-parse 'HEAD\^\{tree\}'[\s\S]+DEPLOY_TREE_SHA=%s/);
   assert.match(deployWorkflow, /Validate deployment configuration[\s\S]+\[\[ "\$DEPLOY_TREE_SHA" =~ \^\[0-9a-f\]\{40\}\$ \]\]/);
   assert.match(deployWorkflow, /Install verified build dependencies[\s\S]+run: npm ci/);
   assert.match(deployWorkflow, /Build standalone release[\s\S]+APP_DEPLOYMENT_ENV:[\s\S]+SKLAND_FEATURE_ENABLED: "1"[\s\S]+ACCOUNT_CLOUD_SYNC_ENABLED: "1"[\s\S]+run: npm run build/);
+  assert.match(deployWorkflow, /run: npm run build && npm run worker:build/);
+  assert.match(qualityWorkflow, /Production worker build[\s\S]+npm run worker:build && node --check dist\/plan-worker\.cjs/);
   assert.match(deployWorkflow, /RELEASE_SHA="\$DEPLOY_SHA" RELEASE_TREE_SHA="\$DEPLOY_TREE_SHA"[\s\S]+npm run release:stage -- --output "\$artifact_root"/);
   assert.match(deployWorkflow, /tar --sort=name[\s\S]+--mtime="@\$SOURCE_DATE_EPOCH"[\s\S]+gzip --best --no-name --rsyncable[\s\S]+gzip -t "\$local_archive"/);
   assert.match(deployWorkflow, /archive_sha256="\$\(sha256sum "\$local_archive"[\s\S]+DEPLOY_ARCHIVE_SHA256=%s/);

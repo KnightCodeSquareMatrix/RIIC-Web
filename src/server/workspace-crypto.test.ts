@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  decryptPlanTaskPayload,
   decryptOperboxSnapshot,
+  encryptPlanTaskPayload,
   encryptOperboxSnapshot,
   planOperboxContentHmac,
   verifyPlanOperboxContentHmac,
@@ -10,6 +12,28 @@ import {
 
 const key = Buffer.alloc(32, 7);
 const keys = new Map([["v1", key]]);
+
+test("plan task envelope round-trips with a task-specific authenticated domain", () => {
+  const envelope = encryptPlanTaskPayload({
+    userId: "user-a",
+    taskId: "task-a",
+    plaintext: '{"operbox":[{"id":"char_1"}]}',
+    activeVersion: "v1",
+    masterKey: key,
+  });
+  assert.equal(
+    decryptPlanTaskPayload({ userId: "user-a", taskId: "task-a", envelope, keys }),
+    '{"operbox":[{"id":"char_1"}]}',
+  );
+  assert.throws(() => decryptPlanTaskPayload({ userId: "user-b", taskId: "task-a", envelope, keys }));
+  assert.throws(() => decryptPlanTaskPayload({ userId: "user-a", taskId: "task-b", envelope, keys }));
+  assert.throws(() => decryptPlanTaskPayload({
+    userId: "user-a",
+    taskId: "task-a",
+    envelope: { ...envelope, schemaVersion: 2 },
+    keys,
+  }));
+});
 
 test("operbox envelope round-trips and binds ciphertext to user, record and schema", () => {
   const envelope = encryptOperboxSnapshot({
