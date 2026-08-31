@@ -87,6 +87,7 @@ export function PlanResultSummary({
   animateEntrance = true,
   onEntranceConsumed,
   onPerformanceIssue,
+  feedbackDisabled = false,
 }: {
   profile?: UserProfile;
   rotation?: RotationJson;
@@ -99,6 +100,7 @@ export function PlanResultSummary({
   animateEntrance?: boolean;
   onEntranceConsumed?: (revision: string) => void;
   onPerformanceIssue: () => void;
+  feedbackDisabled?: boolean;
 }) {
   const shouldReduceMotion = useReducedMotion();
   const [animateOnMount] = useState(animateEntrance);
@@ -262,10 +264,13 @@ export function PlanResultSummary({
               variant="link"
               className="h-11 justify-start px-0 text-xs font-medium text-[#313131]/58 hover:text-[#313131]"
               data-plan-performance-feedback
+              disabled={feedbackDisabled}
+              title={feedbackDisabled ? "全角色导入为体验数据，不能提交反馈" : undefined}
               onClick={requestPerformanceFeedback}
             >
               反馈本次求解速度
             </Button>
+            {feedbackDisabled ? <p className="mt-1 text-xs text-[#313131]/55">全角色导入为体验数据，不能提交反馈。</p> : null}
           </div>
         </div>
       </Drawer>
