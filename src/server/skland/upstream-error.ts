@@ -6,6 +6,8 @@ export type SklandServiceErrorCode =
   | "UNAVAILABLE"
   | "BAD_DATA";
 
+export const SKLAND_UPSTREAM_COOLDOWN_MS = 60_000;
+
 function errorRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" ? value as Record<string, unknown> : null;
 }
@@ -16,10 +18,12 @@ function textValue(value: unknown): string {
 
 export function classifySklandUpstreamError(error: unknown): "AUTH_EXPIRED" | "RATE_LIMITED" | "UNAVAILABLE" {
   const record = errorRecord(error);
-  const cause = errorRecord(record?.cause);
+  const causeValue = record?.cause;
+  const cause = errorRecord(causeValue);
   const status = Number(cause?.status ?? cause?.statusCode ?? cause?.code ?? Number.NaN);
   const combinedMessage = [
     textValue(record?.message ?? error),
+    textValue(causeValue),
     textValue(cause?.message),
     textValue(cause?.msg),
     textValue(cause?.error),
@@ -31,7 +35,11 @@ export function classifySklandUpstreamError(error: unknown): "AUTH_EXPIRED" | "R
   ) {
     return "AUTH_EXPIRED";
   }
-  if (status === 429 || /429|频繁|limit|too many|throttl/i.test(combinedMessage)) {
+  if (
+    status === 429
+    || /429|频繁|limit|too many|throttl/i.test(combinedMessage)
+    || /<!doctype\s*html[\s\S]*<title>\s*405\s*<\/title>/i.test(combinedMessage)
+  ) {
     return "RATE_LIMITED";
   }
   return "UNAVAILABLE";

@@ -28,6 +28,7 @@ import {
 } from "./scan-admission";
 import {
   classifySklandUpstreamError,
+  SKLAND_UPSTREAM_COOLDOWN_MS,
   type SklandServiceErrorCode,
 } from "./upstream-error";
 
@@ -50,6 +51,7 @@ declare global {
   var __infraCalcSklandRate: Map<string, RateEntry> | undefined;
   var __infraCalcSklandScanStarts: Map<string, Promise<ScanStartResult>> | undefined;
   var __infraCalcSklandDeviceIdCache: DeviceIdCache | undefined;
+  var __infraCalcSklandUpstreamCooldownUntil: number | undefined;
 }
 
 const pendingScans = globalThis.__infraCalcSklandScans ?? new Map<string, PendingScan>();
@@ -69,6 +71,23 @@ export class SklandServiceError extends Error {
   ) {
     super(message);
   }
+}
+
+function upstreamRetryAfterSeconds(now = Date.now()): number {
+  return Math.max(0, Math.ceil(((globalThis.__infraCalcSklandUpstreamCooldownUntil ?? 0) - now) / 1000));
+}
+
+function assertUpstreamCapacity(now = Date.now()): void {
+  if (upstreamRetryAfterSeconds(now) > 0) {
+    throw new SklandServiceError("RATE_LIMITED", "森空岛请求正在冷却，请稍后再试。", 429);
+  }
+}
+
+function beginUpstreamCooldown(now = Date.now()): void {
+  globalThis.__infraCalcSklandUpstreamCooldownUntil = Math.max(
+    globalThis.__infraCalcSklandUpstreamCooldownUntil ?? 0,
+    now + SKLAND_UPSTREAM_COOLDOWN_MS,
+  );
 }
 
 function cleanupScans(now = Date.now()): void {
@@ -99,7 +118,10 @@ function publicError(error: unknown): SklandServiceError {
   if (error instanceof SklandServiceError) return error;
   const classification = classifySklandUpstreamError(error);
   if (classification === "AUTH_EXPIRED") return new SklandServiceError("AUTH_EXPIRED", "森空岛登录已失效，请重新扫码。", 401);
-  if (classification === "RATE_LIMITED") return new SklandServiceError("RATE_LIMITED", "森空岛请求过于频繁，请稍后再试。", 429);
+  if (classification === "RATE_LIMITED") {
+    beginUpstreamCooldown();
+    return new SklandServiceError("RATE_LIMITED", "森空岛请求过于频繁，请稍后再试。", 429);
+  }
   return new SklandServiceError("UNAVAILABLE", "森空岛暂时不可用，请稍后重试；MAA 导入仍可正常使用。", 502);
 }
 
@@ -271,6 +293,7 @@ export async function pollScan(scanId: string): Promise<{
     if (!status.scanCode) return { response: { success: true, status: scanDisplayStatus(status.scanStatus ?? "") } };
 
     const oauthToken = await pending.client.collections.hypergryph.getOAuthTokenByScanCode(status.scanCode);
+    assertUpstreamCapacity();
     const completed = await completeOAuthLogin(pending.client, oauthToken, pending.policyConsent);
     pendingScans.delete(scanId);
     return {
@@ -306,6 +329,7 @@ export async function loadSessionSnapshot(payload: SklandSessionPayload, forceRe
   statusSnapshot: SklandStatusSnapshot;
 }> {
   try {
+    assertUpstreamCapacity();
     const client = await seedClient(payload);
     const refreshed = await refreshedPayload(client, payload, forceRefresh);
     if (refreshed.token !== payload.token) await client.storage.setItem(STORAGE_OAUTH_TOKEN_KEY, refreshed.token);
@@ -344,6 +368,7 @@ export async function loadStatusSnapshot(payload: SklandSessionPayload): Promise
   snapshot: SklandStatusSnapshot;
 }> {
   try {
+    assertUpstreamCapacity();
     const client = await seedClient(payload);
     const refreshed = await refreshedPayload(client, payload);
     if (refreshed.token !== payload.token) await client.storage.setItem(STORAGE_OAUTH_TOKEN_KEY, refreshed.token);
