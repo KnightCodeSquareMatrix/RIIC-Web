@@ -15,7 +15,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { pollSklandQr, startSklandQr, toDisplayError } from "@/api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card, CardDescription, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { buildSklandAppOpenUrl } from "@/skland-auth-url";
 import {
@@ -228,26 +228,14 @@ export function SklandLoginPanel({
       )}
       data-skland-login-panel
     >
-      <div className="grid gap-5 px-5 pb-6 pt-5 sm:px-7 sm:pb-7">
-        <div className="flex items-start gap-3" data-skland-auth-copy>
-          <div className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            {authMethod === "qr" ? <ScanLine className="size-5" aria-hidden="true" /> : <KeyRound className="size-5" aria-hidden="true" />}
-          </div>
-          <div className="min-w-0">
-            <CardTitle className={dialogPresentation ? "text-lg" : "text-xl"}>登录森空岛账号</CardTitle>
-            <CardDescription className="mt-1 text-pretty leading-6">
-              登录信息经加密写入 HttpOnly Cookie，并在授权成功 7 天后固定失效。
-            </CardDescription>
-          </div>
-        </div>
-
+      <div className="grid gap-6 px-5 py-6 sm:px-8 sm:py-8">
         {!configured ? (
           <Alert>
             <AlertDescription>{disabledReason ?? "当前未开放森空岛登录，可继续使用 MAA 导入。"}</AlertDescription>
           </Alert>
         ) : (
           <div>
-            <div className="grid min-h-11 w-full grid-cols-2 rounded-lg bg-muted p-1 text-muted-foreground" role="tablist" aria-label="森空岛登录方式">
+            <div className="mx-auto grid min-h-11 w-full max-w-xl grid-cols-2 rounded-lg bg-muted p-1 text-muted-foreground" role="tablist" aria-label="森空岛登录方式">
               {(["qr", "credential"] as const).map((method) => (
                 <button
                   key={method}
@@ -333,7 +321,7 @@ export function SklandLoginPanel({
             ) : null}
 
             {authMethod === "credential" ? (
-            <div id={`${authTabsId}-credential-panel`} role="tabpanel" aria-labelledby={`${authTabsId}-credential-tab`} className="mt-4" data-skland-credential-panel>
+            <div id={`${authTabsId}-credential-panel`} role="tabpanel" aria-labelledby={`${authTabsId}-credential-tab`} className="mx-auto mt-5 w-full max-w-3xl" data-skland-credential-panel>
               <SklandCredentialPanel
                 dialogPresentation={dialogPresentation}
                 onAuthenticated={onAuthenticated}
