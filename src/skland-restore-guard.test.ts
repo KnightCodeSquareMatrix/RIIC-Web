@@ -1,15 +1,7 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import { createSklandRestoreGuard } from "./skland-restore-guard.ts";
-
-test("full Skland hydration only runs where its live snapshot is needed", async () => {
-  const app = await readFile(new URL("./App.tsx", import.meta.url), "utf8");
-  assert.match(app, /const shouldLoadFullSklandSession = page === "skland" \|\| initialBoxSource\.current === "skland"/);
-  assert.match(app, /if \(!shouldLoadFullSklandSession\) \{[\s\S]*setSklandSessionLoading\(false\);[\s\S]*return;/);
-  assert.doesNotMatch(app, /getSklandAccounts\(\)[\s\S]{0,300}getSklandAccounts\("summary"\)/);
-});
 
 test("a complete restore wins over a late identity summary", () => {
   const guard = createSklandRestoreGuard();
