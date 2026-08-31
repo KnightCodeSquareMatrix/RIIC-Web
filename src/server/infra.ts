@@ -533,7 +533,7 @@ function getPlanServeClient() {
   return globalForInfra.__infraCliPlanServeClient;
 }
 
-function stopServeClient(reason: string) {
+export function stopInfraServeClients(reason: string) {
   globalForInfra.__infraCliHealthServeClient?.stop(reason);
   globalForInfra.__infraCliPlanServeClient?.stop(reason);
 }
@@ -541,7 +541,7 @@ function stopServeClient(reason: string) {
 function registerServeClientCleanup() {
   if (globalForInfra.__infraCliCleanupRegistered) return;
   globalForInfra.__infraCliCleanupRegistered = true;
-  registerProcessCleanup(process, stopServeClient);
+  registerProcessCleanup(process, stopInfraServeClients);
 }
 
 registerServeClientCleanup();
@@ -1114,7 +1114,7 @@ export async function activateCliRelease(id: string) {
   const temp = `${activeCliPath}.${randomUUID()}.tmp`;
   await writeJson(temp, { releaseId: id, path: metadata.path, activatedAt: new Date().toISOString() });
   await rename(temp, activeCliPath);
-  stopServeClient("CLI 版本已切换，等待下次请求重启。");
+  stopInfraServeClients("CLI 版本已切换，等待下次请求重启。");
   return { releaseId: id, path: metadata.path };
 }
 

@@ -6,6 +6,7 @@ import {
   describePlanArtifact,
   getPlanCacheSolverIdentity,
   runPlan,
+  stopInfraServeClients,
 } from "../src/server/infra.ts";
 import {
   completePlanCache,
@@ -224,5 +225,7 @@ export async function runPlanWorker(): Promise<void> {
   clearInterval(heartbeatTimer);
   clearInterval(cleanupTimer);
   console.log("[plan-worker] shutting down");
+  stopInfraServeClients("计划任务 Worker 正在退出。");
   await (getDatabase().$client as { end: () => Promise<void> }).end().catch(() => undefined);
+  console.log("[plan-worker] stopped");
 }
