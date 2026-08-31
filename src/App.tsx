@@ -1684,13 +1684,14 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
         <Link prefetch={false} className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/terms">本站服务条款</Link>
         <Link prefetch={false} className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/privacy">本站隐私政策</Link>
         <a className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/about" data-about-link>关于我们</a>
+        <div id="activity-log-root" className="ml-auto shrink-0" />
         <a
           href="https://www.rainyun.com/riic_"
           target="_blank"
           rel="noopener noreferrer"
           aria-label="由雨云提供计算服务（在新标签页打开雨云官网）"
           data-rainyun-link
-          className="ml-auto inline-flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-sm px-1 text-[11px] leading-none opacity-70 outline-none transition-[opacity,transform] duration-180 ease-[var(--motion-ease-out)] hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-foreground/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.96] motion-reduce:transition-none motion-reduce:active:scale-100 max-sm:mt-1"
+          className="inline-flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-sm px-1 text-[11px] leading-none opacity-70 outline-none transition-[opacity,transform] duration-180 ease-[var(--motion-ease-out)] hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-foreground/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.96] motion-reduce:transition-none motion-reduce:active:scale-100 max-sm:mt-1"
         >
           <span className="block leading-none" data-rainyun-copy>由</span>
           <img

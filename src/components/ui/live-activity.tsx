@@ -1,8 +1,9 @@
 "use client";
 
-import { AlertTriangle, Check, Clock, Copy, RotateCcw, X } from "lucide-react";
+import { AlertTriangle, Check, Clock, Copy, RotateCcw, ScrollText, X } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ThinkingOrb } from "thinking-orbs";
 
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,16 @@ export interface LiveActivityProps {
   onRetry: () => void;
   onCopyDiagnostic: () => void;
 }
+
+type ActivityLogEntry = {
+  id: string;
+  time: string;
+  text: string;
+  tone: "default" | "success" | "error";
+};
+
+const ACTIVITY_LOG_STORAGE_KEY = "aic-plan-activity-logs-v1";
+const MAX_STORED_ACTIVITY_LOGS = 24;
 
 export function usePlanActivity({
   loading,
@@ -82,6 +93,43 @@ export function LiveActivity({ activity, onRetry, onCopyDiagnostic }: LiveActivi
   const reduceMotion = useReducedMotion();
   const [copied, setCopied] = useState(false);
   const [dismissed, setDismissed] = useState<{ id: number; phase: ActivityPhase } | null>(null);
+  const [logOpen, setLogOpen] = useState(false);
+  const [logs, setLogs] = useState<ActivityLogEntry[]>([]);
+  const [logsLoaded, setLogsLoaded] = useState(false);
+  const [logTarget, setLogTarget] = useState<HTMLElement | null>(null);
+  const loggedActivityKey = useRef<string | null>(null);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(ACTIVITY_LOG_STORAGE_KEY);
+      if (stored) {
+        const parsed: unknown = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          setLogs(parsed.filter((entry): entry is ActivityLogEntry => (
+            Boolean(entry)
+            && typeof entry === "object"
+            && typeof entry.id === "string"
+            && typeof entry.time === "string"
+            && typeof entry.text === "string"
+            && (entry.tone === "default" || entry.tone === "success" || entry.tone === "error")
+          )).slice(-MAX_STORED_ACTIVITY_LOGS));
+        }
+      }
+    } catch {
+      window.localStorage.removeItem(ACTIVITY_LOG_STORAGE_KEY);
+    } finally {
+      setLogsLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    setLogTarget(document.getElementById("activity-log-root"));
+  }, []);
+
+  useEffect(() => {
+    if (!logsLoaded) return;
+    window.localStorage.setItem(ACTIVITY_LOG_STORAGE_KEY, JSON.stringify(logs));
+  }, [logs, logsLoaded]);
 
   // 阶段切换（running ↔ queued、进入 success/error）时取消之前的关闭状态。
   useEffect(() => {
@@ -105,6 +153,29 @@ export function LiveActivity({ activity, onRetry, onCopyDiagnostic }: LiveActivi
     setCopied(false);
   }, [activity]);
 
+  useEffect(() => {
+    if (!activity || !logsLoaded) return;
+    const key = `${activity.id}:${activity.phase}`;
+    if (loggedActivityKey.current === key) return;
+    loggedActivityKey.current = key;
+    const text = activity.phase === "queued"
+      ? `排班任务排队中，前面还有 ${activity.queuePosition ?? "—"} 人。`
+      : activity.phase === "running"
+        ? "开始生成排班。"
+        : activity.phase === "success"
+          ? "排班已生成。"
+          : `${activity.error?.code ?? "AIC-PLAN"}：${activity.error?.message ?? "排班生成失败"}`;
+    setLogs((current) => [
+      ...current.slice(-(MAX_STORED_ACTIVITY_LOGS - 1)),
+      {
+        id: `${Date.now()}-${key}`,
+        time: new Intl.DateTimeFormat("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(new Date()),
+        text,
+        tone: activity.phase === "error" ? "error" : activity.phase === "success" ? "success" : "default",
+      },
+    ]);
+  }, [activity, logsLoaded]);
+
   const label = activity?.phase === "running"
     ? "正在生成排班"
     : activity?.phase === "queued"
@@ -118,6 +189,7 @@ export function LiveActivity({ activity, onRetry, onCopyDiagnostic }: LiveActivi
   );
 
   return (
+    <>
     <AnimatePresence initial={false}>
       {activity && !hidden ? (
         <motion.aside
@@ -232,6 +304,27 @@ export function LiveActivity({ activity, onRetry, onCopyDiagnostic }: LiveActivi
         </motion.aside>
       ) : null}
     </AnimatePresence>
+      {logTarget && logs.length > 0 ? createPortal(<aside className="relative border border-[#313131]/18 bg-[#FAFAF8] text-[#313131] shadow-sm" aria-label="运行日志">
+        <div className="flex min-h-11 items-center justify-between gap-2 px-3">
+          <button type="button" className="flex min-h-11 min-w-0 flex-1 items-center gap-2 text-left text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-expanded={logOpen} onClick={() => setLogOpen((open) => !open)}>
+            <ScrollText className="size-4 shrink-0" aria-hidden="true" />
+            运行日志
+            <span className="font-number text-xs text-muted-foreground">{logs.length}</span>
+          </button>
+          <Button type="button" size="sm" variant="ghost" className="h-9 text-xs" onClick={() => setLogs([])}>清空</Button>
+        </div>
+        {logOpen ? (
+          <div className="absolute bottom-full right-0 z-20 mb-2 max-h-52 w-[min(30rem,calc(100vw-2rem))] overflow-y-auto border border-[#313131]/18 bg-[#FAFAF8] px-3 py-2 font-mono text-xs leading-5 shadow-[0_12px_30px_rgba(35,38,39,0.14)]" aria-live="polite">
+            {logs.slice().reverse().map((entry) => (
+              <div key={entry.id} className={cn("flex gap-2 py-1", entry.tone === "error" ? "text-red-700" : entry.tone === "success" ? "text-emerald-700" : "text-[#313131]/75")}>
+                <span className="shrink-0 text-[#313131]/45">{entry.time}</span>
+                <span>{entry.text}</span>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </aside>, logTarget) : null}
+    </>
   );
 }
 
