@@ -51,7 +51,6 @@ import {
   ONBOARDING_COMPLETED_VALUE,
   ONBOARDING_DISMISSED_VALUE,
   ONBOARDING_STORAGE_KEY,
-  initialSetupStep,
   resolveOnboardingPreference,
   type OnboardingPreference,
   type SetupStep,
@@ -1207,7 +1206,8 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   }
 
   function openSetup() {
-    setSetupInitialStep(initialSetupStep(Boolean(operbox?.length)));
+    // 固定默认进入第一步（干员数据），不再按是否已有盒跳到布局。
+    setSetupInitialStep("box");
     setSetupOpen(true);
   }
 
