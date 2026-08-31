@@ -33,21 +33,23 @@ jobs:
       group: deployment-preflight-${{ inputs.environment }}
       cancel-in-progress: false
     env:
-      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-      DEPLOY_SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
-      DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
-      DEPLOY_SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
       DEPLOY_APP_ROOT: ${{ vars.DEPLOY_APP_ROOT }}
       DEPLOY_RUN_USER: ${{ vars.DEPLOY_RUN_USER || 'arkinfra' }}
       DEPLOY_INTERNAL_PORT: ${{ vars.DEPLOY_INTERNAL_PORT }}
       DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
       PREFLIGHT_MODE: ${{ inputs.mode }}
-      DEPLOY_PREPARE_HELPER_CONTRACT: "2"
-      DEPLOY_RELEASE_HELPER_CONTRACT: "2"
+      DEPLOY_APPROVED_SOLVER_SHA256: ${{ vars.DEPLOY_APPROVED_SOLVER_SHA256 }}
+      DEPLOY_EXPECTED_REPOSITORY: KnightCodeSquareMatrix/RIIC-Web
+      DEPLOY_RELEASE_HELPER_CONTRACT: "4"
 
     steps:
       - name: Validate preflight configuration
         shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          DEPLOY_SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
         run: |
           set -euo pipefail
           test -n "$DEPLOY_HOST"
@@ -62,9 +64,16 @@ jobs:
           test "$DEPLOY_RUN_USER" != "root"
           [[ "$DEPLOY_INTERNAL_PORT" =~ ^[0-9]{2,5}$ ]]
           [[ "$PREFLIGHT_MODE" == "baseline" || "$PREFLIGHT_MODE" == "cutover-ready" ]]
+          test "$DEPLOY_EXPECTED_REPOSITORY" = "KnightCodeSquareMatrix/RIIC-Web"
+          if [[ "$PREFLIGHT_MODE" == "cutover-ready" ]]; then
+            [[ "$DEPLOY_APPROVED_SOLVER_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          fi
 
       - name: Configure SSH
         shell: bash
+        env:
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          DEPLOY_SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
         run: |
           set -euo pipefail
           install -m 700 -d "$HOME/.ssh"
@@ -72,8 +81,11 @@ jobs:
           printf '%s\n' "$DEPLOY_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"
 
-      - name: Inspect helpers, cache, solver, and disk
+      - name: Inspect deploy helper, solver, and disk
         shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
         run: |
           set -euo pipefail
           ssh_options=(
@@ -109,20 +121,19 @@ jobs:
               >> "$GITHUB_STEP_SUMMARY"
           }
 
-          verify_helper prepare /usr/local/sbin/arknights-infra-prepare-release \
-            "$DEPLOY_PREPARE_HELPER_CONTRACT"
           verify_helper deploy /usr/local/sbin/arknights-infra-deploy \
             "$DEPLOY_RELEASE_HELPER_CONTRACT"
 
           timeout --kill-after=10s 60s ssh "${ssh_options[@]}" \
             "${DEPLOY_SSH_USER}@${DEPLOY_HOST}" \
-            bash -s -- "$DEPLOY_APP_ROOT" "$PREFLIGHT_MODE" "$DEPLOY_ENVIRONMENT" <<'REMOTE'
+            bash -s -- "$DEPLOY_APP_ROOT" "$PREFLIGHT_MODE" "$DEPLOY_ENVIRONMENT" \
+              "$DEPLOY_EXPECTED_REPOSITORY" "$DEPLOY_APPROVED_SOLVER_SHA256" <<'REMOTE'
           set -euo pipefail
           app_root="$1"
           preflight_mode="$2"
           deployment_environment="$3"
-          cache_repository="/var/cache/arknights-infra-deploy/repository.git"
-          expected_origin="https://github.com/KnightCodeSquareMatrix/RIIC-Web.git"
+          expected_repository="$4"
+          approved_solver_sha256="$5"
           cutover_ready=0
           if [[ "$preflight_mode" == "cutover-ready" ]]; then
             cutover_ready=1
@@ -132,21 +143,11 @@ jobs:
 
           test -d "$app_root"
           test ! -L "$app_root"
-          test -d "$cache_repository"
-          test ! -L "$cache_repository"
-          test "$(git --git-dir="$cache_repository" rev-parse --is-bare-repository)" = "true"
-          configured_origin="$(git --git-dir="$cache_repository" remote get-url origin)"
-          public_cache_ready=0
-          if [[ "$configured_origin" == "$expected_origin" ]]; then
-            public_cache_ready=1
-          fi
-          if [[ "$cutover_ready" == "1" ]]; then
-            test "$public_cache_ready" = "1"
-          fi
 
           if [[ "$cutover_ready" == "1" ]]; then
             sudo -n /usr/local/sbin/arknights-infra-deploy \
-              --preflight "$deployment_environment" "$app_root"
+              --preflight "$deployment_environment" "$app_root" \
+              "$expected_repository" "$approved_solver_sha256"
           else
             available_kib="$(df -Pk "$app_root" | awk 'NR == 2 { print $4 }')"
             [[ "$available_kib" =~ ^[0-9]+$ ]]
@@ -154,11 +155,15 @@ jobs:
             printf 'solver_source=not-inspected-root-only\n'
             printf 'available_kib=%s\n' "$available_kib"
           fi
-          printf 'preflight_mode=%s cache_public_origin_ready=%s\n' \
-            "$preflight_mode" "$public_cache_ready"
+          printf 'preflight_mode=%s\n' "$preflight_mode"
           REMOTE
 
           {
             echo
             echo "Preflight is read-only: no archive, release directory, symlink switch, or service restart was requested."
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove SSH credentials from the runner
+        if: always()
+        shell: bash
+        run: rm -f -- "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"
