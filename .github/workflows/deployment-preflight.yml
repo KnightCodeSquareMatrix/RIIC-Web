@@ -163,6 +163,59 @@ jobs:
             echo "Preflight is read-only: no archive, release directory, symlink switch, or service restart was requested."
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Diagnose production homepage cache
+        if: inputs.environment == 'production'
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
+        run: |
+          set -euo pipefail
+          ssh_options=(
+            -o BatchMode=yes
+            -o ConnectTimeout=15
+            -o ConnectionAttempts=2
+            -o ServerAliveInterval=15
+            -o ServerAliveCountMax=3
+          )
+
+          timeout --kill-after=10s 90s ssh "${ssh_options[@]}" \
+            "${DEPLOY_SSH_USER}@${DEPLOY_HOST}" \
+            bash -s -- "$DEPLOY_INTERNAL_PORT" <<'REMOTE'
+          set -euo pipefail
+          internal_port="$1"
+
+          probe() {
+            local label="$1"
+            local url="$2"
+            shift 2
+            local headers body
+            headers="$(mktemp)"
+            body="$(mktemp)"
+            trap 'rm -f -- "$headers" "$body"' RETURN
+            curl -fsS --max-time 15 -D "$headers" -o "$body" "$@" "$url"
+            printf '%s bytes=%s sha256=%s trial=%s\n' \
+              "$label" \
+              "$(stat -c '%s' -- "$body")" \
+              "$(sha256sum -- "$body" | cut -d ' ' -f 1)" \
+              "$(grep -Fq '直接查看示例排班' "$body" && echo yes || echo no)"
+            awk 'BEGIN { IGNORECASE=1 } /^etag:|^cache-control:|^x-nextjs-cache:/ { gsub(/\r$/, ""); print "  " $0 }' "$headers"
+          }
+
+          probe next-root "http://127.0.0.1:${internal_port}/"
+          probe next-query "http://127.0.0.1:${internal_port}/?cache-diagnostic=1"
+          probe funnel-root "http://127.0.0.1:4176/" -H 'Host: riic.autos'
+          probe funnel-query "http://127.0.0.1:4176/?cache-diagnostic=1" -H 'Host: riic.autos'
+
+          nginx_config="$(nginx -T 2>&1 || true)"
+          if grep -Eq '(^|[[:space:]])proxy_cache([[:space:]]|;)' <<<"$nginx_config"; then
+            echo 'nginx_proxy_cache=yes'
+          else
+            echo 'nginx_proxy_cache=no-or-unreadable'
+          fi
+          grep -E 'proxy_cache_path|proxy_cache_key|proxy_cache_valid' <<<"$nginx_config" || true
+          REMOTE
+
       - name: Remove SSH credentials from the runner
         if: always()
         shell: bash
