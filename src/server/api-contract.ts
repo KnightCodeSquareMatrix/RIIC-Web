@@ -234,6 +234,7 @@ type GuardState = {
   planIpCounts: Map<string, number>;
   planStarts: Map<string, number[]>;
   planGlobal: number;
+  planAnonymousSamples: number;
   // Retained only so a development hot reload can clean up the previous guard.
   planIps?: Set<string>;
   planAnonymous?: number;
@@ -247,11 +248,13 @@ const guardState: GuardState = guardGlobal.__aicRequestGuard ??= {
   planIpCounts: new Map<string, number>(),
   planStarts: new Map<string, number[]>(),
   planGlobal: 0,
+  planAnonymousSamples: 0,
 };
 guardState.planAccounts ??= new Set();
 guardState.planNewAccounts ??= new Set();
 guardState.planIpCounts ??= new Map();
 guardState.planStarts ??= new Map();
+guardState.planAnonymousSamples ??= 0;
 const MAX_RATE_KEYS = 10_000;
 
 function pruneRates(now: number): void {
@@ -298,6 +301,8 @@ export const MAX_PLAN_STARTS_PER_ACCOUNT = 3;
 export const MAX_PLAN_STARTS_PER_IP = 8;
 export const PLAN_START_WINDOW_MS = 10 * 60_000;
 export const PLAN_ESTABLISHED_ACCOUNT_AGE_MS = 24 * 60 * 60_000;
+export const MAX_CONCURRENT_ANONYMOUS_SAMPLE_PLAN_ADMISSIONS = 1;
+export const MAX_ANONYMOUS_SAMPLE_PLAN_STARTS_PER_IP = 2;
 
 export function planAccountAdmissionClass(
   account: { createdAt: unknown; emailVerified: unknown },
@@ -387,6 +392,44 @@ export function acquirePlanSlot({
     released = true;
     guardState.planAccounts.delete(accountId);
     guardState.planNewAccounts.delete(accountId);
+    const remainingForIp = (guardState.planIpCounts.get(ip) ?? 1) - 1;
+    if (remainingForIp <= 0) guardState.planIpCounts.delete(ip);
+    else guardState.planIpCounts.set(ip, remainingForIp);
+    guardState.planGlobal = Math.max(0, guardState.planGlobal - 1);
+  };
+}
+
+export function acquireAnonymousSamplePlanSlot({ ip }: { ip: string }): () => void {
+  const activeForIp = guardState.planIpCounts.get(ip) ?? 0;
+  // A trusted sample is the only anonymous cache miss allowed to reach the
+  // solver. Keep one global slot free for signed-in traffic at all times.
+  if (
+    guardState.planAnonymousSamples >= MAX_CONCURRENT_ANONYMOUS_SAMPLE_PLAN_ADMISSIONS
+    || activeForIp >= MAX_CONCURRENT_PLAN_ACCOUNTS_PER_IP
+    || guardState.planGlobal >= MAX_CONCURRENT_AUTHENTICATED_PLAN_ADMISSIONS - 1
+  ) {
+    throw new PublicApiError("AIC-PLAN-3002", { retryAfter: 5 });
+  }
+
+  const now = Date.now();
+  prunePlanStarts(now);
+  const ipStartKey = `anonymous-sample-ip:${ip}`;
+  const retryAfter = planStartRetryAfter(
+    ipStartKey,
+    MAX_ANONYMOUS_SAMPLE_PLAN_STARTS_PER_IP,
+    now,
+  );
+  if (retryAfter) throw new PublicApiError("AIC-PLAN-3002", { retryAfter });
+
+  guardState.planAnonymousSamples += 1;
+  guardState.planIpCounts.set(ip, activeForIp + 1);
+  guardState.planGlobal += 1;
+  recordPlanStart(ipStartKey, now);
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    guardState.planAnonymousSamples = Math.max(0, guardState.planAnonymousSamples - 1);
     const remainingForIp = (guardState.planIpCounts.get(ip) ?? 1) - 1;
     if (remainingForIp <= 0) guardState.planIpCounts.delete(ip);
     else guardState.planIpCounts.set(ip, remainingForIp);
@@ -505,6 +548,7 @@ export function __resetRequestGuardsForTests(): void {
   guardState.planIpCounts.clear();
   guardState.planStarts.clear();
   guardState.planGlobal = 0;
+  guardState.planAnonymousSamples = 0;
   guardState.planIps?.clear();
   guardState.planAnonymous = 0;
 }
