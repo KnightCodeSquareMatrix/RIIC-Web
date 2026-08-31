@@ -309,6 +309,12 @@ test("workbench views use five prefetched route entries under one persistent lay
   assert.doesNotMatch(sidebar, /\?beta|betaRequested/);
 });
 
+test("the Skland entry is request-rendered so releases cannot retain stale login chunks", async () => {
+  const sklandPage = await readRepoFile("src/app/(workbench)/skland/page.tsx");
+
+  assert.match(sklandPage, /export const dynamic = "force-dynamic"/);
+});
+
 test("the critical calculator board stays initial while the compact view loads on demand", async () => {
   const calculator = await readRepoFile("src/components/pages/InfraCalculator.tsx");
   const calculatorRoute = await readRepoFile("src/components/workbench/CalculatorRoute.tsx");
