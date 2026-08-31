@@ -63,6 +63,7 @@ export function TrainingAdviceActionCard({
               profession: operatorProfessionFor(action.operator),
             }}
             portraitSize={80}
+            showSkillTooltip
           />
           <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
             <div className="min-w-0">

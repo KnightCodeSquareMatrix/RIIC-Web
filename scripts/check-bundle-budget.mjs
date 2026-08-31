@@ -7,7 +7,8 @@ import { gzipSync } from "node:zlib";
 // The calculator keeps its always-visible board in the initial graph. Secondary workbench
 // views have independent route chunks and may carry their own datasets without joining `/`.
 // The queue shell remains initial so an interrupted personal run can be restored; its polling
-// implementation is lazy. Keep the resulting allowance narrow instead of exempting the route.
+// implementation is lazy. Training tooltips also add profession presentation to a secondary
+// chunk. Keep both allowances narrow instead of exempting either route.
 const MAX_SKLAND_DISABLED_ROUTE_INITIAL_JS_BYTES = 1_135_000;
 const MAX_SKLAND_ENABLED_ROUTE_INITIAL_JS_BYTES = 1_155_000;
 const MAX_SECONDARY_ROUTE_INITIAL_JS_BYTES = 1_532_000;
