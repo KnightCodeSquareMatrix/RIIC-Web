@@ -58,7 +58,7 @@ Restrict `development` to `develop`. Restrict `production` to `main` and require
 
 - [ ] Re-enable Actions only after branch protection and both Environments are configured.
 - [ ] Manually run full CI on `main` and `develop`; the deploy job must be skipped while the repository variable is `0`.
-- [ ] Run `Deployment preflight` in `baseline` mode for a read-only report of the legacy helper, cache, current solver, Worker fingerprint, and disk state.
+- [ ] Run `Deployment preflight` in `baseline` mode for a read-only report of the installed deploy helper contract and available disk space; root-only solver details remain hidden in this mode.
 - [ ] After private server maintenance, rerun preflight in `cutover-ready` mode.
 
 Set `DEPLOY_APPROVED_SOLVER_SHA256` to the independently verified digest of the approved shared solver for each Environment. The cutover-ready preflight requires a root-owned `shared/bin` solver and independent SHA-256 sidecar, verifies the Environment-approved digest, and compares both with the solver's Worker `ping` fingerprint. Prepare those private server assets from the owner-controlled release record; never derive and trust a digest solely from a runtime-user-writable file.
