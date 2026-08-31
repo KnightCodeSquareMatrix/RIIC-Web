@@ -68,6 +68,11 @@ import {
 import { planToRows, RoomRow } from "./schedule";
 import { DEFAULT_ROTATION_PROFILE } from "./rotation-settings";
 import { MOTION_DURATION } from "./motion";
+
+function canBypassWebsiteAccountForLocalSetup() {
+  if (process.env.NODE_ENV !== "development" || typeof window === "undefined") return false;
+  return ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
+}
 import { closestShift, compareShifts } from "./skland";
 import { emptySklandBindingSummary } from "./skland-binding-state";
 import { createSklandRestoreGuard } from "./skland-restore-guard";
@@ -1273,6 +1278,10 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
 
   function handleStartPersonalFlow() {
     if (!websiteSession) {
+      if (canBypassWebsiteAccountForLocalSetup()) {
+        openSetup();
+        return;
+      }
       requestWebsiteAccount(hasPersonalBox ? "run" : "setup");
       return;
     }
@@ -1284,7 +1293,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   }
 
   function handleProtectedSetup() {
-    if (!websiteSession) {
+    if (!websiteSession && !canBypassWebsiteAccountForLocalSetup()) {
       requestWebsiteAccount("setup");
       return;
     }
