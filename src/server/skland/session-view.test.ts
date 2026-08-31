@@ -51,6 +51,7 @@ test("summary returns only identity and binding fields without loading upstream 
   assert.equal(fullLoads, 0);
   assert.equal(resolved.refreshed, false);
   assert.equal(resolved.data.authenticated, true);
+  assert.deepEqual(resolved.data.authMethods, { qr: true, credential: true });
   assert.deepEqual(Object.keys(resolved.data).sort(), [
     "accounts",
     "activeAccountId",

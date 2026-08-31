@@ -23,6 +23,7 @@ type ErrorDefinition = {
 export const ERROR_DEFINITIONS: Record<AppErrorCode, ErrorDefinition> = {
   "AIC-AUTH-2008": { status: 401, message: "请先登录网站账号后再使用此功能。", retryable: false },
   "AIC-AUTH-2009": { status: 403, message: "当前账号没有管理员权限。", retryable: false },
+  "AIC-AUTH-2010": { status: 400, message: "森空岛凭证格式无效，请重新完整复制 cred,token。", retryable: false },
   "AIC-REQ-1001": { status: 400, message: "请求格式无法识别，请检查后重试。", retryable: false },
   "AIC-REQ-1002": { status: 413, message: "提交的数据过大，请精简后重试。", retryable: false },
   "AIC-BOX-1101": { status: 422, message: "干员数据无效，请重新导入。", retryable: false },
