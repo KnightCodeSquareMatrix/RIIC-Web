@@ -928,7 +928,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
         rotation: rotationProfile,
         fiammetta_enable: effectiveFiammettaSetting(planInput.operbox, rotationProfile, fiammettaEnabled),
       };
-      if (!taskQueueEnabled) {
+      if (!taskQueueEnabled || payload.boxSource === "sample") {
         planTask.complete(await computePlan(payload));
         return true;
       }

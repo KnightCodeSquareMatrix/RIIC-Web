@@ -77,17 +77,19 @@ test("an anonymous cold start probes the shared session once and does not touch 
 
 test("the anonymous sample trial fetches and solves once before showing the schedule", async ({ page }) => {
   await mockAnonymousWebsiteSession(page);
-  await mockApis(page);
+  await mockApis(page, { taskQueueEnabled: true });
   let releasePlan!: () => void;
   const planGate = new Promise<void>((resolve) => {
     releasePlan = resolve;
   });
   let sampleRequests = 0;
   let planRequests = 0;
+  let taskRequests = 0;
   let planPayload: Record<string, unknown> | null = null;
   page.on("request", (request) => {
     const pathname = new URL(request.url()).pathname;
     if (pathname === "/api/sample-operbox") sampleRequests += 1;
+    if (pathname === "/api/tasks") taskRequests += 1;
   });
   await page.unroute("**/api/plan");
   await page.route("**/api/plan", async (route) => {
@@ -107,7 +109,7 @@ test("the anonymous sample trial fetches and solves once before showing the sche
   await expect(page.getByRole("button", { name: "正在生成示例排班…" })).toBeDisabled();
   await expect(page.getByRole("button", { name: "配置Box与布局" })).toBeDisabled();
   await expect(page.getByRole("button", { name: "暂时跳过引导" })).toBeDisabled();
-  await expect.poll(() => ({ sampleRequests, planRequests })).toEqual({ sampleRequests: 1, planRequests: 1 });
+  await expect.poll(() => ({ sampleRequests, planRequests, taskRequests })).toEqual({ sampleRequests: 1, planRequests: 1, taskRequests: 0 });
   expect(planPayload).toMatchObject({ boxSource: "sample", sourceName: "243 全精二示例" });
   expect(planPayload).not.toHaveProperty("operbox");
 

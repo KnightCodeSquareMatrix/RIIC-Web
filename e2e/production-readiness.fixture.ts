@@ -871,6 +871,7 @@ export async function mockApis(
     sklandSummaryDelayMs?: number;
     sklandSessionFailure?: boolean;
     plannerReady?: boolean;
+    taskQueueEnabled?: boolean;
     telemetryBatches?: Array<Array<Record<string, unknown>>>;
   } = {}
 ) {
@@ -883,6 +884,11 @@ export async function mockApis(
       data: {
         status: "ready",
         plannerReady: options.plannerReady ?? true,
+        taskQueue: {
+          enabled: Boolean(options.taskQueueEnabled),
+          ready: Boolean(options.taskQueueEnabled),
+          releaseMatched: Boolean(options.taskQueueEnabled),
+        },
         skland: {
           available: Boolean(options.sklandConfigured),
           message: options.sklandConfigured ? null : "当前未开放森空岛登录，可使用 MAA 导入。",
