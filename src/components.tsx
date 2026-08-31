@@ -65,6 +65,7 @@ import {
   TRADE_ORDER_OPTIONS,
   TradeOrder,
   factoryRecipeFor,
+  hasUnlockedFactoryRecipes,
   maxRoomLevel,
   productLabel,
   roomKindLabel,
@@ -516,6 +517,7 @@ export function LayoutEditor({
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
   onRoomLevelChange: (roomId: string, level: number) => void;
 }) {
+  const factoryRecipesUnlocked = hasUnlockedFactoryRecipes(layout);
   const roomGroups = [
     { key: "trade", label: "贸易站", rooms: layout.rooms.filter((room) => room.kind === "trade_post") },
     { key: "factory", label: "制造站", rooms: layout.rooms.filter((room) => room.kind === "factory") },
@@ -542,8 +544,10 @@ export function LayoutEditor({
               const activeOrder = isTrade ? tradeOrderFor(room) : null;
               const activeRecipe = isFactory ? factoryRecipeFor(room) : null;
               const activeProduct = activeOrder ?? activeRecipe;
-              const hasRestrictedProduct = room.level < 3;
-              const restrictionHint = isTrade ? "开采协力仅限 3 级贸易站" : "源石碎片仅限 3 级制造站";
+              const hasRestrictedProduct = isTrade ? room.level < 3 : isFactory && !factoryRecipesUnlocked;
+              const restrictionHint = isTrade
+                ? "开采协力仅限 3 级贸易站"
+                : "需先拥有至少一个 3 级制造站解锁源石碎片配方";
               const availableProductOptions: Option<TradeOrder | FactoryRecipe>[] = isTrade
                 ? TRADE_ORDER_OPTIONS
                 : isFactory
