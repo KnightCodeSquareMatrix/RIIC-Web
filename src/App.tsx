@@ -565,21 +565,8 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       || websiteSessionPending
       || !websiteUserId
     ) return;
-    const existingRestore = sklandFullRestore.current?.reloadKey === websiteAuthReloadKey
-      ? sklandFullRestore.current
-      : null;
-    const generation = existingRestore?.generation ?? sklandRestoreGuard.current.begin();
+    const generation = beginSklandStateChange();
     let cancelled = false;
-    setSklandSessionLoading(true);
-    if (!existingRestore) {
-      sklandFullRestore.current = {
-        generation,
-        reloadKey: websiteAuthReloadKey,
-        result: getSklandAccounts()
-          .then((session) => ({ session }))
-          .catch((error: unknown) => ({ error })),
-      };
-    }
     void getSklandAccounts("summary")
       .then((session) => {
         if (
@@ -593,7 +580,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
         setSklandBindingSummary(bindingSummaryFromSession(session));
       })
       .catch(() => {
-        // 完整恢复会在网站 Session 确认后提供可操作错误；摘要失败不清除已有身份。
+        // 摘要失败不清除已有身份；需要实时快照的页面会独立提供可操作错误。
       });
     return () => {
       cancelled = true;
@@ -629,6 +616,12 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       setSklandScheduleSnapshot(null);
       setSklandStatusSnapshot(null);
       setSklandError(null);
+      setSklandSessionLoading(false);
+      return;
+    }
+
+    const shouldLoadFullSklandSession = page === "skland" || initialBoxSource.current === "skland";
+    if (!shouldLoadFullSklandSession) {
       setSklandSessionLoading(false);
       return;
     }
@@ -695,7 +688,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [hasRestoredSession, websiteAuthReloadKey, websiteSessionPending, websiteUserId]);
+  }, [hasRestoredSession, page, websiteAuthReloadKey, websiteSessionPending, websiteUserId]);
 
   useEffect(() => {
     if (

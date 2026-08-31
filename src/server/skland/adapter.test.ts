@@ -12,6 +12,7 @@ import {
 } from "./scan-admission.ts";
 import {
   classifySklandUpstreamError,
+  SKLAND_UPSTREAM_COOLDOWN_MS,
 } from "./upstream-error.ts";
 import { publicCodeForSklandServiceError } from "./http-error.ts";
 
@@ -81,6 +82,20 @@ test("skland-kit response messages preserve upstream rate-limit and availability
     cause: { code: 10002, message: "请求过于频繁" },
   })), "RATE_LIMITED");
   assert.equal(classifySklandUpstreamError(new Error("network unavailable")), "UNAVAILABLE");
+});
+
+test("Aliyun WAF burst responses enter the shared upstream cooldown", async () => {
+  const wafResponse = new Error("【skland-kit】获取游戏绑定信息错误", {
+    cause: '<!doctypehtml><html><title>405</title><img src="https://errors.aliyun.com/blocked.png">',
+  });
+  assert.equal(classifySklandUpstreamError(wafResponse), "RATE_LIMITED");
+  assert.equal(SKLAND_UPSTREAM_COOLDOWN_MS, 60_000);
+
+  const source = await readFile(new URL("./adapter.ts", import.meta.url), "utf8");
+  assert.match(source, /__infraCalcSklandUpstreamCooldownUntil/);
+  assert.match(source, /function assertUpstreamCapacity/);
+  assert.match(source, /classification === "RATE_LIMITED"[\s\S]*beginUpstreamCooldown\(\)/);
+  assert.ok((source.match(/assertUpstreamCapacity\(\)/g)?.length ?? 0) >= 3);
 });
 
 test("only missing configuration is reported as skland login being closed", () => {
