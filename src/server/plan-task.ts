@@ -219,19 +219,6 @@ export async function getPlanTask(id: string): Promise<PlanTaskRow | null> {
   return row ? mapPlanTaskRow(row) : null;
 }
 
-export async function userHasActivePlanTask(userId: string): Promise<boolean> {
-  const [row] = await getDatabase()
-    .select({ id: planTask.id })
-    .from(planTask)
-    .where(and(
-      eq(planTask.userId, userId),
-      inArray(planTask.status, ACTIVE_STATUSES),
-      gt(planTask.expiresAt, new Date()),
-    ))
-    .limit(1);
-  return Boolean(row);
-}
-
 export async function claimNextPlanTask(): Promise<ClaimedPlanTask | null> {
   const result = await getDatabase().execute<{ id: string }>(sql`
     UPDATE ${planTask}
@@ -272,14 +259,16 @@ export async function claimNextPlanTask(): Promise<ClaimedPlanTask | null> {
 
 export async function completePlanTask(
   id: string,
-  input: { status: "done" | "failed"; result?: PublicPlanData; error?: string | null },
+  input:
+    | { status: "done"; result: PublicPlanData }
+    | { status: "failed"; error?: string | null },
 ): Promise<void> {
   await getDatabase()
     .update(planTask)
     .set({
       status: input.status,
-      result: input.result ?? null,
-      error: input.error?.slice(0, 500) ?? null,
+      result: input.status === "done" ? input.result : null,
+      error: input.status === "failed" ? input.error?.slice(0, 500) ?? null : null,
       finishedAt: new Date(),
       ...clearedPayloadColumns(),
     })

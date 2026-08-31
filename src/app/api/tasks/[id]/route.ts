@@ -50,10 +50,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         etaSeconds: PLAN_TASK_ETA_PER_TASK_SECONDS,
       }, requestId);
     }
+    if (task.status === "done") {
+      if (!task.result) throw new PublicApiError("AIC-SYS-5000");
+      return successResponse({ taskId, status: "done", result: task.result }, requestId);
+    }
     return successResponse({
       taskId,
       status: task.status,
-      ...(task.status === "done" ? { result: task.result } : {}),
       ...(task.status === "failed" ? { error: task.error } : {}),
     }, requestId);
   } catch (error) {

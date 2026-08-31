@@ -425,7 +425,7 @@ test("task queue disables the legacy synchronous solver endpoint", async () => {
 });
 
 test("worker finalization records saved-plan bindings and cache ownership before publication", async () => {
-  const source = await readFile(new URL("../../scripts/plan-worker.mts", import.meta.url), "utf8");
+  const source = await readFile(new URL("../../scripts/plan-worker-runtime.mts", import.meta.url), "utf8");
   const runRecord = source.indexOf("await recordPlanRunBestEffort");
   const cacheReference = source.indexOf("await recordPlanCacheReferenceBestEffort", runRecord);
   const cachePublication = source.indexOf("await completePlanCache", cacheReference);
@@ -435,4 +435,13 @@ test("worker finalization records saved-plan bindings and cache ownership before
   assert.equal(runRecord > 0, true);
   assert.equal(cacheReference > runRecord, true);
   assert.equal(cachePublication > cacheReference, true);
+});
+
+test("worker loads the sealed release environment before evaluating runtime modules", async () => {
+  const source = await readFile(new URL("../../scripts/plan-worker.mts", import.meta.url), "utf8");
+  const envLoad = source.indexOf("loadEnvConfig(process.cwd())");
+  const runtimeImport = source.indexOf('await import("./plan-worker-runtime.mts")');
+  assert.equal(envLoad > 0, true);
+  assert.equal(runtimeImport > envLoad, true);
+  assert.equal(source.includes('from "./plan-worker-runtime.mts"'), false);
 });
