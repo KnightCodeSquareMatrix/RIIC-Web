@@ -510,6 +510,7 @@ export function LayoutEditor({
               const activeRecipe = isFactory ? factoryRecipeFor(room) : null;
               const activeProduct = activeOrder ?? activeRecipe;
               const hasRestrictedProduct = isTrade ? room.level < 3 : isFactory && !factoryRecipesUnlocked;
+              const showRestrictionHint = hasRestrictedProduct && (!isFactory || roomIndex === 0);
               const restrictionHint = isTrade
                 ? "开采协力仅限 3 级贸易站"
                 : "需先拥有至少一个 3 级制造站解锁源石碎片配方";
@@ -566,7 +567,7 @@ export function LayoutEditor({
                           else onFactoryRecipeChange(room.id, nextProduct as FactoryRecipe);
                         }}
                       />
-                      {hasRestrictedProduct ? <p className="mt-1.5 text-xs text-muted-foreground">{restrictionHint}。</p> : null}
+                      {showRestrictionHint ? <p className="mt-1.5 text-xs text-muted-foreground">{restrictionHint}。</p> : null}
                     </div>
                   ) : null}
                 </div>
