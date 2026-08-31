@@ -55,6 +55,13 @@ test("production builds prepare a solver-free standalone runtime with static ass
   assert.doesNotMatch(stageStandalone, /outputRoot, "\.next", "cache"/);
 });
 
+test("the plan worker closes persistent solver clients before exiting", async () => {
+  const workerRuntime = await readRepoFile("scripts/plan-worker-runtime.mts");
+
+  assert.match(workerRuntime, /stopInfraServeClients\("计划任务 Worker 正在退出。"\)/);
+  assert.match(workerRuntime, /stopInfraServeClients[\s\S]+getDatabase\(\)\.\$client[\s\S]+\[plan-worker\] stopped/);
+});
+
 test("Next.js owns graceful shutdown while systemd accepts its signal exit statuses", async () => {
   const processCleanup = await readRepoFile("src/server/process-cleanup.ts");
   const systemdDropIn = await readRepoFile("deploy/next-graceful-exit.conf");
