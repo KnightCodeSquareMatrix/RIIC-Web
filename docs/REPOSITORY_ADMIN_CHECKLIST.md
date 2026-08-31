@@ -22,7 +22,7 @@ Only the personal-repository owner, `KnightCodeSquareMatrix`, can complete the a
 - [ ] Allow GitHub Actions to create pull requests so the narrowly scoped asset-sync workflow can update `develop`.
 - [ ] Enable private vulnerability reporting and the relevant GitHub security checks.
 
-The `quality` workflow also rejects every pull request to `main` unless its head is a `release/**` branch in this same repository and that head commit is already reachable from `develop`. External and ordinary feature PRs target `develop`.
+The `quality` workflow also rejects every pull request to `main` unless its head is a `release/**` branch in this same repository. By default, that head commit must already be reachable from `develop`; a maintainer-applied `direct-main-release` label may explicitly waive only the ancestry check while preserving all remaining quality jobs. External and ordinary feature PRs target `develop`.
 
 ## Deployment configuration
 
@@ -48,6 +48,7 @@ Enter these non-sensitive variables separately in each Environment:
 - `DEPLOY_INTERNAL_PORT`
 - `DEPLOY_DEBUG_TOOLS_ENABLED`
 - `DEPLOY_RATE_LIMIT_ENABLED`
+- `DEPLOY_APPROVED_SOLVER_SHA256`
 
 Do not copy values out of old GitHub secrets; re-enter them from the owner-controlled secure store. In particular, the development health URL is an Environment secret, never a repository variable or committed value.
 
@@ -57,10 +58,10 @@ Restrict `development` to `develop`. Restrict `production` to `main` and require
 
 - [ ] Re-enable Actions only after branch protection and both Environments are configured.
 - [ ] Manually run full CI on `main` and `develop`; the deploy job must be skipped while the repository variable is `0`.
-- [ ] Run `Deployment preflight` in `baseline` mode for a read-only report of the legacy helper, cache, current solver, Worker fingerprint, and disk state.
+- [ ] Run `Deployment preflight` in `baseline` mode for a read-only report of the installed deploy helper contract and available disk space; root-only solver details remain hidden in this mode.
 - [ ] After private server maintenance, rerun preflight in `cutover-ready` mode.
 
-The cutover-ready preflight requires a root-owned `shared/bin` solver and independent SHA-256 sidecar, checks the current release's configured digest, and compares both with the solver's Worker `ping` fingerprint. Prepare those private server assets from the owner-controlled release record; never derive and trust a digest solely from a runtime-user-writable file.
+Set `DEPLOY_APPROVED_SOLVER_SHA256` to the independently verified digest of the approved shared solver for each Environment. The cutover-ready preflight requires a root-owned `shared/bin` solver and independent SHA-256 sidecar, verifies the Environment-approved digest, and compares both with the solver's Worker `ping` fingerprint. Prepare those private server assets from the owner-controlled release record; never derive and trust a digest solely from a runtime-user-writable file.
 - [ ] Disable automatic deployment in the old private repository before setting the public repository variable to `1`.
 - [ ] Change `deploy/PUBLIC_DEPLOYMENT_SOURCE` in a PR to `public-automation-v1` and merge it to `develop`. This path is intentionally classified as deploy-required.
 - [ ] Complete development acceptance, then create a same-repository `release/develop-to-main-YYYYMMDD` PR.

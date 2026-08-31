@@ -12,6 +12,11 @@ import {
 import type { SklandQrStatusResponse, SklandScheduleSnapshot, SklandStatusSnapshot } from "@/types";
 import type { SklandPolicyConsentRequest } from "@/legal-policy";
 import { DeviceIdCache } from "./device-id-cache";
+import {
+  SKLAND_TEENAGER_PATH,
+  sklandSignedHeaders,
+  stableSklandUserIdFromResponse,
+} from "./credential";
 import { rolesFromBinding, snapshotFromPlayerInfo, snapshotsFromPlayerInfo } from "./normalize";
 import { sklandLayoutSuggestion } from "./layout-suggestion";
 import {
@@ -19,13 +24,26 @@ import {
   type SklandPolicyConsent,
   type SklandSessionPayload,
 } from "./session";
+import {
+  findReusableScan,
+  hasScanStartCapacity,
+  scanActorKey,
+  SCAN_TTL_MS,
+  type ScanStartResult,
+} from "./scan-admission";
+import {
+  classifySklandUpstreamError,
+  SKLAND_UPSTREAM_COOLDOWN_MS,
+  type SklandServiceErrorCode,
+} from "./upstream-error";
 
-const SCAN_TTL_MS = 10 * 60 * 1000;
 const SCAN_TTL_SECONDS = SCAN_TTL_MS / 1000;
 const TOKEN_REFRESH_MS = 20 * 60 * 1000;
 
 type PendingScan = {
   client: Client;
+  actorKey: string;
+  scanUrl: string;
   createdAt: number;
   lastPollAt: number;
   policyConsent: SklandPolicyConsent;
@@ -33,33 +51,54 @@ type PendingScan = {
 
 type RateEntry = { timestamps: number[] };
 
+export interface CompletedSklandAuthentication {
+  session: SklandSessionPayload;
+  snapshot: SklandScheduleSnapshot;
+  statusSnapshot: SklandStatusSnapshot;
+}
+
 declare global {
   var __infraCalcSklandScans: Map<string, PendingScan> | undefined;
   var __infraCalcSklandRate: Map<string, RateEntry> | undefined;
+  var __infraCalcSklandScanStarts: Map<string, Promise<ScanStartResult>> | undefined;
   var __infraCalcSklandDeviceIdCache: DeviceIdCache | undefined;
+  var __infraCalcSklandUpstreamCooldownUntil: number | undefined;
 }
 
 const pendingScans = globalThis.__infraCalcSklandScans ?? new Map<string, PendingScan>();
 const rateEntries = globalThis.__infraCalcSklandRate ?? new Map<string, RateEntry>();
+const scanStartTasks = globalThis.__infraCalcSklandScanStarts ?? new Map<string, Promise<ScanStartResult>>();
 const deviceIdCache = globalThis.__infraCalcSklandDeviceIdCache ?? new DeviceIdCache();
 globalThis.__infraCalcSklandScans = pendingScans;
 globalThis.__infraCalcSklandRate = rateEntries;
+globalThis.__infraCalcSklandScanStarts = scanStartTasks;
 globalThis.__infraCalcSklandDeviceIdCache = deviceIdCache;
 
 export class SklandServiceError extends Error {
   constructor(
-    public readonly code:
-      | "NOT_CONFIGURED"
-      | "INSECURE"
-      | "RATE_LIMITED"
-      | "AUTH_EXPIRED"
-      | "UNAVAILABLE"
-      | "BAD_DATA",
+    public readonly code: SklandServiceErrorCode,
     message: string,
     public readonly status = 500
   ) {
     super(message);
   }
+}
+
+function upstreamRetryAfterSeconds(now = Date.now()): number {
+  return Math.max(0, Math.ceil(((globalThis.__infraCalcSklandUpstreamCooldownUntil ?? 0) - now) / 1000));
+}
+
+function assertUpstreamCapacity(now = Date.now()): void {
+  if (upstreamRetryAfterSeconds(now) > 0) {
+    throw new SklandServiceError("RATE_LIMITED", "森空岛请求正在冷却，请稍后再试。", 429);
+  }
+}
+
+function beginUpstreamCooldown(now = Date.now()): void {
+  globalThis.__infraCalcSklandUpstreamCooldownUntil = Math.max(
+    globalThis.__infraCalcSklandUpstreamCooldownUntil ?? 0,
+    now + SKLAND_UPSTREAM_COOLDOWN_MS,
+  );
 }
 
 function cleanupScans(now = Date.now()): void {
@@ -80,14 +119,20 @@ function assertRate(key: string, limit: number, windowMs: number, now = Date.now
   rateEntries.set(key, { timestamps: current });
 }
 
+export function assertScanStartCapacity(activeStarts: number): void {
+  if (!hasScanStartCapacity(activeStarts)) {
+    throw new SklandServiceError("RATE_LIMITED", "二维码生成请求正在排队，请稍后再试。", 429);
+  }
+}
+
 function publicError(error: unknown): SklandServiceError {
   if (error instanceof SklandServiceError) return error;
-  const message = error instanceof Error ? error.message : String(error);
-  const cause = error && typeof error === "object" && "cause" in error ? (error as { cause?: unknown }).cause : null;
-  const causeMessage = cause && typeof cause === "object" && "msg" in cause ? String((cause as { msg?: unknown }).msg ?? "") : "";
-  const combinedMessage = `${message} ${causeMessage}`;
-  if (/cred|token|认证|unauthor|用户未登录|登录失效/i.test(combinedMessage)) return new SklandServiceError("AUTH_EXPIRED", "森空岛登录已失效，请重新扫码。", 401);
-  if (/429|频繁|limit/i.test(combinedMessage)) return new SklandServiceError("RATE_LIMITED", "森空岛请求过于频繁，请稍后再试。", 429);
+  const classification = classifySklandUpstreamError(error);
+  if (classification === "AUTH_EXPIRED") return new SklandServiceError("AUTH_EXPIRED", "森空岛登录已失效，请重新授权。", 401);
+  if (classification === "RATE_LIMITED") {
+    beginUpstreamCooldown();
+    return new SklandServiceError("RATE_LIMITED", "森空岛请求过于频繁，请稍后再试。", 429);
+  }
   return new SklandServiceError("UNAVAILABLE", "森空岛暂时不可用，请稍后重试；MAA 导入仍可正常使用。", 502);
 }
 
@@ -149,11 +194,7 @@ async function completeOAuthLogin(
   client: Client,
   oauthToken: string,
   policyConsent: SklandPolicyConsent
-): Promise<{
-  session: SklandSessionPayload;
-  snapshot: SklandScheduleSnapshot;
-  statusSnapshot: SklandStatusSnapshot;
-}> {
+): Promise<CompletedSklandAuthentication> {
   const grant = await client.collections.hypergryph.grantAuthorizeCode(oauthToken);
   const auth = await client.signIn(grant.code);
   const binding = await client.collections.player.getBinding();
@@ -184,17 +225,131 @@ async function completeOAuthLogin(
   };
 }
 
+function upstreamResponseCode(value: unknown): number | null {
+  if (!value || typeof value !== "object") return null;
+  const code = Number((value as { code?: unknown }).code);
+  return Number.isFinite(code) ? code : null;
+}
+
+async function stableUserId(
+  client: Client,
+  credential: { cred: string; token: string; dId: string },
+): Promise<string> {
+  const response = await client.$fetch<unknown>(SKLAND_TEENAGER_PATH, {
+    headers: sklandSignedHeaders({
+      ...credential,
+      path: SKLAND_TEENAGER_PATH,
+    }),
+  });
+  const userId = stableSklandUserIdFromResponse(response);
+  if (userId) return userId;
+  const code = upstreamResponseCode(response);
+  if (code === 10000 || code === 10001 || code === 10002) {
+    throw new SklandServiceError("AUTH_EXPIRED", "森空岛凭证已失效，请重新授权。", 401);
+  }
+  throw new SklandServiceError("BAD_DATA", "无法确认森空岛账号身份，已拒绝导入。", 502);
+}
+
+async function refreshCredentialClient(client: Client): Promise<{ token: string }> {
+  try {
+    const refreshed = await client.refresh();
+    if (typeof refreshed.token === "string" && refreshed.token.trim()) return refreshed;
+  } catch (error) {
+    if (!(error instanceof TypeError)) throw error;
+  }
+
+  // skland-kit 0.3.5 reads refresh.data.token before validating the upstream
+  // envelope. Probe a signed read so an expired credential still receives the
+  // public authentication error instead of being misreported as a server fault.
+  await client.collections.player.getBinding();
+  throw new SklandServiceError("UNAVAILABLE", "森空岛未返回可用的刷新 token。", 502);
+}
+
+export async function authenticateSklandCredential(
+  credential: { cred: string; token: string },
+  policyConsent: SklandPolicyConsent,
+): Promise<CompletedSklandAuthentication> {
+  try {
+    assertUpstreamCapacity();
+    const client = createClient({ timeout: 30_000 });
+    await client.storage.setItems([
+      { key: STORAGE_CREDENTIAL_KEY, value: credential.cred },
+      { key: STORAGE_OAUTH_TOKEN_KEY, value: credential.token },
+    ]);
+
+    const refreshed = await refreshCredentialClient(client);
+    const dId = (await client.storage.getItem(STORAGE_DID_KEY)) ?? "";
+    if (!dId) throw new SklandServiceError("BAD_DATA", "森空岛设备凭证生成失败。", 502);
+
+    const binding = await client.collections.player.getBinding();
+    const roles = rolesFromBinding(binding);
+    if (roles.length === 0) {
+      throw new SklandServiceError("BAD_DATA", "该森空岛账号没有绑定可用的明日方舟角色。", 422);
+    }
+    const userId = await stableUserId(client, {
+      cred: credential.cred,
+      token: refreshed.token,
+      dId,
+    });
+    const selectedUid = roles.find((role) => role.isDefault)?.uid ?? roles[0].uid;
+    const info = await client.collections.player.getInfo({ uid: selectedUid });
+    const authorizedAt = Date.now();
+    const session: SklandSessionPayload = {
+      version: 3,
+      cred: credential.cred,
+      token: refreshed.token,
+      dId,
+      userId,
+      selectedUid,
+      refreshedAt: authorizedAt,
+      expiresAt: authorizedAt + SKLAND_SESSION_TTL_SECONDS * 1000,
+      policyConsent,
+    };
+    const snapshots = snapshotsFromPlayerInfo(info, roles, selectedUid, sklandLayoutSuggestion(info));
+    return {
+      session,
+      snapshot: snapshots.scheduleSnapshot,
+      statusSnapshot: snapshots.statusSnapshot,
+    };
+  } catch (error) {
+    throw publicError(error);
+  }
+}
+
 export function requestIp(request: Request): string {
   return request.headers.get("cf-connecting-ip") || request.headers.get("x-real-ip") || request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
 }
 
 export async function startScan(
+  websiteUserId: string,
   ip: string,
   consent: SklandPolicyConsentRequest
-): Promise<{ scanId: string; scanUrl: string; expiresInSeconds: number }> {
+): Promise<ScanStartResult> {
   cleanupScans();
-  assertRate(`scan:${ip}`, 10, 10 * 60 * 1000);
-  assertRate("scan:global", 50, 10 * 60 * 1000);
+  const actorKey = scanActorKey(websiteUserId);
+  const reusable = findReusableScan(pendingScans, actorKey, consent);
+  if (reusable) return reusable;
+
+  const activeTask = scanStartTasks.get(actorKey);
+  if (activeTask) return activeTask;
+
+  assertScanStartCapacity(scanStartTasks.size);
+  assertRate(`scan:actor:${actorKey}`, 5, 10 * 60 * 1000);
+  assertRate(`scan:ip:${ip}`, 10, 10 * 60 * 1000);
+
+  const task = createScan(actorKey, consent);
+  scanStartTasks.set(actorKey, task);
+  try {
+    return await task;
+  } finally {
+    if (scanStartTasks.get(actorKey) === task) scanStartTasks.delete(actorKey);
+  }
+}
+
+async function createScan(
+  actorKey: string,
+  consent: SklandPolicyConsentRequest
+): Promise<ScanStartResult> {
   try {
     const client = createClient({ timeout: 30_000 });
     const result = await deviceIdCache.run(
@@ -202,14 +357,17 @@ export async function startScan(
       STORAGE_DID_KEY,
       () => client.collections.hypergryph.generateScanLoginUrl()
     );
+    const createdAt = Date.now();
     pendingScans.set(result.scanId, {
       client,
-      createdAt: Date.now(),
+      actorKey,
+      scanUrl: result.scanUrl,
+      createdAt,
       lastPollAt: 0,
       policyConsent: {
         termsVersion: consent.termsVersion,
         privacyVersion: consent.privacyVersion,
-        acceptedAt: Date.now(),
+        acceptedAt: createdAt,
       },
     });
     return { ...result, expiresInSeconds: SCAN_TTL_SECONDS };
@@ -233,6 +391,7 @@ export async function pollScan(scanId: string): Promise<{
     if (!status.scanCode) return { response: { success: true, status: scanDisplayStatus(status.scanStatus ?? "") } };
 
     const oauthToken = await pending.client.collections.hypergryph.getOAuthTokenByScanCode(status.scanCode);
+    assertUpstreamCapacity();
     const completed = await completeOAuthLogin(pending.client, oauthToken, pending.policyConsent);
     pendingScans.delete(scanId);
     return {
@@ -268,6 +427,7 @@ export async function loadSessionSnapshot(payload: SklandSessionPayload, forceRe
   statusSnapshot: SklandStatusSnapshot;
 }> {
   try {
+    assertUpstreamCapacity();
     const client = await seedClient(payload);
     const refreshed = await refreshedPayload(client, payload, forceRefresh);
     if (refreshed.token !== payload.token) await client.storage.setItem(STORAGE_OAUTH_TOKEN_KEY, refreshed.token);
@@ -306,6 +466,7 @@ export async function loadStatusSnapshot(payload: SklandSessionPayload): Promise
   snapshot: SklandStatusSnapshot;
 }> {
   try {
+    assertUpstreamCapacity();
     const client = await seedClient(payload);
     const refreshed = await refreshedPayload(client, payload);
     if (refreshed.token !== payload.token) await client.storage.setItem(STORAGE_OAUTH_TOKEN_KEY, refreshed.token);

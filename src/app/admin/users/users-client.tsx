@@ -1,17 +1,35 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { ChevronDown } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import type { AdminSessionData, AdminUserAction, AdminUserData } from "@/types";
+import type { AdminSessionData, AdminUserAction, AdminUserData, SolverPingFingerprint } from "@/types";
 
 const CLIENT_SKLAND_ENABLED = process.env.APP_CLIENT_SKLAND_ENABLED === "1";
 
 type RoleChange = { userId: string; name: string; email: string; action: "grantAdmin" | "revokeAdmin" };
 
-export function AdminUsers() {
+function FingerprintValue({ value, dataAttribute }: { value: string | number | null; dataAttribute?: string }) {
+  return (
+    <code
+      className="mt-1 block break-all font-mono text-xs leading-5 text-foreground"
+      {...(dataAttribute ? { [dataAttribute]: value ?? "unavailable" } : {})}
+    >
+      {value ?? "未返回"}
+    </code>
+  );
+}
+
+export function AdminUsers({
+  plannerReady,
+  solverFingerprint,
+}: {
+  plannerReady: boolean;
+  solverFingerprint: SolverPingFingerprint | null;
+}) {
   const [users, setUsers] = useState<AdminUserData[]>([]);
   const [canManageAdminRoles, setCanManageAdminRoles] = useState<boolean | null>(null);
   const [query, setQuery] = useState("");
@@ -20,6 +38,7 @@ export function AdminUsers() {
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [roleChange, setRoleChange] = useState<RoleChange | null>(null);
   const [sessionsByUser, setSessionsByUser] = useState<Record<string, AdminSessionData[] | undefined>>({});
+  const executableSha256 = solverFingerprint?.solverExecutableSha256 ?? null;
 
   const load = useCallback(async (search: string) => {
     setLoading(true);
@@ -96,6 +115,113 @@ export function AdminUsers() {
         <h1 className="mt-3 text-2xl font-semibold">用户管理</h1>
         <p className="mt-1 text-sm text-muted-foreground">可搜索、封禁、查看及撤销 Session。{canManageAdminRoles === true ? "初始管理员还可以授予或撤销管理员权限。" : canManageAdminRoles === false ? "管理员权限只能由初始管理员调整。" : ""}</p>
       </header>
+
+      <section className="rounded-xl border p-4" data-admin-solver-status>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="font-medium">线上求解器</h2>
+            <p className="mt-1 text-xs text-muted-foreground">当前 Worker 实际返回的可执行文件指纹</p>
+          </div>
+          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${plannerReady ? "bg-emerald-50 text-emerald-700" : "bg-destructive/10 text-destructive"}`}>
+            {plannerReady ? "运行中" : "未就绪"}
+          </span>
+        </div>
+        <p className="mt-4 text-xs text-muted-foreground">Linux ELF SHA-256</p>
+        <code
+          className="mt-1 block break-all rounded-lg bg-muted/50 px-3 py-2 font-mono text-xs leading-5"
+          data-solver-fingerprint={executableSha256 ?? "unavailable"}
+        >
+          {executableSha256 ?? "Worker 未返回有效指纹"}
+        </code>
+
+        <details className="group mt-3 border-t pt-2" data-solver-fingerprint-details>
+          <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-4 rounded-lg px-2 text-sm outline-none transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+            <span>
+              <span className="block font-medium">完整 Worker 指纹</span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">构建身份、协议能力与各版本契约</span>
+            </span>
+            <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+              <span className="group-open:hidden">展开</span>
+              <span className="hidden group-open:inline">收起</span>
+              <ChevronDown aria-hidden="true" className="size-4 transition-transform duration-200 group-open:rotate-180" />
+            </span>
+          </summary>
+
+          <div className="grid gap-5 px-2 pb-2 pt-4">
+            <div>
+              <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">构建身份</h3>
+              <dl className="mt-2 grid gap-x-6 gap-y-3 sm:grid-cols-2">
+                <div>
+                  <dt className="text-xs text-muted-foreground">solver.git_commit</dt>
+                  <dd><FingerprintValue value={solverFingerprint?.envelopeSolverGitCommit ?? null} dataAttribute="data-solver-envelope-git-commit" /></dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">solver.built_at</dt>
+                  <dd><FingerprintValue value={solverFingerprint?.envelopeSolverBuiltAt ?? null} /></dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">result.solver_git_commit</dt>
+                  <dd><FingerprintValue value={solverFingerprint?.solverGitCommit ?? null} dataAttribute="data-solver-git-commit" /></dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">result.solver_built_at</dt>
+                  <dd><FingerprintValue value={solverFingerprint?.solverBuiltAt ?? null} /></dd>
+                </div>
+              </dl>
+            </div>
+
+            <div className="border-t pt-4">
+              <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">协议能力</h3>
+              <dl className="mt-2 grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
+                <div>
+                  <dt className="text-xs text-muted-foreground">pong</dt>
+                  <dd className="mt-1 text-sm font-medium">{solverFingerprint ? String(solverFingerprint.pong) : "未返回"}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">elapsed_ms</dt>
+                  <dd><FingerprintValue value={solverFingerprint?.elapsedMs ?? null} /></dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">protocol_version</dt>
+                  <dd><FingerprintValue value={solverFingerprint?.protocolVersion ?? null} /></dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">plan_schema_version</dt>
+                  <dd><FingerprintValue value={solverFingerprint?.planSchemaVersion ?? null} /></dd>
+                </div>
+              </dl>
+              <p className="mt-3 text-xs text-muted-foreground">supported_plan_schema_versions</p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {solverFingerprint?.supportedPlanSchemaVersions.length
+                  ? solverFingerprint.supportedPlanSchemaVersions.map((version) => (
+                    <code key={version} className="rounded-md bg-muted px-2 py-1 font-mono text-xs">v{version}</code>
+                  ))
+                  : <span className="text-xs text-muted-foreground">未返回</span>}
+              </div>
+            </div>
+
+            <div className="border-t pt-4">
+              <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">计划契约</h3>
+              <p className="mt-2 text-xs text-muted-foreground">plan_contract_sha256</p>
+              <FingerprintValue value={solverFingerprint?.planContractSha256 ?? null} dataAttribute="data-plan-contract-sha256" />
+              <div className="mt-3 overflow-hidden rounded-lg border">
+                {solverFingerprint?.planContractSha256ByVersion.length
+                  ? solverFingerprint.planContractSha256ByVersion.map(({ version, sha256 }, index) => (
+                    <div
+                      key={version}
+                      className={`grid grid-cols-[auto_1fr] gap-3 px-3 py-2.5 ${index ? "border-t" : ""}`}
+                      data-plan-contract-version={version}
+                    >
+                      <span className="text-xs font-medium text-muted-foreground">v{version}</span>
+                      <code className="min-w-0 break-all text-right font-mono text-xs leading-5">{sha256}</code>
+                    </div>
+                  ))
+                  : <p className="px-3 py-2.5 text-xs text-muted-foreground">Worker 未返回按版本划分的契约指纹。</p>}
+              </div>
+            </div>
+          </div>
+        </details>
+      </section>
 
       <form
         className="flex gap-2 max-sm:flex-col"

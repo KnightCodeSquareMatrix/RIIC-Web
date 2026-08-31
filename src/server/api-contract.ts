@@ -23,6 +23,7 @@ type ErrorDefinition = {
 export const ERROR_DEFINITIONS: Record<AppErrorCode, ErrorDefinition> = {
   "AIC-AUTH-2008": { status: 401, message: "请先登录网站账号后再使用此功能。", retryable: false },
   "AIC-AUTH-2009": { status: 403, message: "当前账号没有管理员权限。", retryable: false },
+  "AIC-AUTH-2010": { status: 400, message: "森空岛凭证格式无效，请重新完整复制 cred,token。", retryable: false },
   "AIC-REQ-1001": { status: 400, message: "请求格式无法识别，请检查后重试。", retryable: false },
   "AIC-REQ-1002": { status: 413, message: "提交的数据过大，请精简后重试。", retryable: false },
   "AIC-BOX-1101": { status: 422, message: "干员数据无效，请重新导入。", retryable: false },
@@ -227,16 +228,29 @@ export function requestClientIp(request: Request): string {
 type RateEntry = { count: number; resetAt: number };
 type GuardState = {
   rates: Map<string, RateEntry>;
-  planIps: Set<string>;
+  planAccounts: Set<string>;
+  planNewAccounts: Set<string>;
+  planIpCounts: Map<string, number>;
+  planStarts: Map<string, number[]>;
   planGlobal: number;
+  // Retained only so a development hot reload can clean up the previous guard.
+  planIps?: Set<string>;
+  planAnonymous?: number;
 };
 
 const guardGlobal = globalThis as typeof globalThis & { __aicRequestGuard?: GuardState };
-const guardState = guardGlobal.__aicRequestGuard ??= {
-  rates: new Map(),
-  planIps: new Set(),
+const guardState: GuardState = guardGlobal.__aicRequestGuard ??= {
+  rates: new Map<string, RateEntry>(),
+  planAccounts: new Set<string>(),
+  planNewAccounts: new Set<string>(),
+  planIpCounts: new Map<string, number>(),
+  planStarts: new Map<string, number[]>(),
   planGlobal: 0,
 };
+guardState.planAccounts ??= new Set();
+guardState.planNewAccounts ??= new Set();
+guardState.planIpCounts ??= new Map();
+guardState.planStarts ??= new Map();
 const MAX_RATE_KEYS = 10_000;
 
 function pruneRates(now: number): void {
@@ -274,17 +288,107 @@ export function enforceRateLimit(
   current.count += 1;
 }
 
-export function acquirePlanSlot(ip: string): () => void {
-  if (guardState.planIps.has(ip) || guardState.planGlobal >= 8) {
+export type PlanAccountAdmissionClass = "new" | "established";
+
+export const MAX_CONCURRENT_AUTHENTICATED_PLAN_ADMISSIONS = 5;
+export const MAX_CONCURRENT_NEW_ACCOUNT_PLAN_ADMISSIONS = 3;
+export const MAX_CONCURRENT_PLAN_ACCOUNTS_PER_IP = 2;
+export const MAX_PLAN_STARTS_PER_ACCOUNT = 3;
+export const MAX_PLAN_STARTS_PER_IP = 8;
+export const PLAN_START_WINDOW_MS = 10 * 60_000;
+export const PLAN_ESTABLISHED_ACCOUNT_AGE_MS = 24 * 60 * 60_000;
+
+export function planAccountAdmissionClass(
+  account: { createdAt: unknown; emailVerified: unknown },
+  now = Date.now(),
+): PlanAccountAdmissionClass {
+  const createdAtMs = account.createdAt instanceof Date
+    ? account.createdAt.getTime()
+    : typeof account.createdAt === "string" || typeof account.createdAt === "number"
+      ? new Date(account.createdAt).getTime()
+      : Number.NaN;
+  return account.emailVerified === true
+    && Number.isFinite(createdAtMs)
+    && createdAtMs <= now - PLAN_ESTABLISHED_ACCOUNT_AGE_MS
+    ? "established"
+    : "new";
+}
+
+function prunePlanStarts(now: number): void {
+  const cutoff = now - PLAN_START_WINDOW_MS;
+  for (const [key, timestamps] of guardState.planStarts) {
+    const retained = timestamps.filter((timestamp) => timestamp > cutoff);
+    if (retained.length === 0) guardState.planStarts.delete(key);
+    else if (retained.length !== timestamps.length) guardState.planStarts.set(key, retained);
+  }
+  while (guardState.planStarts.size >= MAX_RATE_KEYS) {
+    const oldest = guardState.planStarts.keys().next().value as string | undefined;
+    if (!oldest) break;
+    guardState.planStarts.delete(oldest);
+  }
+}
+
+function planStartRetryAfter(key: string, limit: number, now: number): number | undefined {
+  const timestamps = guardState.planStarts.get(key);
+  if (!timestamps || timestamps.length < limit) return undefined;
+  return Math.max(1, Math.ceil((timestamps[0] + PLAN_START_WINDOW_MS - now) / 1000));
+}
+
+function recordPlanStart(key: string, now: number): void {
+  const timestamps = guardState.planStarts.get(key) ?? [];
+  timestamps.push(now);
+  guardState.planStarts.set(key, timestamps);
+}
+
+export function acquirePlanSlot({
+  ip,
+  accountId,
+  accountClass,
+}: {
+  ip: string;
+  accountId: string;
+  accountClass: PlanAccountAdmissionClass;
+}): () => void {
+  const activeForIp = guardState.planIpCounts.get(ip) ?? 0;
+  if (
+    guardState.planAccounts.has(accountId)
+    || activeForIp >= MAX_CONCURRENT_PLAN_ACCOUNTS_PER_IP
+    || guardState.planGlobal >= MAX_CONCURRENT_AUTHENTICATED_PLAN_ADMISSIONS
+    || (
+      accountClass === "new"
+      && guardState.planNewAccounts.size >= MAX_CONCURRENT_NEW_ACCOUNT_PLAN_ADMISSIONS
+    )
+  ) {
     throw new PublicApiError("AIC-PLAN-3002", { retryAfter: 5 });
   }
-  guardState.planIps.add(ip);
+
+  const now = Date.now();
+  prunePlanStarts(now);
+  const accountStartKey = `account:${accountId}`;
+  const ipStartKey = `ip:${ip}`;
+  const retryAfter = Math.max(
+    planStartRetryAfter(accountStartKey, MAX_PLAN_STARTS_PER_ACCOUNT, now) ?? 0,
+    planStartRetryAfter(ipStartKey, MAX_PLAN_STARTS_PER_IP, now) ?? 0,
+  );
+  if (retryAfter > 0) {
+    throw new PublicApiError("AIC-PLAN-3002", { retryAfter });
+  }
+
+  guardState.planAccounts.add(accountId);
+  if (accountClass === "new") guardState.planNewAccounts.add(accountId);
+  guardState.planIpCounts.set(ip, activeForIp + 1);
   guardState.planGlobal += 1;
+  recordPlanStart(accountStartKey, now);
+  recordPlanStart(ipStartKey, now);
   let released = false;
   return () => {
     if (released) return;
     released = true;
-    guardState.planIps.delete(ip);
+    guardState.planAccounts.delete(accountId);
+    guardState.planNewAccounts.delete(accountId);
+    const remainingForIp = (guardState.planIpCounts.get(ip) ?? 1) - 1;
+    if (remainingForIp <= 0) guardState.planIpCounts.delete(ip);
+    else guardState.planIpCounts.set(ip, remainingForIp);
     guardState.planGlobal = Math.max(0, guardState.planGlobal - 1);
   };
 }
@@ -395,6 +499,11 @@ export function assertFiammettaEnableCompatible(fiammettaEnable: boolean, rotati
 
 export function __resetRequestGuardsForTests(): void {
   guardState.rates.clear();
-  guardState.planIps.clear();
+  guardState.planAccounts.clear();
+  guardState.planNewAccounts.clear();
+  guardState.planIpCounts.clear();
+  guardState.planStarts.clear();
   guardState.planGlobal = 0;
+  guardState.planIps?.clear();
+  guardState.planAnonymous = 0;
 }
