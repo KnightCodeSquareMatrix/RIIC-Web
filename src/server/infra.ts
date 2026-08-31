@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
@@ -21,7 +20,7 @@ import { isSklandConfigured, sklandDisabledReason } from "@/server/skland/sessio
 import { PublicApiError } from "./api-contract";
 import { feedbackDirectoryGroup, toStoredFeedbackIssue } from "./feedback-record";
 import {
-  PLAN_SCHEMA_VERSION,
+  createPlanComputeParams,
   createSolverObservation,
   inspectPlanComputeCapability,
   inspectSolverDeploymentReadiness,
@@ -45,27 +44,12 @@ import {
   type PrivateArtifactDescriptor,
 } from "./business-records";
 import { isBusinessDatabaseReadEnabled, isBusinessFileFallbackEnabled } from "./business-config";
-
-type JsonRecord = Record<string, unknown>;
-
-type PendingServeRequest = {
-  key: string;
-  request: { id: number; method: string; params: JsonRecord };
-  line: string;
-  resolve: (value: ServeResult) => void;
-  reject: (reason?: unknown) => void;
-  timeoutMs: number;
-  timer: NodeJS.Timeout | null;
-  stderrStart: number;
-  resendCount: number;
-};
-
-type ServeResult = {
-  request: { id: number; method: string; params: JsonRecord };
-  response: JsonRecord;
-  stdout: string;
-  stderr: string;
-};
+import {
+  InfraCliServeClient,
+  type JsonRecord,
+  type ServeResult,
+} from "./serve-client";
+import { registerProcessCleanup } from "./process-cleanup";
 
 type PlanRequestBody = {
   layout: BaseBlueprint;
@@ -86,10 +70,14 @@ const feedbackRoot = path.resolve(/* turbopackIgnore: true */ process.env.BETA_F
 const cliRunRoot = path.resolve(/* turbopackIgnore: true */ process.env.BETA_CLI_RUN_DIR || path.join(storageRoot, "cli-runs"));
 const cliReleaseRoot = path.resolve(/* turbopackIgnore: true */ process.env.BETA_CLI_RELEASE_DIR || path.join(storageRoot, "cli-releases"));
 const activeCliPath = path.join(storageRoot, "active-cli.json");
-const timeoutMs = Number(process.env.BETA_CLI_TIMEOUT_MS || 120_000);
+const timeoutMs = Number(process.env.BETA_CLI_TIMEOUT_MS || 180_000);
 const PRIVATE_RECORD_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const PRIVATE_MAINTENANCE_INTERVAL_MS = 60 * 60 * 1000;
+const PLAN_CACHE_SOLVER_IDENTITY_TTL_MS = 60_000;
+const PLAN_CACHE_SOLVER_IDENTITY_RETRY_MS = 5_000;
 const legacySklandPurgeMarker = path.join(storageRoot, ".skland-legacy-purge-v1.json");
+let cachedPlanCacheSolverIdentity: { value: SolverObservation | null; expiresAt: number } | null = null;
+let planCacheSolverIdentityTask: Promise<SolverObservation | null> | null = null;
 
 function cliCandidates() {
   const platformCliName = process.platform === "win32" ? "infra-cli.exe" : "infra-cli";
@@ -516,279 +504,9 @@ function formatPlanFailure({
     .join("\n");
 }
 
-class InfraCliServeClient {
-  private child: ReturnType<typeof spawn> | null = null;
-  private cliPath: string | null = null;
-  private starting: Promise<void> | null = null;
-  private stdoutBuffer = "";
-  private stderrLog = "";
-  private pending = new Map<string, PendingServeRequest>();
-  private nextId = 1;
-  private restartCount = 0;
-
-  ensureStarted() {
-    if (this.child && !this.child.killed) {
-      return Promise.resolve();
-    }
-    if (this.starting) {
-      return this.starting;
-    }
-
-    this.starting = new Promise((resolve, reject) => {
-      let cliPath = "";
-      try {
-        cliPath = resolveCliPath();
-      } catch (error) {
-        this.starting = null;
-        reject(error);
-        return;
-      }
-
-      const dataDir = resolveRuntimeDataDir(cliPath);
-      const env = { ...process.env };
-      if (dataDir) {
-        env.ARKNIGHTS_INFRA_DATA_DIR = dataDir;
-      } else {
-        delete env.ARKNIGHTS_INFRA_DATA_DIR;
-      }
-      const cwd = path.dirname(cliPath);
-      const child = spawn(/* turbopackIgnore: true */ cliPath, ["serve"], { cwd, env, windowsHide: true, shell: false });
-      let settled = false;
-
-      this.child = child;
-      this.cliPath = cliPath;
-      this.stdoutBuffer = "";
-      this.restartCount += 1;
-
-      const settleOk = () => {
-        if (settled) return;
-        settled = true;
-        this.starting = null;
-        resolve();
-      };
-      const settleError = (error: unknown) => {
-        if (settled) return;
-        settled = true;
-        this.starting = null;
-        reject(error);
-      };
-
-      child.stdout?.on("data", (chunk) => {
-        settleOk();
-        this.handleStdout(chunk.toString());
-      });
-      child.stderr?.on("data", (chunk) => {
-        this.stderrLog += chunk.toString();
-        settleOk();
-      });
-      child.stdin?.on("error", (error) => {
-        this.stderrLog += `stdin error: ${error.message}\n`;
-      });
-      child.on("spawn", settleOk);
-      child.on("error", (error) => {
-        this.stderrLog += `spawn error: ${error.message}\n`;
-        if (this.child === child) {
-          this.child = null;
-        }
-        settleError(error);
-        this.rejectPending(`infra-cli serve 启动失败：${error.message}`);
-      });
-      child.on("close", (code, signal) => {
-        this.handleClose(child, code, signal);
-      });
-    });
-
-    return this.starting;
-  }
-
-  send(method: string, params: JsonRecord, options: { timeoutMs?: number } = {}) {
-    const id = this.nextId++;
-    const request = { id, method, params };
-    const line = JSON.stringify(request);
-    const key = JSON.stringify(id);
-    const requestTimeoutMs = options.timeoutMs ?? timeoutMs;
-
-    return new Promise<ServeResult>((resolve, reject) => {
-      const pending: PendingServeRequest = {
-        key,
-        request,
-        line,
-        resolve,
-        reject,
-        timeoutMs: requestTimeoutMs,
-        timer: null,
-        stderrStart: this.stderrLog.length,
-        resendCount: 0,
-      };
-      this.pending.set(key, pending);
-
-      this.ensureStarted()
-        .then(() => this.writePending(pending))
-        .catch((error) => {
-          this.pending.delete(key);
-          reject(error);
-        });
-    });
-  }
-
-  ping() {
-    return this.send("ping", {}, { timeoutMs: 10_000 });
-  }
-
-  stop(reason = "infra-cli serve 已停止。") {
-    const child = this.child;
-    this.child = null;
-    this.starting = null;
-    this.rejectPending(reason);
-
-    if (!child || child.killed) return;
-
-    child.stdin?.end();
-    child.kill();
-  }
-
-  private writePending(pending: PendingServeRequest) {
-    const child = this.child;
-    if (!child || !child.stdin || child.stdin.destroyed) {
-      throw new Error("infra-cli serve 未运行。");
-    }
-
-    if (pending.timer) {
-      clearTimeout(pending.timer);
-    }
-    pending.stderrStart = this.stderrLog.length;
-    pending.timer = setTimeout(() => {
-      this.pending.delete(pending.key);
-      pending.reject(new Error(`infra-cli serve 请求超时（${pending.timeoutMs}ms）。`));
-      child.kill();
-    }, pending.timeoutMs);
-
-    try {
-      child.stdin.write(`${pending.line}\n`, "utf-8", (error) => {
-        if (!error) return;
-        if (pending.timer) {
-          clearTimeout(pending.timer);
-        }
-        this.pending.delete(pending.key);
-        pending.reject(error);
-      });
-    } catch (error) {
-      if (pending.timer) {
-        clearTimeout(pending.timer);
-      }
-      this.pending.delete(pending.key);
-      pending.reject(error);
-    }
-  }
-
-  private handleStdout(chunk: string) {
-    this.stdoutBuffer += chunk;
-    for (;;) {
-      const newline = this.stdoutBuffer.indexOf("\n");
-      if (newline < 0) return;
-      const line = this.stdoutBuffer.slice(0, newline).trim();
-      this.stdoutBuffer = this.stdoutBuffer.slice(newline + 1);
-      if (line) {
-        this.handleStdoutLine(line);
-      }
-    }
-  }
-
-  private handleStdoutLine(line: string) {
-    let parsed: JsonRecord;
-    try {
-      parsed = JSON.parse(line) as JsonRecord;
-    } catch {
-      this.stderrLog += `invalid stdout line: ${line}\n`;
-      return;
-    }
-
-    const key = JSON.stringify(parsed.id);
-    const pending = this.pending.get(key);
-    if (!pending) return;
-
-    if (pending.timer) {
-      clearTimeout(pending.timer);
-    }
-    this.pending.delete(key);
-    pending.resolve({
-      request: pending.request,
-      response: parsed,
-      stdout: `${line}\n`,
-      stderr: this.stderrLog.slice(pending.stderrStart),
-    });
-  }
-
-  private handleClose(child: ReturnType<typeof spawn>, code: number | null, signal: NodeJS.Signals | null) {
-    if (this.child !== child) return;
-    this.child = null;
-    this.starting = null;
-    this.stderrLog += `infra-cli serve exited: code=${code ?? "null"} signal=${signal ?? "null"}\n`;
-
-    const active = [...this.pending.values()];
-    if (active.length === 0) return;
-
-    for (const pending of active) {
-      if (pending.timer) {
-        clearTimeout(pending.timer);
-      }
-      if (pending.resendCount >= 1) {
-        this.pending.delete(pending.key);
-        pending.reject(new Error(this.closeErrorMessage(pending, code, signal)));
-      } else {
-        pending.resendCount += 1;
-      }
-    }
-
-    if ([...this.pending.values()].some((pending) => pending.resendCount === 1)) {
-      this.resendPending();
-    }
-  }
-
-  private resendPending() {
-    this.ensureStarted()
-      .then(() => {
-        for (const pending of this.pending.values()) {
-          this.writePending(pending);
-        }
-      })
-      .catch((error) => {
-        this.rejectPending(error instanceof Error ? error.message : String(error));
-      });
-  }
-
-  private closeErrorMessage(pending: PendingServeRequest, code: number | null, signal: NodeJS.Signals | null) {
-    const stderr = this.stderrLog.slice(pending.stderrStart).trim();
-    return [
-      `infra-cli serve 已退出：code=${code ?? "null"} signal=${signal ?? "null"}`,
-      stderr && `stderr:\n${stderr.slice(-2000)}`,
-    ]
-      .filter(Boolean)
-      .join("\n");
-  }
-
-  private rejectPending(message: string) {
-    for (const pending of this.pending.values()) {
-      if (pending.timer) {
-        clearTimeout(pending.timer);
-      }
-      pending.reject(new Error(message));
-    }
-    this.pending.clear();
-  }
-
-  info() {
-    return {
-      cliPath: this.cliPath,
-      pid: this.child?.pid ?? null,
-      running: Boolean(this.child && !this.child.killed),
-      restartCount: this.restartCount,
-    };
-  }
-}
-
 const globalForInfra = globalThis as typeof globalThis & {
-  __infraCliServeClient?: InfraCliServeClient;
+  __infraCliHealthServeClient?: InfraCliServeClient;
+  __infraCliPlanServeClient?: InfraCliServeClient;
   __infraCliCleanupRegistered?: boolean;
   __infraPrivateMaintenance?: {
     lastCompletedAt: number;
@@ -796,30 +514,33 @@ const globalForInfra = globalThis as typeof globalThis & {
   };
 };
 
-function getServeClient() {
-  globalForInfra.__infraCliServeClient ??= new InfraCliServeClient();
-  return globalForInfra.__infraCliServeClient;
+function serveClientOptions() {
+  return {
+    resolveCliPath,
+    resolveRuntimeDataDir,
+    timeoutMs,
+  };
+}
+
+function getHealthServeClient() {
+  globalForInfra.__infraCliHealthServeClient ??= new InfraCliServeClient(serveClientOptions());
+  return globalForInfra.__infraCliHealthServeClient;
+}
+
+function getPlanServeClient() {
+  globalForInfra.__infraCliPlanServeClient ??= new InfraCliServeClient(serveClientOptions());
+  return globalForInfra.__infraCliPlanServeClient;
 }
 
 function stopServeClient(reason: string) {
-  globalForInfra.__infraCliServeClient?.stop(reason);
+  globalForInfra.__infraCliHealthServeClient?.stop(reason);
+  globalForInfra.__infraCliPlanServeClient?.stop(reason);
 }
 
 function registerServeClientCleanup() {
   if (globalForInfra.__infraCliCleanupRegistered) return;
   globalForInfra.__infraCliCleanupRegistered = true;
-
-  process.once("SIGINT", () => {
-    stopServeClient("收到 SIGINT，正在关闭 infra-cli serve。");
-    process.exit(130);
-  });
-  process.once("SIGTERM", () => {
-    stopServeClient("收到 SIGTERM，正在关闭 infra-cli serve。");
-    process.exit(143);
-  });
-  process.once("exit", () => {
-    stopServeClient("进程退出，正在关闭 infra-cli serve。");
-  });
+  registerProcessCleanup(process, stopServeClient);
 }
 
 registerServeClientCleanup();
@@ -838,21 +559,22 @@ export async function getHealth(): Promise<HealthApiResponse> {
       }
     })();
     const dataPath = cliPath ? resolveRuntimeDataDir(cliPath) : null;
-    let serve: NonNullable<HealthApiResponse["serve"]> = getServeClient().info();
+    const healthServeClient = getHealthServeClient();
+    let serve: NonNullable<HealthApiResponse["serve"]> = healthServeClient.info();
     let serveError = runnableCandidate
       ? null
       : candidates.find((candidate) => candidate.exists && candidate.reason)?.reason ?? "未找到可运行的 infra-cli。";
 
     if (cliPath) {
       try {
-        const pingResult = await getServeClient().ping();
+        const pingResult = await healthServeClient.ping();
         const planCompute = inspectPlanComputeCapability(pingResult.response);
         const deploymentReadiness = inspectSolverDeploymentReadiness(
           planCompute,
           process.env.INFRA_CLI_EXPECTED_SHA256
         );
         serve = {
-          ...getServeClient().info(),
+          ...healthServeClient.info(),
           protocolMode: planCompute.supported ? "plan.compute" : "legacy",
           planCompute,
         };
@@ -898,15 +620,39 @@ export async function getHealth(): Promise<HealthApiResponse> {
 }
 
 export async function getPlanCacheSolverIdentity(): Promise<SolverObservation | null> {
+  const now = Date.now();
+  if (cachedPlanCacheSolverIdentity && cachedPlanCacheSolverIdentity.expiresAt > now) {
+    return cachedPlanCacheSolverIdentity.value;
+  }
+
+  if (planCacheSolverIdentityTask) return planCacheSolverIdentityTask;
+  const serveClient = getHealthServeClient();
+  if (serveClient.info().busy) return cachedPlanCacheSolverIdentity?.value ?? null;
+
+  const task = (async () => {
+    let value: SolverObservation | null = null;
+    try {
+      resolveCliPath();
+      const ping = await serveClient.ping();
+      const capability = inspectPlanComputeCapability(ping.response);
+      if (capability.supported && capability.solverExecutableSha256) {
+        const readiness = inspectSolverDeploymentReadiness(capability, process.env.INFRA_CLI_EXPECTED_SHA256);
+        if (readiness.ready) value = createSolverObservation(capability, new Date().toISOString());
+      }
+    } catch {
+      value = null;
+    }
+    cachedPlanCacheSolverIdentity = {
+      value,
+      expiresAt: Date.now() + (value ? PLAN_CACHE_SOLVER_IDENTITY_TTL_MS : PLAN_CACHE_SOLVER_IDENTITY_RETRY_MS),
+    };
+    return value;
+  })();
+  planCacheSolverIdentityTask = task;
   try {
-    resolveCliPath();
-    const ping = await getServeClient().ping();
-    const capability = inspectPlanComputeCapability(ping.response);
-    if (!capability.supported || !capability.solverExecutableSha256) return null;
-    const readiness = inspectSolverDeploymentReadiness(capability, process.env.INFRA_CLI_EXPECTED_SHA256);
-    return readiness.ready ? createSolverObservation(capability, new Date().toISOString()) : null;
-  } catch {
-    return null;
+    return await task;
+  } finally {
+    if (planCacheSolverIdentityTask === task) planCacheSolverIdentityTask = null;
   }
 }
 
@@ -1039,7 +785,8 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
     await writeJson(layoutPath, body.layout);
     await writeJson(operboxPath, body.operbox);
 
-    const pingResult = await getServeClient().ping();
+    const serveClient = getPlanServeClient();
+    const pingResult = await serveClient.ping();
     const planCompute = inspectPlanComputeCapability(pingResult.response);
     solver = createSolverObservation(planCompute, new Date().toISOString());
     let serveResult: ServeResult;
@@ -1055,22 +802,13 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
     let responseValidationError: string | undefined;
 
     if (planCompute.supported) {
-      serveResult = await getServeClient().send("plan.compute", {
-        schema_version: PLAN_SCHEMA_VERSION,
+      serveResult = await serveClient.send("plan.compute", createPlanComputeParams({
         layout: body.layout,
         operbox: body.operbox,
-        labels: {
-          layout: body.layout.template ?? null,
-          operbox: body.sourceName ?? null,
-        },
-        options: {
-          rotation: body.rotation,
-          top: 20,
-          system_preferences: {},
-          maa_title: `${body.sourceName ?? "Arknights InfraCalc"} · ${String(body.layout.template ?? "layout")}`,
-          fiammetta_enable: body.fiammettaEnable ?? true,
-        },
-      });
+        sourceName: body.sourceName,
+        rotation: body.rotation,
+        fiammettaEnable: body.fiammettaEnable,
+      }));
 
       let payload: ReturnType<typeof parsePlanComputePayload> = null;
       try {
@@ -1087,7 +825,7 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
       if (profileJson) await writeJson(profilePath, profileJson);
       if (maaJson) await writeJson(maaPath, maaJson);
     } else {
-      serveResult = await getServeClient().send("plan", {
+      serveResult = await serveClient.send("plan", {
         layout: layoutPath,
         operbox: operboxPath,
         profile_out: profilePath,

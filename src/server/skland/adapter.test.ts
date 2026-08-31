@@ -1,0 +1,90 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import test from "node:test";
+import { URL } from "node:url";
+
+import {
+  findReusableScan,
+  hasScanStartCapacity,
+  MAX_CONCURRENT_SCAN_STARTS,
+  scanActorKey,
+  type ReusableScanRecord,
+} from "./scan-admission.ts";
+import {
+  classifySklandUpstreamError,
+} from "./upstream-error.ts";
+import { publicCodeForSklandServiceError } from "./http-error.ts";
+
+const consent = {
+  termsVersion: "terms-v1",
+  privacyVersion: "privacy-v1",
+};
+
+test("scan actor keys isolate website accounts without retaining raw user ids", () => {
+  const first = scanActorKey("website-user-one");
+  assert.equal(first, scanActorKey("website-user-one"));
+  assert.notEqual(first, scanActorKey("website-user-two"));
+  assert.equal(first.includes("website-user-one"), false);
+});
+
+test("an active QR code is reused only for the same website account and policy", () => {
+  const now = 10 * 60 * 1000;
+  const actorKey = scanActorKey("website-user");
+  const record: ReusableScanRecord = {
+    actorKey,
+    scanUrl: "https://example.com/scan",
+    createdAt: now - 30_000,
+    policyConsent: consent,
+  };
+  const scans = [["scan-one", record]] as const;
+
+  assert.deepEqual(findReusableScan(scans, actorKey, consent, now), {
+    scanId: "scan-one",
+    scanUrl: record.scanUrl,
+    expiresInSeconds: 570,
+  });
+  assert.equal(findReusableScan(scans, scanActorKey("another-user"), consent, now), null);
+  assert.equal(findReusableScan(scans, actorKey, { ...consent, privacyVersion: "privacy-v2" }, now), null);
+  assert.equal(findReusableScan(scans, actorKey, consent, now + 10 * 60 * 1000), null);
+});
+
+test("global QR protection limits only concurrent upstream starts", () => {
+  assert.equal(hasScanStartCapacity(MAX_CONCURRENT_SCAN_STARTS - 1), true);
+  assert.equal(hasScanStartCapacity(MAX_CONCURRENT_SCAN_STARTS), false);
+});
+
+test("the ten-minute global quota that caused cross-account lockouts cannot return", async () => {
+  const source = await readFile(new URL("./adapter.ts", import.meta.url), "utf8");
+  const route = await readFile(
+    new URL("../../app/api/skland/auth/qr/route.ts", import.meta.url),
+    "utf8"
+  );
+  assert.doesNotMatch(source, /assertRate\(["']scan:global/);
+  assert.match(source, /scan:actor:/);
+  assert.match(source, /scan:ip:/);
+  assert.match(source, /scanStartTasks/);
+  assert.match(route, /enforceRateLimit\("skland-qr-account", website\.user\.id/);
+});
+
+test("skland-kit response messages identify expired stored credentials", () => {
+  const error = new Error("【skland-kit】获取游戏绑定信息错误", {
+    cause: { code: 10001, message: "用户未登录" },
+  });
+  assert.equal(classifySklandUpstreamError(error), "AUTH_EXPIRED");
+  assert.equal(classifySklandUpstreamError(new Error("request failed", {
+    cause: { status: 401, message: "authorization failed" },
+  })), "AUTH_EXPIRED");
+});
+
+test("skland-kit response messages preserve upstream rate-limit and availability failures", () => {
+  assert.equal(classifySklandUpstreamError(new Error("request failed", {
+    cause: { code: 10002, message: "请求过于频繁" },
+  })), "RATE_LIMITED");
+  assert.equal(classifySklandUpstreamError(new Error("network unavailable")), "UNAVAILABLE");
+});
+
+test("only missing configuration is reported as skland login being closed", () => {
+  assert.equal(publicCodeForSklandServiceError("NOT_CONFIGURED"), "AIC-AUTH-2003");
+  assert.equal(publicCodeForSklandServiceError("UNAVAILABLE"), "AIC-SYS-5000");
+  assert.equal(publicCodeForSklandServiceError("AUTH_EXPIRED"), "AIC-AUTH-2001");
+});

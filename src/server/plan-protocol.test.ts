@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   assertUniqueOperboxIdentities,
+  createPlanComputeParams,
   createSolverObservation,
   inspectPlanComputeCapability,
   inspectSolverDeploymentReadiness,
@@ -32,6 +33,29 @@ test("uses plan.compute for matching versions regardless of schema byte hash", (
     assert.equal(capability.reason, null);
     assert.equal(capability.contractSha256, planContractSha256 ?? null);
   }
+});
+
+test("keeps a v4-capable Worker on the website v3 request without Check-only options", () => {
+  const capability = inspectPlanComputeCapability({
+    ok: true,
+    result: {
+      protocol_version: 1,
+      plan_schema_version: 4,
+      supported_plan_schema_versions: [1, 2, 3, 4],
+    },
+  });
+  const params = createPlanComputeParams({
+    layout: { template: "243", drone_cap: 235, scenario: {}, rooms: [] },
+    operbox: [{ id: "char_1", name: "阿米娅", elite: 2, level: 80, own: true, potential: 6, rarity: 5 }],
+    sourceName: "Current Box",
+    rotation: "fiammetta_8_8_4_4",
+    fiammettaEnable: false,
+  });
+
+  assert.equal(capability.supported, true);
+  assert.equal(params.schema_version, 3);
+  assert.equal(params.options?.fiammetta_enable, false);
+  assert.equal("assert_invariants" in (params.options ?? {}), false);
 });
 
 test("keeps a legacy worker on the legacy plan method", () => {
@@ -148,7 +172,15 @@ test("validates the complete plan.compute success payload", () => {
     result: {
       schema_version: 3,
       profile: { schema_version: 4 },
-      rotation: { profile: "abc_12_6_6", daily: {}, shifts: [] },
+      rotation: {
+        profile: "abc_12_6_6",
+        daily: {},
+        shifts: [{
+          index: 0,
+          assignment: { rooms: ["private solver detail"] },
+          notes: ["private stage note"],
+        }],
+      },
       maa: { plans: [] },
       training_advice: {
         schema_version: 2,
@@ -161,7 +193,11 @@ test("validates the complete plan.compute success payload", () => {
     },
   });
 
-  assert.deepEqual(payload?.rotation.shifts, []);
+  assert.deepEqual(payload?.rotation.shifts, [{
+    index: 0,
+    assignment: { rooms: ["private solver detail"] },
+    notes: ["private stage note"],
+  }]);
   assert.equal(payload?.profile.schema_version, 4);
   assert.equal(payload?.trainingAdvice?.schema_version, 2);
 });

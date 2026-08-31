@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import test from "node:test";
 import { URL } from "node:url";
 
@@ -18,6 +18,49 @@ test("Next.js commands use the default Turbopack bundler", async () => {
   assert.doesNotMatch(packageJson.scripts.dev, /--webpack\b/);
   assert.doesNotMatch(playwrightConfig, /--webpack\b/);
   assert.doesNotMatch(productionPlaywrightConfig, /--webpack\b/);
+});
+
+test("production builds prepare a solver-free standalone runtime with static assets", async () => {
+  const packageJson = JSON.parse(await readRepoFile("package.json"));
+  const nextConfig = await readRepoFile("next.config.ts");
+  const prepareStandalone = await readRepoFile("scripts/prepare-standalone.mjs");
+  const startStandalone = await readRepoFile("scripts/start-standalone.mjs");
+  const stageStandalone = await readRepoFile("scripts/stage-standalone-release.mjs");
+
+  assert.match(nextConfig, /output: "standalone"/);
+  assert.equal(packageJson.scripts.postbuild, "node scripts/prepare-standalone.mjs");
+  assert.equal(packageJson.scripts.start, "node scripts/start-standalone.mjs");
+  assert.equal(packageJson.scripts["release:stage"], "node scripts/stage-standalone-release.mjs");
+  assert.match(prepareStandalone, /standaloneRoot, "public"/);
+  assert.match(prepareStandalone, /standaloneRoot, "\.next", "static"/);
+  assert.match(prepareStandalone, /\["infra-cli", "infra-cli\.exe"\]/);
+  assert.match(prepareStandalone, /\["\.env", "\.env\.production", "\.env\.local", "\.env\.production\.local"\]/);
+  assert.match(prepareStandalone, /standalone website output must not contain/);
+  assert.match(prepareStandalone, /node_modules\/drizzle-orm/);
+  assert.match(prepareStandalone, /scripts\/backfill-business-data\.mts/);
+  assert.match(prepareStandalone, /scripts\/migrate-db\.mts/);
+  assert.match(prepareStandalone, /scripts\/check-auth-readiness\.mts/);
+  assert.match(prepareStandalone, /src\/server\/business-backfill\.ts/);
+  assert.match(startStandalone, /ARKNIGHTS_INFRA_HOSTNAME \|\| "0\.0\.0\.0"/);
+  assert.match(startStandalone, /process\.env\.PORT = String\(numericPort\)/);
+  assert.match(startStandalone, /\.next\/standalone\/server\.js/);
+  assert.match(stageStandalone, /kind: "riic-web-standalone"/);
+  assert.match(stageStandalone, /standalone release root must not contain/);
+  assert.match(stageStandalone, /\["bin\/infra-cli", "infra-cli"\]/);
+  assert.match(stageStandalone, /\["\.env\.production\.local", "\.env\.production\.local"\]/);
+  assert.match(stageStandalone, /dereference: true/);
+});
+
+test("Next.js owns graceful shutdown while systemd accepts its signal exit statuses", async () => {
+  const processCleanup = await readRepoFile("src/server/process-cleanup.ts");
+  const systemdDropIn = await readRepoFile("deploy/next-graceful-exit.conf");
+  const systemdGuide = await readRepoFile("deploy/SYSTEMD.md");
+
+  assert.doesNotMatch(processCleanup, /SIGINT|SIGTERM/);
+  assert.match(processCleanup, /target\.once\("exit", onExit\)/);
+  assert.equal(systemdDropIn, "[Service]\nSuccessExitStatus=130 143\n");
+  assert.match(systemdGuide, /drain in-flight requests/);
+  assert.match(systemdGuide, /systemctl daemon-reload/);
 });
 
 test("CI enforces route and document preload JavaScript budgets after building", async () => {
@@ -57,6 +100,11 @@ test("Next and the verified deployment keep real public GET responses compressed
 
 test("CI gates releases on Chromium and schedules the full WebKit suite", async () => {
   const workflow = await readRepoFile(".github/workflows/frontend-quality.yml");
+  const playwrightConfig = await readRepoFile("playwright.config.ts");
+  const e2eFiles = await readdir(new URL("../e2e/", import.meta.url));
+  const readinessSpecs = e2eFiles.filter((file) => /^production-readiness-.+\.spec\.ts$/.test(file));
+  const readinessTestCount = (await Promise.all(readinessSpecs.map((file) => readRepoFile(`e2e/${file}`))))
+    .reduce((count, source) => count + (source.match(/^test\(/gm)?.length ?? 0), 0);
 
   assert.match(workflow, /browser_e2e:[\s\S]+npm run test:e2e[\s\S]+npm run test:e2e:production-profile/);
   assert.match(workflow, /webkit_e2e:[\s\S]+github\.event_name == 'schedule'[\s\S]+npm run test:e2e:webkit/);
@@ -64,6 +112,12 @@ test("CI gates releases on Chromium and schedules the full WebKit suite", async 
   assert.doesNotMatch(workflow, /quality:[\s\S]+needs: \[[^\]]*webkit_e2e/);
   assert.match(workflow, /deploy:[\s\S]+needs: \[changes, quality\]/);
   assert.match(workflow, /cancel-in-progress: \$\{\{ github\.event_name == 'pull_request' \}\}/);
+  assert.equal(readinessSpecs.length, 4);
+  assert.equal(readinessTestCount, 77);
+  assert.equal(e2eFiles.includes("production-readiness.spec.ts"), false);
+  assert.match(playwrightConfig, /fullyParallel: false/);
+  assert.match(playwrightConfig, /workers: process\.env\.CI \? 3 : undefined/);
+  assert.match(playwrightConfig, /timeout: process\.env\.CI \? 10_000 : 5_000/);
 });
 
 test("CI change scope keeps one required quality gate and fails closed", async () => {
@@ -94,25 +148,42 @@ test("public deployment automation is repository-bound, opt-in, and secret-safe"
   const preflightWorkflow = await readRepoFile(".github/workflows/deployment-preflight.yml");
   const assetWorkflow = await readRepoFile(".github/workflows/sync-arkntools-assets.yml");
   const workflows = [qualityWorkflow, deployWorkflow, preflightWorkflow, assetWorkflow];
+  const deployJobEnvironment = deployWorkflow.slice(
+    deployWorkflow.indexOf("    env:"),
+    deployWorkflow.indexOf("    steps:"),
+  );
+  const preflightJobEnvironment = preflightWorkflow.slice(
+    preflightWorkflow.indexOf("    env:"),
+    preflightWorkflow.indexOf("    steps:"),
+  );
 
   assert.match(qualityWorkflow, /HEAD_REPOSITORY[\s\S]+EXPECTED_REPOSITORY: KnightCodeSquareMatrix\/RIIC-Web[\s\S]+"\$HEAD_REF" == release\/\*/);
   assert.match(qualityWorkflow, /git merge-base --is-ancestor "\$HEAD_SHA" refs\/remotes\/origin\/develop/);
   assert.match(qualityWorkflow, /github\.event_name == 'push'[\s\S]+needs\.quality\.result == 'success'[\s\S]+needs\.changes\.outputs\.deploy_required == 'true'[\s\S]+vars\.DEPLOY_AUTOMATION_ENABLED == '1'[\s\S]+github\.repository == 'KnightCodeSquareMatrix\/RIIC-Web'/);
   assert.match(deployWorkflow, /github\.event_name == 'push'[\s\S]+vars\.DEPLOY_AUTOMATION_ENABLED == '1'[\s\S]+github\.repository == 'KnightCodeSquareMatrix\/RIIC-Web'/);
-  assert.match(deployWorkflow, /DEPLOY_PREPARE_HELPER_CONTRACT: "2"[\s\S]+DEPLOY_RELEASE_HELPER_CONTRACT: "2"/);
+  assert.match(deployWorkflow, /DEPLOY_APPROVED_SOLVER_SHA256: \$\{\{ vars\.DEPLOY_APPROVED_SOLVER_SHA256 \}\}[\s\S]+DEPLOY_EXPECTED_REPOSITORY: KnightCodeSquareMatrix\/RIIC-Web[\s\S]+DEPLOY_RELEASE_HELPER_CONTRACT: "4"/);
+  assert.doesNotMatch(deployWorkflow, /DEPLOY_PREPARE_HELPER_CONTRACT|arknights-infra-prepare-release/);
   assert.match(deployWorkflow, /DEPLOY_PUBLIC_HEALTH_URL: \$\{\{ secrets\.DEPLOY_PUBLIC_HEALTH_URL \}\}/);
   assert.doesNotMatch(deployWorkflow, /DEPLOY_PUBLIC_HEALTH_URL: \$\{\{ vars\./);
+  assert.doesNotMatch(deployJobEnvironment, /\$\{\{ secrets\./);
+  assert.doesNotMatch(preflightJobEnvironment, /\$\{\{ secrets\./);
   assert.match(preflightWorkflow, /Preflight is read-only: no archive, release directory, symlink switch, or service restart was requested/);
   assert.match(preflightWorkflow, /mode:[\s\S]+baseline[\s\S]+cutover-ready/);
   assert.match(preflightWorkflow, /PREFLIGHT_MODE: \$\{\{ inputs\.mode \}\}/);
+  assert.match(preflightWorkflow, /DEPLOY_ENVIRONMENT: \$\{\{ inputs\.environment \}\}/);
   assert.match(preflightWorkflow, /if \[\[ "\$PREFLIGHT_MODE" == "cutover-ready" \]\][\s\S]+test "\$actual_contract" = "\$expected_contract"/);
-  assert.match(preflightWorkflow, /expected_digest_file="\$app_root\/shared\/bin\/infra-cli\.sha256"/);
-  assert.match(preflightWorkflow, /test "\$solver_sha256" = "\$expected_solver_sha256"/);
-  assert.match(preflightWorkflow, /supported_plan_schema_versions[\s\S]+worker_sha256[\s\S]+expected_solver_sha256/);
+  assert.match(preflightWorkflow, /DEPLOY_APPROVED_SOLVER_SHA256: \$\{\{ vars\.DEPLOY_APPROVED_SOLVER_SHA256 \}\}[\s\S]+DEPLOY_RELEASE_HELPER_CONTRACT: "4"/);
+  assert.match(preflightWorkflow, /Inspect deploy helper, solver, and disk[\s\S]+verify_helper deploy \/usr\/local\/sbin\/arknights-infra-deploy/);
+  assert.match(preflightWorkflow, /sudo -n \/usr\/local\/sbin\/arknights-infra-deploy[\s\S]+--preflight "\$deployment_environment" "\$app_root"[\s\S]+"\$expected_repository" "\$approved_solver_sha256"/);
+  assert.match(preflightWorkflow, /solver_source=not-inspected-root-only/);
+  assert.doesNotMatch(preflightWorkflow, /DEPLOY_PREPARE_HELPER_CONTRACT|arknights-infra-prepare-release|cache_repository|expected_origin|public_cache_ready|cache_public_origin_ready|repository\.git|git --git-dir/);
+  assert.doesNotMatch(preflightWorkflow, /current_release\/\.env\.production\.local|current_release="\$\(readlink/);
+  assert.match(preflightWorkflow, /Remove SSH credentials from the runner[\s\S]+rm -f -- "\$HOME\/\.ssh\/id_ed25519" "\$HOME\/\.ssh\/known_hosts"/);
   assert.match(deployWorkflow, /printf '%s\\n' "\$DEPLOY_PUBLIC_HEALTH_URL" \| ssh[\s\S]+'\$public_health_argument'/);
+  assert.match(deployWorkflow, /'\$DEPLOY_EXPECTED_REPOSITORY'[\s\S]+'\$DEPLOY_APPROVED_SOLVER_SHA256'[\s\S]+'\$DEPLOY_TREE_SHA'/);
   assert.doesNotMatch(deployWorkflow, /'\$DEPLOY_PUBLIC_HEALTH_URL'/);
   assert.match(deployWorkflow, /Remove SSH credentials from the runner[\s\S]+rm -f -- "\$HOME\/\.ssh\/id_ed25519" "\$HOME\/\.ssh\/known_hosts"/);
-  assert.match(deployWorkflow, /Verify public response compression[\s\S]+DEPLOY_SSH_PRIVATE_KEY: ""[\s\S]+node scripts\/verify-public-compression\.mjs/);
+  assert.match(deployWorkflow, /Verify public response compression[\s\S]+DEPLOY_PUBLIC_HEALTH_URL: \$\{\{ secrets\.DEPLOY_PUBLIC_HEALTH_URL \}\}[\s\S]+node scripts\/verify-public-compression\.mjs/);
   assert.match(assetWorkflow, /BASE_BRANCH: develop/);
   assert.match(assetWorkflow, /gh pr (?:list|create)[\s\S]+--base "\$BASE_BRANCH"/);
 
@@ -122,6 +193,24 @@ test("public deployment automation is repository-bound, opt-in, and secret-safe"
       assert.ok(match[1].startsWith("./") || /@[0-9a-f]{40}$/.test(match[1]));
     }
   }
+});
+
+test("deploy builds and transfers a verified solver-free standalone artifact", async () => {
+  const deployWorkflow = await readRepoFile(".github/workflows/deploy.yml");
+
+  assert.match(deployWorkflow, /Use Node\.js 22[\s\S]+actions\/setup-node@[0-9a-f]{40}[\s\S]+node-version: 22/);
+  assert.match(deployWorkflow, /Resolve verified release identity[\s\S]+git rev-parse 'HEAD\^\{tree\}'[\s\S]+DEPLOY_TREE_SHA=%s/);
+  assert.match(deployWorkflow, /Validate deployment configuration[\s\S]+\[\[ "\$DEPLOY_TREE_SHA" =~ \^\[0-9a-f\]\{40\}\$ \]\]/);
+  assert.match(deployWorkflow, /Install verified build dependencies[\s\S]+run: npm ci/);
+  assert.match(deployWorkflow, /Build standalone release[\s\S]+APP_DEPLOYMENT_ENV:[\s\S]+SKLAND_FEATURE_ENABLED: "1"[\s\S]+ACCOUNT_CLOUD_SYNC_ENABLED: "1"[\s\S]+run: npm run build/);
+  assert.match(deployWorkflow, /RELEASE_SHA="\$DEPLOY_SHA" RELEASE_TREE_SHA="\$DEPLOY_TREE_SHA"[\s\S]+npm run release:stage -- --output "\$artifact_root"/);
+  assert.match(deployWorkflow, /tar -czf "\$local_archive" -C "\$artifact_root" \.[\s\S]+gzip -t "\$local_archive"/);
+  assert.match(deployWorkflow, /archive_sha256="\$\(sha256sum "\$local_archive"[\s\S]+DEPLOY_ARCHIVE_SHA256=%s/);
+  assert.match(deployWorkflow, /Upload standalone release archive[\s\S]+scp "\$\{ssh_options\[@\]\}"[\s\S]+"\$DEPLOY_LOCAL_ARCHIVE"[\s\S]+test "\$remote_sha256" = "\$DEPLOY_ARCHIVE_SHA256"/);
+  assert.match(deployWorkflow, /DEPLOY_RELEASE_HELPER_CONTRACT: "4"/);
+  assert.match(deployWorkflow, /'\$DEPLOY_APPROVED_SOLVER_SHA256' \\\n\s+'\$DEPLOY_TREE_SHA'/);
+  assert.match(deployWorkflow, /Remove staged release artifacts from the runner[\s\S]+if: always\(\)[\s\S]+"\$RUNNER_TEMP"\/riic-web-release\.\*[\s\S]+"\$RUNNER_TEMP"\/arknights-infra-\*\.tar\.gz/);
+  assert.doesNotMatch(deployWorkflow, /git (?:archive|bundle)|repository\.git|DEPLOY_PREVIOUS_SHA|remote_bundle|bin\/infra-cli/);
 });
 
 test("asset synchronization isolates untrusted generation from repository write credentials", async () => {
