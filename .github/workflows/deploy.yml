@@ -53,8 +53,13 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$DEPLOY_SHA"
           deploy_tree_sha="$(git rev-parse 'HEAD^{tree}')"
+          source_date_epoch="$(git show -s --format=%ct HEAD)"
           [[ "$deploy_tree_sha" =~ ^[0-9a-f]{40}$ ]]
-          printf 'DEPLOY_TREE_SHA=%s\n' "$deploy_tree_sha" >> "$GITHUB_ENV"
+          [[ "$source_date_epoch" =~ ^[1-9][0-9]*$ ]]
+          {
+            printf 'DEPLOY_TREE_SHA=%s\n' "$deploy_tree_sha"
+            printf 'SOURCE_DATE_EPOCH=%s\n' "$source_date_epoch"
+          } >> "$GITHUB_ENV"
 
       - name: Validate deployment configuration
         shell: bash
@@ -105,6 +110,7 @@ jobs:
 
       - name: Build standalone release
         env:
+          APP_BUILD_ID: ${{ env.DEPLOY_SHA }}
           APP_DEPLOYMENT_ENV: ${{ env.DEPLOYMENT_ENV }}
           SKLAND_FEATURE_ENABLED: "1"
           ACCOUNT_CLOUD_SYNC_ENABLED: "1"
@@ -130,7 +136,15 @@ jobs:
 
           RELEASE_SHA="$DEPLOY_SHA" RELEASE_TREE_SHA="$DEPLOY_TREE_SHA" \
             npm run release:stage -- --output "$artifact_root"
-          tar -czf "$local_archive" -C "$artifact_root" .
+          tar --sort=name \
+            --mtime="@$SOURCE_DATE_EPOCH" \
+            --owner=0 \
+            --group=0 \
+            --numeric-owner \
+            --format=gnu \
+            -cf - \
+            -C "$artifact_root" . \
+            | gzip --best --no-name --rsyncable > "$local_archive"
           gzip -t "$local_archive"
 
           archive_bytes="$(stat -c '%s' "$local_archive")"
@@ -217,7 +231,10 @@ jobs:
           DEPLOY_SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
         run: |
           set -euo pipefail
+          archive_cache=".cache/riic-web/${DEPLOYMENT_ENV}-standalone.tar.gz"
           remote_archive="/tmp/arknights-infra-${DEPLOYMENT_ENV}-${DEPLOY_SHA}.tar.gz"
+          ssh_target="${DEPLOY_SSH_USER}@${DEPLOY_HOST}"
+          upload_chunk_bytes=$((4 * 1024 * 1024))
           ssh_options=(
             -o BatchMode=yes
             -o ConnectTimeout=15
@@ -230,20 +247,137 @@ jobs:
           test ! -L "$DEPLOY_LOCAL_ARCHIVE"
           test "$(stat -c '%s' "$DEPLOY_LOCAL_ARCHIVE")" = "$DEPLOY_ARCHIVE_BYTES"
           test "$(sha256sum "$DEPLOY_LOCAL_ARCHIVE" | cut -d ' ' -f 1)" = "$DEPLOY_ARCHIVE_SHA256"
+          [[ "$DEPLOY_ARCHIVE_BYTES" =~ ^[1-9][0-9]*$ ]]
 
-          timeout --kill-after=10s 1500s scp "${ssh_options[@]}" \
-            "$DEPLOY_LOCAL_ARCHIVE" \
-            "${DEPLOY_SSH_USER}@${DEPLOY_HOST}:$remote_archive"
+          timeout --kill-after=5s 30s ssh "${ssh_options[@]}" "$ssh_target" \
+            "set -eu
+             cache_dir=\"\$HOME/.cache/riic-web\"
+             test ! -L \"\$cache_dir\"
+             install -d -m 700 -- \"\$cache_dir\"
+             test -d \"\$cache_dir\"
+             test ! -L \"\$cache_dir\"
+             test \"\$(stat -c '%U:%a' -- \"\$cache_dir\")\" = \"\$(id -un):700\"
+             cache_file=\"\$HOME/$archive_cache\"
+             test ! -L \"\$cache_file\"
+             if [ -e \"\$cache_file\" ]; then
+               test -f \"\$cache_file\"
+             else
+               umask 077
+               : > \"\$cache_file\"
+             fi
+             chmod 600 -- \"\$cache_file\""
 
-          timeout --kill-after=5s 30s ssh "${ssh_options[@]}" \
-            "${DEPLOY_SSH_USER}@${DEPLOY_HOST}" \
-            "test -f '$remote_archive' && test ! -L '$remote_archive'"
-          remote_bytes="$(timeout --kill-after=5s 30s ssh "${ssh_options[@]}" \
-            "${DEPLOY_SSH_USER}@${DEPLOY_HOST}" "stat -c '%s' -- '$remote_archive'")"
-          remote_sha256="$(timeout --kill-after=5s 30s ssh "${ssh_options[@]}" \
-            "${DEPLOY_SSH_USER}@${DEPLOY_HOST}" "sha256sum -- '$remote_archive' | cut -d ' ' -f 1")"
+          reset_remote_cache() {
+            timeout --kill-after=5s 30s ssh "${ssh_options[@]}" "$ssh_target" \
+              "set -eu
+               cache_file=\"\$HOME/$archive_cache\"
+               test -f \"\$cache_file\"
+               test ! -L \"\$cache_file\"
+               : > \"\$cache_file\"
+               chmod 600 -- \"\$cache_file\""
+          }
+
+          remote_cache_bytes() {
+            timeout --kill-after=5s 30s ssh "${ssh_options[@]}" "$ssh_target" \
+              "cache_file=\"\$HOME/$archive_cache\"; test -f \"\$cache_file\"; test ! -L \"\$cache_file\"; stat -c '%s' -- \"\$cache_file\""
+          }
+
+          resumed_bytes=0
+          transfer_method="verified chunks"
+          if command -v rsync >/dev/null \
+            && timeout --kill-after=5s 30s ssh "${ssh_options[@]}" "$ssh_target" \
+              "command -v rsync >/dev/null"; then
+            transfer_method="rsync delta"
+            resumed_bytes="$(remote_cache_bytes)"
+            [[ "$resumed_bytes" =~ ^[0-9]+$ ]]
+            timeout --kill-after=10s 5400s rsync \
+              --checksum \
+              --partial \
+              --inplace \
+              --no-owner \
+              --no-group \
+              --chmod=F600 \
+              --info=progress2 \
+              -e "ssh ${ssh_options[*]}" \
+              -- "$DEPLOY_LOCAL_ARCHIVE" "$ssh_target:$archive_cache"
+          else
+            remote_bytes="$(remote_cache_bytes)"
+            [[ "$remote_bytes" =~ ^[0-9]+$ ]]
+            remote_prefix_sha256=""
+
+            if (( remote_bytes > DEPLOY_ARCHIVE_BYTES )); then
+              reset_remote_cache
+              remote_bytes=0
+            elif (( remote_bytes > 0 )); then
+              local_prefix_sha256="$(head -c "$remote_bytes" "$DEPLOY_LOCAL_ARCHIVE" | sha256sum | cut -d ' ' -f 1)"
+              remote_prefix_sha256="$(timeout --kill-after=5s 60s ssh "${ssh_options[@]}" "$ssh_target" \
+                "cache_file=\"\$HOME/$archive_cache\"; head -c '$remote_bytes' \"\$cache_file\" | sha256sum | cut -d ' ' -f 1")"
+              if [[ "$local_prefix_sha256" != "$remote_prefix_sha256" ]]; then
+                reset_remote_cache
+                remote_bytes=0
+              fi
+            fi
+
+            resumed_bytes="$remote_bytes"
+            while (( remote_bytes < DEPLOY_ARCHIVE_BYTES )); do
+              remaining_bytes=$((DEPLOY_ARCHIVE_BYTES - remote_bytes))
+              if (( remaining_bytes < upload_chunk_bytes )); then
+                current_chunk_bytes="$remaining_bytes"
+              else
+                current_chunk_bytes="$upload_chunk_bytes"
+              fi
+              expected_remote_bytes=$((remote_bytes + current_chunk_bytes))
+
+              dd if="$DEPLOY_LOCAL_ARCHIVE" \
+                bs=1M \
+                skip="$remote_bytes" \
+                count="$current_chunk_bytes" \
+                iflag=skip_bytes,count_bytes \
+                status=none \
+                | timeout --kill-after=10s 900s ssh "${ssh_options[@]}" "$ssh_target" \
+                  "set -eu
+                   cache_file=\"\$HOME/$archive_cache\"
+                   test -f \"\$cache_file\"
+                   test ! -L \"\$cache_file\"
+                   test \"\$(stat -c '%s' -- \"\$cache_file\")\" = '$remote_bytes'
+                   cat >> \"\$cache_file\""
+
+              remote_bytes="$(remote_cache_bytes)"
+              test "$remote_bytes" = "$expected_remote_bytes"
+              printf 'Uploaded %s/%s bytes\n' "$remote_bytes" "$DEPLOY_ARCHIVE_BYTES"
+            done
+          fi
+
+          remote_bytes="$(remote_cache_bytes)"
+          remote_sha256="$(timeout --kill-after=5s 60s ssh "${ssh_options[@]}" "$ssh_target" \
+            "cache_file=\"\$HOME/$archive_cache\"; sha256sum -- \"\$cache_file\" | cut -d ' ' -f 1")"
           test "$remote_bytes" = "$DEPLOY_ARCHIVE_BYTES"
           test "$remote_sha256" = "$DEPLOY_ARCHIVE_SHA256"
+
+          timeout --kill-after=5s 60s ssh "${ssh_options[@]}" "$ssh_target" \
+            "set -eu
+             cache_file=\"\$HOME/$archive_cache\"
+             test -f \"\$cache_file\"
+             test ! -L \"\$cache_file\"
+             test \"\$(stat -c '%s' -- \"\$cache_file\")\" = '$DEPLOY_ARCHIVE_BYTES'
+             test \"\$(sha256sum -- \"\$cache_file\" | cut -d ' ' -f 1)\" = '$DEPLOY_ARCHIVE_SHA256'
+             staged_archive=\"\$(mktemp '${remote_archive}.XXXXXX')\"
+             trap 'rm -f -- \"\$staged_archive\"' EXIT
+             install -m 600 -- \"\$cache_file\" \"\$staged_archive\"
+             mv -fT -- \"\$staged_archive\" '$remote_archive'
+             trap - EXIT"
+
+          timeout --kill-after=5s 30s ssh "${ssh_options[@]}" \
+            "$ssh_target" \
+            "test -f '$remote_archive' && test ! -L '$remote_archive'"
+          remote_bytes="$(timeout --kill-after=5s 30s ssh "${ssh_options[@]}" \
+            "$ssh_target" "stat -c '%s' -- '$remote_archive'")"
+          remote_sha256="$(timeout --kill-after=5s 30s ssh "${ssh_options[@]}" \
+            "$ssh_target" "sha256sum -- '$remote_archive' | cut -d ' ' -f 1")"
+          test "$remote_bytes" = "$DEPLOY_ARCHIVE_BYTES"
+          test "$remote_sha256" = "$DEPLOY_ARCHIVE_SHA256"
+          printf 'archive transfer=%s cached_bytes=%s total_bytes=%s\n' \
+            "$transfer_method" "$resumed_bytes" "$DEPLOY_ARCHIVE_BYTES" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Deploy and verify
         shell: bash
