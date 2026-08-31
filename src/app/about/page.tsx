@@ -11,8 +11,8 @@ const sources = [
 ];
 
 const contributionCards = [
-  { title: "项目仓库", description: "查看源码、提交记录与开发进度", href: "https://github.com/KnightCodeSquareMatrix/ArknightsInfraCalc-v2_beta_test_frontend", tags: ["源码", "开发进度"], icon: Github, tone: "bg-neutral-100 text-neutral-700" },
-  { title: "参与贡献", description: "提交问题、建议或改进方案", href: "https://github.com/KnightCodeSquareMatrix/ArknightsInfraCalc-v2_beta_test_frontend/issues", tags: ["问题反馈", "功能建议"], icon: MessageSquareText, tone: "bg-emerald-50 text-emerald-700" },
+  { title: "RIIC-Web", description: "查看源码、提交记录与开发进度", href: "https://github.com/KnightCodeSquareMatrix/RIIC-Web", tags: ["源码", "开发进度"], icon: Github, tone: "bg-neutral-100 text-neutral-700" },
+  { title: "参与贡献", description: "提交问题、建议或改进方案", href: "https://github.com/KnightCodeSquareMatrix/RIIC-Web/issues", tags: ["问题反馈", "功能建议"], icon: MessageSquareText, tone: "bg-emerald-50 text-emerald-700" },
 ];
 
 type LinkCardItem = (typeof sources)[number] | (typeof contributionCards)[number];
