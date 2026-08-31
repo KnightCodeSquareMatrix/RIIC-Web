@@ -21,6 +21,7 @@ import { isRotationProfile } from "@/rotation-settings";
 import type { BaseBlueprint, OperBoxEntry, PublicPlanData, RotationProfile, SavedPlanCalculationContext } from "@/types";
 import { activeSklandAccount, readSklandAccountStore } from "@/server/skland/http";
 import { sklandDataOwnerTag } from "@/server/skland/session";
+import { websiteSession as readWebsiteSession } from "@/server/auth";
 import { requireWebsiteSession } from "@/server/auth/authorization";
 import { planAccessMode } from "@/server/plan-access";
 import { recordPlanRunBestEffort } from "@/server/business-records";
@@ -107,6 +108,11 @@ export async function POST(request: Request) {
       const sample = await (await import("@/server/infra")).getSampleOperbox();
       body.operbox = sample.operbox as OperBoxEntry[];
       body.sourceName = "243 全精二示例";
+      const optionalSession = await readWebsiteSession(request).catch(() => null);
+      if (optionalSession?.user?.id) {
+        websiteUserId = optionalSession.user.id;
+        websiteAccountClass = planAccountAdmissionClass(optionalSession.user);
+      }
     } else {
       const websiteSession = await requireWebsiteSession(request);
       websiteUserId = websiteSession.user.id;
@@ -174,6 +180,9 @@ export async function POST(request: Request) {
     });
     if (!calculationContext) throw new PublicApiError("AIC-LAYOUT-1201");
     const sourceType = body.boxSource === "skland" ? "skland" : body.boxSource === "sample" ? "sample" : "maa";
+    // Sample inputs are global server data. A website identity may authorize a
+    // cache miss, but it must never become the owner of that shared cache entry.
+    const cacheReferenceUserId = sourceType === "sample" ? null : websiteUserId;
     let operboxContentHmac: string | null = null;
     let operboxHmacKeyVersion: string | null = null;
     if (websiteUserId && sourceType === "maa" && isAccountCloudSyncEnabled()) {
@@ -235,7 +244,7 @@ export async function POST(request: Request) {
           const referenceStored = runStored && await recordPlanCacheReferenceBestEffort({
             cacheKeyHmac: cache.keyHmac,
             diagnosticId: cache.result.diagnosticId,
-            userId: websiteUserId,
+            userId: cacheReferenceUserId,
           });
           if (!referenceStored) await evictPlanCacheKeys([cache.keyHmac]).catch(() => undefined);
           return successResponse(cache.result, requestId);
@@ -269,7 +278,7 @@ export async function POST(request: Request) {
           const referenceStored = await recordPlanCacheReferenceBestEffort({
             cacheKeyHmac: activeLease.keyHmac,
             diagnosticId: publicResult.diagnosticId,
-            userId: websiteUserId,
+            userId: cacheReferenceUserId,
           });
           if (!referenceStored) {
             await releasePlanCacheLease(activeLease);

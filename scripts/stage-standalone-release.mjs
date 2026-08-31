@@ -65,7 +65,7 @@ for (const [relativePath, displayName] of forbiddenBuildEntries) {
 }
 
 await mkdir(path.join(outputRoot, "scripts"), { recursive: true });
-await mkdir(path.join(outputRoot, ".next"), { recursive: true });
+await mkdir(path.join(outputRoot, ".next", "cache"), { recursive: true });
 await copyFile(path.join(repoRoot, "package.json"), path.join(outputRoot, "package.json"));
 await copyFile(
   path.join(repoRoot, "scripts", "start-standalone.mjs"),
@@ -85,6 +85,7 @@ await writeFile(path.join(outputRoot, ".release-artifact.json"), `${JSON.stringi
 }, null, 2)}\n`, "utf8");
 
 assert.equal(await lstat(path.join(outputRoot, ".next", "standalone", "server.js")).then((entry) => entry.isFile()), true);
+assert.equal(await lstat(path.join(outputRoot, ".next", "cache")).then((entry) => entry.isDirectory()), true);
 for (const forbiddenRootEntry of ["node_modules", "bin"]) {
   try {
     await lstat(path.join(outputRoot, forbiddenRootEntry));

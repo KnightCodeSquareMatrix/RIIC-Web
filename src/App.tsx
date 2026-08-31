@@ -276,6 +276,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     reloadKey: number;
     result: Promise<SklandFullRestoreResult>;
   } | null>(null);
+  const sklandFullRestorePending = useRef(false);
   const [inputError, setInputError] = useState<string | null>(null);
   const [inputErrorCode, setInputErrorCode] = useState<DisplayError["code"]>("AIC-BOX-1101");
   const [sampleLoading, setSampleLoading] = useState(false);
@@ -400,6 +401,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
 
   function beginSklandStateChange(): number {
     sklandFullRestore.current = null;
+    sklandFullRestorePending.current = false;
     return sklandRestoreGuard.current.begin();
   }
 
@@ -565,21 +567,8 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       || websiteSessionPending
       || !websiteUserId
     ) return;
-    const existingRestore = sklandFullRestore.current?.reloadKey === websiteAuthReloadKey
-      ? sklandFullRestore.current
-      : null;
-    const generation = existingRestore?.generation ?? sklandRestoreGuard.current.begin();
+    const generation = beginSklandStateChange();
     let cancelled = false;
-    setSklandSessionLoading(true);
-    if (!existingRestore) {
-      sklandFullRestore.current = {
-        generation,
-        reloadKey: websiteAuthReloadKey,
-        result: getSklandAccounts()
-          .then((session) => ({ session }))
-          .catch((error: unknown) => ({ error })),
-      };
-    }
     void getSklandAccounts("summary")
       .then((session) => {
         if (
@@ -593,7 +582,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
         setSklandBindingSummary(bindingSummaryFromSession(session));
       })
       .catch(() => {
-        // 完整恢复会在网站 Session 确认后提供可操作错误；摘要失败不清除已有身份。
+        // 摘要失败不清除已有身份；需要实时快照的页面会独立提供可操作错误。
       });
     return () => {
       cancelled = true;
@@ -633,6 +622,18 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       return;
     }
 
+    const shouldLoadFullSklandSession = (
+      page === "skland"
+      || initialBoxSource.current === "skland"
+      || !initialOperbox.current
+      || setupOpen
+    );
+    if (!shouldLoadFullSklandSession) {
+      setSklandSessionLoading(false);
+      return;
+    }
+
+    sklandFullRestorePending.current = true;
     setSklandSessionLoading(true);
     let restore = sklandFullRestore.current;
     if (!restore || restore.generation !== generation) {
@@ -690,12 +691,13 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
         setSklandError(toDisplayError(error, "森空岛会话恢复失败，请稍后刷新。"));
       })
       .finally(() => {
+        if (sklandFullRestore.current === restore) sklandFullRestorePending.current = false;
         if (!cancelled && sklandRestoreGuard.current.isCurrent(generation)) setSklandSessionLoading(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [hasRestoredSession, websiteAuthReloadKey, websiteSessionPending, websiteUserId]);
+  }, [hasRestoredSession, page, setupOpen, websiteAuthReloadKey, websiteSessionPending, websiteUserId]);
 
   useEffect(() => {
     if (
@@ -703,6 +705,9 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       || page !== "skland"
       || !activeSklandAccount
       || sklandStatusSnapshot
+      || sklandFullRestorePending.current
+      || sklandSessionLoading
+      || sklandError
       || statusLoadingAccount.current === activeSklandAccount.accountId
     ) return;
     let cancelled = false;
@@ -726,7 +731,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [activeSklandAccount, page, sklandStatusReloadKey, sklandStatusSnapshot]);
+  }, [activeSklandAccount, page, sklandError, sklandSessionLoading, sklandStatusReloadKey, sklandStatusSnapshot]);
 
   async function handleFile(file: File): Promise<boolean> {
     setInputError(null);
