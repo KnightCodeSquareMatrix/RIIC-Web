@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 
 import { passwordConfirmationError } from "@/components/auth/password-confirmation";
+import { PasswordInput } from "@/components/auth/password-input";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
 
@@ -47,9 +47,8 @@ export function ResetPassword() {
       <p className="text-sm leading-6 text-muted-foreground">新密码需为 10–128 位。重置成功后，其他登录设备上的 Session 也会失效。</p>
       <div className="grid gap-1.5">
         <Label htmlFor="reset-password">新密码</Label>
-        <Input
+        <PasswordInput
           id="reset-password"
-          type="password"
           minLength={10}
           maxLength={128}
           value={password}
@@ -62,13 +61,13 @@ export function ResetPassword() {
           }}
           autoComplete="new-password"
           placeholder="新密码（10–128 位）"
+          revealLabel="显示新密码"
         />
       </div>
       <div className="grid gap-1.5">
         <Label htmlFor="reset-confirm-password">确认新密码</Label>
-        <Input
+        <PasswordInput
           id="reset-confirm-password"
-          type="password"
           minLength={10}
           maxLength={128}
           value={confirmPassword}
@@ -82,6 +81,7 @@ export function ResetPassword() {
           onBlur={() => setConfirmPasswordError(passwordConfirmationError(password, confirmPassword))}
           autoComplete="new-password"
           placeholder="再次输入新密码"
+          revealLabel="显示确认新密码"
           aria-invalid={Boolean(confirmPasswordError)}
           aria-describedby="reset-confirm-password-hint"
         />

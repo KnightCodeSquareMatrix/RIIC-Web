@@ -21,6 +21,8 @@ import {
 } from "@/account-name";
 import { accountOrbColor } from "@/account-orb";
 import { cloudSyncMetadataKey } from "@/cloud-sync";
+import { passwordConfirmationError } from "@/components/auth/password-confirmation";
+import { PasswordInput } from "@/components/auth/password-input";
 import { WebsiteAccountLoadingStatus } from "@/components/auth/WebsiteAccountDialogLoading";
 import { OtpInput, type OtpInputHandle, type OtpStatus } from "@/components/interior/otp-input";
 import { PasswordStrength } from "@/components/interior/password-strength";
@@ -37,7 +39,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { FluidOrb } from "@/components/ui/fluid-orb";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { passwordConfirmationError } from "@/components/auth/password-confirmation";
 import { authClient } from "@/lib/auth-client";
 import { PRIVACY_VERSION, TERMS_VERSION } from "@/legal-policy";
 import { clearLocalProductData } from "@/persistence";
@@ -56,6 +57,7 @@ const MODE_COPY: Record<AuthMode, { title: string; description: string }> = {
 };
 
 const AUTH_INPUT_CLASS = "border-[#d5d7da] bg-white shadow-none dark:border-[#d5d7da] dark:bg-white dark:text-[#242424] dark:placeholder:text-[#737373]";
+const AUTH_PASSWORD_TOGGLE_CLASS = "text-[#737373] hover:text-[#242424] dark:text-[#737373] dark:hover:text-[#242424]";
 
 interface WebsiteAccountPanelProps {
   onSessionChanged?: (authenticated: boolean) => void | Promise<void>;
@@ -346,15 +348,16 @@ export function WebsiteAccountPanel({
               </p>
               <div className="mt-4 grid gap-1.5">
                 <Label className="text-white/72" htmlFor={`${fieldId}-delete-password`}>当前密码</Label>
-                <Input
+                <PasswordInput
                   id={`${fieldId}-delete-password`}
                   className="border-white/22 bg-white text-[#242424] shadow-none placeholder:text-[#737373]"
-                  type="password"
                   value={deletePassword}
                   onChange={(event) => setDeletePassword(event.target.value)}
                   minLength={10}
                   maxLength={128}
                   autoComplete="current-password"
+                  revealLabel="显示当前密码"
+                  toggleClassName={AUTH_PASSWORD_TOGGLE_CLASS}
                 />
               </div>
               <label className="mt-3 flex min-h-11 items-center gap-3 text-sm text-white/72">
@@ -455,7 +458,7 @@ export function WebsiteAccountPanel({
                 {mode !== "forgot" ? (
                   <div className="grid gap-1.5">
                     <Label htmlFor={`${fieldId}-password`}>密码</Label>
-                    <Input
+                    <PasswordInput
                       className={AUTH_INPUT_CLASS}
                       id={`${fieldId}-password`}
                       value={password}
@@ -467,11 +470,11 @@ export function WebsiteAccountPanel({
                         }
                       }}
                       required
-                      type="password"
                       minLength={10}
                       maxLength={128}
                       placeholder="10–128 位"
                       autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                      toggleClassName={AUTH_PASSWORD_TOGGLE_CLASS}
                     />
                     {mode === "signup" ? <PasswordStrength value={password} className="mt-1.5" /> : null}
                   </div>
@@ -479,7 +482,7 @@ export function WebsiteAccountPanel({
                 {mode === "signup" ? (
                   <div className="grid gap-1.5">
                     <Label htmlFor={`${fieldId}-confirm-password`}>确认密码</Label>
-                    <Input
+                    <PasswordInput
                       className={AUTH_INPUT_CLASS}
                       id={`${fieldId}-confirm-password`}
                       value={confirmPassword}
@@ -492,11 +495,12 @@ export function WebsiteAccountPanel({
                       }}
                       onBlur={() => setConfirmPasswordError(passwordConfirmationError(password, confirmPassword))}
                       required
-                      type="password"
                       minLength={10}
                       maxLength={128}
                       placeholder="再次输入密码"
                       autoComplete="new-password"
+                      revealLabel="显示确认密码"
+                      toggleClassName={AUTH_PASSWORD_TOGGLE_CLASS}
                       aria-invalid={Boolean(confirmPasswordError)}
                       aria-describedby={`${fieldId}-confirm-password-hint`}
                     />

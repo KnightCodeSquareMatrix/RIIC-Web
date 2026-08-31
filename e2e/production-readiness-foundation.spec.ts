@@ -665,6 +665,11 @@ test("password reset requires matching password confirmation before making a req
 
   await page.getByLabel("新密码", { exact: true }).fill("correct-password");
   await page.getByLabel("确认新密码", { exact: true }).fill("different-password");
+  await expect(page.getByLabel("新密码", { exact: true })).toHaveAttribute("type", "password");
+  await page.getByRole("button", { name: "显示新密码" }).click();
+  await expect(page.getByLabel("新密码", { exact: true })).toHaveAttribute("type", "text");
+  await page.getByRole("button", { name: "隐藏新密码" }).click();
+  await expect(page.getByLabel("新密码", { exact: true })).toHaveAttribute("type", "password");
   await page.getByRole("button", { name: "确认重置" }).click();
   await expect(page.getByText("两次输入的密码不一致。", { exact: true })).toBeVisible();
   expect(resetRequests).toBe(0);
@@ -1247,6 +1252,11 @@ for (const viewport of [
     await accountPanel.getByRole("textbox", { name: "邮箱", exact: true }).fill(`account-${viewport.width}@example.test`);
     await page.getByLabel("密码", { exact: true }).fill("secure-password-1");
     await page.getByLabel("确认密码", { exact: true }).fill("different-password-1");
+    await expect(page.getByLabel("密码", { exact: true })).toHaveAttribute("type", "password");
+    await page.getByRole("button", { name: "显示密码" }).click();
+    await expect(page.getByLabel("密码", { exact: true })).toHaveAttribute("type", "text");
+    await page.getByRole("button", { name: "隐藏密码" }).click();
+    await expect(page.getByLabel("密码", { exact: true })).toHaveAttribute("type", "password");
     await page.getByLabel("昵称").fill("博士😀");
     await page.getByRole("button", { name: "创建账号并发送验证码" }).click();
     await expect(accountPanel.getByText(/昵称只能使用中文、英文字母、数字/)).toBeVisible();
