@@ -71,7 +71,14 @@ function SidebarProvider({
 
   // This is the internal state of the sidebar.
   // We use openProp and setOpenProp for control from outside the component.
-  const [_open, _setOpen] = React.useState(defaultOpen)
+  // 挂载时读回 sidebar_state cookie，避免整页刷新后侧边栏被复位成收起。
+  const [_open, _setOpen] = React.useState(() => {
+    if (typeof document === "undefined") return defaultOpen
+    const cookie = document.cookie
+      .split("; ")
+      .find((entry) => entry.startsWith(`${SIDEBAR_COOKIE_NAME}=`))
+    return cookie ? cookie.split("=")[1] === "true" : defaultOpen
+  })
   const open = openProp ?? _open
   const setOpen = React.useCallback(
     (value: boolean | ((value: boolean) => boolean)) => {
