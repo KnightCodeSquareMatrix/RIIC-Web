@@ -140,6 +140,7 @@ export function dailyProductionGroups(
   estimate: DailyProductionEstimate | null,
   solverProduction: SolverDailyProduction | null,
 ): DailyProductionGroup[] {
-  if (solverProduction) return solverGroups(solverProduction);
-  return estimate ? estimateGroups(estimate) : [];
+  // 优先显示带自然制造/无人机制造拆分的估算；求解器日产量作为兜底。
+  if (estimate) return estimateGroups(estimate);
+  return solverProduction ? solverGroups(solverProduction) : [];
 }

@@ -144,7 +144,9 @@ function finalEfficiency(efficiency: RoomEfficiency | undefined): number | null 
 
 function powerBonus(efficiency: RoomEfficiency | undefined): number | null {
   const final = finalEfficiency(efficiency);
-  return final === null ? null : (final - 1) * 100;
+  if (final === null) return null;
+  // 新求解器：发电效率为加成形式（0.2 = +20%）；旧输出为倍率形式（1.2）。
+  return final < 1 ? final * 100 : (final - 1) * 100;
 }
 
 function droneEquivalent(

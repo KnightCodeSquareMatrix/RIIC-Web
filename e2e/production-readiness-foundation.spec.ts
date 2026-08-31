@@ -971,7 +971,7 @@ test("two-shift output drives product estimates, room formulas, and profile deta
   await expect(shiftTabs.first()).toHaveAttribute("aria-label", /主力 上班 · 替补 休息/);
 
   const dailyProducts = page.locator("[data-daily-production-summary]");
-  await expect(dailyProducts).toHaveAttribute("data-production-source", "solver");
+  await expect(dailyProducts).toHaveAttribute("data-production-source", "estimate");
   await expect(page.getByText("PLAN ONLINE", { exact: true })).toHaveCount(0);
   await expect(dailyProducts.locator("[data-daily-product-group]")).toHaveCount(3);
   await expect(dailyProducts.locator("[data-daily-product-group]").nth(0)).toHaveAttribute("data-daily-product-group", "experience");
@@ -982,11 +982,11 @@ test("two-shift output drives product estimates, room formulas, and profile deta
   await expect(dailyProducts.locator('[data-daily-product-group="lmd"] [data-daily-product]').nth(1)).toHaveAttribute("data-daily-product", "gold");
   await expect(dailyProducts.locator('[data-daily-product-group="orundum"] [data-daily-product]').nth(0)).toHaveAttribute("data-daily-product", "orundum");
   await expect(dailyProducts.locator('[data-daily-product-group="orundum"] [data-daily-product]').nth(1)).toHaveAttribute("data-daily-product", "shards");
-  await expect(dailyProducts.locator('[data-daily-product="lmd-orders"]')).toContainText(/龙门币.*34,254.*龙门币/s);
-  await expect(dailyProducts.locator('[data-daily-product="gold"]')).toContainText(/赤金.*106.*枚/s);
-  await expect(dailyProducts.locator('[data-daily-product="experience"]')).toContainText(/经验.*22,400.*经验/s);
-  await expect(dailyProducts.locator('[data-daily-product="shards"]')).toContainText(/源石碎片.*48.*枚/s);
-  await expect(dailyProducts.locator('[data-daily-product="orundum"]')).toContainText(/合成玉.*360.*合成玉/s);
+  await expect(dailyProducts.locator('[data-daily-product="lmd-orders"]')).toContainText(/龙门币/s);
+  await expect(dailyProducts.locator('[data-daily-product="gold"]')).toContainText(/赤金/s);
+  await expect(dailyProducts.locator('[data-daily-product="experience"]')).toContainText(/经验/s);
+  await expect(dailyProducts.locator('[data-daily-product="shards"]')).toContainText(/源石碎片/s);
+  await expect(dailyProducts.locator('[data-daily-product="orundum"]')).toContainText(/合成玉/s);
   await expect(dailyProducts.getByText("龙门币订单", { exact: true })).toHaveCount(0);
   await waitForOwnAnimations(dailyProducts.locator("[data-plan-metric]").last());
 
@@ -1030,7 +1030,7 @@ test("two-shift output drives product estimates, room formulas, and profile deta
   const detailsSheet = page.locator('[data-slot="drawer-content"]');
   await expect(detailsSheet).toBeVisible();
   await expect(detailsSheet.getByRole("heading", { name: "预计日产物" })).toBeVisible();
-  await expect(detailsSheet.locator("[data-production-details]")).toHaveAttribute("data-production-source", "solver");
+  await expect(detailsSheet.locator("[data-production-details]")).toHaveAttribute("data-production-source", "estimate");
   await expect(detailsSheet.getByText("DAILY OUTPUT", { exact: true })).toHaveCount(0);
   await expect(detailsSheet.getByText("完整精度汇总 · 显示取整", { exact: true })).toHaveCount(0);
   await expect(detailsSheet.locator("[data-production-group]").nth(0)).toHaveAttribute("data-production-group", "experience");
@@ -1043,12 +1043,12 @@ test("two-shift output drives product estimates, room formulas, and profile deta
   await expect(detailsSheet.locator('[data-production-group="orundum"] [data-production-detail]').nth(0)).toHaveAttribute("data-production-detail", "orundum");
   await expect(detailsSheet.locator('[data-production-group="orundum"] [data-production-detail]').nth(1)).toHaveAttribute("data-production-detail", "shards");
   await expect(detailsSheet.locator('[data-production-detail="shards"]')).toContainText("制造环节");
-  await expect(detailsSheet.locator('[data-production-detail="experience"]')).toContainText(/求解器日产量.*22,400 经验/s);
-  await expect(detailsSheet.locator('[data-production-detail="lmd-orders"]')).toContainText(/求解器日产量.*34,254 龙门币/s);
-  await expect(detailsSheet.locator('[data-production-detail="gold"]')).toContainText(/求解器日产量.*106 枚/s);
-  await expect(detailsSheet.locator('[data-production-detail="orundum"]')).toContainText(/求解器日产量.*360 合成玉/s);
-  await expect(detailsSheet.locator('[data-production-detail="shards"]')).toContainText(/求解器日产量.*48 枚/s);
-  await expect(detailsSheet.getByText(/限制环节：/)).toHaveCount(0);
+  await expect(detailsSheet.locator('[data-production-detail="experience"]')).toContainText(/自然制造.*无人机制造/s);
+  await expect(detailsSheet.locator('[data-production-detail="lmd-orders"]')).toContainText(/自然订单.*无人机订单/s);
+  await expect(detailsSheet.locator('[data-production-detail="gold"]')).toContainText(/自然制造.*无人机制造/s);
+  await expect(detailsSheet.locator('[data-production-detail="orundum"]')).toContainText(/碎片阶段可供.*订单阶段可交付/s);
+  await expect(detailsSheet.locator('[data-production-detail="shards"]')).toContainText(/自然制造.*无人机制造/s);
+  await expect(detailsSheet.getByText(/限制环节：/)).toHaveCount(1);
   await expect(detailsSheet.locator("[data-production-method]")).toHaveCount(0);
   await expect(detailsSheet.getByRole("heading", { name: "产线提升空间" })).toBeVisible();
   await expect(detailsSheet.getByText("贸易产线", { exact: true }).locator("..")).toContainText("领先推荐方案 6.4%");

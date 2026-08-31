@@ -118,7 +118,8 @@ export function PlanResultSummary({
     { kind: "power" as const, label: "发电产线", value: rotation?.daily.power ?? currentRotation?.daily_power_efficiency ?? currentRotation?.daily_power, baseline: baselineRotation?.daily_power_efficiency ?? baselineRotation?.daily_power },
   ].filter((metric): metric is { kind: RotationMetricKind; label: string; value: number; baseline: number | undefined } => typeof metric.value === "number");
   const solverDaily = rotation?.daily?.production ?? null;
-  const production = rotation && !solverDaily ? estimateDailyProduction({ layout, maa, rotation }) : null;
+  // 始终计算前端估算（含自然/无人机拆分）；求解器日产量仅作兜底。
+  const production = rotation && layout && maa ? estimateDailyProduction({ layout, maa, rotation }) : null;
   const productGroups = dailyProductionGroups(production, solverDaily);
   const adjustmentCount = countShiftPlacementAdjustments(comparison);
   const activeDetailSection = detailSection === "comparison" && comparison ? "comparison" : "efficiency";
