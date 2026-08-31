@@ -16,7 +16,7 @@
 - 按练度与基建收益查看练卡建议
 - 查询基建技能与适用设施
 - 对比当前进驻与排班计划，并导出 MAA JSON
-- 可选的森空岛二维码授权、状态同步、网站账号和云端工作区
+- 可选的森空岛扫码或凭证导入授权、状态同步、网站账号和云端工作区
 
 森空岛、网站账号和云同步都由部署者显式配置。未启用这些能力时，样例数据、布局配置、技能查询和已接入求解器的排班流程仍可独立使用。
 
@@ -26,7 +26,7 @@
 - React 19 与 TypeScript
 - Tailwind CSS 4、shadcn/ui、Base UI
 - Better Auth、Drizzle ORM 与 PostgreSQL
-- `skland-kit`，仅用于可选的森空岛二维码授权
+- `skland-kit`，仅用于可选的森空岛扫码或凭证导入授权
 - 外部长驻进程 `infra-cli serve`
 
 页面和 `/api/*` 由同一个 Next.js 服务提供，不需要单独启动 Express 或 Vite 服务。
@@ -59,7 +59,7 @@ npm run dev
 chmod +x bin/infra-cli
 ```
 
-首次部署时，可把 Linux 制品放到应用根目录的 `shared/bin/infra-cli`；后续 release 会复用共享制品，或在共享制品不存在时沿用当前 release 的求解器。服务器上也不要从不可信来源下载或执行二进制。
+服务器部署只使用应用根目录中由 root 管理的 `shared/bin/infra-cli`，并校验独立的 SHA-256 sidecar、GitHub Environment 批准摘要和 Worker 指纹。网站 release 不得携带 `bin/infra-cli`，共享制品缺失或校验不一致时部署会直接失败，因此发布网站不会替换或降级求解器。服务器上也不要从不可信来源下载或执行二进制。
 
 如需单独指定求解器数据目录，可设置 `ARKNIGHTS_INFRA_DATA_DIR`。启动应用后访问 `/api/health`，成功信封中的 `data.plannerReady: true` 表示排班服务可用。
 
@@ -93,7 +93,7 @@ cp .env.example .env.local
 
 ## 数据与隐私边界
 
-- 森空岛只提供官方二维码授权，不接收账号密码或短信验证码。
+- 森空岛支持官方二维码授权，以及由用户从已登录官网主动生成的凭证导入；本站不接收账号密码或短信验证码。
 - 森空岛凭据使用 AES-256-GCM 封装在 HttpOnly Cookie 中，不写入 localStorage、运行记录或反馈。
 - 排班 API 只公开白名单字段；调试字段在 production 强制关闭。
 - 运行记录、反馈、云工作区和分析数据各有独立的最小化与保留策略。
@@ -124,14 +124,14 @@ npm run audit:security
 npm run build
 ```
 
-`npm run check` 会执行公开仓库卫生检查、生成资源校验、ESLint、单元测试和 API 契约测试。浏览器测试可分别通过 `npm run test:e2e`、`npm run test:e2e:production-profile` 和 `npm run test:e2e:webkit` 运行。涉及数据库 schema 的改动，应先设置 `DATABASE_MIGRATION_URL`，再执行：
+`npm run check` 会执行公开仓库卫生检查、生成资源校验、ESLint、单元测试和 API 契约测试。浏览器测试可分别通过 `npm run test:e2e`、`npm run test:e2e:production-profile` 和 `npm run test:e2e:webkit` 运行。`npm run build` 会准备不含求解器的 `.next/standalone` 运行目录，并补齐 `public` 与 `.next/static`；生产启动脚本会使用这一目录。涉及数据库 schema 的改动，应先设置 `DATABASE_MIGRATION_URL`，再执行：
 
 ```bash
 npm run db:generate
 npm run db:migrate
 ```
 
-所有功能和修复 PR 都应提交到 `develop`；`main` 只接收维护者从同仓库 `release/**` 分支发起的发布 PR。完整流程见 [CONTRIBUTING.md](./CONTRIBUTING.md)。不要把本地环境文件、求解器二进制、运行记录、用户数据或浏览器自动化产物加入提交。
+所有普通功能和修复 PR 都应提交到 `develop`；`main` 只接收维护者从同仓库 `release/**` 分支发起的发布 PR。特批的直接发布还必须带有维护者设置的 `direct-main-release` 标签，并通过其余全部质量门禁。完整流程见 [CONTRIBUTING.md](./CONTRIBUTING.md)。不要把本地环境文件、求解器二进制、运行记录、用户数据或浏览器自动化产物加入提交。
 
 ## 第三方素材
 

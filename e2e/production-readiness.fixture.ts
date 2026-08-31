@@ -941,7 +941,7 @@ export async function mockApis(
           ? {
               authenticated: false,
               configured: Boolean(options.sklandConfigured),
-              authMethods: { qr: true },
+              authMethods: { qr: true, credential: true },
               accounts: [],
               activeAccountId: null,
               bindingCount: 0,
@@ -950,7 +950,7 @@ export async function mockApis(
           : {
               authenticated: isSummary ? accounts.length > 0 : Boolean(options.sklandSnapshot),
               configured: Boolean(options.sklandConfigured),
-              authMethods: { qr: true },
+              authMethods: { qr: true, credential: true },
               accounts,
               activeAccountId,
               bindingCount,

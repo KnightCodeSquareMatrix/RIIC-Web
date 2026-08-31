@@ -22,7 +22,7 @@ function WebsiteLoginRequired({ onOpenAccount }: { onOpenAccount: () => void }) 
         <p className="text-xs font-medium tracking-wide text-primary">森空岛状态中心</p>
         <h2 className="mt-2 text-2xl font-semibold tracking-tight">先登录网站账号</h2>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          森空岛绑定属于当前网站账号。登录后即可扫码绑定、查看当前基建状态，并在七天授权到期后重新续期。
+          森空岛绑定属于当前网站账号。登录后可通过扫码或凭证导入完成绑定、查看当前基建状态，并在七天授权到期后重新续期。
         </p>
       </header>
       <div className="grid min-h-64 place-items-center border-y border-border/70 py-10 text-center">

@@ -8,9 +8,9 @@ import {
   assertPlanCollectionLimits,
   assertSameOrigin,
   createRequestId,
-  enforceRateLimit,
   failureResponse,
   normalizeFiammettaEnable,
+  planAccountAdmissionClass,
   PublicApiError,
   readJsonBody,
   requestClientIp,
@@ -21,6 +21,7 @@ import { isRotationProfile } from "@/rotation-settings";
 import type { BaseBlueprint, OperBoxEntry, PublicPlanData, RotationProfile, SavedPlanCalculationContext } from "@/types";
 import { activeSklandAccount, readSklandAccountStore } from "@/server/skland/http";
 import { sklandDataOwnerTag } from "@/server/skland/session";
+import { websiteSession as readWebsiteSession } from "@/server/auth";
 import { requireWebsiteSession } from "@/server/auth/authorization";
 import { planAccessMode } from "@/server/plan-access";
 import { recordPlanRunBestEffort } from "@/server/business-records";
@@ -92,8 +93,6 @@ export async function POST(request: Request) {
     const includeDebug = new URL(request.url).searchParams.get("beta") === "1";
     assertSameOrigin(request);
     const ip = requestClientIp(request);
-    enforceRateLimit("plan", ip, 20, 10 * 60_000, "AIC-PLAN-3002");
-    release = acquirePlanSlot(ip);
 
     const body = await readJsonBody(request, 2 * 1024 * 1024) as {
       layout?: BaseBlueprint;
@@ -104,12 +103,20 @@ export async function POST(request: Request) {
       fiammetta_enable?: unknown;
     };
     let websiteUserId: string | null = null;
+    let websiteAccountClass: "new" | "established" | null = null;
     if (planAccessMode(body.boxSource, body.operbox !== undefined) === "trusted-sample") {
       const sample = await (await import("@/server/infra")).getSampleOperbox();
       body.operbox = sample.operbox as OperBoxEntry[];
       body.sourceName = "243 全精二示例";
+      const optionalSession = await readWebsiteSession(request).catch(() => null);
+      if (optionalSession?.user?.id) {
+        websiteUserId = optionalSession.user.id;
+        websiteAccountClass = planAccountAdmissionClass(optionalSession.user);
+      }
     } else {
-      websiteUserId = (await requireWebsiteSession(request)).user.id;
+      const websiteSession = await requireWebsiteSession(request);
+      websiteUserId = websiteSession.user.id;
+      websiteAccountClass = planAccountAdmissionClass(websiteSession.user);
     }
     const layoutErrors = validateLayoutJson(body?.layout);
     if (layoutErrors.length || !body.layout) {
@@ -173,6 +180,9 @@ export async function POST(request: Request) {
     });
     if (!calculationContext) throw new PublicApiError("AIC-LAYOUT-1201");
     const sourceType = body.boxSource === "skland" ? "skland" : body.boxSource === "sample" ? "sample" : "maa";
+    // Sample inputs are global server data. A website identity may authorize a
+    // cache miss, but it must never become the owner of that shared cache entry.
+    const cacheReferenceUserId = sourceType === "sample" ? null : websiteUserId;
     let operboxContentHmac: string | null = null;
     let operboxHmacKeyVersion: string | null = null;
     if (websiteUserId && sourceType === "maa" && isAccountCloudSyncEnabled()) {
@@ -234,7 +244,7 @@ export async function POST(request: Request) {
           const referenceStored = runStored && await recordPlanCacheReferenceBestEffort({
             cacheKeyHmac: cache.keyHmac,
             diagnosticId: cache.result.diagnosticId,
-            userId: websiteUserId,
+            userId: cacheReferenceUserId,
           });
           if (!referenceStored) await evictPlanCacheKeys([cache.keyHmac]).catch(() => undefined);
           return successResponse(cache.result, requestId);
@@ -242,6 +252,14 @@ export async function POST(request: Request) {
         if (cache.kind === "lease") cacheLease = cache;
       }
     }
+    // Only an actual cache miss occupies scarce solver capacity. Authentication,
+    // validation and cache hits must remain available while another plan runs.
+    if (!websiteUserId || !websiteAccountClass) {
+      throw new PublicApiError("AIC-AUTH-2008", {
+        message: "请登录网站账号后再发起新的排班计算；未登录仍可使用已有缓存。",
+      });
+    }
+    release = acquirePlanSlot({ ip, accountId: websiteUserId, accountClass: websiteAccountClass });
     runResult = await runPlan({ layout: body.layout, operbox, sourceName, rotation, fiammettaEnable, dataOwnerTag });
     const publicResult = toPublicPlanData(
       runResult,
@@ -260,7 +278,7 @@ export async function POST(request: Request) {
           const referenceStored = await recordPlanCacheReferenceBestEffort({
             cacheKeyHmac: activeLease.keyHmac,
             diagnosticId: publicResult.diagnosticId,
-            userId: websiteUserId,
+            userId: cacheReferenceUserId,
           });
           if (!referenceStored) {
             await releasePlanCacheLease(activeLease);

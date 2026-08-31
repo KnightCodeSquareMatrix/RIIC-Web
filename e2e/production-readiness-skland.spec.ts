@@ -12,7 +12,7 @@ test.beforeEach(async ({ page }) => {
   }));
 });
 
-test("Skland login centers the QR on every viewport and starts after explicit consent", async ({ page }) => {
+test("Skland login exposes both methods and starts QR only after explicit consent", async ({ page }) => {
   await mockApis(page, { sklandConfigured: true });
   let qrStartRequests = 0;
   await page.route("**/api/skland/auth/qr", (route) => {
@@ -61,19 +61,18 @@ test("Skland login centers the QR on every viewport and starts after explicit co
   await expect(page.locator("[data-skland-account-control]")).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "把当前罗德岛带进排班助手" })).toBeVisible();
   await expect(page.getByText(/手机号|验证码|密码/)).toHaveCount(0);
-  await expect(page.getByText("使用森空岛 App 扫描二维码，同步当前角色的干员与基建数据。")).toBeVisible();
+  await expect(page.getByText("使用森空岛 App 扫码，或从已登录的森空岛网页导入凭证，同步当前角色的干员与基建数据。")).toBeVisible();
   await expect(page.getByText("登录凭证只保存在当前浏览器，7 天后失效。")).toBeVisible();
-  await expect(page.getByText(/本站不会自动签到或读取社区内容/)).toHaveCount(0);
+  await expect(page.getByRole("tab", { name: "扫码登录" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "凭证导入" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "登录森空岛账号" })).toHaveCount(0);
+  await expect(page.getByText("登录信息经加密写入 HttpOnly Cookie，并在授权成功 7 天后固定失效。")).toHaveCount(0);
+  await expect(page.locator("[data-skland-auth-copy]")).toHaveCount(0);
   expect(qrStartRequests).toBe(0);
-  const [mobileQrBox, mobileCopyBox] = await Promise.all([
-    page.locator("[data-skland-login-qr]").boundingBox(),
-    page.locator("[data-skland-login-copy]").boundingBox(),
-  ]);
-  expect(mobileCopyBox?.y).toBeLessThan(mobileQrBox?.y ?? 0);
 
   const consentCheckboxes = page.getByRole("checkbox");
   await expect(consentCheckboxes).toHaveCount(2);
-  await expect(page.getByRole("button", { name: /生成|打开森空岛/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "生成登录二维码" })).toBeDisabled();
   await consentCheckboxes.nth(0).check();
   expect(qrStartRequests).toBe(0);
   await consentCheckboxes.nth(1).check();
@@ -92,17 +91,231 @@ test("Skland login centers the QR on every viewport and starts after explicit co
   ]) {
     await page.setViewportSize(viewport);
     await expect(page.getByRole("img", { name: "森空岛登录二维码" })).toBeVisible();
-    const [sklandPageBox, qrBox] = await Promise.all([
-      page.locator("[data-skland-page]").boundingBox(),
-      page.locator("[data-skland-qr-visual]").boundingBox(),
-    ]);
-    expect(sklandPageBox).not.toBeNull();
+    const qrBox = await page.locator("[data-skland-qr-visual]").boundingBox();
     expect(qrBox).not.toBeNull();
-    const pageCenter = (sklandPageBox?.x ?? 0) + (sklandPageBox?.width ?? 0) / 2;
-    const qrCenter = (qrBox?.x ?? 0) + (qrBox?.width ?? 0) / 2;
-    expect(qrCenter).toBeCloseTo(pageCenter, 0);
+    expect(qrBox?.width).toBeGreaterThanOrEqual(208);
+    expect(qrBox?.width).toBeLessThanOrEqual(224);
   }
   expect(qrStartRequests).toBe(1);
+});
+
+test("credential import explains the risk, gates consent, recovers from errors, and clears secrets on success", async ({ page, context }) => {
+  await mockApis(page, { sklandConfigured: true });
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const submittedCredential = "cred-private-fixture,token-private-fixture";
+  const requestBodies: unknown[] = [];
+  let attempts = 0;
+  let releaseFirstAttempt!: () => void;
+  const firstAttemptGate = new Promise<void>((resolve) => { releaseFirstAttempt = resolve; });
+
+  await page.route("**/api/skland/auth/credential", async (route) => {
+    attempts += 1;
+    requestBodies.push(route.request().postDataJSON());
+    if (attempts === 1) {
+      await firstAttemptGate;
+      return route.fulfill({
+        status: 400,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: false,
+          error: {
+            code: "AIC-AUTH-2010",
+            message: "森空岛凭证格式无效，请重新完整复制 cred,token。",
+            requestId,
+            retryable: false,
+          },
+        }),
+      });
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        data: {
+          authenticated: true,
+          configured: true,
+          authMethods: { qr: true, credential: true },
+          accounts: [primarySklandAccount],
+          activeAccountId: primarySklandAccount.accountId,
+          bindingCount: 1,
+          scheduleSnapshot: authenticatedSklandSnapshot,
+          statusSnapshot: authenticatedSklandSnapshot,
+        },
+        requestId,
+      }),
+    });
+  });
+
+  await seedPreferences(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Toggle Sidebar" }).click();
+  await openSklandOverview(page);
+  await page.getByRole("tab", { name: "凭证导入" }).click();
+
+  const credentialPanel = page.locator("[data-skland-credential-panel]");
+  await expect(credentialPanel).toBeVisible();
+  const credentialForm = credentialPanel.locator("[data-skland-credential-form]");
+  await expect(credentialForm).toBeVisible();
+  await expect.poll(() => credentialForm.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  await expect(credentialPanel.getByText("手机端优先使用扫码")).toBeVisible();
+  await expect(credentialPanel.locator("ol > li")).toHaveCount(3);
+  await expect(credentialPanel.getByText(/allow pasting.*允许粘贴/)).toBeVisible();
+  await expect(credentialPanel.getByText("仓库物资数量", { exact: true })).toBeVisible();
+  await expect(credentialPanel.getByText(/本站实际不读取、不保存、不展示仓库数据/)).toBeVisible();
+
+  await credentialPanel.getByRole("button", { name: "复制命令" }).click();
+  await expect(credentialPanel.getByRole("button", { name: "已复制" })).toBeVisible();
+  const copiedCommand = await page.evaluate(() => navigator.clipboard.readText());
+  expect(copiedCommand).toBe("copy(localStorage.getItem('SK_OAUTH_CRED_KEY')+','+localStorage.getItem('SK_TOKEN_CACHE_KEY')),console.log('已复制到粘贴板，回到网页粘贴')");
+
+  const input = credentialPanel.locator("[data-skland-credential-input]");
+  const submit = credentialPanel.locator("[data-skland-credential-submit]");
+  await expect(input).toHaveAttribute("type", "password");
+  await input.fill(submittedCredential);
+  await expect(submit).toBeDisabled();
+  await credentialPanel.getByRole("checkbox").nth(0).check();
+  await expect(submit).toBeDisabled();
+  await credentialPanel.getByRole("checkbox").nth(1).check();
+  await expect(submit).toBeEnabled();
+
+  await submit.click();
+  await expect(submit).toContainText("正在验证凭证…");
+  releaseFirstAttempt();
+  await expect(credentialPanel.getByText(/AIC-AUTH-2010/)).toBeVisible();
+  await expect(input).toHaveValue(submittedCredential);
+  await submit.click();
+  await expect(page.getByRole("heading", { name: "测试博士" }).first()).toBeVisible();
+
+  expect(requestBodies).toEqual([
+    {
+      credential: submittedCredential,
+      consent: {
+        termsAccepted: true,
+        privacyAccepted: true,
+        termsVersion: "2026-08-21-cloud-workspace",
+        privacyVersion: "2026-08-27-detailed-telemetry",
+      },
+    },
+    {
+      credential: submittedCredential,
+      consent: {
+        termsAccepted: true,
+        privacyAccepted: true,
+        termsVersion: "2026-08-21-cloud-workspace",
+        privacyVersion: "2026-08-27-detailed-telemetry",
+      },
+    },
+  ]);
+  const browserPersistence = await page.evaluate(() => ({
+    local: JSON.stringify(localStorage),
+    session: JSON.stringify(sessionStorage),
+    bodyText: document.body.textContent ?? "",
+  }));
+  expect(browserPersistence.local).not.toContain(submittedCredential);
+  expect(browserPersistence.session).not.toContain(submittedCredential);
+  expect(browserPersistence.bodyText).not.toContain(submittedCredential);
+});
+
+test("credential import can add a second Skland account from the account dialog", async ({ page }) => {
+  const secondarySnapshot = {
+    ...authenticatedSklandSnapshot,
+    player: {
+      ...authenticatedSklandSnapshot.player,
+      uid: "246813579",
+      nickname: "凭证导入博士",
+      channelName: "官服",
+    },
+    roles: [{
+      uid: "246813579",
+      nickname: "凭证导入博士",
+      channelName: "官服",
+      isDefault: true,
+    }],
+  };
+  const secondaryAccount = {
+    accountId: "account_credential_secondary",
+    selectedUid: secondarySnapshot.player.uid,
+    roles: secondarySnapshot.roles,
+    credentialExpiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+  };
+  const submittedCredential = "cred-dialog-fixture,token-dialog-fixture";
+  let submittedBody: unknown;
+
+  await mockApis(page, {
+    sklandConfigured: true,
+    sklandSnapshot: authenticatedSklandSnapshot,
+  });
+  await page.route("**/api/skland/auth/credential", async (route) => {
+    submittedBody = route.request().postDataJSON();
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "X-Request-Id": requestId },
+      body: JSON.stringify({
+        success: true,
+        data: {
+          authenticated: true,
+          configured: true,
+          authMethods: { qr: true, credential: true },
+          accounts: [primarySklandAccount, secondaryAccount],
+          activeAccountId: secondaryAccount.accountId,
+          bindingCount: 2,
+          bindingSummary: {
+            totalCount: 2,
+            activeCount: 2,
+            renewalDueCount: 0,
+            nextExpiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+            latestExpiredAt: null,
+          },
+          scheduleSnapshot: secondarySnapshot,
+          statusSnapshot: secondarySnapshot,
+        },
+        requestId,
+      }),
+    });
+  });
+
+  await seedPreferences(page);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/");
+  await openSklandOverview(page);
+  await page.locator("[data-skland-add-account]").click();
+
+  const dialog = page.getByRole("dialog", { name: "添加森空岛账号" });
+  await dialog.getByRole("tab", { name: "凭证导入" }).click();
+  await expect(dialog).toHaveCSS("width", "960px");
+  const credentialPanel = dialog.locator("[data-skland-credential-panel]");
+  const credentialForm = credentialPanel.locator("[data-skland-credential-form]");
+  const riskNotice = credentialPanel.locator("[data-skland-credential-risk]");
+  const [panelBox, formBox, riskBox] = await Promise.all([
+    credentialPanel.boundingBox(),
+    credentialForm.boundingBox(),
+    riskNotice.boundingBox(),
+  ]);
+  expect(panelBox).not.toBeNull();
+  expect(formBox?.width).toBeCloseTo(768, 0);
+  expect(riskBox?.width).toBeCloseTo(672, 0);
+  expect(Math.abs((formBox?.x ?? 0) + (formBox?.width ?? 0) / 2 - ((panelBox?.x ?? 0) + (panelBox?.width ?? 0) / 2))).toBeLessThanOrEqual(2);
+  expect(Math.abs((riskBox?.x ?? 0) + (riskBox?.width ?? 0) / 2 - ((formBox?.x ?? 0) + (formBox?.width ?? 0) / 2))).toBeLessThanOrEqual(2);
+  await dialog.locator("[data-skland-credential-input]").fill(submittedCredential);
+  await dialog.getByRole("checkbox").nth(0).check();
+  await dialog.getByRole("checkbox").nth(1).check();
+  await dialog.locator("[data-skland-credential-submit]").click();
+
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "凭证导入博士" }).first()).toBeVisible();
+  expect(submittedBody).toEqual({
+    credential: submittedCredential,
+    consent: {
+      termsAccepted: true,
+      privacyAccepted: true,
+      termsVersion: "2026-08-21-cloud-workspace",
+      privacyVersion: "2026-08-27-detailed-telemetry",
+    },
+  });
+  await expect(page.locator("body")).not.toContainText(submittedCredential);
 });
 
 test("Skland login waits for explicit consent and explains slow preparation", async ({ page }) => {
@@ -248,8 +461,9 @@ test("Skland restore waits for website authentication and then starts summary an
   await expect.poll(() => summarySessionRequests).toBe(1);
 });
 
-test("Skland login loads full status by default and deletion preserves non-Skland data", async ({ page }) => {
+test("Skland status center loads full status on demand and deletion preserves non-Skland data", async ({ page }) => {
   const statusMethods: string[] = [];
+  let fullSessionRequests = 0;
   let releaseAvatar!: () => void;
   const avatarGate = new Promise<void>((resolve) => { releaseAvatar = resolve; });
   const snapshotWithAvatar = {
@@ -268,7 +482,9 @@ test("Skland login loads full status by default and deletion preserves non-Sklan
     });
   });
   page.on("request", (request) => {
-    if (new URL(request.url()).pathname === "/api/skland/status/refresh") statusMethods.push(request.method());
+    const url = new URL(request.url());
+    if (url.pathname === "/api/skland/status/refresh") statusMethods.push(request.method());
+    if (url.pathname === "/api/skland/accounts" && !url.searchParams.has("mode")) fullSessionRequests += 1;
   });
   await mockApis(page, {
     sklandConfigured: true,
@@ -277,17 +493,15 @@ test("Skland login loads full status by default and deletion preserves non-Sklan
   await seedV4Session(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
-  await expect(page.locator("[data-skland-account-avatar] img")).toHaveAttribute(
-    "src",
-    snapshotWithAvatar.player.avatarUrl
-  );
   const calculatorAccount = page.locator("[data-skland-account-control]:visible");
-  await expect(calculatorAccount.locator('[data-remote-avatar-state="loading"]')).toBeVisible();
-  await expect(calculatorAccount.locator('[data-slot="skeleton"]')).toBeVisible();
+  await expect(calculatorAccount).toBeVisible();
+  expect(fullSessionRequests).toBe(0);
+  await expect(calculatorAccount.locator("[data-skland-account-avatar] img")).toHaveCount(0);
   const compactAvatarBox = await calculatorAccount.locator("[data-remote-avatar-state]").boundingBox();
   expect(compactAvatarBox?.width).toBeCloseTo(42, 0);
   await page.getByRole("button", { name: "Toggle Sidebar" }).click();
   await openSklandOverview(page);
+  await expect.poll(() => fullSessionRequests).toBe(1);
 
   const statusAvatar = page.locator('[data-skland-page] [data-remote-avatar-state="loading"]');
   await expect(statusAvatar).toBeVisible();
@@ -364,7 +578,7 @@ test("Skland status center keeps profile and recruitment in overview and support
         data: {
           authenticated: true,
           configured: true,
-          authMethods: { qr: true },
+          authMethods: { qr: true, credential: true },
           accounts: [{
             ...primarySklandAccount,
             selectedUid: switchedSnapshot.player.uid,
@@ -744,7 +958,7 @@ test("Skland supports adding, switching, and individually logging out multiple a
         data: {
           authenticated: currentAccounts.length > 0,
           configured: true,
-          authMethods: { qr: true },
+          authMethods: { qr: true, credential: true },
           accounts: currentAccounts,
           activeAccountId: currentAccountId,
           ...(currentAccounts.length ? { scheduleSnapshot: currentSnapshot } : {}),
@@ -884,7 +1098,7 @@ test("Skland supports adding, switching, and individually logging out multiple a
   const addAccountDialog = page.getByRole("dialog", { name: "添加森空岛账号" });
   await expect(addAccountDialog).toBeVisible();
   await expectUnifiedDialogTypography(addAccountDialog);
-  await expect(addAccountDialog).toHaveCSS("width", "880px");
+  await expect(addAccountDialog).toHaveCSS("width", "960px");
   await expect(addAccountDialog.locator("[data-skland-login-panel]")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   const generateLoginQr = addAccountDialog.getByRole("button", { name: "生成登录二维码" });
   await expectUnifiedDialogAction(generateLoginQr, { width: "196px", height: "46px" });

@@ -155,6 +155,17 @@ export function startSklandQr(consent: SklandPolicyConsentRequest): Promise<Skla
   });
 }
 
+export function importSklandCredential(
+  credential: string,
+  consent: SklandPolicyConsentRequest,
+): Promise<SklandSessionData> {
+  return requestData(sklandApiPath("/auth/credential"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ credential, consent }),
+  });
+}
+
 export function refreshSklandStatus(): Promise<SklandStatusData> {
   return requestData(sklandApiPath("/status/refresh"), { method: "POST" });
 }

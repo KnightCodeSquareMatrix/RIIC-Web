@@ -33,20 +33,23 @@ jobs:
       group: deployment-preflight-${{ inputs.environment }}
       cancel-in-progress: false
     env:
-      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-      DEPLOY_SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
-      DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
-      DEPLOY_SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
       DEPLOY_APP_ROOT: ${{ vars.DEPLOY_APP_ROOT }}
       DEPLOY_RUN_USER: ${{ vars.DEPLOY_RUN_USER || 'arkinfra' }}
       DEPLOY_INTERNAL_PORT: ${{ vars.DEPLOY_INTERNAL_PORT }}
+      DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
       PREFLIGHT_MODE: ${{ inputs.mode }}
-      DEPLOY_PREPARE_HELPER_CONTRACT: "2"
-      DEPLOY_RELEASE_HELPER_CONTRACT: "2"
+      DEPLOY_APPROVED_SOLVER_SHA256: ${{ vars.DEPLOY_APPROVED_SOLVER_SHA256 }}
+      DEPLOY_EXPECTED_REPOSITORY: KnightCodeSquareMatrix/RIIC-Web
+      DEPLOY_RELEASE_HELPER_CONTRACT: "4"
 
     steps:
       - name: Validate preflight configuration
         shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          DEPLOY_SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
         run: |
           set -euo pipefail
           test -n "$DEPLOY_HOST"
@@ -61,9 +64,16 @@ jobs:
           test "$DEPLOY_RUN_USER" != "root"
           [[ "$DEPLOY_INTERNAL_PORT" =~ ^[0-9]{2,5}$ ]]
           [[ "$PREFLIGHT_MODE" == "baseline" || "$PREFLIGHT_MODE" == "cutover-ready" ]]
+          test "$DEPLOY_EXPECTED_REPOSITORY" = "KnightCodeSquareMatrix/RIIC-Web"
+          if [[ "$PREFLIGHT_MODE" == "cutover-ready" ]]; then
+            [[ "$DEPLOY_APPROVED_SOLVER_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          fi
 
       - name: Configure SSH
         shell: bash
+        env:
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          DEPLOY_SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
         run: |
           set -euo pipefail
           install -m 700 -d "$HOME/.ssh"
@@ -71,8 +81,11 @@ jobs:
           printf '%s\n' "$DEPLOY_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"
 
-      - name: Inspect helpers, cache, solver, and disk
+      - name: Inspect deploy helper, solver, and disk
         shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
         run: |
           set -euo pipefail
           ssh_options=(
@@ -108,20 +121,19 @@ jobs:
               >> "$GITHUB_STEP_SUMMARY"
           }
 
-          verify_helper prepare /usr/local/sbin/arknights-infra-prepare-release \
-            "$DEPLOY_PREPARE_HELPER_CONTRACT"
           verify_helper deploy /usr/local/sbin/arknights-infra-deploy \
             "$DEPLOY_RELEASE_HELPER_CONTRACT"
 
           timeout --kill-after=10s 60s ssh "${ssh_options[@]}" \
             "${DEPLOY_SSH_USER}@${DEPLOY_HOST}" \
-            bash -s -- "$DEPLOY_APP_ROOT" "$DEPLOY_RUN_USER" "$PREFLIGHT_MODE" <<'REMOTE'
+            bash -s -- "$DEPLOY_APP_ROOT" "$PREFLIGHT_MODE" "$DEPLOY_ENVIRONMENT" \
+              "$DEPLOY_EXPECTED_REPOSITORY" "$DEPLOY_APPROVED_SOLVER_SHA256" <<'REMOTE'
           set -euo pipefail
           app_root="$1"
-          run_user="$2"
-          preflight_mode="$3"
-          cache_repository="/var/cache/arknights-infra-deploy/repository.git"
-          expected_origin="https://github.com/KnightCodeSquareMatrix/RIIC-Web.git"
+          preflight_mode="$2"
+          deployment_environment="$3"
+          expected_repository="$4"
+          approved_solver_sha256="$5"
           cutover_ready=0
           if [[ "$preflight_mode" == "cutover-ready" ]]; then
             cutover_ready=1
@@ -131,103 +143,27 @@ jobs:
 
           test -d "$app_root"
           test ! -L "$app_root"
-          test -d "$cache_repository"
-          test ! -L "$cache_repository"
-          test "$(git --git-dir="$cache_repository" rev-parse --is-bare-repository)" = "true"
-          configured_origin="$(git --git-dir="$cache_repository" remote get-url origin)"
-          public_cache_ready=0
-          if [[ "$configured_origin" == "$expected_origin" ]]; then
-            public_cache_ready=1
-          fi
-          if [[ "$cutover_ready" == "1" ]]; then
-            test "$public_cache_ready" = "1"
-          fi
 
-          current_release="$(readlink -f "$app_root/current")"
-          case "$current_release" in
-            "$app_root"/releases/*) ;;
-            *) exit 1 ;;
-          esac
-          current_solver="$current_release/bin/infra-cli"
-          test -f "$current_solver"
-          test ! -L "$current_solver"
-
-          trusted_solver="$app_root/shared/bin/infra-cli"
-          expected_digest_file="$app_root/shared/bin/infra-cli.sha256"
-          solver="$current_solver"
-          solver_source="current-release"
           if [[ "$cutover_ready" == "1" ]]; then
-            test -d "$app_root/shared/bin"
-            test ! -L "$app_root/shared/bin"
-            test "$(stat -c '%U:%G:%a' -- "$app_root/shared/bin")" = "root:root:755"
-            test -f "$trusted_solver"
-            test ! -L "$trusted_solver"
-            test "$(stat -c '%U:%G:%a' -- "$trusted_solver")" = "root:root:755"
-            test -f "$expected_digest_file"
-            test ! -L "$expected_digest_file"
-            test "$(stat -c '%U:%G:%a' -- "$expected_digest_file")" = "root:root:644"
-            expected_solver_sha256="$(awk 'NR == 1 { value = $0 } END { if (NR != 1) exit 1; print value }' "$expected_digest_file")"
-            [[ "$expected_solver_sha256" =~ ^[0-9a-f]{64}$ ]]
-            solver="$trusted_solver"
-            solver_source="shared"
-          fi
-          solver_owner="$(stat -c '%U' -- "$solver")"
-          solver_mode="$(stat -c '%a' -- "$solver")"
-          (( (8#$solver_mode & 0111) != 0 ))
-          solver_sha256="$(sha256sum -- "$solver" | cut -d ' ' -f 1)"
-          if [[ "$cutover_ready" == "1" ]]; then
-            test "$solver_sha256" = "$expected_solver_sha256"
-            test -f "$current_release/.env.production.local"
-            test ! -L "$current_release/.env.production.local"
-            configured_solver_sha256="$(awk -F= '$1 == "INFRA_CLI_EXPECTED_SHA256" { count += 1; value = $2 } END { if (count != 1) exit 1; print value }' "$current_release/.env.production.local")"
-            test "$configured_solver_sha256" = "$expected_solver_sha256"
+            sudo -n /usr/local/sbin/arknights-infra-deploy \
+              --preflight "$deployment_environment" "$app_root" \
+              "$expected_repository" "$approved_solver_sha256"
           else
-            expected_solver_sha256="$solver_sha256"
+            available_kib="$(df -Pk "$app_root" | awk 'NR == 2 { print $4 }')"
+            [[ "$available_kib" =~ ^[0-9]+$ ]]
+            (( available_kib >= 2097152 ))
+            printf 'solver_source=not-inspected-root-only\n'
+            printf 'available_kib=%s\n' "$available_kib"
           fi
-
-          worker_ping="$(printf '%s\n' '{"id":"deployment-preflight","method":"ping"}' \
-            | timeout --kill-after=2s 10s "$solver" serve)"
-          worker_metadata="$(printf '%s' "$worker_ping" | node -e '
-            let input = "";
-            process.stdin.on("data", (chunk) => input += chunk);
-            process.stdin.on("end", () => {
-              const lines = input.split(/\r?\n/u).filter((line) => line.trim());
-              if (lines.length !== 1) process.exit(1);
-              const response = JSON.parse(lines[0]);
-              const result = response?.result;
-              const schemaReady = Array.isArray(result?.supported_plan_schema_versions)
-                && result.supported_plan_schema_versions.includes(3);
-              const contract = result?.plan_contract_sha256 ?? "none";
-              process.stdout.write([
-                response?.ok === true ? "ok" : "invalid",
-                String(result?.protocol_version ?? ""),
-                schemaReady ? "schema-ready" : "schema-invalid",
-                String(result?.solver_executable_sha256 ?? ""),
-                String(contract),
-              ].join(" "));
-            });
-          ')"
-          read -r worker_ok worker_protocol worker_schema worker_sha256 worker_contract_sha256 <<<"$worker_metadata"
-          test "$worker_ok" = "ok"
-          test "$worker_protocol" = "1"
-          test "$worker_schema" = "schema-ready"
-          test "$worker_sha256" = "$expected_solver_sha256"
-          if [[ "$worker_contract_sha256" != "none" ]]; then
-            [[ "$worker_contract_sha256" =~ ^[0-9a-f]{64}$ ]]
-          fi
-
-          available_kib="$(df -Pk "$app_root" | awk 'NR == 2 { print $4 }')"
-          [[ "$available_kib" =~ ^[0-9]+$ ]]
-          (( available_kib >= 2097152 ))
-
-          printf 'preflight_mode=%s cache_public_origin_ready=%s\n' "$preflight_mode" "$public_cache_ready"
-          printf 'solver_source=%s\n' "$solver_source"
-          printf 'solver_owner=%s solver_mode=%s solver_sha256=%s worker_protocol=%s worker_schema=%s worker_contract_sha256=%s\n' \
-            "$solver_owner" "$solver_mode" "$solver_sha256" "$worker_protocol" "$worker_schema" "$worker_contract_sha256"
-          printf 'available_kib=%s\n' "$available_kib"
+          printf 'preflight_mode=%s\n' "$preflight_mode"
           REMOTE
 
           {
             echo
             echo "Preflight is read-only: no archive, release directory, symlink switch, or service restart was requested."
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove SSH credentials from the runner
+        if: always()
+        shell: bash
+        run: rm -f -- "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"

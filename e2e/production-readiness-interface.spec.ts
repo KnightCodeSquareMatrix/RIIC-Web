@@ -590,7 +590,7 @@ test("publishes the site terms and privacy policy with upstream policy links", a
   await page.setViewportSize({ width: 390, height: 844 });
   await gotoStable(page, "/privacy");
   await expect(page.getByRole("heading", { name: "隐私政策", level: 1 })).toBeVisible();
-  await expect(page.getByText("版本与生效日期：2026-08-27")).toBeVisible();
+  await expect(page.getByText("版本与生效日期：2026-08-31")).toBeVisible();
   await expect(page.getByText(/第一方体验分析会自动记录/)).toBeVisible();
   await expect(page.getByText(/30 天到期/)).toBeVisible();
   await expect(page.getByText("可露希尔基建终端项目维护者", { exact: false })).toBeVisible();
@@ -605,7 +605,7 @@ test("publishes the site terms and privacy policy with upstream policy links", a
 
   await gotoStable(page, "/terms");
   await expect(page.getByRole("heading", { name: "服务条款", level: 1 })).toBeVisible();
-  await expect(page.getByText("版本与生效日期：2026-08-21")).toBeVisible();
+  await expect(page.getByText("版本与生效日期：2026-08-31")).toBeVisible();
   await expect(page.getByText(/非官方、非商业工具/)).toBeVisible();
 });
 

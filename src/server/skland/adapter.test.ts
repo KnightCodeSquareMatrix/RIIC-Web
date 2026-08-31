@@ -10,6 +10,11 @@ import {
   scanActorKey,
   type ReusableScanRecord,
 } from "./scan-admission.ts";
+import {
+  classifySklandUpstreamError,
+  SKLAND_UPSTREAM_COOLDOWN_MS,
+} from "./upstream-error.ts";
+import { publicCodeForSklandServiceError } from "./http-error.ts";
 
 const consent = {
   termsVersion: "terms-v1",
@@ -60,4 +65,41 @@ test("the ten-minute global quota that caused cross-account lockouts cannot retu
   assert.match(source, /scan:ip:/);
   assert.match(source, /scanStartTasks/);
   assert.match(route, /enforceRateLimit\("skland-qr-account", website\.user\.id/);
+});
+
+test("skland-kit response messages identify expired stored credentials", () => {
+  const error = new Error("【skland-kit】获取游戏绑定信息错误", {
+    cause: { code: 10001, message: "用户未登录" },
+  });
+  assert.equal(classifySklandUpstreamError(error), "AUTH_EXPIRED");
+  assert.equal(classifySklandUpstreamError(new Error("request failed", {
+    cause: { status: 401, message: "authorization failed" },
+  })), "AUTH_EXPIRED");
+});
+
+test("skland-kit response messages preserve upstream rate-limit and availability failures", () => {
+  assert.equal(classifySklandUpstreamError(new Error("request failed", {
+    cause: { code: 10002, message: "请求过于频繁" },
+  })), "RATE_LIMITED");
+  assert.equal(classifySklandUpstreamError(new Error("network unavailable")), "UNAVAILABLE");
+});
+
+test("Aliyun WAF burst responses enter the shared upstream cooldown", async () => {
+  const wafResponse = new Error("【skland-kit】获取游戏绑定信息错误", {
+    cause: '<!doctypehtml><html><title>405</title><img src="https://errors.aliyun.com/blocked.png">',
+  });
+  assert.equal(classifySklandUpstreamError(wafResponse), "RATE_LIMITED");
+  assert.equal(SKLAND_UPSTREAM_COOLDOWN_MS, 60_000);
+
+  const source = await readFile(new URL("./adapter.ts", import.meta.url), "utf8");
+  assert.match(source, /__infraCalcSklandUpstreamCooldownUntil/);
+  assert.match(source, /function assertUpstreamCapacity/);
+  assert.match(source, /classification === "RATE_LIMITED"[\s\S]*beginUpstreamCooldown\(\)/);
+  assert.ok((source.match(/assertUpstreamCapacity\(\)/g)?.length ?? 0) >= 3);
+});
+
+test("only missing configuration is reported as skland login being closed", () => {
+  assert.equal(publicCodeForSklandServiceError("NOT_CONFIGURED"), "AIC-AUTH-2003");
+  assert.equal(publicCodeForSklandServiceError("UNAVAILABLE"), "AIC-SYS-5000");
+  assert.equal(publicCodeForSklandServiceError("AUTH_EXPIRED"), "AIC-AUTH-2001");
 });

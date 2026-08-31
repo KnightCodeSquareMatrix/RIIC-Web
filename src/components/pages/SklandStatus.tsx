@@ -1428,23 +1428,23 @@ export function SklandStatus({
 
   if (!scheduleSnapshot) {
     const loginTitle = bindingState === "renewal-due"
-      ? "七天授权期已结束，请扫码续期"
+      ? "七天授权期已结束，请重新授权"
       : bindingState === "reauthorize"
         ? "森空岛已绑定，请授权当前浏览器"
         : "把当前罗德岛带进排班助手";
     const loginDescription = bindingState === "renewal-due"
       ? `最近一次授权${bindingSummary.latestExpiredAt
         ? `已于 ${credentialExpiryLabel(bindingSummary.latestExpiredAt)} 到期`
-        : "已经到期"}。重新扫码即可继续同步，现有排班设置不会被清除。`
+        : "已经到期"}。扫码或重新导入凭证后即可继续同步，现有排班设置不会被清除。`
       : bindingState === "reauthorize"
-        ? `网站账号仍保留 ${bindingCount} 个森空岛绑定，但当前浏览器没有可用凭证。重新扫码即可继续同步。`
-        : "使用森空岛 App 扫描二维码，同步当前角色的干员与基建数据。";
+        ? `网站账号仍保留 ${bindingCount} 个森空岛绑定，但当前浏览器没有可用凭证。重新授权后即可继续同步。`
+        : "使用森空岛 App 扫码，或从已登录的森空岛网页导入凭证，同步当前角色的干员与基建数据。";
     return (
       <StatusCenterPage
         className="min-h-[calc(100dvh-7rem)] place-items-center py-8 sm:py-12"
         data-skland-page
       >
-        <div className="grid w-full max-w-xl justify-items-center gap-7 text-center">
+        <div className="grid w-full max-w-4xl justify-items-center gap-7 text-center">
           <header className="grid max-w-lg gap-3" data-skland-login-copy>
             <p className="text-xs font-medium tracking-wide text-primary">森空岛状态中心</p>
             <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">{loginTitle}</h2>
@@ -1459,7 +1459,7 @@ export function SklandStatus({
             </Alert>
           ) : null}
           <SklandLoginPanel
-            className="max-w-lg"
+            className="max-w-4xl"
             configured={configured}
             disabledReason={disabledReason}
             onAuthenticated={onAuthenticated}
@@ -1480,7 +1480,7 @@ export function SklandStatus({
           <p className="text-xs font-medium tracking-wide text-primary">森空岛状态中心</p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight">完整状态暂时无法加载</h2>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            当前已登录{activeRole ? `“${activeRole.nickname}”` : "森空岛"}。你可以重新加载，或退出当前账号后重新扫码。
+            当前已登录{activeRole ? `“${activeRole.nickname}”` : "森空岛"}。你可以重新加载，或退出当前账号后重新授权。
           </p>
         </header>
         <Alert variant="destructive"><AlertDescription>{error.message}（{error.code}）</AlertDescription></Alert>
@@ -1646,11 +1646,11 @@ export function SklandStatus({
       />
 
       <Dialog open={addAccountOpen} onOpenChange={setAddAccountOpen}>
-        <DialogContent className="max-h-[calc(100dvh-1rem)] grid-rows-[auto_minmax(0,1fr)] sm:max-w-[min(880px,calc(100vw-2rem))]">
+        <DialogContent className="max-h-[calc(100dvh-1rem)] grid-rows-[auto_minmax(0,1fr)] sm:max-w-[min(960px,calc(100vw-2rem))]">
           <DialogHeader>
             <DialogTitle>添加森空岛账号</DialogTitle>
             <DialogDescription>
-              扫码后会保留现有账号，并将新账号设为当前账号。最多同时登录 <span className="font-number">5</span> 个账号。
+              扫码或导入凭证后会保留现有账号，并将新账号设为当前账号。最多同时登录 <span className="font-number">5</span> 个账号。
             </DialogDescription>
           </DialogHeader>
           <DialogBody className="min-h-0 overflow-y-auto pb-5 pt-0 sm:pb-7">
@@ -1679,7 +1679,7 @@ export function SklandStatus({
       {bindingSummary.renewalDueCount > 0 ? (
         <Alert>
           <AlertDescription data-ui-number-font>
-            有 {bindingSummary.renewalDueCount} 个森空岛绑定已满七天，需要重新扫码续期。当前仍有效的账号可以继续使用。
+            有 {bindingSummary.renewalDueCount} 个森空岛绑定已满七天，需要重新授权。当前仍有效的账号可以继续使用。
           </AlertDescription>
         </Alert>
       ) : null}

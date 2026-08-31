@@ -347,7 +347,7 @@ export function SetupDialog({
                             ) : !sklandConfigured && sklandDisabledReason ? (
                               <span className="mt-0.5 block text-xs text-muted-foreground">{sklandDisabledReason}</span>
                             ) : sklandBindingCount > 0 ? (
-                              <span className="mt-0.5 block text-xs text-muted-foreground">网站账号已绑定，当前浏览器需要重新扫码授权</span>
+                              <span className="mt-0.5 block text-xs text-muted-foreground">网站账号已绑定，当前浏览器需要重新授权</span>
                             ) : null}
                           </div>
                           {sklandSnapshot && boxSource !== "skland" ? (
