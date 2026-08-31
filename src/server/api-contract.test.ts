@@ -400,3 +400,39 @@ test("authenticated sample requests retain admission after a cache miss while an
   assert.equal(admission > source.indexOf("await resolvePlanCache"), true);
   assert.equal(admission < source.indexOf("runResult = await runPlan"), true);
 });
+
+test("task queue keeps anonymous samples cache-only and applies persistent authenticated admission", async () => {
+  const source = await readFile(new URL("../app/api/tasks/route.ts", import.meta.url), "utf8");
+  const cacheResolution = source.indexOf("await resolvePlanCache");
+  const anonymousGuard = source.indexOf("if (!session?.user?.id)");
+  const taskCreation = source.indexOf("await createPlanTask");
+  assert.equal(cacheResolution > 0, true);
+  assert.equal(anonymousGuard > cacheResolution, true);
+  assert.equal(taskCreation > anonymousGuard, true);
+  assert.equal(source.includes("accountClass: planAccountAdmissionClass(session.user)"), true);
+  assert.equal(source.includes("requestIpHmac: planTaskIpHmac(ip, planCacheHmacKey())"), true);
+  assert.equal(source.includes("cacheReferenceUserId = sourceType === \"sample\" ? null : userId"), true);
+});
+
+test("task queue disables the legacy synchronous solver endpoint", async () => {
+  const source = await readFile(new URL("../app/api/plan/route.ts", import.meta.url), "utf8");
+  const originGuard = source.indexOf("assertSameOrigin(request)");
+  const queueGuard = source.indexOf("if (isPlanTaskQueueEnabled())");
+  const solverCall = source.indexOf("runResult = await runPlan");
+  assert.equal(source.includes('throw new PublicApiError("AIC-PLAN-3001")'), true);
+  assert.equal(queueGuard > originGuard, true);
+  assert.equal(queueGuard < solverCall, true);
+});
+
+test("worker finalization records saved-plan bindings and cache ownership before publication", async () => {
+  const source = await readFile(new URL("../../scripts/plan-worker.mts", import.meta.url), "utf8");
+  const runRecord = source.indexOf("await recordPlanRunBestEffort");
+  const cacheReference = source.indexOf("await recordPlanCacheReferenceBestEffort", runRecord);
+  const cachePublication = source.indexOf("await completePlanCache", cacheReference);
+  assert.equal(source.includes("calculationContext: savedPlanContext"), true);
+  assert.equal(source.includes("publicResultSha256"), true);
+  assert.equal(source.includes("operboxContentHmac"), true);
+  assert.equal(runRecord > 0, true);
+  assert.equal(cacheReference > runRecord, true);
+  assert.equal(cachePublication > cacheReference, true);
+});

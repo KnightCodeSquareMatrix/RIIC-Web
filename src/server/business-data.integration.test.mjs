@@ -6,7 +6,11 @@ import test from "node:test";
 
 import { Pool } from "pg";
 
-import { decryptOperboxSnapshot, encryptOperboxSnapshot } from "./workspace-crypto.ts";
+import {
+  decryptOperboxSnapshot,
+  encryptOperboxSnapshot,
+  encryptPlanTaskPayload,
+} from "./workspace-crypto.ts";
 
 const databaseUrl = process.env.AUTH_INTEGRATION_DATABASE_URL?.trim();
 if (!databaseUrl) throw new Error("AUTH_INTEGRATION_DATABASE_URL is required for the business-data integration test.");
@@ -118,6 +122,72 @@ test("database lease grants only one concurrent solver and can be reclaimed afte
     assert.equal((await query("recovered")).rows[0]?.lease_owner, "recovered");
   } finally {
     await pool.query("DELETE FROM app.plan_cache WHERE key_hmac=$1", [key]);
+    await pool.end();
+  }
+});
+
+test("plan tasks persist only encrypted Box payloads and scrub them at terminal state", async () => {
+  const pool = new Pool({ connectionString: databaseUrl, max: 2 });
+  const userId = randomUUID();
+  const taskId = randomUUID();
+  const duplicateId = randomUUID();
+  const key = Buffer.alloc(32, 11);
+  const plaintext = JSON.stringify({ operbox: [{ id: "char_private", name: "隐私干员" }] });
+  const envelope = encryptPlanTaskPayload({
+    userId,
+    taskId,
+    plaintext,
+    activeVersion: "v1",
+    masterKey: key,
+  });
+  try {
+    await pool.query(
+      'INSERT INTO "user" (id,name,email,email_verified,created_at,updated_at) VALUES ($1,$2,$3,true,now(),now())',
+      [userId, "Task Test", `${userId}@example.test`],
+    );
+    await pool.query(
+      `INSERT INTO app.plan_task
+       (id,user_id,account_class,request_ip_hmac,status,encrypted_payload,payload_iv,wrapped_data_key,wrapped_key_iv,key_version,schema_version,expires_at)
+       VALUES ($1,$2,'established',$3,'pending',$4,$5,$6,$7,$8,$9,now()+interval '1 day')`,
+      [taskId, userId, "a".repeat(64), envelope.encryptedPayload, envelope.payloadIv, envelope.wrappedDataKey, envelope.wrappedKeyIv, envelope.keyVersion, envelope.schemaVersion],
+    );
+    const stored = await pool.query("SELECT * FROM app.plan_task WHERE id=$1", [taskId]);
+    assert.equal(JSON.stringify(stored.rows[0]).includes("char_private"), false);
+
+    await assert.rejects(
+      pool.query(
+        `INSERT INTO app.plan_task
+         (id,user_id,account_class,request_ip_hmac,status,encrypted_payload,payload_iv,wrapped_data_key,wrapped_key_iv,key_version,schema_version,expires_at)
+         VALUES ($1,$2,'established',$3,'pending',$4,$5,$6,$7,$8,$9,now()+interval '1 day')`,
+        [duplicateId, userId, "b".repeat(64), envelope.encryptedPayload, envelope.payloadIv, envelope.wrappedDataKey, envelope.wrappedKeyIv, envelope.keyVersion, envelope.schemaVersion],
+      ),
+      (error) => error?.code === "23505",
+    );
+    await assert.rejects(
+      pool.query("UPDATE app.plan_task SET status='done' WHERE id=$1", [taskId]),
+      (error) => error?.code === "23514",
+    );
+    await pool.query(
+      `UPDATE app.plan_task SET status='done',finished_at=now(),result='{}',
+       encrypted_payload=NULL,payload_iv=NULL,wrapped_data_key=NULL,wrapped_key_iv=NULL,key_version=NULL,schema_version=NULL
+       WHERE id=$1`,
+      [taskId],
+    );
+    const terminal = await pool.query(
+      "SELECT status,encrypted_payload,payload_iv,wrapped_data_key,wrapped_key_iv,key_version,schema_version FROM app.plan_task WHERE id=$1",
+      [taskId],
+    );
+    assert.deepEqual(terminal.rows[0], {
+      status: "done",
+      encrypted_payload: null,
+      payload_iv: null,
+      wrapped_data_key: null,
+      wrapped_key_iv: null,
+      key_version: null,
+      schema_version: null,
+    });
+  } finally {
+    await pool.query('DELETE FROM "user" WHERE id=$1', [userId]).catch(() => undefined);
     await pool.end();
   }
 });

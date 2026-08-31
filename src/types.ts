@@ -1062,6 +1062,11 @@ export interface PublicFeatureFlags {
 export interface PublicHealthData {
   status: "ready" | "unavailable";
   plannerReady: boolean;
+  taskQueue: {
+    enabled: boolean;
+    ready: boolean;
+    releaseMatched: boolean;
+  };
   skland?: {
     available: boolean;
     message: string | null;

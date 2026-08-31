@@ -288,6 +288,9 @@ jobs:
           AUTH_EMAIL_FROM: ""
         run: npm run build
 
+      - name: Production worker build
+        run: npm run worker:build && node --check dist/plan-worker.cjs
+
       - name: Initial bundle budget
         run: npm run check:bundle-budget
 

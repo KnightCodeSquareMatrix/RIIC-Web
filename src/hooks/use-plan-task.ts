@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ApiClientError, cancelPlanTask, pollPlanTask, type PlanTaskStatus } from "@/api";
+import { planTaskCancellationDecision } from "@/plan-task-cancellation";
 import type { PublicPlanData } from "@/types";
 
 const STORAGE_KEY = "aic-plan-task-v1";
@@ -216,6 +217,11 @@ export function usePlanTask({ onDone, onFailed }: PlanTaskOptions) {
     void pollOnce(taskId, 0);
   }, [clearTimer, pollOnce, stopResumeCooldown]);
 
+  const complete = useCallback((result: PublicPlanData) => {
+    finish({ status: "done", result, error: null });
+    onDoneRef.current(result);
+  }, [finish]);
+
   const resume = useCallback(() => {
     const taskId = taskIdRef.current;
     if (!taskId) return;
@@ -225,23 +231,35 @@ export function usePlanTask({ onDone, onFailed }: PlanTaskOptions) {
     void pollOnce(taskId, 0);
   }, [clearTimer, pollOnce, stopResumeCooldown]);
 
-  const cancel = useCallback(() => {
+  const cancel = useCallback(async (): Promise<boolean> => {
     const taskId = taskIdRef.current;
+    if (!taskId) return false;
     clearTimer();
     stopResumeCooldown();
-    taskIdRef.current = null;
-    clearStoredTaskId();
-    setState({
-      taskId: null,
-      status: "cancelled",
-      queuePosition: null,
-      etaSeconds: null,
-      pollStopped: false,
-      result: null,
-      error: null,
-    });
-    if (taskId) void cancelPlanTask(taskId).catch(() => undefined);
-  }, [clearTimer, stopResumeCooldown]);
+    try {
+      const response = await cancelPlanTask(taskId);
+      if (taskIdRef.current !== taskId) return false;
+      const decision = planTaskCancellationDecision(response);
+      if (decision.clearTask) {
+        finish({ status: "cancelled", error: null });
+        return true;
+      }
+      setState((current) => ({
+        ...current,
+        pollStopped: false,
+        error: decision.message,
+      }));
+    } catch {
+      if (taskIdRef.current !== taskId) return false;
+      setState((current) => ({
+        ...current,
+        pollStopped: false,
+        error: "取消请求未确认，任务仍会继续查询。",
+      }));
+    }
+    void pollOnceRef.current(taskId, 0);
+    return false;
+  }, [clearTimer, finish, stopResumeCooldown]);
 
   // 只在真正挂载（刷新/重新打开）时从 localStorage 恢复轮询；
   // 切换侧边栏子页面不触发恢复。
@@ -263,6 +281,7 @@ export function usePlanTask({ onDone, onFailed }: PlanTaskOptions) {
     resumeDisabled,
     resumeCountdown,
     begin,
+    complete,
     resume,
     cancel,
   };

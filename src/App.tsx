@@ -484,8 +484,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape" && loading) {
-        planTask.cancel();
-        setLoading(false);
+        void planTask.cancel();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -926,7 +925,8 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
         rotation: rotationProfile,
         fiammetta_enable: effectiveFiammettaSetting(planInput.operbox, rotationProfile, fiammettaEnabled),
       });
-      planTask.begin(submitted.taskId);
+      if (submitted.status === "done") planTask.complete(submitted.result);
+      else planTask.begin(submitted.taskId);
       return true;
     } catch (error) {
       setApiError(toDisplayError(error, "排班请求失败，请稍后重试。"));
@@ -936,9 +936,9 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   }
 
   function handleCancelRun() {
-    planTask.cancel();
-    setLoading(false);
-    setApiError(null);
+    void planTask.cancel().then((cancelled) => {
+      if (cancelled) setApiError(null);
+    });
   }
 
   async function handleRun() {

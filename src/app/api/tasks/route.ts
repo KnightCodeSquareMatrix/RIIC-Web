@@ -1,3 +1,7 @@
+import { validateLayoutJson } from "@/layout-validation";
+import { assertOperbox } from "@/operbox";
+import { normalizePersistedPlanData } from "@/persistence";
+import { isRotationProfile } from "@/rotation-settings";
 import {
   assertFiammettaEnableCompatible,
   assertPlanCollectionLimits,
@@ -6,21 +10,38 @@ import {
   enforceRateLimit,
   failureResponse,
   normalizeFiammettaEnable,
+  planAccountAdmissionClass,
   PublicApiError,
   readJsonBody,
   requestClientIp,
   successResponse,
 } from "@/server/api-contract";
+import { websiteSession as readWebsiteSession } from "@/server/auth";
 import { requireWebsiteSession } from "@/server/auth/authorization";
-import { getSampleOperbox } from "@/server/infra";
-import { validateLayoutJson } from "@/layout-validation";
-import { assertOperbox } from "@/operbox";
+import {
+  isAccountCloudSyncEnabled,
+  isPlanTaskQueueEnabled,
+  planCacheHmacKey,
+  workspaceMasterKeys,
+} from "@/server/business-config";
+import { recordPlanRunBestEffort } from "@/server/business-records";
+import { accountDataConsent } from "@/server/data-consent";
+import { getPlanCacheSolverIdentity, getSampleOperbox } from "@/server/infra";
+import {
+  evictPlanCacheKeys,
+  recordPlanCacheReferenceBestEffort,
+  releasePlanCacheLease,
+  resolvePlanCache,
+  type PlanCacheResolution,
+} from "@/server/plan-cache";
 import { planAccessMode } from "@/server/plan-access";
-import { createPlanTask, userHasActivePlanTask, PLAN_TASK_ETA_PER_TASK_SECONDS } from "@/server/plan-task";
+import { publicPlanSha256, resolveSavedPlanCalculationContext } from "@/server/plan-result-binding";
 import { safeDisplayName } from "@/server/public-plan";
-import { isRotationProfile } from "@/rotation-settings";
 import { activeSklandAccount, readSklandAccountStore } from "@/server/skland/http";
 import { sklandDataOwnerTag } from "@/server/skland/session";
+import { createPlanTask, planTaskIpHmac, PLAN_TASK_ETA_PER_TASK_SECONDS } from "@/server/plan-task";
+import { planOperboxContentHmac } from "@/server/workspace-crypto";
+import { validateSavedPlanCalculationContext } from "@/server/workspace-payload";
 import type { BaseBlueprint, OperBoxEntry, RotationProfile } from "@/types";
 
 export const runtime = "nodejs";
@@ -36,41 +57,32 @@ type SubmitBody = {
 };
 
 function isUniqueViolation(error: unknown): boolean {
-  return typeof error === "object"
-    && error !== null
-    && (error as { code?: unknown }).code === "23505";
-}
-
-function filterOwnedOperbox(entries: OperBoxEntry[]): OperBoxEntry[] {
-  const seenNames = new Set<string>();
-  const skipNames = new Set(["阿米娅（近卫）", "阿米娅（医疗）"]);
-  return entries.filter((entry) => {
-    if (!entry.own) return false;
-    const name = entry.name.trim();
-    if (skipNames.has(name) || seenNames.has(name)) return false;
-    seenNames.add(name);
-    return true;
-  });
+  if (typeof error !== "object" || error === null) return false;
+  if ((error as { code?: unknown }).code === "23505") return true;
+  return isUniqueViolation((error as { cause?: unknown }).cause);
 }
 
 export async function POST(request: Request) {
   const requestId = createRequestId();
   const startedAt = performance.now();
+  let cacheLease: Extract<PlanCacheResolution, { kind: "lease" }> | undefined;
   try {
     assertSameOrigin(request);
     const ip = requestClientIp(request);
     enforceRateLimit("plan-submit", ip, 20, 10 * 60_000, "AIC-PLAN-3002");
 
     const body = await readJsonBody(request, 2 * 1024 * 1024) as SubmitBody | null;
-    let userId: string | null = null;
-    if (planAccessMode(body?.boxSource, body?.operbox !== undefined) === "trusted-sample") {
-      const sample = await getSampleOperbox();
-      body!.operbox = sample.operbox as OperBoxEntry[];
-      body!.sourceName = "243 全精二示例";
-    } else {
-      userId = (await requireWebsiteSession(request)).user.id;
-    }
     if (!body) throw new PublicApiError("AIC-REQ-1001");
+
+    let session: Awaited<ReturnType<typeof readWebsiteSession>> | null = null;
+    if (planAccessMode(body.boxSource, body.operbox !== undefined) === "trusted-sample") {
+      const sample = await getSampleOperbox();
+      body.operbox = sample.operbox as OperBoxEntry[];
+      body.sourceName = sample.sourceName;
+      session = await readWebsiteSession(request).catch(() => null);
+    } else {
+      session = await requireWebsiteSession(request);
+    }
 
     const layoutErrors = validateLayoutJson(body.layout);
     if (layoutErrors.length || !body.layout) {
@@ -87,6 +99,7 @@ export async function POST(request: Request) {
         fieldErrors: [{ path: "operbox", code: "invalid_operbox", message: "干员数据需要是数组。" }],
       });
     }
+
     let rotation: RotationProfile = "abc_12_6_6";
     if (body.rotation !== undefined) {
       if (!isRotationProfile(body.rotation)) {
@@ -103,6 +116,7 @@ export async function POST(request: Request) {
     const fiammettaEnable = normalizeFiammettaEnable(body.fiammetta_enable);
     assertFiammettaEnableCompatible(fiammettaEnable, rotation);
     assertPlanCollectionLimits(body.operbox.length, body.layout.rooms.length, body.sourceName);
+
     let operbox: OperBoxEntry[];
     try {
       operbox = assertOperbox(body.operbox);
@@ -116,52 +130,124 @@ export async function POST(request: Request) {
         cause: error,
       });
     }
+
     const sourceName = safeDisplayName(body.sourceName, "已导入的干员数据");
     const sourceType = body.boxSource === "skland" ? "skland" : body.boxSource === "sample" ? "sample" : "maa";
+    const userId = session?.user?.id ?? null;
+    const cacheReferenceUserId = sourceType === "sample" ? null : userId;
     let dataOwnerTag: string | null = null;
     if (body.boxSource === "skland") {
       const account = activeSklandAccount(await readSklandAccountStore());
       if (account) dataOwnerTag = sklandDataOwnerTag(account.session.userId);
     }
 
-    // 并发限制：登录用户同一时间最多一条 pending/running（数据库唯一索引兜底）。
-    if (userId && await userHasActivePlanTask(userId)) {
-      throw new PublicApiError("AIC-PLAN-3005");
+    const calculationContext = validateSavedPlanCalculationContext({
+      presetLabel: body.layout.template,
+      layout: body.layout,
+      rotationProfile: rotation,
+      fiammettaEnabled: fiammettaEnable,
+    });
+    if (!calculationContext) throw new PublicApiError("AIC-LAYOUT-1201");
+
+    let operboxContentHmac: string | null = null;
+    let operboxHmacKeyVersion: string | null = null;
+    if (userId && sourceType === "maa" && isAccountCloudSyncEnabled()) {
+      try {
+        if ((await accountDataConsent(userId)).current) {
+          const { activeVersion, keys } = workspaceMasterKeys();
+          const activeKey = keys.get(activeVersion);
+          if (!activeKey) throw new Error("Active workspace key is unavailable.");
+          operboxContentHmac = planOperboxContentHmac({ userId, operbox, masterKey: activeKey });
+          operboxHmacKeyVersion = activeVersion;
+        }
+      } catch {
+        console.error(JSON.stringify({ level: "error", event: "plan_operbox_binding_skipped", requestId }));
+      }
     }
 
-    const ownedOperbox = filterOwnedOperbox(operbox);
-    if (ownedOperbox.length === 0) {
-      throw new PublicApiError("AIC-BOX-1101", {
-        fieldErrors: [{
-          path: "operbox",
-          code: "invalid_operbox",
-          message: "干员数据中没有已拥有的干员，无法生成排班。",
-        }],
+    const cacheSolver = await getPlanCacheSolverIdentity();
+    if (cacheSolver) {
+      const cache = await resolvePlanCache({
+        layout: body.layout,
+        operbox,
+        sourceType,
+        sourceName,
+        rotation,
+        fiammettaEnable,
+        solver: cacheSolver,
+      });
+      if (cache.kind === "hit") {
+        const persistedResult = normalizePersistedPlanData(cache.result, rotation);
+        if (!persistedResult) throw new PublicApiError("AIC-SYS-5000");
+        const savedPlanContext = operboxContentHmac && operboxHmacKeyVersion
+          ? resolveSavedPlanCalculationContext(calculationContext, persistedResult)
+          : null;
+        const runStored = await recordPlanRunBestEffort({
+          diagnosticId: cache.result.diagnosticId,
+          userId,
+          dataOwnerTag,
+          sourceType,
+          status: "success",
+          layoutTemplate: body.layout.template,
+          roomCount: body.layout.rooms.length,
+          operatorCount: operbox.length,
+          rotation,
+          fiammettaEnable,
+          durationMs: cache.result.durationMs,
+          solver: cacheSolver,
+          artifact: null,
+          calculationContext: savedPlanContext,
+          publicResultSha256: savedPlanContext ? publicPlanSha256(persistedResult) : null,
+          operboxContentHmac: savedPlanContext ? operboxContentHmac : null,
+          operboxHmacKeyVersion: savedPlanContext ? operboxHmacKeyVersion : null,
+        });
+        const referenceStored = runStored && await recordPlanCacheReferenceBestEffort({
+          cacheKeyHmac: cache.keyHmac,
+          diagnosticId: cache.result.diagnosticId,
+          userId: cacheReferenceUserId,
+        });
+        if (!referenceStored) await evictPlanCacheKeys([cache.keyHmac]).catch(() => undefined);
+        return successResponse({ status: "done", result: cache.result }, requestId);
+      }
+      if (cache.kind === "lease") {
+        cacheLease = cache;
+        await releasePlanCacheLease(cache);
+        cacheLease = undefined;
+      }
+    }
+
+    if (!session?.user?.id) {
+      throw new PublicApiError("AIC-AUTH-2008", {
+        message: "请登录网站账号后再发起新的排班计算；未登录仍可使用已有缓存。",
       });
     }
+    if (!isPlanTaskQueueEnabled()) throw new PublicApiError("AIC-PLAN-3001");
 
     let task;
     try {
       task = await createPlanTask({
-        userId,
+        userId: session.user.id,
+        accountClass: planAccountAdmissionClass(session.user),
+        requestIpHmac: planTaskIpHmac(ip, planCacheHmacKey()),
         payload: {
           layout: body.layout,
-          operbox: ownedOperbox,
+          operbox,
           sourceName,
           sourceType,
           rotation,
           fiammettaEnable,
           layoutTemplate: body.layout.template,
           roomCount: body.layout.rooms.length,
-          operatorCount: ownedOperbox.length,
+          operatorCount: operbox.length,
           dataOwnerTag,
+          calculationContext,
+          operboxContentHmac,
+          operboxHmacKeyVersion,
+          cacheReferenceUserId,
         },
       });
     } catch (error) {
-      // 预检查和插入之间存在竞态窗口时，唯一索引兜底会抛 23505，转成友好提示。
-      if (userId && isUniqueViolation(error)) {
-        throw new PublicApiError("AIC-PLAN-3005");
-      }
+      if (isUniqueViolation(error)) throw new PublicApiError("AIC-PLAN-3005");
       throw error;
     }
 
@@ -172,6 +258,7 @@ export async function POST(request: Request) {
       etaSeconds: PLAN_TASK_ETA_PER_TASK_SECONDS,
     }, requestId);
   } catch (error) {
+    if (cacheLease) await releasePlanCacheLease(cacheLease);
     return failureResponse(error, requestId, "/api/tasks", startedAt);
   }
 }

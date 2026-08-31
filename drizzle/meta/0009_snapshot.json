@@ -1,5 +1,5 @@
 {
-  "id": "7a947924-02cf-47b7-b8f0-4f23ae4acb9c",
+  "id": "aefdcdf7-9827-4ab9-8e72-f3de80a99d43",
   "prevId": "8e3c9069-191f-4ac4-8b6c-0e81f9660c00",
   "version": "7",
   "dialect": "postgresql",
@@ -1135,7 +1135,19 @@
           "name": "user_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
+        },
+        "account_class": {
+          "name": "account_class",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "request_ip_hmac": {
+          "name": "request_ip_hmac",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
         },
         "status": {
           "name": "status",
@@ -1143,11 +1155,41 @@
           "primaryKey": false,
           "notNull": true
         },
-        "payload": {
-          "name": "payload",
-          "type": "jsonb",
+        "encrypted_payload": {
+          "name": "encrypted_payload",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
+        },
+        "payload_iv": {
+          "name": "payload_iv",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "wrapped_data_key": {
+          "name": "wrapped_data_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "wrapped_key_iv": {
+          "name": "wrapped_key_iv",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "key_version": {
+          "name": "key_version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "schema_version": {
+          "name": "schema_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
         },
         "result": {
           "name": "result",
@@ -1216,6 +1258,42 @@
           "method": "btree",
           "with": {}
         },
+        "plan_task_expires_at_idx": {
+          "name": "plan_task_expires_at_idx",
+          "columns": [
+            {
+              "expression": "expires_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "plan_task_ip_created_at_idx": {
+          "name": "plan_task_ip_created_at_idx",
+          "columns": [
+            {
+              "expression": "request_ip_hmac",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "plan_task_one_active_per_user_idx": {
           "name": "plan_task_one_active_per_user_idx",
           "columns": [
@@ -1227,7 +1305,7 @@
             }
           ],
           "isUnique": true,
-          "where": "\"app\".\"plan_task\".\"user_id\" is not null and \"app\".\"plan_task\".\"status\" in ('pending', 'running')",
+          "where": "\"app\".\"plan_task\".\"status\" in ('pending', 'running')",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -1248,6 +1326,56 @@
           "onUpdate": "no action"
         }
       },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "plan_task_status_check": {
+          "name": "plan_task_status_check",
+          "value": "\"app\".\"plan_task\".\"status\" in ('pending', 'running', 'done', 'failed', 'cancelled')"
+        },
+        "plan_task_account_class_check": {
+          "name": "plan_task_account_class_check",
+          "value": "\"app\".\"plan_task\".\"account_class\" in ('new', 'established')"
+        },
+        "plan_task_payload_lifecycle_check": {
+          "name": "plan_task_payload_lifecycle_check",
+          "value": "(\n    (\"app\".\"plan_task\".\"status\" in ('pending', 'running')\n      and \"app\".\"plan_task\".\"encrypted_payload\" is not null\n      and \"app\".\"plan_task\".\"payload_iv\" is not null\n      and \"app\".\"plan_task\".\"wrapped_data_key\" is not null\n      and \"app\".\"plan_task\".\"wrapped_key_iv\" is not null\n      and \"app\".\"plan_task\".\"key_version\" is not null\n      and \"app\".\"plan_task\".\"schema_version\" is not null)\n    or\n    (\"app\".\"plan_task\".\"status\" in ('done', 'failed', 'cancelled')\n      and \"app\".\"plan_task\".\"encrypted_payload\" is null\n      and \"app\".\"plan_task\".\"payload_iv\" is null\n      and \"app\".\"plan_task\".\"wrapped_data_key\" is null\n      and \"app\".\"plan_task\".\"wrapped_key_iv\" is null\n      and \"app\".\"plan_task\".\"key_version\" is null\n      and \"app\".\"plan_task\".\"schema_version\" is null)\n  )"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "app.plan_worker_heartbeat": {
+      "name": "plan_worker_heartbeat",
+      "schema": "app",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "release_sha": {
+          "name": "release_sha",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "started_at": {
+          "name": "started_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "heartbeat_at": {
+          "name": "heartbeat_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},

@@ -142,8 +142,11 @@ export function computePlan(payload: {
 export type PlanTaskStatus = "pending" | "running" | "done" | "failed" | "cancelled";
 
 export type PlanTaskSubmitData = {
+  status: "done";
+  result: PublicPlanData;
+} | {
   taskId: string;
-  status: PlanTaskStatus;
+  status: "pending";
   queuePosition: number;
   etaSeconds: number;
 };
@@ -179,7 +182,11 @@ export function pollPlanTask(taskId: string): Promise<PlanTaskPollData> {
   return requestData(`/api/tasks/${encodeURIComponent(taskId)}`);
 }
 
-export function cancelPlanTask(taskId: string): Promise<{ taskId: string; cancelled: boolean }> {
+export function cancelPlanTask(taskId: string): Promise<{
+  taskId: string;
+  cancelled: boolean;
+  reason: "running" | "unavailable" | null;
+}> {
   return requestData(`/api/tasks/${encodeURIComponent(taskId)}`, { method: "DELETE" });
 }
 

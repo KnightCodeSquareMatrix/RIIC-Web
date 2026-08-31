@@ -12,3 +12,7 @@ sudo systemctl daemon-reload
 ```
 
 The drop-in only classifies Next.js's documented signal exit statuses as successful. It does not change restart policy, stop timeout, or service state. Do not add application-level signal handlers that terminate the shared solver before Next.js has drained in-flight HTTP requests.
+
+The production task queue runs `worker/plan-worker.cjs` in a separate systemd service. Its working directory must be the active release's `.next/standalone` directory so `@next/env` loads the same sealed `.env.local` and `.env.production.local` snapshots as the website. The deployment helper injects `APP_RELEASE_SHA` and `PLAN_TASK_QUEUE_ENABLED=1`, restarts the website and worker together, and accepts the release only after `/api/health` reports a fresh heartbeat from that exact SHA.
+
+Keep the worker unit root-owned, run it as the same non-root application user, and grant writes only to the environment's `/var/lib/arknights-infra*` persistent directory. Install both environment-specific units and reload systemd before installing deployment helper contract v5. Do not start the worker against an older release that has no `worker/plan-worker.cjs`; the first successful v5 deployment enables it.
