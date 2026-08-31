@@ -248,8 +248,9 @@ test("Skland restore waits for website authentication and then starts summary an
   await expect.poll(() => summarySessionRequests).toBe(1);
 });
 
-test("Skland login loads full status by default and deletion preserves non-Skland data", async ({ page }) => {
+test("Skland status center loads full status on demand and deletion preserves non-Skland data", async ({ page }) => {
   const statusMethods: string[] = [];
+  let fullSessionRequests = 0;
   let releaseAvatar!: () => void;
   const avatarGate = new Promise<void>((resolve) => { releaseAvatar = resolve; });
   const snapshotWithAvatar = {
@@ -268,7 +269,9 @@ test("Skland login loads full status by default and deletion preserves non-Sklan
     });
   });
   page.on("request", (request) => {
-    if (new URL(request.url()).pathname === "/api/skland/status/refresh") statusMethods.push(request.method());
+    const url = new URL(request.url());
+    if (url.pathname === "/api/skland/status/refresh") statusMethods.push(request.method());
+    if (url.pathname === "/api/skland/accounts" && !url.searchParams.has("mode")) fullSessionRequests += 1;
   });
   await mockApis(page, {
     sklandConfigured: true,
@@ -277,17 +280,15 @@ test("Skland login loads full status by default and deletion preserves non-Sklan
   await seedV4Session(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
-  await expect(page.locator("[data-skland-account-avatar] img")).toHaveAttribute(
-    "src",
-    snapshotWithAvatar.player.avatarUrl
-  );
   const calculatorAccount = page.locator("[data-skland-account-control]:visible");
-  await expect(calculatorAccount.locator('[data-remote-avatar-state="loading"]')).toBeVisible();
-  await expect(calculatorAccount.locator('[data-slot="skeleton"]')).toBeVisible();
+  await expect(calculatorAccount).toBeVisible();
+  expect(fullSessionRequests).toBe(0);
+  await expect(calculatorAccount.locator("[data-skland-account-avatar] img")).toHaveCount(0);
   const compactAvatarBox = await calculatorAccount.locator("[data-remote-avatar-state]").boundingBox();
   expect(compactAvatarBox?.width).toBeCloseTo(42, 0);
   await page.getByRole("button", { name: "Toggle Sidebar" }).click();
   await openSklandOverview(page);
+  await expect.poll(() => fullSessionRequests).toBe(1);
 
   const statusAvatar = page.locator('[data-skland-page] [data-remote-avatar-state="loading"]');
   await expect(statusAvatar).toBeVisible();

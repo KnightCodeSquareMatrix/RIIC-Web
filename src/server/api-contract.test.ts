@@ -377,10 +377,22 @@ test("plan start windows limit accounts and shared IPs without charging rejected
   }
 });
 
-test("anonymous plan requests are cache-only and authenticated admission follows cache lookup", async () => {
+test("authenticated sample requests retain admission after a cache miss while anonymous samples stay cache-only", async () => {
   const source = await readFile(new URL("../app/api/plan/route.ts", import.meta.url), "utf8");
+  const sampleBranch = source.indexOf('=== "trusted-sample"');
+  const authenticatedBranch = source.indexOf("} else {", sampleBranch);
+  const optionalSession = source.indexOf("await readWebsiteSession(request).catch(() => null)", sampleBranch);
+  const sampleUserId = source.indexOf("websiteUserId = optionalSession.user.id", optionalSession);
+  const sampleAccountClass = source.indexOf("websiteAccountClass = planAccountAdmissionClass(optionalSession.user)", optionalSession);
   const anonymousGuard = source.indexOf("if (!websiteUserId || !websiteAccountClass)");
   const admission = source.indexOf("release = acquirePlanSlot({ ip, accountId: websiteUserId, accountClass: websiteAccountClass })");
+  const anonymousSampleReference = 'const cacheReferenceUserId = sourceType === "sample" ? null : websiteUserId';
+  assert.equal(optionalSession > sampleBranch, true);
+  assert.equal(optionalSession < authenticatedBranch, true);
+  assert.equal(sampleUserId > optionalSession && sampleUserId < authenticatedBranch, true);
+  assert.equal(sampleAccountClass > optionalSession && sampleAccountClass < authenticatedBranch, true);
+  assert.equal(source.includes(anonymousSampleReference), true);
+  assert.equal(source.match(/userId: cacheReferenceUserId/g)?.length, 2);
   assert.equal(anonymousGuard > source.indexOf("await resolvePlanCache"), true);
   assert.equal(anonymousGuard < admission, true);
   assert.equal(admission > source.indexOf("await readJsonBody"), true);
