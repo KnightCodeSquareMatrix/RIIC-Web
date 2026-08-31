@@ -51,6 +51,18 @@ test("production builds prepare a solver-free standalone runtime with static ass
   assert.match(stageStandalone, /dereference: true/);
 });
 
+test("Next.js owns graceful shutdown while systemd accepts its signal exit statuses", async () => {
+  const processCleanup = await readRepoFile("src/server/process-cleanup.ts");
+  const systemdDropIn = await readRepoFile("deploy/next-graceful-exit.conf");
+  const systemdGuide = await readRepoFile("deploy/SYSTEMD.md");
+
+  assert.doesNotMatch(processCleanup, /SIGINT|SIGTERM/);
+  assert.match(processCleanup, /target\.once\("exit", onExit\)/);
+  assert.equal(systemdDropIn, "[Service]\nSuccessExitStatus=130 143\n");
+  assert.match(systemdGuide, /drain in-flight requests/);
+  assert.match(systemdGuide, /systemctl daemon-reload/);
+});
+
 test("CI enforces route and document preload JavaScript budgets after building", async () => {
   const packageJson = JSON.parse(await readRepoFile("package.json"));
   const workflow = await readRepoFile(".github/workflows/frontend-quality.yml");
