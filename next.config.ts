@@ -8,12 +8,33 @@ const outputFileTracingExcludes = [
   ...buildTracingPolicy.excludedFiles.map((file) => `./${file}`),
 ];
 
+const uncachedDocumentRoutes = [
+  "/",
+  "/about",
+  "/account",
+  "/account/reset-password",
+  "/admin/users",
+  "/privacy",
+  "/skills",
+  "/skland",
+  "/terms",
+  "/training",
+];
+
+const documentCacheControl = "private, no-cache, no-store, max-age=0, must-revalidate";
+
 const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1"],
   compress: true,
+  deploymentId: process.env.APP_BUILD_ID,
+  generateBuildId: async () => process.env.APP_BUILD_ID ?? "local-development",
   output: "standalone",
   async headers() {
     return [
+      ...uncachedDocumentRoutes.map((source) => ({
+        source,
+        headers: [{ key: "Cache-Control", value: documentCacheControl }],
+      })),
       {
         source: "/images/operator-portraits/:asset",
         has: [{ type: "query", key: "v", value: "\\d+-[0-9a-f]{12}" }],
@@ -47,6 +68,7 @@ const nextConfig: NextConfig = {
     ];
   },
   env: {
+    APP_CLIENT_BUILD_ID: process.env.APP_BUILD_ID ?? "local-development",
     APP_CLIENT_ACCOUNT_CLOUD_SYNC_ENABLED: process.env.ACCOUNT_CLOUD_SYNC_ENABLED === "1" ? "1" : "0",
     APP_CLIENT_SKLAND_ENABLED: isSklandFeatureEnabled() ? "1" : "0",
     APP_CLIENT_SKLAND_API_PREFIX: isSklandFeatureEnabled() ? "/api/skland" : "",

@@ -23,6 +23,7 @@ import {
   createPlanComputeParams,
   createSolverObservation,
   inspectPlanComputeCapability,
+  inspectSolverPingFingerprint,
   inspectSolverDeploymentReadiness,
   parsePlanComputePayload,
   solverObservationFromPlanRecord,
@@ -532,7 +533,7 @@ function getPlanServeClient() {
   return globalForInfra.__infraCliPlanServeClient;
 }
 
-function stopServeClient(reason: string) {
+export function stopInfraServeClients(reason: string) {
   globalForInfra.__infraCliHealthServeClient?.stop(reason);
   globalForInfra.__infraCliPlanServeClient?.stop(reason);
 }
@@ -540,7 +541,7 @@ function stopServeClient(reason: string) {
 function registerServeClientCleanup() {
   if (globalForInfra.__infraCliCleanupRegistered) return;
   globalForInfra.__infraCliCleanupRegistered = true;
-  registerProcessCleanup(process, stopServeClient);
+  registerProcessCleanup(process, stopInfraServeClients);
 }
 
 registerServeClientCleanup();
@@ -569,6 +570,7 @@ export async function getHealth(): Promise<HealthApiResponse> {
       try {
         const pingResult = await healthServeClient.ping();
         const planCompute = inspectPlanComputeCapability(pingResult.response);
+        const fingerprint = inspectSolverPingFingerprint(pingResult.response);
         const deploymentReadiness = inspectSolverDeploymentReadiness(
           planCompute,
           process.env.INFRA_CLI_EXPECTED_SHA256
@@ -577,6 +579,7 @@ export async function getHealth(): Promise<HealthApiResponse> {
           ...healthServeClient.info(),
           protocolMode: planCompute.supported ? "plan.compute" : "legacy",
           planCompute,
+          fingerprint,
         };
         if (!deploymentReadiness.ready) {
           serveError = deploymentReadiness.reason;
@@ -1111,7 +1114,7 @@ export async function activateCliRelease(id: string) {
   const temp = `${activeCliPath}.${randomUUID()}.tmp`;
   await writeJson(temp, { releaseId: id, path: metadata.path, activatedAt: new Date().toISOString() });
   await rename(temp, activeCliPath);
-  stopServeClient("CLI 版本已切换，等待下次请求重启。");
+  stopInfraServeClients("CLI 版本已切换，等待下次请求重启。");
   return { releaseId: id, path: metadata.path };
 }
 

@@ -4,6 +4,7 @@ import type { OperBoxEntry } from "../types.ts";
 
 const AUTH_TAG_BYTES = 16;
 export const OPERBOX_ENVELOPE_SCHEMA_VERSION = 1;
+export const PLAN_TASK_ENVELOPE_SCHEMA_VERSION = 1;
 
 export type OperboxEnvelope = {
   contentHmac: string;
@@ -14,6 +15,8 @@ export type OperboxEnvelope = {
   keyVersion: string;
   schemaVersion: number;
 };
+
+export type PlanTaskEnvelope = Omit<OperboxEnvelope, "contentHmac">;
 
 function seal(plaintext: Buffer, key: Buffer, iv: Buffer, aad: Buffer): string {
   const cipher = createCipheriv("aes-256-gcm", key, iv);
@@ -34,6 +37,10 @@ function open(encoded: string, key: Buffer, iv: Buffer, aad: Buffer): Buffer {
 
 function aad(userId: string, snapshotId: string, schemaVersion: number, purpose: "payload" | "key"): Buffer {
   return Buffer.from(`${userId}\0${snapshotId}\0${schemaVersion}\0${purpose}`, "utf8");
+}
+
+function planTaskAad(userId: string, taskId: string, schemaVersion: number, purpose: "payload" | "key"): Buffer {
+  return Buffer.from(`plan-task\0${userId}\0${taskId}\0${schemaVersion}\0${purpose}`, "utf8");
 }
 
 function contentHmacKey(masterKey: Buffer): Buffer {
@@ -123,5 +130,67 @@ export function decryptOperboxSnapshot(input: {
     dataKey,
     payloadIv,
     aad(input.userId, input.snapshotId, input.envelope.schemaVersion, "payload"),
+  ).toString("utf8");
+}
+
+export function encryptPlanTaskPayload(input: {
+  userId: string;
+  taskId: string;
+  plaintext: string;
+  activeVersion: string;
+  masterKey: Buffer;
+}): PlanTaskEnvelope {
+  if (input.masterKey.byteLength !== 32) throw new Error("Workspace master key must contain exactly 32 bytes.");
+  const schemaVersion = PLAN_TASK_ENVELOPE_SCHEMA_VERSION;
+  const dataKey = randomBytes(32);
+  const payloadIv = randomBytes(12);
+  const wrappedKeyIv = randomBytes(12);
+  return {
+    encryptedPayload: seal(
+      Buffer.from(input.plaintext, "utf8"),
+      dataKey,
+      payloadIv,
+      planTaskAad(input.userId, input.taskId, schemaVersion, "payload"),
+    ),
+    payloadIv: payloadIv.toString("base64"),
+    wrappedDataKey: seal(
+      dataKey,
+      input.masterKey,
+      wrappedKeyIv,
+      planTaskAad(input.userId, input.taskId, schemaVersion, "key"),
+    ),
+    wrappedKeyIv: wrappedKeyIv.toString("base64"),
+    keyVersion: input.activeVersion,
+    schemaVersion,
+  };
+}
+
+export function decryptPlanTaskPayload(input: {
+  userId: string;
+  taskId: string;
+  envelope: PlanTaskEnvelope;
+  keys: Map<string, Buffer>;
+}): string {
+  const masterKey = input.keys.get(input.envelope.keyVersion);
+  if (!masterKey) throw new Error(`Workspace key version ${input.envelope.keyVersion} is unavailable.`);
+  if (masterKey.byteLength !== 32) throw new Error("Workspace master key must contain exactly 32 bytes.");
+  if (input.envelope.schemaVersion !== PLAN_TASK_ENVELOPE_SCHEMA_VERSION) {
+    throw new Error(`Unsupported plan task envelope schema ${input.envelope.schemaVersion}.`);
+  }
+  const payloadIv = Buffer.from(input.envelope.payloadIv, "base64");
+  const wrappedKeyIv = Buffer.from(input.envelope.wrappedKeyIv, "base64");
+  if (payloadIv.byteLength !== 12 || wrappedKeyIv.byteLength !== 12) throw new Error("Plan task envelope IV is invalid.");
+  const dataKey = open(
+    input.envelope.wrappedDataKey,
+    masterKey,
+    wrappedKeyIv,
+    planTaskAad(input.userId, input.taskId, input.envelope.schemaVersion, "key"),
+  );
+  if (dataKey.byteLength !== 32) throw new Error("Plan task data key is invalid.");
+  return open(
+    input.envelope.encryptedPayload,
+    dataKey,
+    payloadIv,
+    planTaskAad(input.userId, input.taskId, input.envelope.schemaVersion, "payload"),
   ).toString("utf8");
 }

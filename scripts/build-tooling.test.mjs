@@ -28,6 +28,9 @@ test("production builds prepare a solver-free standalone runtime with static ass
   const stageStandalone = await readRepoFile("scripts/stage-standalone-release.mjs");
 
   assert.match(nextConfig, /output: "standalone"/);
+  assert.match(nextConfig, /generateBuildId: async \(\) => process\.env\.APP_BUILD_ID \?\? "local-development"/);
+  assert.match(nextConfig, /deploymentId: process\.env\.APP_BUILD_ID/);
+  assert.match(nextConfig, /APP_CLIENT_BUILD_ID: process\.env\.APP_BUILD_ID \?\? "local-development"/);
   assert.equal(packageJson.scripts.postbuild, "node scripts/prepare-standalone.mjs");
   assert.equal(packageJson.scripts.start, "node scripts/start-standalone.mjs");
   assert.equal(packageJson.scripts["release:stage"], "node scripts/stage-standalone-release.mjs");
@@ -52,6 +55,13 @@ test("production builds prepare a solver-free standalone runtime with static ass
   assert.doesNotMatch(stageStandalone, /outputRoot, "\.next", "cache"/);
 });
 
+test("the plan worker closes persistent solver clients before exiting", async () => {
+  const workerRuntime = await readRepoFile("scripts/plan-worker-runtime.mts");
+
+  assert.match(workerRuntime, /stopInfraServeClients\("计划任务 Worker 正在退出。"\)/);
+  assert.match(workerRuntime, /stopInfraServeClients[\s\S]+getDatabase\(\)\.\$client[\s\S]+\[plan-worker\] stopped/);
+});
+
 test("Next.js owns graceful shutdown while systemd accepts its signal exit statuses", async () => {
   const processCleanup = await readRepoFile("src/server/process-cleanup.ts");
   const systemdDropIn = await readRepoFile("deploy/next-graceful-exit.conf");
@@ -71,15 +81,15 @@ test("CI enforces route and document preload JavaScript budgets after building",
 
   assert.equal(packageJson.scripts["check:bundle-budget"], "node scripts/check-bundle-budget.mjs");
   assert.match(workflow, /Production build[\s\S]+npm run check:bundle-budget/);
-  assert.match(budgetCheck, /MAX_SKLAND_DISABLED_ROUTE_INITIAL_JS_BYTES = 1_130_000/);
-  assert.match(budgetCheck, /MAX_SKLAND_ENABLED_ROUTE_INITIAL_JS_BYTES = 1_150_000/);
-  assert.match(budgetCheck, /MAX_SKLAND_ROUTE_INITIAL_JS_BYTES = 1_590_000/);
+  assert.match(budgetCheck, /MAX_SKLAND_DISABLED_ROUTE_INITIAL_JS_BYTES = 1_140_000/);
+  assert.match(budgetCheck, /MAX_SKLAND_ENABLED_ROUTE_INITIAL_JS_BYTES = 1_160_000/);
+  assert.match(budgetCheck, /MAX_SKLAND_ROUTE_INITIAL_JS_BYTES = 1_600_000/);
   assert.match(budgetCheck, /MAX_SKLAND_DISABLED_DOCUMENT_INITIAL_JS_BYTES = 1_240_000/);
-  assert.match(budgetCheck, /MAX_SKLAND_ENABLED_DOCUMENT_INITIAL_JS_BYTES = 1_270_000/);
+  assert.match(budgetCheck, /MAX_SKLAND_ENABLED_DOCUMENT_INITIAL_JS_BYTES = 1_275_000/);
   assert.match(budgetCheck, /MAX_SKLAND_DISABLED_DOCUMENT_INITIAL_GZIP_JS_BYTES = 395_000/);
-  assert.match(budgetCheck, /MAX_SKLAND_ENABLED_DOCUMENT_INITIAL_GZIP_JS_BYTES = 405_000/);
+  assert.match(budgetCheck, /MAX_SKLAND_ENABLED_DOCUMENT_INITIAL_GZIP_JS_BYTES = 407_000/);
   assert.match(budgetCheck, /const sklandEnabled = sklandRoute\.firstLoadChunkPaths\.some/);
-  assert.match(budgetCheck, /MAX_SECONDARY_ROUTE_INITIAL_JS_BYTES = 1_527_000/);
+  assert.match(budgetCheck, /MAX_SECONDARY_ROUTE_INITIAL_JS_BYTES = 1_540_000/);
   assert.match(budgetCheck, /MAX_DOCUMENT_INITIAL_JS_FILES = 18/);
   assert.match(budgetCheck, /WORKBENCH_ROUTES = \["\/", "\/training", "\/skills", "\/skland", "\/account"\]/);
   assert.match(budgetCheck, /firstLoadUncompressedJsBytes/);
@@ -92,8 +102,15 @@ test("CI enforces route and document preload JavaScript budgets after building",
 test("Next and the verified deployment keep real public GET responses compressed", async () => {
   const nextConfig = await readRepoFile("next.config.ts");
   const deployWorkflow = await readRepoFile(".github/workflows/deploy.yml");
+  const rootLayout = await readRepoFile("src/app/layout.tsx");
+  const publicVerification = await readRepoFile("scripts/verify-public-compression.mjs");
 
   assert.match(nextConfig, /compress: true/);
+  assert.match(nextConfig, /const uncachedDocumentRoutes = \[/);
+  assert.match(nextConfig, /private, no-cache, no-store, max-age=0, must-revalidate/);
+  assert.match(rootLayout, /"riic-build-id": process\.env\.APP_CLIENT_BUILD_ID \?\? "local-development"/);
+  assert.match(publicVerification, /public HTML build ID is/);
+  assert.match(publicVerification, /public HTML must not be stored by a shared cache/);
   assert.match(deployWorkflow, /Deploy and verify[\s\S]+Verify public response compression/);
   assert.match(deployWorkflow, /node scripts\/verify-public-compression\.mjs\s*$/m);
   assert.doesNotMatch(deployWorkflow, /verify-public-compression\.mjs "\$DEPLOY_PUBLIC_HEALTH_URL"/);
@@ -114,7 +131,7 @@ test("CI gates releases on Chromium and schedules the full WebKit suite", async 
   assert.match(workflow, /deploy:[\s\S]+needs: \[changes, quality\]/);
   assert.match(workflow, /cancel-in-progress: \$\{\{ github\.event_name == 'pull_request' \}\}/);
   assert.equal(readinessSpecs.length, 4);
-  assert.equal(readinessTestCount, 77);
+  assert.equal(readinessTestCount, 85);
   assert.equal(e2eFiles.includes("production-readiness.spec.ts"), false);
   assert.match(playwrightConfig, /fullyParallel: false/);
   assert.match(playwrightConfig, /workers: process\.env\.CI \? 3 : undefined/);
@@ -159,10 +176,12 @@ test("public deployment automation is repository-bound, opt-in, and secret-safe"
   );
 
   assert.match(qualityWorkflow, /HEAD_REPOSITORY[\s\S]+EXPECTED_REPOSITORY: KnightCodeSquareMatrix\/RIIC-Web[\s\S]+"\$HEAD_REF" == release\/\*/);
+  assert.match(qualityWorkflow, /types: \[opened, synchronize, reopened, labeled, unlabeled\]/);
+  assert.match(qualityWorkflow, /DIRECT_MAIN_RELEASE: \$\{\{ contains\(github\.event\.pull_request\.labels\.\*\.name, 'direct-main-release'\)[\s\S]+"\$DIRECT_MAIN_RELEASE" == "1"[\s\S]+develop ancestry is intentionally skipped/);
   assert.match(qualityWorkflow, /git merge-base --is-ancestor "\$HEAD_SHA" refs\/remotes\/origin\/develop/);
   assert.match(qualityWorkflow, /github\.event_name == 'push'[\s\S]+needs\.quality\.result == 'success'[\s\S]+needs\.changes\.outputs\.deploy_required == 'true'[\s\S]+vars\.DEPLOY_AUTOMATION_ENABLED == '1'[\s\S]+github\.repository == 'KnightCodeSquareMatrix\/RIIC-Web'/);
   assert.match(deployWorkflow, /github\.event_name == 'push'[\s\S]+vars\.DEPLOY_AUTOMATION_ENABLED == '1'[\s\S]+github\.repository == 'KnightCodeSquareMatrix\/RIIC-Web'/);
-  assert.match(deployWorkflow, /DEPLOY_APPROVED_SOLVER_SHA256: \$\{\{ vars\.DEPLOY_APPROVED_SOLVER_SHA256 \}\}[\s\S]+DEPLOY_EXPECTED_REPOSITORY: KnightCodeSquareMatrix\/RIIC-Web[\s\S]+DEPLOY_RELEASE_HELPER_CONTRACT: "4"/);
+  assert.match(deployWorkflow, /DEPLOY_APPROVED_SOLVER_SHA256: \$\{\{ vars\.DEPLOY_APPROVED_SOLVER_SHA256 \}\}[\s\S]+DEPLOY_EXPECTED_REPOSITORY: KnightCodeSquareMatrix\/RIIC-Web[\s\S]+DEPLOY_RELEASE_HELPER_CONTRACT: "5"/);
   assert.doesNotMatch(deployWorkflow, /DEPLOY_PREPARE_HELPER_CONTRACT|arknights-infra-prepare-release/);
   assert.match(deployWorkflow, /DEPLOY_PUBLIC_HEALTH_URL: \$\{\{ secrets\.DEPLOY_PUBLIC_HEALTH_URL \}\}/);
   assert.doesNotMatch(deployWorkflow, /DEPLOY_PUBLIC_HEALTH_URL: \$\{\{ vars\./);
@@ -173,7 +192,7 @@ test("public deployment automation is repository-bound, opt-in, and secret-safe"
   assert.match(preflightWorkflow, /PREFLIGHT_MODE: \$\{\{ inputs\.mode \}\}/);
   assert.match(preflightWorkflow, /DEPLOY_ENVIRONMENT: \$\{\{ inputs\.environment \}\}/);
   assert.match(preflightWorkflow, /if \[\[ "\$PREFLIGHT_MODE" == "cutover-ready" \]\][\s\S]+test "\$actual_contract" = "\$expected_contract"/);
-  assert.match(preflightWorkflow, /DEPLOY_APPROVED_SOLVER_SHA256: \$\{\{ vars\.DEPLOY_APPROVED_SOLVER_SHA256 \}\}[\s\S]+DEPLOY_RELEASE_HELPER_CONTRACT: "4"/);
+  assert.match(preflightWorkflow, /DEPLOY_APPROVED_SOLVER_SHA256: \$\{\{ vars\.DEPLOY_APPROVED_SOLVER_SHA256 \}\}[\s\S]+DEPLOY_RELEASE_HELPER_CONTRACT: "5"/);
   assert.match(preflightWorkflow, /Inspect deploy helper, solver, and disk[\s\S]+verify_helper deploy \/usr\/local\/sbin\/arknights-infra-deploy/);
   assert.match(preflightWorkflow, /sudo -n \/usr\/local\/sbin\/arknights-infra-deploy[\s\S]+--preflight "\$deployment_environment" "\$app_root"[\s\S]+"\$expected_repository" "\$approved_solver_sha256"/);
   assert.match(preflightWorkflow, /solver_source=not-inspected-root-only/);
@@ -198,17 +217,24 @@ test("public deployment automation is repository-bound, opt-in, and secret-safe"
 
 test("deploy builds and transfers a verified solver-free standalone artifact", async () => {
   const deployWorkflow = await readRepoFile(".github/workflows/deploy.yml");
+  const qualityWorkflow = await readRepoFile(".github/workflows/frontend-quality.yml");
 
   assert.match(deployWorkflow, /Use Node\.js 22[\s\S]+actions\/setup-node@[0-9a-f]{40}[\s\S]+node-version: 22/);
   assert.match(deployWorkflow, /Resolve verified release identity[\s\S]+git rev-parse 'HEAD\^\{tree\}'[\s\S]+DEPLOY_TREE_SHA=%s/);
   assert.match(deployWorkflow, /Validate deployment configuration[\s\S]+\[\[ "\$DEPLOY_TREE_SHA" =~ \^\[0-9a-f\]\{40\}\$ \]\]/);
   assert.match(deployWorkflow, /Install verified build dependencies[\s\S]+run: npm ci/);
   assert.match(deployWorkflow, /Build standalone release[\s\S]+APP_DEPLOYMENT_ENV:[\s\S]+SKLAND_FEATURE_ENABLED: "1"[\s\S]+ACCOUNT_CLOUD_SYNC_ENABLED: "1"[\s\S]+run: npm run build/);
+  assert.match(deployWorkflow, /run: npm run build && npm run worker:build/);
+  assert.match(qualityWorkflow, /Production worker build[\s\S]+npm run worker:build && node --check dist\/plan-worker\.cjs/);
   assert.match(deployWorkflow, /RELEASE_SHA="\$DEPLOY_SHA" RELEASE_TREE_SHA="\$DEPLOY_TREE_SHA"[\s\S]+npm run release:stage -- --output "\$artifact_root"/);
-  assert.match(deployWorkflow, /tar -czf "\$local_archive" -C "\$artifact_root" \.[\s\S]+gzip -t "\$local_archive"/);
+  assert.match(deployWorkflow, /tar --sort=name[\s\S]+--mtime="@\$SOURCE_DATE_EPOCH"[\s\S]+gzip --best --no-name --rsyncable[\s\S]+gzip -t "\$local_archive"/);
   assert.match(deployWorkflow, /archive_sha256="\$\(sha256sum "\$local_archive"[\s\S]+DEPLOY_ARCHIVE_SHA256=%s/);
-  assert.match(deployWorkflow, /Upload standalone release archive[\s\S]+scp "\$\{ssh_options\[@\]\}"[\s\S]+"\$DEPLOY_LOCAL_ARCHIVE"[\s\S]+test "\$remote_sha256" = "\$DEPLOY_ARCHIVE_SHA256"/);
-  assert.match(deployWorkflow, /DEPLOY_RELEASE_HELPER_CONTRACT: "4"/);
+  assert.match(deployWorkflow, /Build standalone release[\s\S]+APP_BUILD_ID: \$\{\{ env\.DEPLOY_SHA \}\}/);
+  assert.match(deployWorkflow, /Upload standalone release archive[\s\S]+--checksum[\s\S]+--partial[\s\S]+--inplace[\s\S]+remote_prefix_sha256[\s\S]+upload_chunk_bytes[\s\S]+test "\$remote_sha256" = "\$DEPLOY_ARCHIVE_SHA256"/);
+  assert.match(deployWorkflow, /archive_cache="\.cache\/riic-web\/\$\{DEPLOYMENT_ENV\}-standalone\.tar\.gz"/);
+  assert.match(deployWorkflow, /staged_archive=[\s\S]+mktemp[\s\S]+install -m 600[\s\S]+mv -fT/);
+  assert.doesNotMatch(deployWorkflow, /\bscp\b/);
+  assert.match(deployWorkflow, /DEPLOY_RELEASE_HELPER_CONTRACT: "5"/);
   assert.match(deployWorkflow, /'\$DEPLOY_APPROVED_SOLVER_SHA256' \\\n\s+'\$DEPLOY_TREE_SHA'/);
   assert.match(deployWorkflow, /Remove staged release artifacts from the runner[\s\S]+if: always\(\)[\s\S]+"\$RUNNER_TEMP"\/riic-web-release\.\*[\s\S]+"\$RUNNER_TEMP"\/arknights-infra-\*\.tar\.gz/);
   assert.doesNotMatch(deployWorkflow, /git (?:archive|bundle)|repository\.git|DEPLOY_PREVIOUS_SHA|remote_bundle|bin\/infra-cli/);
@@ -305,6 +331,12 @@ test("workbench views use five prefetched route entries under one persistent lay
   assert.doesNotMatch(app, /betaRequested|showBetaPanels|DebugActions|IssuePanel/);
   assert.doesNotMatch(routeMap, /\?beta|betaRequested/);
   assert.doesNotMatch(sidebar, /\?beta|betaRequested/);
+});
+
+test("the Skland entry is request-rendered so releases cannot retain stale login chunks", async () => {
+  const sklandPage = await readRepoFile("src/app/(workbench)/skland/page.tsx");
+
+  assert.match(sklandPage, /export const dynamic = "force-dynamic"/);
 });
 
 test("the critical calculator board stays initial while the compact view loads on demand", async () => {

@@ -27,7 +27,7 @@ import { isSecureSklandRequest, isSklandConfigured } from "./session";
 import { resolveSklandSessionView, sklandSessionMode } from "./session-view";
 import type { SklandBindingSummary } from "../../types";
 
-const authMethods = { qr: true as const };
+const authMethods = { qr: true as const, credential: true as const };
 
 function deprecated(response: Response, successor: string): Response {
   response.headers.set("Deprecation", "true");

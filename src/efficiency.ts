@@ -194,6 +194,16 @@ export function presentRoomEfficiency(
   }
 
   if (group === "power") {
+    // 新 serve 输出：直接展示总效率（final/total 恒存在），不再依赖被双重归一化吞掉的
+    // power_skill_pct/power_score 字段。
+    const total = efficiency.final_efficiency ?? efficiency.total_efficiency;
+    if (total !== undefined) {
+      return {
+        primaryLabel: "总效率",
+        primaryValue: percent(total * 100),
+        details: [],
+      };
+    }
     const scoreFallback = efficiency.power_score !== undefined ? Math.max(0, efficiency.power_score - 100) : undefined;
     const skill = efficiency.power_skill_pct ?? efficiency.power_charge_speed_pct ?? scoreFallback;
     const display = efficiency.power_display_pct;

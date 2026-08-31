@@ -4,6 +4,7 @@ import test from "node:test";
 
 import {
   __resetRequestGuardsForTests,
+  acquireAnonymousSamplePlanSlot,
   acquirePlanSlot,
   assertEmptyBody,
   assertFiammettaEnableCompatible,
@@ -14,7 +15,9 @@ import {
   failureResponse,
   healthHttpStatus,
   MAX_CONCURRENT_AUTHENTICATED_PLAN_ADMISSIONS,
+  MAX_CONCURRENT_ANONYMOUS_SAMPLE_PLAN_ADMISSIONS,
   MAX_CONCURRENT_NEW_ACCOUNT_PLAN_ADMISSIONS,
+  MAX_ANONYMOUS_SAMPLE_PLAN_STARTS_PER_IP,
   MAX_CONCURRENT_PLAN_ACCOUNTS_PER_IP,
   MAX_PLAN_STARTS_PER_ACCOUNT,
   MAX_PLAN_STARTS_PER_IP,
@@ -39,6 +42,7 @@ test("error catalog keeps the required HTTP status mapping", () => {
   assert.equal(ERROR_DEFINITIONS["AIC-AUTH-2005"].status, 400);
   assert.equal(ERROR_DEFINITIONS["AIC-AUTH-2006"].status, 409);
   assert.equal(ERROR_DEFINITIONS["AIC-AUTH-2007"].status, 404);
+  assert.equal(ERROR_DEFINITIONS["AIC-AUTH-2010"].status, 400);
   assert.equal(ERROR_DEFINITIONS["AIC-PLAN-3001"].status, 503);
   assert.equal(ERROR_DEFINITIONS["AIC-PLAN-3002"].status, 429);
   assert.equal(ERROR_DEFINITIONS["AIC-PLAN-3003"].status, 504);
@@ -326,6 +330,82 @@ test("established accounts can use reserved capacity without opening it to fresh
   }
 });
 
+test("anonymous trusted samples use one bounded slot while preserving signed-in capacity", () => {
+  __resetRequestGuardsForTests();
+  try {
+    assert.equal(MAX_CONCURRENT_ANONYMOUS_SAMPLE_PLAN_ADMISSIONS, 1);
+    const releaseSample = acquireAnonymousSamplePlanSlot({ ip: "sample-ip" });
+    assert.throws(
+      () => acquireAnonymousSamplePlanSlot({ ip: "other-sample-ip" }),
+      (error: unknown) => error instanceof PublicApiError && error.code === "AIC-PLAN-3002",
+    );
+
+    const authenticatedReleases = Array.from(
+      { length: MAX_CONCURRENT_AUTHENTICATED_PLAN_ADMISSIONS - 1 },
+      (_, index) => acquirePlanSlot({
+        ip: `authenticated-ip-${index}`,
+        accountId: `established-account-${index}`,
+        accountClass: "established",
+      }),
+    );
+    assert.throws(
+      () => acquirePlanSlot({
+        ip: "authenticated-ip-rejected",
+        accountId: "established-account-rejected",
+        accountClass: "established",
+      }),
+      (error: unknown) => error instanceof PublicApiError && error.code === "AIC-PLAN-3002",
+    );
+
+    authenticatedReleases.forEach((release) => release());
+    releaseSample();
+
+    const priorityReleases = Array.from(
+      { length: MAX_CONCURRENT_AUTHENTICATED_PLAN_ADMISSIONS - 1 },
+      (_, index) => acquirePlanSlot({
+        ip: `priority-ip-${index}`,
+        accountId: `priority-account-${index}`,
+        accountClass: "established",
+      }),
+    );
+    assert.throws(
+      () => acquireAnonymousSamplePlanSlot({ ip: "sample-priority-ip" }),
+      (error: unknown) => error instanceof PublicApiError && error.code === "AIC-PLAN-3002",
+    );
+    const releasePriorityAccount = acquirePlanSlot({
+      ip: "priority-final-ip",
+      accountId: "priority-final-account",
+      accountClass: "established",
+    });
+    releasePriorityAccount();
+    priorityReleases.forEach((release) => release());
+  } finally {
+    __resetRequestGuardsForTests();
+  }
+});
+
+test("anonymous trusted sample starts allow one retry per IP without charging rejections", () => {
+  __resetRequestGuardsForTests();
+  try {
+    assert.equal(MAX_ANONYMOUS_SAMPLE_PLAN_STARTS_PER_IP, 2);
+    const releaseFirst = acquireAnonymousSamplePlanSlot({ ip: "sample-ip" });
+    assert.throws(
+      () => acquireAnonymousSamplePlanSlot({ ip: "sample-ip" }),
+      (error: unknown) => error instanceof PublicApiError && error.code === "AIC-PLAN-3002",
+    );
+    releaseFirst();
+    acquireAnonymousSamplePlanSlot({ ip: "sample-ip" })();
+    assert.throws(
+      () => acquireAnonymousSamplePlanSlot({ ip: "sample-ip" }),
+      (error: unknown) => error instanceof PublicApiError
+        && error.code === "AIC-PLAN-3002"
+        && Boolean(error.retryAfter),
+    );
+  } finally {
+    __resetRequestGuardsForTests();
+  }
+});
+
 test("plan account admission class requires verified email and a server-observed 24 hour age", () => {
   const now = Date.parse("2026-08-31T00:00:00.000Z");
   assert.equal(PLAN_ESTABLISHED_ACCOUNT_AGE_MS, 24 * 60 * 60_000);
@@ -377,14 +457,15 @@ test("plan start windows limit accounts and shared IPs without charging rejected
   }
 });
 
-test("authenticated sample requests retain admission after a cache miss while anonymous samples stay cache-only", async () => {
+test("trusted anonymous samples receive bounded admission after a cache miss", async () => {
   const source = await readFile(new URL("../app/api/plan/route.ts", import.meta.url), "utf8");
   const sampleBranch = source.indexOf('=== "trusted-sample"');
   const authenticatedBranch = source.indexOf("} else {", sampleBranch);
   const optionalSession = source.indexOf("await readWebsiteSession(request).catch(() => null)", sampleBranch);
   const sampleUserId = source.indexOf("websiteUserId = optionalSession.user.id", optionalSession);
   const sampleAccountClass = source.indexOf("websiteAccountClass = planAccountAdmissionClass(optionalSession.user)", optionalSession);
-  const anonymousGuard = source.indexOf("if (!websiteUserId || !websiteAccountClass)");
+  const anonymousGuard = source.indexOf('if (accessMode !== "trusted-sample" || includeDebug)');
+  const anonymousAdmission = source.indexOf("release = acquireAnonymousSamplePlanSlot({ ip })");
   const admission = source.indexOf("release = acquirePlanSlot({ ip, accountId: websiteUserId, accountClass: websiteAccountClass })");
   const anonymousSampleReference = 'const cacheReferenceUserId = sourceType === "sample" ? null : websiteUserId';
   assert.equal(optionalSession > sampleBranch, true);
@@ -394,8 +475,68 @@ test("authenticated sample requests retain admission after a cache miss while an
   assert.equal(source.includes(anonymousSampleReference), true);
   assert.equal(source.match(/userId: cacheReferenceUserId/g)?.length, 2);
   assert.equal(anonymousGuard > source.indexOf("await resolvePlanCache"), true);
-  assert.equal(anonymousGuard < admission, true);
+  assert.equal(anonymousGuard < anonymousAdmission, true);
+  assert.equal(anonymousAdmission < admission, true);
   assert.equal(admission > source.indexOf("await readJsonBody"), true);
   assert.equal(admission > source.indexOf("await resolvePlanCache"), true);
   assert.equal(admission < source.indexOf("runResult = await runPlan"), true);
+});
+
+test("task queue keeps anonymous samples cache-only and applies persistent authenticated admission", async () => {
+  const source = await readFile(new URL("../app/api/tasks/route.ts", import.meta.url), "utf8");
+  const cacheResolution = source.indexOf("await resolvePlanCache");
+  const anonymousGuard = source.indexOf("if (!session?.user?.id)");
+  const taskCreation = source.indexOf("await createPlanTask");
+  assert.equal(cacheResolution > 0, true);
+  assert.equal(anonymousGuard > cacheResolution, true);
+  assert.equal(taskCreation > anonymousGuard, true);
+  assert.equal(source.includes("accountClass: planAccountAdmissionClass(session.user)"), true);
+  assert.equal(source.includes("requestIpHmac: planTaskIpHmac(ip, planCacheHmacKey())"), true);
+  assert.equal(source.includes("cacheReferenceUserId = sourceType === \"sample\" ? null : userId"), true);
+});
+
+test("task queue keeps only the trusted sample on the bounded synchronous endpoint", async () => {
+  const source = await readFile(new URL("../app/api/plan/route.ts", import.meta.url), "utf8");
+  const originGuard = source.indexOf("assertSameOrigin(request)");
+  const accessMode = source.indexOf("const accessMode = planAccessMode");
+  const queueGuard = source.indexOf('if (taskQueueEnabled && accessMode !== "trusted-sample")');
+  const solverCall = source.indexOf("runResult = await runPlan");
+  assert.equal(source.includes('throw new PublicApiError("AIC-PLAN-3001")'), true);
+  assert.equal(queueGuard > originGuard, true);
+  assert.equal(queueGuard > accessMode, true);
+  assert.equal(queueGuard < solverCall, true);
+});
+
+test("worker finalization records saved-plan bindings and cache ownership before publication", async () => {
+  const source = await readFile(new URL("../../scripts/plan-worker-runtime.mts", import.meta.url), "utf8");
+  const runRecord = source.indexOf("await recordPlanRunBestEffort");
+  const cacheReference = source.indexOf("await recordPlanCacheReferenceBestEffort", runRecord);
+  const cachePublication = source.indexOf("await completePlanCache", cacheReference);
+  assert.equal(source.includes("calculationContext: savedPlanContext"), true);
+  assert.equal(source.includes("publicResultSha256"), true);
+  assert.equal(source.includes("operboxContentHmac"), true);
+  assert.equal(runRecord > 0, true);
+  assert.equal(cacheReference > runRecord, true);
+  assert.equal(cachePublication > cacheReference, true);
+});
+
+test("worker loads the sealed release environment before evaluating runtime modules", async () => {
+  const source = await readFile(new URL("../../scripts/plan-worker.mts", import.meta.url), "utf8");
+  const envLoad = source.indexOf("loadEnvConfig(process.cwd())");
+  const runtimeImport = source.indexOf('await import("./plan-worker-runtime.mts")');
+  assert.equal(envLoad > 0, true);
+  assert.equal(runtimeImport > envLoad, true);
+  assert.equal(source.includes('from "./plan-worker-runtime.mts"'), false);
+});
+
+test("the client keeps trusted samples synchronous while personal plans follow queue health", async () => {
+  const source = await readFile(new URL("../../src/App.tsx", import.meta.url), "utf8");
+  const healthFlag = source.indexOf("setTaskQueueEnabled(Boolean(health.taskQueue?.enabled))");
+  const fallback = source.indexOf('if (!taskQueueEnabled || payload.boxSource === "sample")');
+  const synchronousCall = source.indexOf("await computePlan(payload)", fallback);
+  const queueCall = source.indexOf("await submitPlanTask(payload)", synchronousCall);
+  assert.equal(healthFlag > 0, true);
+  assert.equal(fallback > healthFlag, true);
+  assert.equal(synchronousCall > fallback, true);
+  assert.equal(queueCall > synchronousCall, true);
 });

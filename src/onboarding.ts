@@ -30,6 +30,14 @@ export function onboardingStepStatuses({
   return ["complete", "complete", "current"];
 }
 
-export function initialSetupStep(hasBox: boolean): SetupStep {
-  return hasBox ? "layout" : "box";
+export function shouldShowAnonymousSampleTrial({
+  authenticated,
+  hasPersonalBox,
+  onboardingActive,
+}: {
+  authenticated: boolean;
+  hasPersonalBox: boolean;
+  onboardingActive: boolean;
+}): boolean {
+  return onboardingActive && !authenticated && !hasPersonalBox;
 }

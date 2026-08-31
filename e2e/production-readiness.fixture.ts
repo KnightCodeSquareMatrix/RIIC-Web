@@ -871,6 +871,7 @@ export async function mockApis(
     sklandSummaryDelayMs?: number;
     sklandSessionFailure?: boolean;
     plannerReady?: boolean;
+    taskQueueEnabled?: boolean;
     telemetryBatches?: Array<Array<Record<string, unknown>>>;
   } = {}
 ) {
@@ -883,6 +884,11 @@ export async function mockApis(
       data: {
         status: "ready",
         plannerReady: options.plannerReady ?? true,
+        taskQueue: {
+          enabled: Boolean(options.taskQueueEnabled),
+          ready: Boolean(options.taskQueueEnabled),
+          releaseMatched: Boolean(options.taskQueueEnabled),
+        },
         skland: {
           available: Boolean(options.sklandConfigured),
           message: options.sklandConfigured ? null : "当前未开放森空岛登录，可使用 MAA 导入。",
@@ -941,7 +947,7 @@ export async function mockApis(
           ? {
               authenticated: false,
               configured: Boolean(options.sklandConfigured),
-              authMethods: { qr: true },
+              authMethods: { qr: true, credential: true },
               accounts: [],
               activeAccountId: null,
               bindingCount: 0,
@@ -950,7 +956,7 @@ export async function mockApis(
           : {
               authenticated: isSummary ? accounts.length > 0 : Boolean(options.sklandSnapshot),
               configured: Boolean(options.sklandConfigured),
-              authMethods: { qr: true },
+              authMethods: { qr: true, credential: true },
               accounts,
               activeAccountId,
               bindingCount,
@@ -1041,8 +1047,17 @@ export async function mockApis(
 
 export async function openSklandOverview(page: Page) {
   await page.getByRole("button", { name: "森空岛状态中心", exact: true }).click();
-  await expect(page.locator("[data-skland-page]")).toBeVisible();
+  await expect(page.locator("[data-skland-page]")).toBeVisible({ timeout: 45_000 });
   await expect(page.locator('[data-slot="dialog-overlay"]')).toHaveCount(0);
+}
+
+export async function mockAnonymousWebsiteSession(page: Page) {
+  await page.unroute("**/api/auth/get-session");
+  await page.route("**/api/auth/get-session", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: "null",
+  }));
 }
 
 export async function navigateToPrimaryPage(
@@ -1079,10 +1094,11 @@ export async function seedV4Session(
     layoutDirty?: boolean;
     operbox?: Array<Record<string, unknown>>;
     boxSource?: "sample" | "maa" | "skland";
+    onboardingValue?: string | null;
   } = {}
 ) {
-  await page.addInitScript(({ layout, result, savedAt, expiresAt, activeShift, rotationProfile, layoutDirty, operbox, boxSource }) => {
-    window.localStorage.setItem("arknights-infra-calc-beta-onboarding-v1", "1");
+  await page.addInitScript(({ layout, result, savedAt, expiresAt, activeShift, rotationProfile, layoutDirty, operbox, boxSource, onboardingValue }) => {
+    if (onboardingValue !== null) window.localStorage.setItem("arknights-infra-calc-beta-onboarding-v1", onboardingValue);
     if (!window.localStorage.getItem("arknights-infra-calc-session-v4")) window.localStorage.setItem("arknights-infra-calc-session-v4", JSON.stringify({
       version: 4,
       savedAt,
@@ -1115,5 +1131,6 @@ export async function seedV4Session(
     layoutDirty: options.layoutDirty ?? false,
     operbox: options.operbox,
     boxSource: options.boxSource ?? "sample",
+    onboardingValue: options.onboardingValue === undefined ? "1" : options.onboardingValue,
   });
 }

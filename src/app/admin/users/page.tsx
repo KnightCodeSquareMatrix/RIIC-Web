@@ -17,7 +17,7 @@ export default async function AdminUsersPage() {
   return (
     <AdminUsers
       plannerReady={Boolean(health.ok && health.cliReady)}
-      solverFingerprint={health.serve?.planCompute?.solverExecutableSha256 ?? null}
+      solverFingerprint={health.serve?.fingerprint ?? null}
     />
   );
 }
