@@ -1,11 +1,20 @@
 "use client";
 
-import { Calculator, Cloud, GraduationCap, Search, UserRound, type LucideIcon } from "lucide-react";
+import {
+  Calculator,
+  CircleHelp,
+  Cloud,
+  GraduationCap,
+  Search,
+  UserRound,
+  type LucideIcon,
+} from "lucide-react";
 import Link from "next/link";
 
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarHeader,
   SidebarMenu,
@@ -98,6 +107,19 @@ export function AppSidebar({ page, onPageChange }: AppSidebarProps) {
           </SidebarMenu>
         </SidebarGroup>
       </SidebarContent>
+      <SidebarFooter className="border-t border-sidebar-border p-2">
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              render={<Link href="/help" data-help-link />}
+              tooltip="使用帮助"
+            >
+              <CircleHelp className="size-5" />
+              <span>使用帮助</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
     </Sidebar>
   );
 }
