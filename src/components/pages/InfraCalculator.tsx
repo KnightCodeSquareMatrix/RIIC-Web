@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, FlaskConical, HeartPulse, Keyboard, Loader2, Play, RefreshCw, Search, Settings2, X } from "lucide-react";
+import { Download, Ellipsis, FlaskConical, HeartPulse, Keyboard, Loader2, Play, RefreshCw, Search, Settings2, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { ScheduleBoard, ShiftTabs } from "@/components";
@@ -460,20 +460,32 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                 data-calculator-controls
               >
                 {renderSearch()}
+                <details className="relative min-w-0 sm:hidden" data-calculator-more-tools>
+                  <summary className="flex h-11 cursor-pointer list-none items-center justify-center gap-2 border border-border bg-background px-3 text-sm font-medium marker:content-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFD800]">
+                    <Ellipsis className="size-4" aria-hidden="true" />更多工具
+                  </summary>
+                  <div className="absolute left-0 top-[calc(100%+0.35rem)] z-30 grid w-[min(18rem,calc(100vw-1.5rem))] gap-2 border border-border bg-background p-2 shadow-lg">
+                    <Button type="button" variant="ghost" className="h-11 justify-start" onClick={onOpenSetup}>
+                      <Settings2 />配置Box与布局
+                    </Button>
+                    <Button type="button" variant="ghost" className="h-11 justify-start" onClick={() => setShortcutGuideOpen(true)}>
+                      <Keyboard />查看快捷键
+                    </Button>
+                  </div>
+                </details>
                 <div className="contents sm:inline-flex sm:min-w-0" data-calculator-setup-group>
                   <Button
                     type="button"
                     size="sm"
                     variant="outline"
                     className={accountControl
-                      ? "h-9 min-w-0 rounded-r-none"
-                      : "h-9 min-w-0"}
+                      ? "h-9 min-w-0 rounded-r-none max-sm:hidden"
+                      : "h-9 min-w-0 max-sm:hidden"}
                     aria-label="配置Box与布局"
                     onClick={onOpenSetup}
                   >
                     <Settings2 />
-                    <span className="max-sm:hidden">配置Box与布局</span>
-                    <span className="sm:hidden">配置</span>
+                    配置Box与布局
                   </Button>
                   {accountControl}
                 </div>
