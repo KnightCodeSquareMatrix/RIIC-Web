@@ -114,7 +114,7 @@ test("CI gates releases on Chromium and schedules the full WebKit suite", async 
   assert.match(workflow, /deploy:[\s\S]+needs: \[changes, quality\]/);
   assert.match(workflow, /cancel-in-progress: \$\{\{ github\.event_name == 'pull_request' \}\}/);
   assert.equal(readinessSpecs.length, 4);
-  assert.equal(readinessTestCount, 77);
+  assert.equal(readinessTestCount, 78);
   assert.equal(e2eFiles.includes("production-readiness.spec.ts"), false);
   assert.match(playwrightConfig, /fullyParallel: false/);
   assert.match(playwrightConfig, /workers: process\.env\.CI \? 3 : undefined/);

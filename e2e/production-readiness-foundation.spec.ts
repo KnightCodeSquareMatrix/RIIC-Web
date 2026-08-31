@@ -651,6 +651,31 @@ test("password reset rejects a link without a token before making a request", as
   expect(resetRequests).toBe(0);
 });
 
+test("password reset requires matching password confirmation before making a request", async ({ page }) => {
+  let resetRequests = 0;
+  await page.route("**/api/auth/reset-password", async (route) => {
+    resetRequests += 1;
+    expect(route.request().postDataJSON()).toMatchObject({
+      newPassword: "correct-password",
+      token: "valid-reset-token",
+    });
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ status: true }) });
+  });
+  await page.goto("/account/reset-password?token=valid-reset-token");
+
+  await page.getByLabel("新密码", { exact: true }).fill("correct-password");
+  await page.getByLabel("确认新密码", { exact: true }).fill("different-password");
+  await page.getByRole("button", { name: "确认重置" }).click();
+  await expect(page.getByText("两次输入的密码不一致。", { exact: true })).toBeVisible();
+  expect(resetRequests).toBe(0);
+
+  await page.getByLabel("确认新密码", { exact: true }).fill("correct-password");
+  await expect(page.getByText("两次输入的密码不一致。", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "确认重置" }).click();
+  await expect.poll(() => resetRequests).toBe(1);
+  await expect(page.getByText("密码已重置，旧 Session 已撤销，请返回首页登录。", { exact: true })).toBeVisible();
+});
+
 test("anonymous MAA data cannot drive planning or training advice", async ({ page }) => {
   await page.unroute("**/api/auth/get-session");
   await page.route("**/api/auth/get-session", (route) => route.fulfill({ status: 200, contentType: "application/json", body: "null" }));

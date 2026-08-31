@@ -37,6 +37,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { FluidOrb } from "@/components/ui/fluid-orb";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { passwordConfirmationError } from "@/components/auth/password-confirmation";
 import { authClient } from "@/lib/auth-client";
 import { PRIVACY_VERSION, TERMS_VERSION } from "@/legal-policy";
 import { clearLocalProductData } from "@/persistence";
@@ -73,11 +74,6 @@ function formatSessionExpiry(value: unknown): string | null {
   const date = value instanceof Date ? value : new Date(value);
   if (!Number.isFinite(date.getTime())) return null;
   return new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(date);
-}
-
-function passwordConfirmationError(password: string, confirmation: string): string | null {
-  if (!confirmation) return "请再次输入密码。";
-  return password === confirmation ? null : "两次输入的密码不一致。";
 }
 
 export function WebsiteAccountPanel({
