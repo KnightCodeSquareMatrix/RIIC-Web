@@ -266,11 +266,18 @@ export function FileDrop({
   }
 
   return (
-    <Label pressable className="flex min-h-32 cursor-pointer flex-col items-center justify-center gap-2 rounded-[4px] border border-dashed bg-background px-4 py-5 text-center transition-[color,background-color,border-color] duration-[var(--motion-duration-state)] ease-[var(--motion-ease-out)] hover:border-primary/40 hover:bg-muted/40">
+    <Label pressable className="flex min-h-36 cursor-pointer flex-col items-center justify-center gap-2 rounded-[4px] border border-dashed bg-background px-4 py-5 text-center transition-[color,background-color,border-color] duration-[var(--motion-duration-state)] ease-[var(--motion-ease-out)] hover:border-primary/40 hover:bg-muted/40">
       <Upload className="size-5 text-primary" />
       <span className="font-medium text-foreground">{fileName ?? "上传练度 JSON / XLSX"}</span>
-      <span className="text-xs text-muted-foreground">
-        支持 MAA 导出的干员数据 JSON，也支持一图流 XLSX
+      <span className="flex flex-wrap items-center justify-center gap-1.5 text-xs" role="list" aria-label="支持的 MAA JSON 语言">
+        {["简中", "繁中", "日文", "英文"].map((language) => (
+          <span key={language} role="listitem" className="rounded-full border border-border bg-muted/70 px-2 py-0.5 font-medium text-foreground">
+            {language}
+          </span>
+        ))}
+      </span>
+      <span className="text-xs leading-relaxed text-muted-foreground">
+        导入后在本地自动转为简中，再提交排班 · 也支持一图流 XLSX
       </span>
       <input className="sr-only" type="file" accept=".json,.xlsx,.xls" onChange={handleChange} />
     </Label>

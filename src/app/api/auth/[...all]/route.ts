@@ -1,6 +1,7 @@
 import { getAuth, websiteSession } from "@/server/auth";
 import { isForbiddenNativeAdminPath } from "@/server/auth/native-route-policy";
 import { responseWithClearedSklandCookies } from "@/server/auth/session-cookie-cleanup";
+import { localDevelopmentAuthBypassSession } from "@/server/auth/local-bypass";
 import { evictPlanCacheKeys, userPlanCacheKeys } from "@/server/plan-cache";
 
 export const runtime = "nodejs";
@@ -11,6 +12,10 @@ async function handle(request: Request) {
     return Response.json({ code: "NOT_FOUND", message: "Not found" }, { status: 404 });
   }
   const pathname = new URL(request.url).pathname.replace(/\/+$/, "");
+  const localSession = localDevelopmentAuthBypassSession(request);
+  if (pathname === "/api/auth/get-session" && localSession) {
+    return Response.json(localSession, { headers: { "cache-control": "no-store" } });
+  }
   if (pathname === "/api/auth/delete-user") {
     const current = await websiteSession(request);
     if (current?.user.id) await evictPlanCacheKeys(await userPlanCacheKeys(current.user.id));

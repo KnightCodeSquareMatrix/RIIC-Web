@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { canChangeWebsiteAdminRole, canModerateWebsiteUser, isEligibleForWebsiteAdmin, websiteAdminAccess } from "./admin-access.ts";
 import { configuredAdminIds, requireAuthBaseUrl, requireAuthSecret } from "./config.ts";
+import { localDevelopmentAuthBypassEnabled, localDevelopmentAuthBypassSession } from "./local-bypass.ts";
 
 test("Better Auth secret must contain at least 32 UTF-8 bytes", () => {
   assert.throws(() => requireAuthSecret("short"), /32 bytes/);
@@ -15,6 +16,30 @@ test("Better Auth base URL must be an HTTPS origin outside local development", (
   assert.throws(() => requireAuthBaseUrl("http://127.0.0.1:5174", "production"), /HTTPS/);
   assert.throws(() => requireAuthBaseUrl("http://auth.example.test", "development"), /HTTPS/);
   assert.throws(() => requireAuthBaseUrl("https://auth.example.test/path", "production"), /origin/);
+});
+
+test("local auth bypass is restricted to the development server on port 5174", () => {
+  const enabledEnvironment = { LOCAL_AUTH_BYPASS: "1", NODE_ENV: "development", APP_DEPLOYMENT_ENV: "development" };
+  assert.equal(localDevelopmentAuthBypassEnabled(new Request("http://127.0.0.1:5174/"), enabledEnvironment), true);
+  assert.equal(localDevelopmentAuthBypassEnabled(new Request("http://localhost:5174/"), enabledEnvironment), true);
+  assert.equal(localDevelopmentAuthBypassEnabled(new Headers({ host: "localhost:5174" }), enabledEnvironment), true);
+  assert.equal(localDevelopmentAuthBypassEnabled(new Request("http://127.0.0.1:5175/"), enabledEnvironment), false);
+  assert.equal(localDevelopmentAuthBypassEnabled(new Request("https://riic.autos/"), enabledEnvironment), false);
+  assert.equal(localDevelopmentAuthBypassEnabled(new Request("http://127.0.0.1:5174/"), { ...enabledEnvironment, NODE_ENV: "production" }), false);
+  assert.equal(localDevelopmentAuthBypassEnabled(new Request("http://127.0.0.1:5174/"), { ...enabledEnvironment, APP_DEPLOYMENT_ENV: "production" }), false);
+  assert.equal(localDevelopmentAuthBypassEnabled(new Request("http://127.0.0.1:5174/"), { ...enabledEnvironment, NODE_ENV: undefined }), false);
+  assert.equal(localDevelopmentAuthBypassEnabled(new Request("https://127.0.0.1:5174/"), enabledEnvironment), false);
+  assert.equal(localDevelopmentAuthBypassEnabled(new Request("http://127.0.0.1:5174/"), { ...enabledEnvironment, LOCAL_AUTH_BYPASS: "0" }), false);
+});
+
+test("local auth bypass returns a verified long-lived development identity", () => {
+  const session = localDevelopmentAuthBypassSession(
+    new Request("http://127.0.0.1:5174/api/auth/get-session"),
+    { LOCAL_AUTH_BYPASS: "1", NODE_ENV: "development", APP_DEPLOYMENT_ENV: "development" },
+  );
+  assert.equal(session?.user.id, "local-development-user");
+  assert.equal(session?.user.emailVerified, true);
+  assert.ok(session && session.session.expiresAt.getUTCFullYear() === 2099);
 });
 
 test("administrator ids are explicit, trimmed Better Auth user ids", () => {
