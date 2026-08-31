@@ -65,6 +65,9 @@ test("Skland login exposes both methods and starts QR only after explicit consen
   await expect(page.getByText("登录凭证只保存在当前浏览器，7 天后失效。")).toBeVisible();
   await expect(page.getByRole("tab", { name: "扫码登录" })).toBeVisible();
   await expect(page.getByRole("tab", { name: "凭证导入" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "登录森空岛账号" })).toHaveCount(0);
+  await expect(page.getByText("登录信息经加密写入 HttpOnly Cookie，并在授权成功 7 天后固定失效。")).toHaveCount(0);
+  await expect(page.locator("[data-skland-auth-copy]")).toHaveCount(0);
   expect(qrStartRequests).toBe(0);
 
   const consentCheckboxes = page.getByRole("checkbox");
@@ -153,16 +156,19 @@ test("credential import explains the risk, gates consent, recovers from errors, 
 
   const credentialPanel = page.locator("[data-skland-credential-panel]");
   await expect(credentialPanel).toBeVisible();
+  const credentialForm = credentialPanel.locator("[data-skland-credential-form]");
+  await expect(credentialForm).toBeVisible();
+  await expect.poll(() => credentialForm.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
   await expect(credentialPanel.getByText("手机端优先使用扫码")).toBeVisible();
   await expect(credentialPanel.locator("ol > li")).toHaveCount(3);
+  await expect(credentialPanel.getByText(/allow pasting.*允许粘贴/)).toBeVisible();
   await expect(credentialPanel.getByText("仓库物资数量", { exact: true })).toBeVisible();
   await expect(credentialPanel.getByText(/本站实际不读取、不保存、不展示仓库数据/)).toBeVisible();
 
   await credentialPanel.getByRole("button", { name: "复制命令" }).click();
   await expect(credentialPanel.getByRole("button", { name: "已复制" })).toBeVisible();
   const copiedCommand = await page.evaluate(() => navigator.clipboard.readText());
-  expect(copiedCommand).toContain('localStorage.getItem("SK_OAUTH_CRED_KEY")');
-  expect(copiedCommand).toContain('localStorage.getItem("SK_TOKEN_CACHE_KEY")');
+  expect(copiedCommand).toBe("copy(localStorage.getItem('SK_OAUTH_CRED_KEY')+','+localStorage.getItem('SK_TOKEN_CACHE_KEY')),console.log('已复制到粘贴板，回到网页粘贴')");
 
   const input = credentialPanel.locator("[data-skland-credential-input]");
   const submit = credentialPanel.locator("[data-skland-credential-submit]");
@@ -279,6 +285,20 @@ test("credential import can add a second Skland account from the account dialog"
 
   const dialog = page.getByRole("dialog", { name: "添加森空岛账号" });
   await dialog.getByRole("tab", { name: "凭证导入" }).click();
+  await expect(dialog).toHaveCSS("width", "960px");
+  const credentialPanel = dialog.locator("[data-skland-credential-panel]");
+  const credentialForm = credentialPanel.locator("[data-skland-credential-form]");
+  const riskNotice = credentialPanel.locator("[data-skland-credential-risk]");
+  const [panelBox, formBox, riskBox] = await Promise.all([
+    credentialPanel.boundingBox(),
+    credentialForm.boundingBox(),
+    riskNotice.boundingBox(),
+  ]);
+  expect(panelBox).not.toBeNull();
+  expect(formBox?.width).toBeCloseTo(768, 0);
+  expect(riskBox?.width).toBeCloseTo(672, 0);
+  expect(Math.abs((formBox?.x ?? 0) + (formBox?.width ?? 0) / 2 - ((panelBox?.x ?? 0) + (panelBox?.width ?? 0) / 2))).toBeLessThanOrEqual(2);
+  expect(Math.abs((riskBox?.x ?? 0) + (riskBox?.width ?? 0) / 2 - ((formBox?.x ?? 0) + (formBox?.width ?? 0) / 2))).toBeLessThanOrEqual(2);
   await dialog.locator("[data-skland-credential-input]").fill(submittedCredential);
   await dialog.getByRole("checkbox").nth(0).check();
   await dialog.getByRole("checkbox").nth(1).check();
@@ -1078,7 +1098,7 @@ test("Skland supports adding, switching, and individually logging out multiple a
   const addAccountDialog = page.getByRole("dialog", { name: "添加森空岛账号" });
   await expect(addAccountDialog).toBeVisible();
   await expectUnifiedDialogTypography(addAccountDialog);
-  await expect(addAccountDialog).toHaveCSS("width", "880px");
+  await expect(addAccountDialog).toHaveCSS("width", "960px");
   await expect(addAccountDialog.locator("[data-skland-login-panel]")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   const generateLoginQr = addAccountDialog.getByRole("button", { name: "生成登录二维码" });
   await expectUnifiedDialogAction(generateLoginQr, { width: "196px", height: "46px" });

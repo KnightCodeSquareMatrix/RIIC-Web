@@ -21,7 +21,7 @@ import {
 } from "@/skland-policy-consent";
 import type { SklandSessionData } from "@/types";
 
-const SKLAND_CREDENTIAL_COPY_COMMAND = 'copy([localStorage.getItem("SK_OAUTH_CRED_KEY"), localStorage.getItem("SK_TOKEN_CACHE_KEY")].join(","))';
+const SKLAND_CREDENTIAL_COPY_COMMAND = "copy(localStorage.getItem('SK_OAUTH_CRED_KEY')+','+localStorage.getItem('SK_TOKEN_CACHE_KEY')),console.log('已复制到粘贴板，回到网页粘贴')";
 
 export function SklandCredentialPanel({
   dialogPresentation,
@@ -79,29 +79,36 @@ export function SklandCredentialPanel({
   }
 
   return (
-    <form className="grid gap-5" onSubmit={(event) => void submitCredential(event)}>
-      <Alert className="md:hidden">
+    <form
+      className="mx-auto grid w-full max-w-3xl justify-items-center gap-7"
+      onSubmit={(event) => void submitCredential(event)}
+      data-skland-credential-form
+    >
+      <Alert className="w-full text-start md:hidden">
         <ScanLine />
         <AlertTitle>手机端优先使用扫码</AlertTitle>
         <AlertDescription>凭证导入需要桌面浏览器的开发者工具，手机上建议切回“扫码登录”。</AlertDescription>
       </Alert>
 
-      <ol className="grid gap-4 text-sm leading-6">
-        <li className="grid grid-cols-[1.75rem_minmax(0,1fr)] gap-3">
-          <span className="font-number grid size-7 place-items-center rounded-full bg-foreground text-xs font-semibold text-background">1</span>
-          <div>
+      <ol className="grid w-full gap-6 text-sm leading-6" data-skland-credential-workflow>
+        <li className="grid grid-cols-[2rem_minmax(0,1fr)] items-start gap-4 text-start">
+          <span className="font-number grid size-8 place-items-center rounded-full bg-foreground text-xs font-semibold text-background">1</span>
+          <div className="min-w-0">
             <p className="font-medium text-foreground">登录森空岛网页版</p>
             <p className="text-muted-foreground">打开 <a className="font-medium text-foreground underline underline-offset-4" href="https://www.skland.com/index" target="_blank" rel="noreferrer">www.skland.com/index</a> 并完成登录。</p>
           </div>
         </li>
-        <li className="grid grid-cols-[1.75rem_minmax(0,1fr)] gap-3">
-          <span className="font-number grid size-7 place-items-center rounded-full bg-foreground text-xs font-semibold text-background">2</span>
+        <li className="grid grid-cols-[2rem_minmax(0,1fr)] items-start gap-4 text-start">
+          <span className="font-number grid size-8 place-items-center rounded-full bg-foreground text-xs font-semibold text-background">2</span>
           <div className="min-w-0">
             <p className="font-medium text-foreground">在 F12 Console 执行命令</p>
             <p className="text-muted-foreground">打开开发者工具的 Console，将下方命令粘贴并执行。它只读取森空岛页面已有的 cred 与 token，并复制为一行。</p>
-            <div className="mt-2 flex min-w-0 items-stretch gap-2">
-              <code className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap rounded-lg bg-muted px-3 py-2 font-number text-xs text-foreground" title={SKLAND_CREDENTIAL_COPY_COMMAND}>{SKLAND_CREDENTIAL_COPY_COMMAND}</code>
-              <Button type="button" variant="outline" size="sm" onClick={() => void copyCredentialCommand()} data-skland-copy-command>
+            <p className="mt-2 text-xs leading-5 text-amber-700 dark:text-amber-400">
+              如果 Console 阻止粘贴，请先输入 <span className="font-number font-medium">allow pasting</span> 或 <span className="font-medium">允许粘贴</span>，按回车后再粘贴命令。
+            </p>
+            <div className="mt-3 flex min-w-0 flex-col items-stretch gap-2 sm:flex-row">
+              <code className="flex min-h-10 min-w-0 flex-1 items-center overflow-hidden text-ellipsis whitespace-nowrap rounded-lg bg-muted px-3 py-2 font-number text-xs text-foreground" title={SKLAND_CREDENTIAL_COPY_COMMAND}>{SKLAND_CREDENTIAL_COPY_COMMAND}</code>
+              <Button className="sm:shrink-0" type="button" variant="outline" size="sm" onClick={() => void copyCredentialCommand()} data-skland-copy-command>
                 {copyState === "copied" ? <Check /> : <Clipboard />}
                 {copyState === "copied" ? "已复制" : "复制命令"}
               </Button>
@@ -109,9 +116,9 @@ export function SklandCredentialPanel({
             {copyState === "error" ? <p className="mt-1 text-xs text-destructive">复制失败，请手动选择命令复制。</p> : null}
           </div>
         </li>
-        <li className="grid grid-cols-[1.75rem_minmax(0,1fr)] gap-3">
-          <span className="font-number grid size-7 place-items-center rounded-full bg-foreground text-xs font-semibold text-background">3</span>
-          <div>
+        <li className="grid grid-cols-[2rem_minmax(0,1fr)] items-start gap-4 text-start">
+          <span className="font-number grid size-8 place-items-center rounded-full bg-foreground text-xs font-semibold text-background">3</span>
+          <div className="min-w-0">
             <label className="font-medium text-foreground" htmlFor={credentialInputId}>粘贴生成的单行凭证</label>
             <p className="text-muted-foreground">内容应为 <span className="font-number">cred,token</span>，仅在本次请求和当前组件内存中短暂存在。</p>
             <Input
@@ -125,7 +132,7 @@ export function SklandCredentialPanel({
               autoCorrect="off"
               spellCheck={false}
               maxLength={12 * 1024}
-              className="mt-2 h-11 font-number"
+              className="mt-3 h-12 font-number"
               aria-invalid={Boolean(importError)}
               data-skland-credential-input
             />
@@ -133,7 +140,7 @@ export function SklandCredentialPanel({
         </li>
       </ol>
 
-      <div className="grid gap-3 border-y py-4">
+      <div className="grid w-full max-w-2xl gap-4 border-y py-5 text-start" data-skland-credential-risk>
         <div className="flex items-start gap-2">
           <TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden="true" />
           <div>
@@ -150,19 +157,21 @@ export function SklandCredentialPanel({
         <p className="text-xs font-medium leading-5 text-foreground">本站实际不读取、不保存、不展示仓库数据，也不签到、不发布或操作任何社区内容。</p>
       </div>
 
-      <SklandPolicyConsent
-        termsAccepted={termsAccepted}
-        privacyAccepted={privacyAccepted}
-        onTermsChange={setTermsAccepted}
-        onPrivacyChange={setPrivacyAccepted}
-      />
+      <div className="w-full max-w-2xl text-start">
+        <SklandPolicyConsent
+          termsAccepted={termsAccepted}
+          privacyAccepted={privacyAccepted}
+          onTermsChange={setTermsAccepted}
+          onPrivacyChange={setPrivacyAccepted}
+        />
+      </div>
 
-      {importError ? <Alert variant="destructive"><AlertDescription>{importError}</AlertDescription></Alert> : null}
+      {importError ? <Alert className="w-full max-w-2xl text-start" variant="destructive"><AlertDescription>{importError}</AlertDescription></Alert> : null}
 
       <Button
         type="submit"
         size={dialogPresentation ? "dialog" : "default"}
-        className={cn("w-full sm:w-fit", dialogPresentation && "sm:w-[196px]")}
+        className={cn("w-full max-w-sm", dialogPresentation && "sm:w-[240px]")}
         disabled={!consentReady || !credential.trim() || submitting}
         data-skland-credential-submit
       >

@@ -1444,7 +1444,7 @@ export function SklandStatus({
         className="min-h-[calc(100dvh-7rem)] place-items-center py-8 sm:py-12"
         data-skland-page
       >
-        <div className="grid w-full max-w-3xl justify-items-center gap-7 text-center">
+        <div className="grid w-full max-w-4xl justify-items-center gap-7 text-center">
           <header className="grid max-w-lg gap-3" data-skland-login-copy>
             <p className="text-xs font-medium tracking-wide text-primary">森空岛状态中心</p>
             <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">{loginTitle}</h2>
@@ -1459,7 +1459,7 @@ export function SklandStatus({
             </Alert>
           ) : null}
           <SklandLoginPanel
-            className="max-w-3xl"
+            className="max-w-4xl"
             configured={configured}
             disabledReason={disabledReason}
             onAuthenticated={onAuthenticated}
@@ -1646,7 +1646,7 @@ export function SklandStatus({
       />
 
       <Dialog open={addAccountOpen} onOpenChange={setAddAccountOpen}>
-        <DialogContent className="max-h-[calc(100dvh-1rem)] grid-rows-[auto_minmax(0,1fr)] sm:max-w-[min(880px,calc(100vw-2rem))]">
+        <DialogContent className="max-h-[calc(100dvh-1rem)] grid-rows-[auto_minmax(0,1fr)] sm:max-w-[min(960px,calc(100vw-2rem))]">
           <DialogHeader>
             <DialogTitle>添加森空岛账号</DialogTitle>
             <DialogDescription>
