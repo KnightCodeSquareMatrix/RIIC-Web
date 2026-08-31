@@ -305,8 +305,15 @@ export function FileDrop({
     >
       <Upload className="size-5 text-primary" />
       <span className="font-medium text-foreground">{dragActive ? "松开即可导入" : fileName ?? "上传练度 JSON / XLSX"}</span>
-      <span className="text-xs text-muted-foreground">
-        可直接拖入文件；支持 MAA 导出的干员数据 JSON，也支持一图流 XLSX
+      <span className="flex flex-wrap items-center justify-center gap-1.5 text-xs" role="list" aria-label="支持的 MAA JSON 语言">
+        {["简中", "繁中", "日文", "英文"].map((language) => (
+          <span key={language} role="listitem" className="rounded-full border border-border bg-muted/70 px-2 py-0.5 font-medium text-foreground">
+            {language}
+          </span>
+        ))}
+      </span>
+      <span className="text-xs leading-relaxed text-muted-foreground">
+        可直接拖入文件；MAA JSON 会在本地统一转换为简中后提交排班，也支持一图流 XLSX
       </span>
       <input className="sr-only" type="file" accept=".json,.xlsx,.xls" onChange={handleChange} />
     </Label>
