@@ -51,7 +51,7 @@ export default function PrivacyPage() {
         <h2 className="font-number">2. 我们处理哪些信息</h2>
         <h3>排班所需数据</h3>
         <ul>
-          <li>森空岛二维码登录产生的 cred、token、设备标识和上游用户标识。</li>
+          <li>森空岛扫码或凭证导入产生的 cred、token、设备标识和上游用户标识。</li>
           <li>绑定角色、干员持有与练度、基建设施、当前进驻、心情、制造配方和贸易订单。</li>
           <li>你导入的 MAA JSON、兼容表格、布局设置和生成的排班结果。</li>
         </ul>
@@ -65,8 +65,9 @@ export default function PrivacyPage() {
         <h2 className="font-number">3. 处理方式与目的</h2>
         <ul>
           <li>登录凭证经 AES-<span className="font-number">256</span>-GCM 加密后存入此浏览器的 HttpOnly Cookie，请求期间由本站服务端解密使用，不写入业务数据库。</li>
+          <li>凭证导入框中的原始文本只在当前组件内存和单次请求期间短暂存在；成功后立即清空，不写入 localStorage、sessionStorage、遥测、日志或数据库。</li>
           <li>为区分“账号已绑定”和“当前浏览器仍有有效凭证”，PostgreSQL 会保存由森空岛上游账号标识经 HMAC 生成的不可逆绑定值、对应网站用户及授权时间；不会保存森空岛 UID、昵称、Box 或令牌。</li>
-          <li>凭证仅用于同步角色数据、切换角色和刷新森空岛会话；本站不会自动签到或操作社区内容。</li>
+          <li>凭证仅用于同步角色数据、切换角色和刷新森空岛会话；本站不会读取、保存或展示仓库物资，不会自动签到，也不会发布、点赞或操作社区内容。</li>
           <li>森空岛的玩家信息接口会一次返回组合数据。登录后，服务端分别生成最小排班快照和完整状态白名单；原始响应不会返回浏览器，完整状态快照只保留在页面内存，不写入浏览器持久化或服务端运行记录。</li>
           <li>干员和布局数据会发送给本站部署的排班求解器，以生成轮班、效率概览和 MAA 导出。</li>
         </ul>
@@ -75,8 +76,8 @@ export default function PrivacyPage() {
       <section>
         <h2 className="font-number">4. 保存期限</h2>
         <ul>
-          <li>森空岛登录凭证自扫码成功起固定保存 <span className="font-number">7</span> 天，刷新页面或 token 不会延长期限。</li>
-          <li>森空岛绑定记录保留至你退出对应森空岛账号、删除全部森空岛数据或注销网站账号；最近授权满 <span className="font-number">7</span> 天后会标记为“待续期”，必须重新扫码才能继续同步。</li>
+          <li>森空岛登录凭证自扫码或导入成功起固定保存 <span className="font-number">7</span> 天，刷新页面或 token 不会延长期限。</li>
+          <li>森空岛绑定记录保留至你退出对应森空岛账号、删除全部森空岛数据或注销网站账号；最近授权满 <span className="font-number">7</span> 天后会标记为“待续期”，必须重新授权才能继续同步。</li>
           <li>服务端 CLI 运行记录最多保存 <span className="font-number">7</span> 天，你也可以随时提前删除。</li>
           <li>浏览器中的布局、干员 Box 和最近排班通常最多保存 <span className="font-number">30</span> 天；“删除全部森空岛数据”会立即移除其中的森空岛来源内容。</li>
           <li>未完成的二维码登录记录最多保留 <span className="font-number">10</span> 分钟。</li>
@@ -85,7 +86,7 @@ export default function PrivacyPage() {
 
       <section>
         <h2 className="font-number">5. 第三方服务</h2>
-        <p>扫码登录和角色同步需要向森空岛及鹰角登录服务发送请求，并受<a href="https://assets.skland.com/protocols/agreement.html">森空岛使用许可及服务协议</a>与<a href="https://assets.skland.com/protocols/privacy.html">森空岛个人信息保护政策</a>约束。本站不会出售你的信息，也不会将登录凭证用于本政策列明目的以外的用途。</p>
+        <p>扫码登录、凭证验证和角色同步需要向森空岛及鹰角登录服务发送请求，并受<a href="https://assets.skland.com/protocols/agreement.html">森空岛使用许可及服务协议</a>与<a href="https://assets.skland.com/protocols/privacy.html">森空岛个人信息保护政策</a>约束。本站不会出售你的信息，也不会将登录凭证用于本政策列明目的以外的用途。</p>
       </section>
 
       <section>
@@ -105,7 +106,7 @@ export default function PrivacyPage() {
 
       <section>
         <h2 className="font-number">8. 安全与变更</h2>
-        <p>本站采用 HTTPS、HttpOnly Cookie、同源校验、限流、字段白名单和最小日志等措施降低风险。互联网服务无法保证绝对安全；如政策内容或处理目的发生实质变化，本站会更新版本，并在下一次生成二维码前重新取得同意。</p>
+        <p>本站采用 HTTPS、HttpOnly Cookie、同源校验、限流、字段白名单和最小日志等措施降低风险。互联网服务无法保证绝对安全；如政策内容或处理目的发生实质变化，本站会更新版本，并在下一次森空岛授权前重新取得同意。</p>
       </section>
       </> : <>
         <section>
