@@ -1,6 +1,7 @@
 "use client";
 
 import type { CSSProperties } from "react";
+import { FileWarning } from "lucide-react";
 
 import {
   factoryRecipeFor,
@@ -9,6 +10,8 @@ import {
 } from "@/blueprint";
 import { AnimatedNumber, AnimatedText } from "@/components/AnimatedText";
 import { LevelDiamonds, OperatorSlot, roomVisualFor } from "@/components";
+import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { presentRoomEfficiency } from "@/efficiency";
 import {
   COMPACT_CARD_CLASS,
@@ -41,6 +44,7 @@ export interface CompactScheduleViewProps {
   activePlan?: MaaPlan;
   shiftDirection: ShiftDirection;
   onIssue: (row: RoomRow) => void;
+  feedbackDisabled?: boolean;
 }
 
 /** 布局宽度百分比，自己改数值 */
@@ -63,6 +67,8 @@ function CompactRoomCard({
   slots,
   currentMoraleByOperator,
   shiftDirection,
+  onIssue,
+  feedbackDisabled = false,
   horizontal,
   className = "",
   style,
@@ -74,6 +80,8 @@ function CompactRoomCard({
   slots: { slot: RoomRow["operatorSlots"][number] | undefined; positionLabel?: string }[];
   currentMoraleByOperator?: ReadonlyMap<string, number>;
   shiftDirection: ShiftDirection;
+  onIssue: (row: RoomRow) => void;
+  feedbackDisabled?: boolean;
   horizontal: boolean;
   className?: string;
   style?: CSSProperties;
@@ -202,6 +210,7 @@ function CompactRoomCard({
         style={{ ...rowStyle, ...style }}
       >
         {backgroundLayers}
+        <CompactFeedbackButton row={row} disabled={feedbackDisabled} onIssue={onIssue} />
         {details}
         {operatorArea}
       </div>
@@ -216,6 +225,7 @@ function CompactRoomCard({
       style={{ ...rowStyle, ...style }}
     >
       {backgroundLayers}
+      <CompactFeedbackButton row={row} disabled={feedbackDisabled} onIssue={onIssue} />
       {details}
       <div
         className={`relative z-10 ${
@@ -228,8 +238,33 @@ function CompactRoomCard({
   );
 }
 
+function CompactFeedbackButton({ row, disabled, onIssue }: { row: RoomRow; disabled: boolean; onIssue: (row: RoomRow) => void }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <span className="absolute right-2 top-2 z-20">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="border border-white/10 bg-[#3C3C3C]/55 text-white/70 hover:bg-[#4B4B4B] hover:text-white disabled:cursor-not-allowed disabled:opacity-45"
+              aria-label={`${row.title} 反馈排班问题`}
+              disabled={disabled}
+              onClick={() => onIssue(row)}
+            >
+              <FileWarning />
+            </Button>
+          </span>
+        }
+      />
+      <TooltipContent side="left">{disabled ? "全精二 Box 为体验数据，不能提交反馈" : "反馈排班问题"}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 export function CompactScheduleView(props: CompactScheduleViewProps) {
-  const { rows, layout, currentMoraleByOperator, shiftDirection } = props;
+  const { rows, layout, currentMoraleByOperator, shiftDirection, onIssue, feedbackDisabled = false } = props;
 
   if (rows.length === 0) {
     return (
@@ -272,6 +307,8 @@ export function CompactScheduleView(props: CompactScheduleViewProps) {
         slots={slots}
         currentMoraleByOperator={currentMoraleByOperator}
         shiftDirection={shiftDirection}
+        onIssue={onIssue}
+        feedbackDisabled={feedbackDisabled}
         horizontal={COMPACT_AUXILIARY_GROUPS.has(row.group)}
         className="min-w-0"
         style={widthPercent !== undefined ? { flexBasis: `${widthPercent}%` } : { flex: 1 }}
