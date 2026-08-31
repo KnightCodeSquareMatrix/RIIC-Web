@@ -11,7 +11,13 @@ const CLIENT_SKLAND_ENABLED = process.env.APP_CLIENT_SKLAND_ENABLED === "1";
 
 type RoleChange = { userId: string; name: string; email: string; action: "grantAdmin" | "revokeAdmin" };
 
-export function AdminUsers() {
+export function AdminUsers({
+  plannerReady,
+  solverFingerprint,
+}: {
+  plannerReady: boolean;
+  solverFingerprint: string | null;
+}) {
   const [users, setUsers] = useState<AdminUserData[]>([]);
   const [canManageAdminRoles, setCanManageAdminRoles] = useState<boolean | null>(null);
   const [query, setQuery] = useState("");
@@ -96,6 +102,25 @@ export function AdminUsers() {
         <h1 className="mt-3 text-2xl font-semibold">用户管理</h1>
         <p className="mt-1 text-sm text-muted-foreground">可搜索、封禁、查看及撤销 Session。{canManageAdminRoles === true ? "初始管理员还可以授予或撤销管理员权限。" : canManageAdminRoles === false ? "管理员权限只能由初始管理员调整。" : ""}</p>
       </header>
+
+      <section className="rounded-xl border p-4" data-admin-solver-status>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="font-medium">线上求解器</h2>
+            <p className="mt-1 text-xs text-muted-foreground">当前 Worker 实际返回的可执行文件指纹</p>
+          </div>
+          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${plannerReady ? "bg-emerald-50 text-emerald-700" : "bg-destructive/10 text-destructive"}`}>
+            {plannerReady ? "运行中" : "未就绪"}
+          </span>
+        </div>
+        <p className="mt-4 text-xs text-muted-foreground">Linux ELF SHA-256</p>
+        <code
+          className="mt-1 block break-all rounded-lg bg-muted/50 px-3 py-2 font-mono text-xs leading-5"
+          data-solver-fingerprint={solverFingerprint ?? "unavailable"}
+        >
+          {solverFingerprint ?? "Worker 未返回有效指纹"}
+        </code>
+      </section>
 
       <form
         className="flex gap-2 max-sm:flex-col"
