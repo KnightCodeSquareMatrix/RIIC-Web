@@ -29,6 +29,8 @@ test("production builds prepare a solver-free standalone runtime with static ass
 
   assert.match(nextConfig, /output: "standalone"/);
   assert.match(nextConfig, /generateBuildId: async \(\) => process\.env\.APP_BUILD_ID \?\? "local-development"/);
+  assert.match(nextConfig, /deploymentId: process\.env\.APP_BUILD_ID/);
+  assert.match(nextConfig, /APP_CLIENT_BUILD_ID: process\.env\.APP_BUILD_ID \?\? "local-development"/);
   assert.equal(packageJson.scripts.postbuild, "node scripts/prepare-standalone.mjs");
   assert.equal(packageJson.scripts.start, "node scripts/start-standalone.mjs");
   assert.equal(packageJson.scripts["release:stage"], "node scripts/stage-standalone-release.mjs");
@@ -93,8 +95,15 @@ test("CI enforces route and document preload JavaScript budgets after building",
 test("Next and the verified deployment keep real public GET responses compressed", async () => {
   const nextConfig = await readRepoFile("next.config.ts");
   const deployWorkflow = await readRepoFile(".github/workflows/deploy.yml");
+  const rootLayout = await readRepoFile("src/app/layout.tsx");
+  const publicVerification = await readRepoFile("scripts/verify-public-compression.mjs");
 
   assert.match(nextConfig, /compress: true/);
+  assert.match(nextConfig, /const uncachedDocumentRoutes = \[/);
+  assert.match(nextConfig, /private, no-cache, no-store, max-age=0, must-revalidate/);
+  assert.match(rootLayout, /"riic-build-id": process\.env\.APP_CLIENT_BUILD_ID \?\? "local-development"/);
+  assert.match(publicVerification, /public HTML build ID is/);
+  assert.match(publicVerification, /public HTML must not be stored by a shared cache/);
   assert.match(deployWorkflow, /Deploy and verify[\s\S]+Verify public response compression/);
   assert.match(deployWorkflow, /node scripts\/verify-public-compression\.mjs\s*$/m);
   assert.doesNotMatch(deployWorkflow, /verify-public-compression\.mjs "\$DEPLOY_PUBLIC_HEALTH_URL"/);
