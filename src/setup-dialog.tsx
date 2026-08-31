@@ -30,7 +30,6 @@ const PANEL_TRANSITION = { type: "spring", stiffness: 420, damping: 38, mass: 0.
 
 type SetupDialogProps = {
   open: boolean;
-  initialStep: SetupStep;
   onOpenChange: (open: boolean) => void;
   operbox: OperBoxEntry[] | null;
   boxSource: BoxSource;
@@ -86,7 +85,6 @@ function formatSyncTime(timestamp: number | null | undefined): string {
 
 export function SetupDialog({
   open,
-  initialStep,
   onOpenChange,
   operbox,
   boxSource,
@@ -128,7 +126,7 @@ export function SetupDialog({
   onSkip,
 }: SetupDialogProps) {
   const { data: websiteSession } = useWebsiteSession();
-  const [step, setStep] = useState<SetupStep>(initialStep);
+  const [step, setStep] = useState<SetupStep>("box");
   const [stepDirection, setStepDirection] = useState(0);
   const [needsFacilityReview, setNeedsFacilityReview] = useState(false);
   const [showImportOptions, setShowImportOptions] = useState(false);
@@ -153,14 +151,14 @@ export function SetupDialog({
     const justOpened = open && !wasOpenRef.current;
     wasOpenRef.current = open;
     if (!justOpened) return;
-    setStep(initialStep);
+    setStep("box");
     setStepDirection(0);
     setNeedsFacilityReview(pendingExternalReviewRef.current);
     pendingExternalReviewRef.current = false;
     setShowImportOptions(!hasBox);
     setShowMaaPaste(false);
     setOpeningConfigurationKey(configurationKey);
-  }, [configurationKey, hasBox, initialStep, open]);
+  }, [configurationKey, hasBox, open]);
 
   const configurationChanged = open && hasSetupConfigurationChanged(openingConfigurationKey, configurationKey);
 

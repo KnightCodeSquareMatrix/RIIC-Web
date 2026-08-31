@@ -50,10 +50,8 @@ import {
   ONBOARDING_COMPLETED_VALUE,
   ONBOARDING_DISMISSED_VALUE,
   ONBOARDING_STORAGE_KEY,
-  initialSetupStep,
   resolveOnboardingPreference,
   type OnboardingPreference,
-  type SetupStep,
 } from "./onboarding";
 import { readOperboxFile, readOperboxText } from "./operbox";
 import { normalizeOperboxEntries } from "./operbox-normalization";
@@ -260,7 +258,6 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   const [setupMounted, setSetupMounted] = useState(false);
   const [issueModalMounted, setIssueModalMounted] = useState(false);
   const [productModalMounted, setProductModalMounted] = useState(false);
-  const [setupInitialStep, setSetupInitialStep] = useState<SetupStep>("box");
   const initialLayoutForRestore = useRef(defaultLayout);
   const initialBoxSource = useRef(boxSource);
   const initialOperbox = useRef(operbox);
@@ -279,6 +276,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   const [inputError, setInputError] = useState<string | null>(null);
   const [inputErrorCode, setInputErrorCode] = useState<DisplayError["code"]>("AIC-BOX-1101");
   const [sampleLoading, setSampleLoading] = useState(false);
+  const sampleTrialInFlightRef = useRef(false);
   const [result, setResult] = useState<PublicPlanData | null>(null);
   const [loading, setLoading] = useState(false);
   const planAbortRef = useRef<AbortController | null>(null);
@@ -364,7 +362,6 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   const accountCanUseCurrentBox = boxSource === "sample" || Boolean(websiteSession);
   const hasBox = Boolean(operbox?.length);
   const hasPersonalBox = hasBox && boxSource !== "sample";
-  const hasSampleBox = hasBox && boxSource === "sample";
   const canRun = Boolean(operbox && operbox.length > 0 && cliReady && accountCanUseCurrentBox);
   const sklandBindingCount = sklandBindingSummary.totalCount;
   const websiteUserId = websiteSession?.user.id ?? null;
@@ -853,18 +850,26 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     clearPlanResult();
   }
 
-  async function runPlanForLayout(planLayout: BaseBlueprint, retryUnavailable = false) {
-    if (!operbox) return;
+  async function runPlanForLayout(
+    planLayout: BaseBlueprint,
+    retryUnavailable = false,
+    planInput: { operbox: OperBoxEntry[] | null; sourceName: string | null; boxSource: BoxSource } = {
+      operbox,
+      sourceName: fileName,
+      boxSource,
+    },
+  ): Promise<boolean> {
+    if (!planInput.operbox) return false;
     planClickAtRef.current = performance.now();
     trackTelemetry({ type: "interaction", name: "plan_click", page: "calculator" });
     const layoutError = layoutValidationError(planLayout);
     if (layoutError) {
       setApiError(displayError("AIC-LAYOUT-1201", layoutError));
-      return;
+      return false;
     }
     if (!cliReady && !retryUnavailable) {
       setApiError(displayError("AIC-PLAN-3001", "排班服务暂不可用，请稍后重试。", true));
-      return;
+      return false;
     }
     preloadProductIcons();
     setLoading(true);
@@ -880,11 +885,11 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       trackTelemetry({ type: "interaction", name: "plan_submit", page: "calculator" });
       const response = await computePlan({
         layout: planLayout,
-        operbox: normalizeOperboxEntries(operbox),
-        sourceName: fileName,
-        boxSource,
+        operbox: normalizeOperboxEntries(planInput.operbox),
+        sourceName: planInput.sourceName,
+        boxSource: planInput.boxSource,
         rotation: rotationProfile,
-        fiammetta_enable: effectiveFiammettaEnabled,
+        fiammetta_enable: effectiveFiammettaSetting(planInput.operbox, rotationProfile, fiammettaEnabled),
       }, { signal: controller.signal });
       trackTelemetry({ type: "interaction", name: "plan_response", page: "calculator" });
       trackTelemetry({
@@ -899,9 +904,11 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       setResult(finalizedResult);
       completeOnboarding();
       setLayout((current) => resolvePlanPresentationLayout(current, response));
+      return true;
     } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") return;
+      if (error instanceof DOMException && error.name === "AbortError") return false;
       setApiError(toDisplayError(error, "排班请求失败，请稍后重试。"));
+      return false;
     } finally {
       if (planAbortRef.current === controller) {
         planAbortRef.current = null;
@@ -920,17 +927,24 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     await runPlanForLayout(layout);
   }
 
-  async function handleLoadSample(): Promise<boolean> {
+  async function handleRunSampleTrial(): Promise<boolean> {
+    if (sampleTrialInFlightRef.current) return false;
+    sampleTrialInFlightRef.current = true;
     setSampleLoading(true);
     setInputError(null);
     setResult(null);
     clearIssueState();
     try {
       const sample = await getSampleOperbox();
-      setOperbox(normalizeOperboxEntries(sample.operbox));
+      const sampleOperbox = normalizeOperboxEntries(sample.operbox);
+      setOperbox(sampleOperbox);
       setFileName(sample.sourceName);
       setBoxSource("sample");
-      return true;
+      return await runPlanForLayout(layout, false, {
+        operbox: sampleOperbox,
+        sourceName: sample.sourceName,
+        boxSource: "sample",
+      });
     } catch (error) {
       setInputError(error instanceof Error ? error.message : "样例数据读取失败。");
       const normalized = toDisplayError(error, "示例数据读取失败，请稍后重试。");
@@ -938,6 +952,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       setApiError(normalized);
       return false;
     } finally {
+      sampleTrialInFlightRef.current = false;
       setSampleLoading(false);
     }
   }
@@ -1189,7 +1204,6 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   }
 
   function openSetup() {
-    setSetupInitialStep(initialSetupStep(Boolean(operbox?.length)));
     setSetupOpen(true);
   }
 
@@ -1302,7 +1316,6 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
 
   websiteIntentContinuationRef.current = (intent) => {
     if (intent === "setup") {
-      setSetupInitialStep("box");
       setSetupOpen(true);
       return;
     }
@@ -1484,7 +1497,6 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       canRun,
       hasBox,
       hasPersonalBox,
-      hasSampleBox,
       plannerReady: cliReady,
       websiteAuthenticated: Boolean(websiteSession),
       showOnboarding: onboardingPreference === "active" && !result,
@@ -1511,7 +1523,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
           onOpenSkland={() => navigateToPage("skland")}
         />
       ) : undefined,
-      onLoadSample: handleLoadSample,
+      onRunSampleTrial: handleRunSampleTrial,
       onStartPersonalFlow: handleStartPersonalFlow,
       onDismissOnboarding: dismissOnboarding,
       onOpenSetup: handleProtectedSetup,
@@ -1584,7 +1596,6 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
         onDeleteAllData: handleDeleteAllSklandData,
         onApplyLayout: handleApplySklandLayout,
         onContinueSetup: () => {
-          setSetupInitialStep("layout");
           setSetupOpen(true);
         },
         onOpenCalculator: () => navigateToPage("calculator"),
@@ -1677,7 +1688,6 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
           onUseSklandSnapshot: useSklandSnapshotFromSetup,
         } : {})}
         open={setupOpen}
-        initialStep={setupInitialStep}
         onOpenChange={handleSetupOpenChange}
         operbox={operbox}
         boxSource={boxSource}
