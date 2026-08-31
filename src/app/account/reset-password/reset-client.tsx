@@ -4,12 +4,15 @@ import { useEffect, useState } from "react";
 
 import { passwordConfirmationError } from "@/components/auth/password-confirmation";
 import { PasswordInput } from "@/components/auth/password-input";
+import { PasswordStrength } from "@/components/interior/password-strength";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
+import { isStrongPassword, PASSWORD_STRENGTH_ERROR } from "@/password-strength";
 
 export function ResetPassword() {
   const [password, setPassword] = useState("");
+  const [passwordStrengthError, setPasswordStrengthError] = useState<string | null>(null);
   const [confirmPassword, setConfirmPassword] = useState("");
   const [confirmPasswordError, setConfirmPasswordError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -27,6 +30,11 @@ export function ResetPassword() {
       setMessage("重置链接无效或缺少令牌，请重新申请密码重置邮件。");
       return;
     }
+    if (!isStrongPassword(password)) {
+      setPasswordStrengthError(PASSWORD_STRENGTH_ERROR);
+      return;
+    }
+    setPasswordStrengthError(null);
     const confirmationError = passwordConfirmationError(password, confirmPassword);
     if (confirmationError) {
       setConfirmPasswordError(confirmationError);
@@ -44,7 +52,7 @@ export function ResetPassword() {
     <main className="mx-auto grid min-h-dvh max-w-md place-content-center gap-4 p-5">
       <a href="/" className="inline-flex min-h-11 items-center text-sm underline underline-offset-4">返回排班助手</a>
       <h1 className="text-2xl font-semibold">重置密码</h1>
-      <p className="text-sm leading-6 text-muted-foreground">新密码需为 10–128 位。重置成功后，其他登录设备上的 Session 也会失效。</p>
+      <p className="text-sm leading-6 text-muted-foreground">新密码需为 10–128 位，并满足下方全部强度规则。重置成功后，其他登录设备上的 Session 也会失效。</p>
       <div className="grid gap-1.5">
         <Label htmlFor="reset-password">新密码</Label>
         <PasswordInput
@@ -55,14 +63,28 @@ export function ResetPassword() {
           onChange={(event) => {
             const nextPassword = event.target.value;
             setPassword(nextPassword);
+            if (passwordStrengthError) {
+              setPasswordStrengthError(isStrongPassword(nextPassword) ? null : PASSWORD_STRENGTH_ERROR);
+            }
             if (confirmPasswordError) {
               setConfirmPasswordError(passwordConfirmationError(nextPassword, confirmPassword));
+            }
+          }}
+          onBlur={() => {
+            if (password && !isStrongPassword(password)) {
+              setPasswordStrengthError(PASSWORD_STRENGTH_ERROR);
             }
           }}
           autoComplete="new-password"
           placeholder="新密码（10–128 位）"
           revealLabel="显示新密码"
+          aria-invalid={Boolean(passwordStrengthError)}
+          aria-describedby="reset-password-strength"
         />
+        <PasswordStrength id="reset-password-strength" value={password} className="mt-1.5" />
+        {passwordStrengthError ? (
+          <p role="alert" className="text-xs leading-5 text-destructive">{passwordStrengthError}</p>
+        ) : null}
       </div>
       <div className="grid gap-1.5">
         <Label htmlFor="reset-confirm-password">确认新密码</Label>

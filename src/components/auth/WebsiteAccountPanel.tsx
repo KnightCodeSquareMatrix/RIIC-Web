@@ -41,6 +41,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
 import { PRIVACY_VERSION, TERMS_VERSION } from "@/legal-policy";
+import { isStrongPassword, PASSWORD_STRENGTH_ERROR } from "@/password-strength";
 import { clearLocalProductData } from "@/persistence";
 import { CloudDataPanel } from "@/components/cloud/CloudDataPanel";
 import type { CloudWorkspaceData, SavedPlanData } from "@/types";
@@ -92,6 +93,7 @@ export function WebsiteAccountPanel({
   const [nameError, setNameError] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordStrengthError, setPasswordStrengthError] = useState<string | null>(null);
   const [confirmPassword, setConfirmPassword] = useState("");
   const [confirmPasswordError, setConfirmPasswordError] = useState<string | null>(null);
   const [deletePassword, setDeletePassword] = useState("");
@@ -116,6 +118,7 @@ export function WebsiteAccountPanel({
     setMode(nextMode);
     setStep("details");
     setPassword("");
+    setPasswordStrengthError(null);
     setConfirmPassword("");
     setConfirmPasswordError(null);
     setNameError(null);
@@ -165,6 +168,11 @@ export function WebsiteAccountPanel({
       return;
     }
     if (mode === "signup") {
+      if (!isStrongPassword(password)) {
+        setPasswordStrengthError(PASSWORD_STRENGTH_ERROR);
+        return;
+      }
+      setPasswordStrengthError(null);
       const confirmationError = passwordConfirmationError(password, confirmPassword);
       if (confirmationError) {
         setConfirmPasswordError(confirmationError);
@@ -465,8 +473,16 @@ export function WebsiteAccountPanel({
                       onChange={(event) => {
                         const nextPassword = event.target.value;
                         setPassword(nextPassword);
+                        if (passwordStrengthError) {
+                          setPasswordStrengthError(isStrongPassword(nextPassword) ? null : PASSWORD_STRENGTH_ERROR);
+                        }
                         if (confirmPasswordError && mode === "signup") {
                           setConfirmPasswordError(passwordConfirmationError(nextPassword, confirmPassword));
+                        }
+                      }}
+                      onBlur={() => {
+                        if (mode === "signup" && password && !isStrongPassword(password)) {
+                          setPasswordStrengthError(PASSWORD_STRENGTH_ERROR);
                         }
                       }}
                       required
@@ -475,8 +491,17 @@ export function WebsiteAccountPanel({
                       placeholder="10–128 位"
                       autoComplete={mode === "signup" ? "new-password" : "current-password"}
                       toggleClassName={AUTH_PASSWORD_TOGGLE_CLASS}
+                      aria-invalid={mode === "signup" && Boolean(passwordStrengthError)}
+                      aria-describedby={mode === "signup" ? `${fieldId}-password-strength` : undefined}
                     />
-                    {mode === "signup" ? <PasswordStrength value={password} className="mt-1.5" /> : null}
+                    {mode === "signup" ? (
+                      <>
+                        <PasswordStrength id={`${fieldId}-password-strength`} value={password} className="mt-1.5" />
+                        {passwordStrengthError ? (
+                          <p role="alert" className="text-xs leading-5 text-destructive">{passwordStrengthError}</p>
+                        ) : null}
+                      </>
+                    ) : null}
                   </div>
                 ) : null}
                 {mode === "signup" ? (
