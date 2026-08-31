@@ -370,6 +370,24 @@ export interface CliCandidate {
   reason: string | null;
 }
 
+export interface SolverPingFingerprint {
+  elapsedMs: number | null;
+  envelopeSolverGitCommit: string | null;
+  envelopeSolverBuiltAt: string | null;
+  pong: boolean;
+  protocolVersion: number | null;
+  planSchemaVersion: number | null;
+  supportedPlanSchemaVersions: number[];
+  planContractSha256: string | null;
+  planContractSha256ByVersion: Array<{
+    version: number;
+    sha256: string;
+  }>;
+  solverExecutableSha256: string | null;
+  solverGitCommit: string | null;
+  solverBuiltAt: string | null;
+}
+
 export interface HealthApiResponse {
   ok: boolean;
   apiReady?: boolean;
@@ -389,6 +407,7 @@ export interface HealthApiResponse {
       solverExecutableSha256: string | null;
       reason: string | null;
     };
+    fingerprint?: SolverPingFingerprint;
   };
   serveError?: string | null;
   candidates?: CliCandidate[];

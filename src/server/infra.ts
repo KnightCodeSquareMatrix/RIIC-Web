@@ -23,6 +23,7 @@ import {
   createPlanComputeParams,
   createSolverObservation,
   inspectPlanComputeCapability,
+  inspectSolverPingFingerprint,
   inspectSolverDeploymentReadiness,
   parsePlanComputePayload,
   solverObservationFromPlanRecord,
@@ -569,6 +570,7 @@ export async function getHealth(): Promise<HealthApiResponse> {
       try {
         const pingResult = await healthServeClient.ping();
         const planCompute = inspectPlanComputeCapability(pingResult.response);
+        const fingerprint = inspectSolverPingFingerprint(pingResult.response);
         const deploymentReadiness = inspectSolverDeploymentReadiness(
           planCompute,
           process.env.INFRA_CLI_EXPECTED_SHA256
@@ -577,6 +579,7 @@ export async function getHealth(): Promise<HealthApiResponse> {
           ...healthServeClient.info(),
           protocolMode: planCompute.supported ? "plan.compute" : "legacy",
           planCompute,
+          fingerprint,
         };
         if (!deploymentReadiness.ready) {
           serveError = deploymentReadiness.reason;
