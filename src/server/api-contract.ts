@@ -38,6 +38,7 @@ export const ERROR_DEFINITIONS: Record<AppErrorCode, ErrorDefinition> = {
   "AIC-PLAN-3002": { status: 429, message: "已有排班任务或请求过于频繁，请稍后重试。", retryable: true },
   "AIC-PLAN-3003": { status: 504, message: "排班计算超时，请稍后重试。", retryable: true },
   "AIC-PLAN-3004": { status: 502, message: "排班结果暂时无法解析，请稍后重试。", retryable: true },
+  "AIC-PLAN-3005": { status: 409, message: "已有任务在排队，请等待完成后再试。", retryable: false },
   "AIC-FEEDBACK-4001": { status: 422, message: "反馈内容无效，请检查后重试。", retryable: false },
   "AIC-FEEDBACK-4002": { status: 500, message: "反馈保存失败，请稍后重试。", retryable: true },
   "AIC-SYS-5000": { status: 500, message: "服务暂时出现问题，请稍后重试。", retryable: true },
