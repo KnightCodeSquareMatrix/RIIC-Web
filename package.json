@@ -31,7 +31,9 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node --experimental-strip-types scripts/migrate-db.mts",
     "db:backfill-business": "node --experimental-strip-types scripts/backfill-business-data.mts",
-    "auth:check": "node --experimental-strip-types scripts/check-auth-readiness.mts"
+    "auth:check": "node --experimental-strip-types scripts/check-auth-readiness.mts",
+    "worker:plan": "node --experimental-strip-types --import ./scripts/register-hooks.mjs scripts/plan-worker.mts",
+    "worker:build": "node scripts/build-worker.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

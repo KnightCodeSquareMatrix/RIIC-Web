@@ -20,6 +20,7 @@ import { preloadProductIcons } from "@/product-assets";
 import { WorkbenchContext } from "@/workbench-context";
 import { WORKBENCH_PAGE_PATHS, workbenchHref, workbenchPageFromPathname, type AppPage } from "@/workbench-routes";
 import { useWebsiteSession } from "@/website-session";
+import { usePlanTask } from "@/hooks/use-plan-task";
 
 import {
   deleteAllSklandAccountData,
@@ -28,7 +29,7 @@ import {
   getSampleOperbox,
   getSklandAccounts,
   refreshSklandStatus,
-  computePlan,
+  submitPlanTask,
   saveFeedback,
   selectSklandRole,
   toDisplayError,
@@ -280,7 +281,6 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   const sampleTrialInFlightRef = useRef(false);
   const [result, setResult] = useState<PublicPlanData | null>(null);
   const [loading, setLoading] = useState(false);
-  const planAbortRef = useRef<AbortController | null>(null);
   const [cliReady, setCliReady] = useState(false);
   const [apiError, setApiError] = useState<DisplayError | null>(null);
   const [storageNotice, setStorageNotice] = useState<DisplayError | null>(null);
@@ -294,6 +294,36 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   const [resultClearNotice, setResultClearNotice] = useState<string | null>(null);
   const [resultClearWarningDismissed, setResultClearWarningDismissed] = useState(false);
   const [pendingProductChange, setPendingProductChange] = useState<ProductChange | null>(null);
+
+  const planTask = usePlanTask({
+    onDone: (finalizedResult) => {
+      setCliReady(true);
+      setActiveShift(0);
+      setResult(finalizedResult);
+      setLoading(false);
+      completeOnboarding();
+      setLayout((current) => resolvePlanPresentationLayout(current, finalizedResult));
+      trackTelemetry({ type: "interaction", name: "plan_response", page: "calculator" });
+      trackTelemetry({
+        type: "performance",
+        name: "plan_result",
+        page: "calculator",
+        durationMs: typeof finalizedResult.durationMs === "number" ? finalizedResult.durationMs : undefined,
+      });
+    },
+    onFailed: (message) => {
+      setLoading(false);
+      setApiError(displayError("AIC-PLAN-3004", message));
+    },
+  });
+
+  useEffect(() => {
+    if (planTask.status === "cancelled") setLoading(false);
+  }, [planTask.status]);
+  // loading 完全由任务状态推导：提交、刷新恢复、取消都会同步驱动界面。
+  useEffect(() => {
+    setLoading(Boolean(planTask.taskId));
+  }, [planTask.taskId]);
 
   // 公开排班结果只包含产品页面需要的效率、MAA 与轮换数据。
   const scheduleResult = result;
@@ -453,11 +483,14 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && loading) planAbortRef.current?.abort();
+      if (event.key === "Escape" && loading) {
+        planTask.cancel();
+        setLoading(false);
+      }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [loading]);
+  }, [loading, planTask]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -878,9 +911,6 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     }
     preloadProductIcons();
     setLoading(true);
-    const controller = new AbortController();
-    planAbortRef.current?.abort();
-    planAbortRef.current = controller;
     setResultClearNotice(null);
     setInputError(null);
     setApiError(null);
@@ -888,44 +918,27 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
 
     try {
       trackTelemetry({ type: "interaction", name: "plan_submit", page: "calculator" });
-      const response = await computePlan({
+      const submitted = await submitPlanTask({
         layout: planLayout,
         operbox: normalizeOperboxEntries(planInput.operbox),
         sourceName: planInput.sourceName,
         boxSource: planInput.boxSource,
         rotation: rotationProfile,
         fiammetta_enable: effectiveFiammettaSetting(planInput.operbox, rotationProfile, fiammettaEnabled),
-      }, { signal: controller.signal });
-      trackTelemetry({ type: "interaction", name: "plan_response", page: "calculator" });
-      trackTelemetry({
-        type: "performance",
-        name: "plan_result",
-        page: "calculator",
-        durationMs: typeof response.durationMs === "number" ? response.durationMs : undefined,
       });
-      setCliReady(true);
-      setActiveShift(0);
-      const finalizedResult = response;
-      setResult(finalizedResult);
-      completeOnboarding();
-      setLayout((current) => resolvePlanPresentationLayout(current, response));
+      planTask.begin(submitted.taskId);
       return true;
     } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") return false;
       setApiError(toDisplayError(error, "排班请求失败，请稍后重试。"));
+      setLoading(false);
       return false;
-    } finally {
-      if (planAbortRef.current === controller) {
-        planAbortRef.current = null;
-        setLoading(false);
-      }
     }
   }
 
   function handleCancelRun() {
-    planAbortRef.current?.abort();
-    planAbortRef.current = null;
+    planTask.cancel();
     setLoading(false);
+    setApiError(null);
   }
 
   async function handleRun() {
@@ -1465,7 +1478,14 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   const statusError = inputError && !setupOpen
     ? displayError(inputErrorCode, inputError)
     : apiError ?? storageNotice;
-  const activity = usePlanActivity({ loading, result, error: statusError });
+  const activity = usePlanActivity({
+    loading,
+    error: statusError,
+    completed: planTask.status === "done",
+    queued: loading && planTask.pollStopped,
+    queuePosition: planTask.queuePosition,
+    etaSeconds: planTask.etaSeconds,
+  });
   useEffect(() => {
     if (page !== "calculator" || !result?.maa) return;
     let cancelled = false;
@@ -1505,6 +1525,15 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       plannerReady: cliReady,
       websiteAuthenticated: Boolean(websiteSession),
       showOnboarding: onboardingPreference === "active" && !result,
+      taskQueue: loading && planTask.taskId ? {
+        queuePosition: planTask.queuePosition,
+        etaSeconds: planTask.etaSeconds,
+        pollStopped: planTask.pollStopped,
+        error: planTask.error,
+        resumeDisabled: planTask.resumeDisabled,
+        resumeCountdown: planTask.resumeCountdown,
+        onResumePoll: planTask.resume,
+      } : null,
       animatePlanEntrance,
       animateEmptyScheduleEntrance,
       onPlanEntranceConsumed: (revision: string) => {

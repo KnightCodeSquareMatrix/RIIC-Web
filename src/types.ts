@@ -1018,6 +1018,7 @@ export type AppErrorCode =
   | "AIC-PLAN-3002"
   | "AIC-PLAN-3003"
   | "AIC-PLAN-3004"
+  | "AIC-PLAN-3005"
   | "AIC-FEEDBACK-4001"
   | "AIC-FEEDBACK-4002"
   | "AIC-SYS-5000"

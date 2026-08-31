@@ -10,6 +10,7 @@ import {
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -109,6 +110,25 @@ export const planRun = appSchema.table("plan_run", {
   index("plan_run_error_code_created_at_idx").on(table.errorCode, table.createdAt),
   index("plan_run_solver_created_at_idx").on(table.solverExecutableSha256, table.createdAt),
   index("plan_run_user_created_at_idx").on(table.userId, table.createdAt),
+]);
+
+export const planTask = appSchema.table("plan_task", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").references(() => user.id, { onDelete: "cascade" }),
+  status: text("status").notNull(),
+  payload: jsonb("payload").notNull(),
+  result: jsonb("result"),
+  error: text("error"),
+  attempts: integer("attempts").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  startedAt: timestamp("started_at", { withTimezone: true }),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+}, (table) => [
+  index("plan_task_claim_idx").on(table.status, table.createdAt),
+  uniqueIndex("plan_task_one_active_per_user_idx").on(table.userId).where(
+    sql`${table.userId} is not null and ${table.status} in ('pending', 'running')`,
+  ),
 ]);
 
 export const feedback = appSchema.table("feedback", {

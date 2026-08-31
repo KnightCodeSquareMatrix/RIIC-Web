@@ -544,7 +544,7 @@ export function SetupDialog({
             </>
           ) : step === "layout" ? (
             <>
-              <Button className="max-sm:min-w-16 sm:min-w-[88px]" size="dialog" type="button" variant="ghost" onClick={goToBox}>返回</Button>
+              <Button className="max-sm:min-w-16 sm:min-w-[88px]" size="dialog" type="button" variant="ghost" onClick={goToBox}>上一步</Button>
               <Button size="dialog" type="button" onClick={reviewFacilities}>
                 {mustReviewFacilities ? "检查设施" : "继续"}
               </Button>
@@ -564,7 +564,7 @@ export function SetupDialog({
                     : `电力不足 ${powerBudget.consumed - powerBudget.generated} · ${powerBudget.consumed}/${powerBudget.generated}`}
                 </span>
               </span>
-              <Button className="max-sm:min-w-16 sm:min-w-[88px]" size="dialog" type="button" variant="ghost" onClick={goToBasics}>返回</Button>
+              <Button className="max-sm:min-w-16 sm:min-w-[88px]" size="dialog" type="button" variant="ghost" onClick={goToBasics}>上一步</Button>
               <Button className="shrink-0" size="dialog" type="button" disabled={!powerBudget.ok} onClick={onFinish}><Check />完成</Button>
             </>
           )}
