@@ -64,7 +64,8 @@ export function RotationSettings({ value, onChange }: RotationSettingsProps) {
           id="rotation-profile"
           className="font-number h-11 w-full bg-background sm:max-w-md"
           aria-label="换班方式"
-          placeholder="搜索换班方式"
+          placeholder="选择换班方式"
+          readOnly
         />
         <ComboboxContent align="start">
           <ComboboxEmpty className="block empty:p-0">没有匹配的换班方式</ComboboxEmpty>

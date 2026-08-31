@@ -9,6 +9,8 @@ import {
 } from "@/server/api-contract";
 import type { PublicHealthData } from "@/types";
 import { isSklandFeatureEnabled } from "@/deployment";
+import { isPlanTaskQueueEnabled } from "@/server/business-config";
+import { getPlanWorkerHealth } from "@/server/plan-task";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,12 +20,22 @@ export async function GET() {
   const startedAt = performance.now();
   try {
     const health = await getHealth();
-    const plannerReady = Boolean(health.ok && health.cliReady);
+    const taskQueueEnabled = isPlanTaskQueueEnabled();
+    const expectedReleaseSha = process.env.APP_RELEASE_SHA?.trim() ?? "";
+    const workerHealth = taskQueueEnabled
+      ? await getPlanWorkerHealth({ expectedReleaseSha }).catch(() => ({ ready: false, releaseSha: null, heartbeatAt: null }))
+      : { ready: false, releaseSha: null, heartbeatAt: null };
+    const plannerReady = Boolean(health.ok && health.cliReady && (!taskQueueEnabled || workerHealth.ready));
     const sklandEnabled = isSklandFeatureEnabled();
     const sklandAvailable = Boolean(sklandEnabled && health.sklandConfigured && !health.sklandDisabledReason);
     const data: PublicHealthData = {
       status: plannerReady ? "ready" : "unavailable",
       plannerReady,
+      taskQueue: {
+        enabled: taskQueueEnabled,
+        ready: taskQueueEnabled && workerHealth.ready,
+        releaseMatched: taskQueueEnabled && workerHealth.releaseSha === expectedReleaseSha,
+      },
       ...(sklandEnabled ? {
         skland: {
           available: sklandAvailable,
@@ -40,4 +52,3 @@ export async function GET() {
     return failureResponse(error, requestId, "/api/health", startedAt, "AIC-SYS-5000");
   }
 }
-
