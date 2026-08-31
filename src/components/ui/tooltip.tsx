@@ -1,14 +1,6 @@
 "use client"
 
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip"
-import {
-  cloneElement,
-  useEffect,
-  useRef,
-  useState,
-  type ReactElement,
-  type ReactNode,
-} from "react"
 import { motion, type HTMLMotionProps } from "motion/react"
 
 import { cn } from "@/lib/utils"
@@ -87,76 +79,6 @@ function TooltipContent({
         </TooltipPrimitive.Popup>
       </TooltipPrimitive.Positioner>
     </TooltipPrimitive.Portal>
-  )
-}
-
-function useCoarsePointer() {
-  const [coarse, setCoarse] = useState(false)
-  useEffect(() => {
-    if (typeof window === "undefined" || !window.matchMedia) return
-    const query = window.matchMedia("(pointer: coarse)")
-    const apply = (matches: boolean) => setCoarse(matches)
-    apply(query.matches)
-    const onChange = (event: MediaQueryListEvent) => apply(event.matches)
-    query.addEventListener("change", onChange)
-    return () => query.removeEventListener("change", onChange)
-  }, [])
-  return coarse
-}
-
-function withClick(trigger: ReactElement, onClick: (event: React.MouseEvent) => void): ReactElement {
-  return cloneElement(trigger, {
-    onClick,
-  } as Record<string, unknown>)
-}
-
-/**
- * 桌面（细指针）悬浮显示；触屏/平板（粗指针）改为点击切换气泡，点击外部自动收起。
- */
-export function TapAwareTooltip({
-  trigger,
-  children,
-  side = "top",
-  align = "center",
-  className,
-}: {
-  trigger: ReactElement
-  children: ReactNode
-  side?: TooltipPrimitive.Positioner.Props["side"]
-  align?: TooltipPrimitive.Positioner.Props["align"]
-  className?: string
-}) {
-  const coarse = useCoarsePointer()
-  const [open, setOpen] = useState(false)
-  const triggerRef = useRef<HTMLButtonElement | null>(null)
-
-  useEffect(() => {
-    if (!coarse) return
-    const onPointerDown = (event: PointerEvent) => {
-      const element = triggerRef.current
-      if (element && event.target instanceof Node && !element.contains(event.target)) {
-        setOpen(false)
-      }
-    }
-    document.addEventListener("pointerdown", onPointerDown, true)
-    return () => document.removeEventListener("pointerdown", onPointerDown, true)
-  }, [coarse])
-
-  // 始终使用受控 open，避免同一组件在受控/非受控之间切换触发 React 警告。
-  return (
-    <Tooltip open={open} onOpenChange={setOpen}>
-      <TooltipTrigger
-        ref={triggerRef}
-        closeOnClick={!coarse}
-        render={coarse
-          ? withClick(trigger, (event) => {
-              event.preventDefault()
-              setOpen((value) => !value)
-            })
-          : trigger}
-      />
-      <TooltipContent side={side} align={align} className={className}>{children}</TooltipContent>
-    </Tooltip>
   )
 }
 

@@ -1,7 +1,9 @@
 "use client";
 
+import { useState } from "react";
+
 import { InfraTechnicalCard } from "@/components/InfraTechnicalCard";
-import { TapAwareTooltip } from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { operatorProfessionPresentationForCode } from "@/operator-presentation";
 import { operatorPortraitFor, operatorProfessionFor } from "@/operatorPortraits";
 import { cn } from "@/lib/utils";
@@ -27,6 +29,7 @@ const STATE_CLASSES: Record<string, string> = {
 };
 
 function MemberRow({ member }: { member: TrainingAdviceMember }) {
+  const [professionOpen, setProfessionOpen] = useState(false);
   const isReady = member.progress === "ready";
   const isMissing = member.progress === "missing";
   // 就绪：浅灰背景；需培养（需精2 等）：琥珀色边框与状态字同色；缺失保持原样。
@@ -54,8 +57,8 @@ function MemberRow({ member }: { member: TrainingAdviceMember }) {
       ? "border-white/20 bg-white/10 text-white"
       : "border-white/10 bg-white/5 text-white/65";
   const profession = operatorProfessionPresentationForCode(operatorProfessionFor(member.operator));
-  const card = (
-    <div className={cn("flex min-w-0 items-center gap-1.5 border px-2 py-1", cardClass)}>
+  const content = (
+    <>
       <span className="size-8 shrink-0 overflow-hidden border border-white/10 bg-[#272A2B]">
         <img src={operatorPortraitFor(member.operator)} alt="" className="size-full object-cover" loading="lazy" />
       </span>
@@ -66,14 +69,30 @@ function MemberRow({ member }: { member: TrainingAdviceMember }) {
       <span className={cn("shrink-0 text-xs tabular-nums", statusClass)}>
         {statusText}
       </span>
-    </div>
+    </>
   );
-  if (!profession) return card;
+  const cardClassName = cn("flex min-w-0 items-center gap-1.5 border px-2 py-1", cardClass);
+  if (!profession) return <div className={cardClassName}>{content}</div>;
   return (
-    <TapAwareTooltip trigger={card} side="top" align="center" className="gap-2 whitespace-nowrap px-3.5 py-2">
-      <img src={profession.icon} alt="" aria-hidden="true" className="size-6 shrink-0 object-contain" />
-      <span className="text-sm font-semibold">{profession.label}</span>
-    </TapAwareTooltip>
+    <Tooltip open={professionOpen} onOpenChange={setProfessionOpen}>
+      <TooltipTrigger
+        closeOnClick={false}
+        render={(
+        <button
+          type="button"
+          className={cardClassName}
+          aria-label={`${member.operator}，职业：${profession.label}`}
+          onClick={() => setProfessionOpen((value) => !value)}
+        >
+          {content}
+        </button>
+      )}
+      />
+      <TooltipContent side="top" align="center" className="gap-2 whitespace-nowrap px-3.5 py-2">
+        <img src={profession.icon} alt="" aria-hidden="true" className="size-6 shrink-0 object-contain" />
+        <span className="text-sm font-semibold">{profession.label}</span>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 

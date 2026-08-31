@@ -8,7 +8,9 @@ import { gzipSync } from "node:zlib";
 // views have independent route chunks and may carry their own datasets without joining `/`.
 const MAX_SKLAND_DISABLED_ROUTE_INITIAL_JS_BYTES = 1_130_000;
 const MAX_SKLAND_ENABLED_ROUTE_INITIAL_JS_BYTES = 1_150_000;
-const MAX_SECONDARY_ROUTE_INITIAL_JS_BYTES = 1_525_000;
+// Training tooltips add profession labels and icons to the existing route chunk. Preserve a
+// narrow secondary-route ceiling instead of treating a sub-kilobyte intentional delta as drift.
+const MAX_SECONDARY_ROUTE_INITIAL_JS_BYTES = 1_527_000;
 const MAX_SKLAND_ROUTE_INITIAL_JS_BYTES = 1_590_000;
 const MAX_SKLAND_DISABLED_DOCUMENT_INITIAL_JS_BYTES = 1_240_000;
 const MAX_SKLAND_ENABLED_DOCUMENT_INITIAL_JS_BYTES = 1_270_000;
