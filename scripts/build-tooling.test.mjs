@@ -49,7 +49,7 @@ test("production builds prepare a solver-free standalone runtime with static ass
   assert.match(stageStandalone, /\["bin\/infra-cli", "infra-cli"\]/);
   assert.match(stageStandalone, /\["\.env\.production\.local", "\.env\.production\.local"\]/);
   assert.match(stageStandalone, /dereference: true/);
-  assert.match(stageStandalone, /outputRoot, "\.next", "cache"/);
+  assert.doesNotMatch(stageStandalone, /outputRoot, "\.next", "cache"/);
 });
 
 test("Next.js owns graceful shutdown while systemd accepts its signal exit statuses", async () => {
