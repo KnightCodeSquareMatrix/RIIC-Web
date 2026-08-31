@@ -28,6 +28,7 @@ test("production builds prepare a solver-free standalone runtime with static ass
   const stageStandalone = await readRepoFile("scripts/stage-standalone-release.mjs");
 
   assert.match(nextConfig, /output: "standalone"/);
+  assert.match(nextConfig, /generateBuildId: async \(\) => process\.env\.APP_BUILD_ID \?\? "local-development"/);
   assert.equal(packageJson.scripts.postbuild, "node scripts/prepare-standalone.mjs");
   assert.equal(packageJson.scripts.start, "node scripts/start-standalone.mjs");
   assert.equal(packageJson.scripts["release:stage"], "node scripts/stage-standalone-release.mjs");
@@ -207,9 +208,13 @@ test("deploy builds and transfers a verified solver-free standalone artifact", a
   assert.match(deployWorkflow, /Install verified build dependencies[\s\S]+run: npm ci/);
   assert.match(deployWorkflow, /Build standalone release[\s\S]+APP_DEPLOYMENT_ENV:[\s\S]+SKLAND_FEATURE_ENABLED: "1"[\s\S]+ACCOUNT_CLOUD_SYNC_ENABLED: "1"[\s\S]+run: npm run build/);
   assert.match(deployWorkflow, /RELEASE_SHA="\$DEPLOY_SHA" RELEASE_TREE_SHA="\$DEPLOY_TREE_SHA"[\s\S]+npm run release:stage -- --output "\$artifact_root"/);
-  assert.match(deployWorkflow, /tar -czf "\$local_archive" -C "\$artifact_root" \.[\s\S]+gzip -t "\$local_archive"/);
+  assert.match(deployWorkflow, /tar --sort=name[\s\S]+--mtime="@\$SOURCE_DATE_EPOCH"[\s\S]+gzip --best --no-name --rsyncable[\s\S]+gzip -t "\$local_archive"/);
   assert.match(deployWorkflow, /archive_sha256="\$\(sha256sum "\$local_archive"[\s\S]+DEPLOY_ARCHIVE_SHA256=%s/);
-  assert.match(deployWorkflow, /Upload standalone release archive[\s\S]+scp "\$\{ssh_options\[@\]\}"[\s\S]+"\$DEPLOY_LOCAL_ARCHIVE"[\s\S]+test "\$remote_sha256" = "\$DEPLOY_ARCHIVE_SHA256"/);
+  assert.match(deployWorkflow, /Build standalone release[\s\S]+APP_BUILD_ID: \$\{\{ env\.DEPLOY_SHA \}\}/);
+  assert.match(deployWorkflow, /Upload standalone release archive[\s\S]+--checksum[\s\S]+--partial[\s\S]+--inplace[\s\S]+remote_prefix_sha256[\s\S]+upload_chunk_bytes[\s\S]+test "\$remote_sha256" = "\$DEPLOY_ARCHIVE_SHA256"/);
+  assert.match(deployWorkflow, /archive_cache="\.cache\/riic-web\/\$\{DEPLOYMENT_ENV\}-standalone\.tar\.gz"/);
+  assert.match(deployWorkflow, /staged_archive=[\s\S]+mktemp[\s\S]+install -m 600[\s\S]+mv -fT/);
+  assert.doesNotMatch(deployWorkflow, /\bscp\b/);
   assert.match(deployWorkflow, /DEPLOY_RELEASE_HELPER_CONTRACT: "4"/);
   assert.match(deployWorkflow, /'\$DEPLOY_APPROVED_SOLVER_SHA256' \\\n\s+'\$DEPLOY_TREE_SHA'/);
   assert.match(deployWorkflow, /Remove staged release artifacts from the runner[\s\S]+if: always\(\)[\s\S]+"\$RUNNER_TEMP"\/riic-web-release\.\*[\s\S]+"\$RUNNER_TEMP"\/arknights-infra-\*\.tar\.gz/);

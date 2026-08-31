@@ -11,6 +11,7 @@ const outputFileTracingExcludes = [
 const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1"],
   compress: true,
+  generateBuildId: async () => process.env.APP_BUILD_ID ?? "local-development",
   output: "standalone",
   async headers() {
     return [
