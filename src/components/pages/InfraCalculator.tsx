@@ -1,10 +1,18 @@
 "use client";
 
-import { Download, Ellipsis, FlaskConical, HeartPulse, Keyboard, Loader2, Play, Search, Settings2, X } from "lucide-react";
+import { Download, Ellipsis, FlaskConical, HeartPulse, Keyboard, Loader2, Play, RefreshCw, Search, Settings2, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { ScheduleBoard, ShiftTabs } from "@/components";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { PlanResultSummarySkeleton } from "@/components/PlanResultSummarySkeleton";
 
@@ -12,7 +20,7 @@ import type { FactoryRecipe, TradeOrder } from "@/blueprint";
 import { loadClientFeature } from "@/client-lazy-loader";
 import { cn } from "@/lib/utils";
 import type { ShiftDirection } from "@/motion";
-import { onboardingStepStatuses } from "@/onboarding";
+import { onboardingStepStatuses, shouldShowAnonymousSampleTrial } from "@/onboarding";
 import type { RoomRow } from "@/schedule";
 import type {
   BaseBlueprint,
@@ -85,26 +93,24 @@ function RunButton({
 function CalculatorStartPanel({
   websiteAuthenticated,
   hasPersonalBox,
-  hasSampleBox,
   sampleLoading,
   loading,
   plannerReady,
   accountControl,
   onStartPersonalFlow,
-  onLoadSample,
+  onRunSampleTrial,
   onRun,
   onOpenSetup,
   onDismissOnboarding,
 }: {
   websiteAuthenticated: boolean;
   hasPersonalBox: boolean;
-  hasSampleBox: boolean;
   sampleLoading: boolean;
   loading: boolean;
   plannerReady: boolean;
   accountControl?: ReactNode;
   onStartPersonalFlow: () => void;
-  onLoadSample: () => Promise<boolean>;
+  onRunSampleTrial: () => Promise<boolean>;
   onRun: () => void;
   onOpenSetup: () => void;
   onDismissOnboarding: () => void;
@@ -139,6 +145,11 @@ function CalculatorStartPanel({
     : hasPersonalBox && !plannerReady ? "排班服务未就绪" : hasPersonalBox ? "生成第一份方案" : "导入自己的 BOX";
   const personalActionAriaLabel = hasPersonalBox ? "生成排班" : "配置Box与布局";
   const personalPlanUnavailable = websiteAuthenticated && hasPersonalBox && !plannerReady;
+  const showAnonymousSampleTrial = shouldShowAnonymousSampleTrial({
+    authenticated: websiteAuthenticated,
+    hasPersonalBox,
+    onboardingActive: true,
+  });
   const actionControls = (
     <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row sm:flex-wrap sm:items-center" data-calculator-controls>
       <Button
@@ -147,23 +158,11 @@ function CalculatorStartPanel({
         className="min-h-11 sm:min-w-44"
         aria-label={personalActionAriaLabel}
         title={personalPlanUnavailable ? "排班服务尚未就绪" : undefined}
-        disabled={loading || personalPlanUnavailable}
+        disabled={sampleLoading || loading || personalPlanUnavailable}
         onClick={hasPersonalBox && websiteAuthenticated ? onRun : onStartPersonalFlow}
       >
         {loading && hasPersonalBox ? <Loader2 className="animate-spin" /> : <Play />}
         {loading && hasPersonalBox ? "正在生成第一份方案…" : personalActionLabel}
-      </Button>
-      <Button
-        type="button"
-        size="lg"
-        variant="outline"
-        className="min-h-11 bg-white/72 sm:min-w-44"
-        aria-label={hasSampleBox ? "生成排班" : "全角色导入"}
-        disabled={sampleLoading || loading || (hasSampleBox && !plannerReady)}
-        onClick={hasSampleBox ? onRun : () => void onLoadSample()}
-      >
-        {sampleLoading || (loading && hasSampleBox) ? <Loader2 className="animate-spin" /> : <FlaskConical />}
-        {sampleLoading ? "正在载入示例…" : loading && hasSampleBox ? "正在生成示例…" : hasSampleBox ? "生成示例排班" : "先看全角色示例"}
       </Button>
       {hasPersonalBox ? (
         <div className="inline-flex min-w-0 max-sm:[&_[data-skland-account-control]]:rounded-l-none" data-calculator-setup-group>
@@ -183,7 +182,7 @@ function CalculatorStartPanel({
         </div>
       ) : null}
       {!hasPersonalBox && accountControl ? <div className="self-center">{accountControl}</div> : null}
-      <Button type="button" variant="ghost" className="min-h-11" onClick={onDismissOnboarding}>
+      <Button type="button" variant="ghost" className="min-h-11" disabled={sampleLoading} onClick={onDismissOnboarding}>
         暂时跳过引导
       </Button>
     </div>
@@ -251,6 +250,41 @@ function CalculatorStartPanel({
             })}
         </ol>
 
+        {showAnonymousSampleTrial ? (
+          <section
+            className="mt-5 flex flex-col gap-4 border border-[#d8c64a] bg-[#fffdf2] px-4 py-4 shadow-[0_10px_28px_rgb(49_49_49/0.07)] sm:flex-row sm:items-center sm:justify-between sm:px-5"
+            aria-labelledby="anonymous-sample-trial-title"
+            aria-busy={sampleLoading}
+            data-anonymous-sample-trial
+          >
+            <div className="min-w-0">
+              <div className="flex items-start gap-3">
+                <span className="mt-0.5 grid size-8 shrink-0 place-items-center bg-[#313131] text-[#FFD800]" aria-hidden="true">
+                  <FlaskConical className="size-4" />
+                </span>
+                <div className="min-w-0">
+                  <h2 id="anonymous-sample-trial-title" className="text-sm font-semibold leading-6 text-[#313127]">
+                    不想登录？只想看看全角色导入之后的排班效果
+                  </h2>
+                  <p className="mt-0.5 text-xs leading-5 text-[#5d5b4d]">使用服务端示例数据，直接生成一份可浏览的三班排班。</p>
+                </div>
+              </div>
+            </div>
+            <Button
+              type="button"
+              size="lg"
+              variant="outline"
+              className="min-h-11 shrink-0 border-[#313131] bg-[#313131] text-[#FFD800] hover:bg-[#454545] hover:text-[#FFD800] sm:min-w-52"
+              disabled={sampleLoading || loading || !plannerReady}
+              title={!plannerReady ? "排班服务尚未就绪" : undefined}
+              onClick={() => void onRunSampleTrial()}
+            >
+              {sampleLoading ? <Loader2 className="animate-spin" /> : <Play />}
+              {sampleLoading ? "正在生成示例排班…" : "直接查看示例排班"}
+            </Button>
+          </section>
+        ) : null}
+
         {actionControls}
       </div>
     </section>
@@ -273,16 +307,24 @@ export interface InfraCalculatorProps {
   canRun: boolean;
   hasBox: boolean;
   hasPersonalBox: boolean;
-  hasSampleBox: boolean;
   plannerReady: boolean;
   websiteAuthenticated: boolean;
   showOnboarding: boolean;
+  taskQueue?: {
+    queuePosition: number | null;
+    etaSeconds: number | null;
+    pollStopped: boolean;
+    error: string | null;
+    resumeDisabled: boolean;
+    resumeCountdown: number;
+    onResumePoll: () => void;
+  } | null;
   animatePlanEntrance: boolean;
   animateEmptyScheduleEntrance: boolean;
   onPlanEntranceConsumed: (revision: string) => void;
   requiresAccount?: boolean;
   accountControl?: ReactNode;
-  onLoadSample: () => Promise<boolean>;
+  onRunSampleTrial: () => Promise<boolean>;
   onStartPersonalFlow: () => void;
   onDismissOnboarding: () => void;
   onOpenSetup: () => void;
@@ -305,14 +347,15 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     activePlan, closestComparison,
     resultClearNotice,
     feedbackResult,
-    sampleLoading, loading, canRun, hasBox, hasPersonalBox, hasSampleBox, plannerReady, websiteAuthenticated, showOnboarding, animatePlanEntrance, animateEmptyScheduleEntrance, onPlanEntranceConsumed, requiresAccount = false, accountControl,
-    onLoadSample, onStartPersonalFlow, onDismissOnboarding, onOpenSetup, onRun, onCancelRun,
+    sampleLoading, loading, canRun, hasBox, hasPersonalBox, plannerReady, websiteAuthenticated, showOnboarding, taskQueue, animatePlanEntrance, animateEmptyScheduleEntrance, onPlanEntranceConsumed, requiresAccount = false, accountControl,
+    onRunSampleTrial, onStartPersonalFlow, onDismissOnboarding, onOpenSetup, onRun, onCancelRun,
     onSetActiveShift, onMarkIssue, onPerformanceIssue,
     onFactoryRecipeChange, onTradeOrderChange,
     onDownloadMaa,
     onClearResultNotice, onDismissResultClearWarning,
   } = props;
   const [shortcutGuideOpen, setShortcutGuideOpen] = useState(false);
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [operatorQuery, setOperatorQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [shiftDirection, setShiftDirection] = useState<ShiftDirection>(0);
@@ -342,18 +385,6 @@ export function InfraCalculator(props: InfraCalculatorProps) {
         : "flex min-w-0 items-center justify-end gap-2"}
       data-calculator-export-actions={placement}
     >
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        disabled={sampleLoading}
-        aria-label="全角色导入"
-        onClick={() => void onLoadSample()}
-        data-full-e2
-      >
-        {sampleLoading ? <Loader2 className="animate-spin" /> : <FlaskConical />}
-        {sampleLoading ? "正在载入" : "全角色导入"}
-      </Button>
       <Button type="button" size="sm" variant="outline" disabled={!result?.maa} onClick={onDownloadMaa}>
         <Download />导出到 MAA
       </Button>
@@ -459,10 +490,39 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                   {accountControl}
                 </div>
                 {loading ? (
-                  <Button type="button" variant="destructive" className="h-9 max-sm:h-11" onClick={onCancelRun} aria-label="取消计算">
-                    <Loader2 className="animate-spin" />
-                    取消计算
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    {taskQueue?.error ? (
+                      <span className="text-xs text-red-300">{taskQueue.error}</span>
+                    ) : null}
+                    {taskQueue?.pollStopped ? (
+                      <div className="relative">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-9 max-sm:h-11"
+                          onClick={taskQueue.onResumePoll}
+                          disabled={taskQueue.resumeDisabled}
+                          aria-label="查询进度"
+                        >
+                          <RefreshCw />
+                          查询进度
+                        </Button>
+                        {taskQueue.resumeCountdown > 0 ? (
+                          <span
+                            className="pointer-events-none absolute inset-0 grid place-items-center rounded-md bg-black/45 text-lg font-semibold text-white"
+                            aria-hidden="true"
+                          >
+                            {taskQueue.resumeCountdown}
+                          </span>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    <Button type="button" variant="destructive" className="h-9 max-sm:h-11" onClick={() => setCancelConfirmOpen(true)} aria-label="取消任务">
+                      <Loader2 className="animate-spin" />
+                      取消任务
+                    </Button>
+                  </div>
                 ) : <RunButton canRun={canRun} hasBox={hasBox} plannerReady={plannerReady} requiresAccount={requiresAccount} onRun={onRun} />}
               </div>
             ) : null}
@@ -490,13 +550,12 @@ export function InfraCalculator(props: InfraCalculatorProps) {
               <CalculatorStartPanel
                 websiteAuthenticated={websiteAuthenticated}
                 hasPersonalBox={hasPersonalBox}
-                hasSampleBox={hasSampleBox}
                 sampleLoading={sampleLoading}
                 loading={loading}
                 plannerReady={plannerReady}
                 accountControl={accountControl}
                 onStartPersonalFlow={onStartPersonalFlow}
-                onLoadSample={onLoadSample}
+                onRunSampleTrial={onRunSampleTrial}
                 onRun={onRun}
                 onOpenSetup={onOpenSetup}
                 onDismissOnboarding={onDismissOnboarding}
@@ -565,6 +624,27 @@ export function InfraCalculator(props: InfraCalculatorProps) {
       ) : null}
       <Suspense fallback={null}>
         <ShortcutGuideDialog open={shortcutGuideOpen} onOpenChange={setShortcutGuideOpen} />
+        <Dialog open={cancelConfirmOpen} onOpenChange={setCancelConfirmOpen}>
+          <DialogContent className="gap-5 max-sm:px-4 sm:max-w-sm sm:p-6">
+            <DialogHeader className="gap-1.5 px-1 sm:px-2">
+              <DialogTitle className="text-lg font-semibold">取消当前任务？</DialogTitle>
+              <DialogDescription className="text-sm leading-6">
+                取消当前任务会退出排队，后续生成排班需要重新排队。
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="gap-2">
+              <Button type="button" variant="outline" onClick={() => setCancelConfirmOpen(false)}>
+                继续等待
+              </Button>
+              <Button type="button" variant="destructive" onClick={() => {
+                setCancelConfirmOpen(false);
+                onCancelRun();
+              }}>
+                确认取消
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </Suspense>
     </>
   );

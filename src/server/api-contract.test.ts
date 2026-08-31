@@ -39,6 +39,7 @@ test("error catalog keeps the required HTTP status mapping", () => {
   assert.equal(ERROR_DEFINITIONS["AIC-AUTH-2005"].status, 400);
   assert.equal(ERROR_DEFINITIONS["AIC-AUTH-2006"].status, 409);
   assert.equal(ERROR_DEFINITIONS["AIC-AUTH-2007"].status, 404);
+  assert.equal(ERROR_DEFINITIONS["AIC-AUTH-2010"].status, 400);
   assert.equal(ERROR_DEFINITIONS["AIC-PLAN-3001"].status, 503);
   assert.equal(ERROR_DEFINITIONS["AIC-PLAN-3002"].status, 429);
   assert.equal(ERROR_DEFINITIONS["AIC-PLAN-3003"].status, 504);
@@ -398,4 +399,61 @@ test("authenticated sample requests retain admission after a cache miss while an
   assert.equal(admission > source.indexOf("await readJsonBody"), true);
   assert.equal(admission > source.indexOf("await resolvePlanCache"), true);
   assert.equal(admission < source.indexOf("runResult = await runPlan"), true);
+});
+
+test("task queue keeps anonymous samples cache-only and applies persistent authenticated admission", async () => {
+  const source = await readFile(new URL("../app/api/tasks/route.ts", import.meta.url), "utf8");
+  const cacheResolution = source.indexOf("await resolvePlanCache");
+  const anonymousGuard = source.indexOf("if (!session?.user?.id)");
+  const taskCreation = source.indexOf("await createPlanTask");
+  assert.equal(cacheResolution > 0, true);
+  assert.equal(anonymousGuard > cacheResolution, true);
+  assert.equal(taskCreation > anonymousGuard, true);
+  assert.equal(source.includes("accountClass: planAccountAdmissionClass(session.user)"), true);
+  assert.equal(source.includes("requestIpHmac: planTaskIpHmac(ip, planCacheHmacKey())"), true);
+  assert.equal(source.includes("cacheReferenceUserId = sourceType === \"sample\" ? null : userId"), true);
+});
+
+test("task queue disables the legacy synchronous solver endpoint", async () => {
+  const source = await readFile(new URL("../app/api/plan/route.ts", import.meta.url), "utf8");
+  const originGuard = source.indexOf("assertSameOrigin(request)");
+  const queueGuard = source.indexOf("if (isPlanTaskQueueEnabled())");
+  const solverCall = source.indexOf("runResult = await runPlan");
+  assert.equal(source.includes('throw new PublicApiError("AIC-PLAN-3001")'), true);
+  assert.equal(queueGuard > originGuard, true);
+  assert.equal(queueGuard < solverCall, true);
+});
+
+test("worker finalization records saved-plan bindings and cache ownership before publication", async () => {
+  const source = await readFile(new URL("../../scripts/plan-worker-runtime.mts", import.meta.url), "utf8");
+  const runRecord = source.indexOf("await recordPlanRunBestEffort");
+  const cacheReference = source.indexOf("await recordPlanCacheReferenceBestEffort", runRecord);
+  const cachePublication = source.indexOf("await completePlanCache", cacheReference);
+  assert.equal(source.includes("calculationContext: savedPlanContext"), true);
+  assert.equal(source.includes("publicResultSha256"), true);
+  assert.equal(source.includes("operboxContentHmac"), true);
+  assert.equal(runRecord > 0, true);
+  assert.equal(cacheReference > runRecord, true);
+  assert.equal(cachePublication > cacheReference, true);
+});
+
+test("worker loads the sealed release environment before evaluating runtime modules", async () => {
+  const source = await readFile(new URL("../../scripts/plan-worker.mts", import.meta.url), "utf8");
+  const envLoad = source.indexOf("loadEnvConfig(process.cwd())");
+  const runtimeImport = source.indexOf('await import("./plan-worker-runtime.mts")');
+  assert.equal(envLoad > 0, true);
+  assert.equal(runtimeImport > envLoad, true);
+  assert.equal(source.includes('from "./plan-worker-runtime.mts"'), false);
+});
+
+test("the client keeps the synchronous fallback only when health reports that the queue is disabled", async () => {
+  const source = await readFile(new URL("../../src/App.tsx", import.meta.url), "utf8");
+  const healthFlag = source.indexOf("setTaskQueueEnabled(Boolean(health.taskQueue?.enabled))");
+  const fallback = source.indexOf("if (!taskQueueEnabled)");
+  const synchronousCall = source.indexOf("await computePlan(payload)", fallback);
+  const queueCall = source.indexOf("await submitPlanTask(payload)", synchronousCall);
+  assert.equal(healthFlag > 0, true);
+  assert.equal(fallback > healthFlag, true);
+  assert.equal(synchronousCall > fallback, true);
+  assert.equal(queueCall > synchronousCall, true);
 });

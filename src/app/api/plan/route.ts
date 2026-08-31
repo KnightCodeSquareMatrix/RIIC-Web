@@ -25,7 +25,7 @@ import { websiteSession as readWebsiteSession } from "@/server/auth";
 import { requireWebsiteSession } from "@/server/auth/authorization";
 import { planAccessMode } from "@/server/plan-access";
 import { recordPlanRunBestEffort } from "@/server/business-records";
-import { isAccountCloudSyncEnabled, workspaceMasterKeys } from "@/server/business-config";
+import { isAccountCloudSyncEnabled, isPlanTaskQueueEnabled, workspaceMasterKeys } from "@/server/business-config";
 import { accountDataConsent } from "@/server/data-consent";
 import { publicPlanSha256, resolveSavedPlanCalculationContext } from "@/server/plan-result-binding";
 import { validateSavedPlanCalculationContext } from "@/server/workspace-payload";
@@ -92,6 +92,7 @@ export async function POST(request: Request) {
   try {
     const includeDebug = new URL(request.url).searchParams.get("beta") === "1";
     assertSameOrigin(request);
+    if (isPlanTaskQueueEnabled()) throw new PublicApiError("AIC-PLAN-3001");
     const ip = requestClientIp(request);
 
     const body = await readJsonBody(request, 2 * 1024 * 1024) as {

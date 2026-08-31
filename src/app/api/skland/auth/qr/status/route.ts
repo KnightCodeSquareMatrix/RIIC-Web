@@ -11,14 +11,11 @@ import { pollScan } from "@/server/skland/adapter";
 import {
   assertSklandAvailable,
   assertSklandFeatureEnabled,
-  readSklandAccountStore,
   setSklandAccountStoreCookies,
-  sklandAccountSummaries,
   sklandErrorResponse,
 } from "@/server/skland/http";
-import { SklandAccountLimitError, upsertSklandAccount } from "@/server/skland/session";
 import { requireWebsiteSession } from "@/server/auth/authorization";
-import { bindSklandAccount } from "@/server/skland/bindings";
+import { finalizeSklandAuthentication } from "@/server/skland/auth-completion";
 
 export const runtime = "nodejs";
 
@@ -36,32 +33,22 @@ export async function POST(request: Request) {
       throw new PublicApiError("AIC-REQ-1001");
     }
     const result = await pollScan(body.scanId.trim());
-    if (result.session && result.response.scheduleSnapshot) {
-      const previous = await readSklandAccountStore();
-      let upserted;
-      try {
-        upserted = upsertSklandAccount(previous.accounts, result.session, result.response.scheduleSnapshot.roles);
-      } catch (error) {
-        if (error instanceof SklandAccountLimitError) throw new PublicApiError("AIC-AUTH-2004");
-        throw error;
-      }
-      const bindingSummary = await bindSklandAccount(website.user.id, result.session.userId);
-      const next = {
-        ...previous,
-        accounts: upserted.accounts,
-        activeAccountId: upserted.account.accountId,
-        migratedSnapshot: null,
-      };
+    if (result.session && result.response.scheduleSnapshot && result.response.statusSnapshot) {
+      const completed = await finalizeSklandAuthentication(website.user.id, {
+        session: result.session,
+        snapshot: result.response.scheduleSnapshot,
+        statusSnapshot: result.response.statusSnapshot,
+      });
       const response = successResponse({
         status: result.response.status,
-        scheduleSnapshot: result.response.scheduleSnapshot,
-        statusSnapshot: result.response.statusSnapshot,
-        accounts: sklandAccountSummaries(next),
-        activeAccountId: next.activeAccountId,
-        bindingCount: bindingSummary.totalCount,
-        bindingSummary,
+        scheduleSnapshot: completed.data.scheduleSnapshot,
+        statusSnapshot: completed.data.statusSnapshot,
+        accounts: completed.data.accounts,
+        activeAccountId: completed.data.activeAccountId,
+        bindingCount: completed.data.bindingCount,
+        bindingSummary: completed.data.bindingSummary,
       }, requestId);
-      setSklandAccountStoreCookies(response, request, next, previous);
+      setSklandAccountStoreCookies(response, request, completed.next, completed.previous);
       return response;
     }
     const response = successResponse({

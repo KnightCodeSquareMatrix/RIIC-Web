@@ -1,5 +1,5 @@
 import { expect, test, type Route } from "@playwright/test";
-import { amiyaPortrait, requestId, diagnosticId, layout243, waitForOwnAnimations, planData, twoShiftPlanData, fourShiftPlanData, adjacentPortraitPlanData, lazyPortraitPlanData, authenticatedSklandSnapshot, mockApis, openSklandOverview, navigateToPrimaryPage, seedPreferences, seedV4Session } from "./production-readiness.fixture";
+import { amiyaPortrait, requestId, diagnosticId, layout243, waitForOwnAnimations, planData, twoShiftPlanData, fourShiftPlanData, adjacentPortraitPlanData, lazyPortraitPlanData, authenticatedSklandSnapshot, mockApis, mockAnonymousWebsiteSession, openSklandOverview, navigateToPrimaryPage, seedPreferences, seedV4Session } from "./production-readiness.fixture";
 
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/auth/get-session", (route) => route.fulfill({
@@ -50,6 +50,10 @@ test("an anonymous cold start probes the shared session once and does not touch 
   await expect(page.getByText("导入自己的 BOX", { exact: true })).toBeVisible();
   await expect(page.getByText("支持自主上传或第三方同步。", { exact: true })).toBeVisible();
   await expect(page.getByText("生成第一份方案", { exact: true })).toBeVisible();
+  const sampleTrial = page.locator("[data-anonymous-sample-trial]");
+  await expect(sampleTrial).toBeVisible();
+  await expect(sampleTrial.getByRole("heading", { name: "不想登录？只想看看全角色导入之后的排班效果" })).toBeVisible();
+  await expect(sampleTrial.getByRole("button", { name: "直接查看示例排班" })).toBeVisible();
   await expect(page.getByText("从可执行的排班开始", { exact: true })).toHaveCount(0);
   await expect(page.getByText("把你的 BOX 变成今天就能照着换的三班方案", { exact: true })).toHaveCount(0);
   await expect(page.getByText(/登录只用于保护个人数据|生成结果前，不需要先理解所有配置项/)).toHaveCount(0);
@@ -69,6 +73,106 @@ test("an anonymous cold start probes the shared session once and does not touch 
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "登录网站账号" })).toHaveCount(0);
   await expect(importTrigger).toBeFocused();
+});
+
+test("the anonymous sample trial fetches and solves once before showing the schedule", async ({ page }) => {
+  await mockAnonymousWebsiteSession(page);
+  await mockApis(page);
+  let releasePlan!: () => void;
+  const planGate = new Promise<void>((resolve) => {
+    releasePlan = resolve;
+  });
+  let sampleRequests = 0;
+  let planRequests = 0;
+  let planPayload: Record<string, unknown> | null = null;
+  page.on("request", (request) => {
+    const pathname = new URL(request.url()).pathname;
+    if (pathname === "/api/sample-operbox") sampleRequests += 1;
+  });
+  await page.unroute("**/api/plan");
+  await page.route("**/api/plan", async (route) => {
+    planRequests += 1;
+    planPayload = route.request().postDataJSON() as Record<string, unknown>;
+    await planGate;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ success: true, data: planData, requestId }),
+    });
+  });
+  await page.goto("/");
+
+  const trialButton = page.getByRole("button", { name: "直接查看示例排班" });
+  await trialButton.click();
+  await expect(page.getByRole("button", { name: "正在生成示例排班…" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "配置Box与布局" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "暂时跳过引导" })).toBeDisabled();
+  await expect.poll(() => ({ sampleRequests, planRequests })).toEqual({ sampleRequests: 1, planRequests: 1 });
+  expect(planPayload).toMatchObject({ boxSource: "sample", sourceName: "243 全精二示例" });
+  expect(planPayload).not.toHaveProperty("operbox");
+
+  releasePlan();
+  await expect(page.locator("[data-plan-board]")).toHaveAttribute("data-plan-revision", diagnosticId);
+  await expect(page.locator("[data-anonymous-sample-trial]")).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => window.localStorage.getItem("arknights-infra-calc-beta-onboarding-v1"))).toBe("completed");
+});
+
+test("the anonymous sample trial is absent for a signed-in onboarding session", async ({ page }) => {
+  await mockApis(page);
+  await page.goto("/");
+
+  await expect(page.locator('[data-calculator-start-panel][data-onboarding-active="true"]')).toBeVisible();
+  await expect(page.locator("[data-anonymous-sample-trial]")).toHaveCount(0);
+});
+
+test("an anonymous session with a personal BOX does not render the sample trial", async ({ page }) => {
+  await mockAnonymousWebsiteSession(page);
+  await mockApis(page);
+  await seedV4Session(page, null, { boxSource: "maa", onboardingValue: null });
+  await page.goto("/");
+
+  await expect(page.locator('[data-calculator-start-panel][data-onboarding-active="true"]')).toBeVisible();
+  await expect(page.getByText("个人 BOX 已就绪，可以配置布局并生成方案。", { exact: true })).toBeVisible();
+  await expect(page.locator("[data-anonymous-sample-trial]")).toHaveCount(0);
+});
+
+test("a failed anonymous sample solve keeps the trial available for retry", async ({ page }) => {
+  await mockAnonymousWebsiteSession(page);
+  await mockApis(page);
+  let planRequests = 0;
+  await page.unroute("**/api/plan");
+  await page.route("**/api/plan", async (route) => {
+    planRequests += 1;
+    if (planRequests === 1) {
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: false,
+          error: { code: "AIC-PLAN-3001", message: "排班服务暂不可用，请稍后重试。", retryable: true },
+          requestId,
+        }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ success: true, data: planData, requestId }),
+    });
+  });
+  await page.goto("/");
+
+  const trial = page.locator("[data-anonymous-sample-trial]");
+  await trial.getByRole("button", { name: "直接查看示例排班" }).click();
+  await expect(page.locator('[data-slot="live-activity"]')).toHaveAttribute("data-activity-phase", "error");
+  await expect(trial).toBeVisible();
+  await expect(trial.getByRole("button", { name: "直接查看示例排班" })).toBeEnabled();
+  expect(planRequests).toBe(1);
+
+  await trial.getByRole("button", { name: "直接查看示例排班" }).click();
+  await expect(page.locator("[data-plan-board]")).toHaveAttribute("data-plan-revision", diagnosticId);
+  expect(planRequests).toBe(2);
 });
 
 test("the onboarding cards reuse the Skland technical grid and dismiss into the empty schedule", async ({ page }) => {
@@ -178,7 +282,7 @@ test("completed onboarding returns to the empty schedule after changing the layo
   await expect(page.locator("[data-plan-board]")).toBeVisible();
   await page.getByRole("button", { name: "配置Box与布局" }).first().click();
   const setupDialog = page.getByRole("dialog");
-  await setupDialog.getByRole("button", { name: /第 2 步，共 3 步：布局/ }).click();
+  await setupDialog.getByRole("button", { name: "继续", exact: true }).click();
   await setupDialog.getByRole("button", { name: /^342/ }).click();
   await setupDialog.getByRole("button", { name: "Close" }).click();
   await page.getByRole("dialog", { name: "关闭排班设置？" })
@@ -226,11 +330,10 @@ test("an authenticated personal plan stays disabled while the planner is unavail
 
 test("a 768px solved plan defaults to list layout and stays inside the viewport", async ({ page }) => {
   await mockApis(page);
-  await seedPreferences(page);
+  await seedV4Session(page, null);
   await page.setViewportSize({ width: 768, height: 900 });
   await page.goto("/");
   await expect(page.locator('[data-workbench-hydrated="true"]')).toBeVisible();
-  await page.getByRole("button", { name: "全角色导入" }).click();
   await page.getByRole("button", { name: "生成排班" }).click();
   await expect(page.locator('[data-schedule-view="list"]')).toBeVisible();
   await expect(page.getByRole("tab", { name: "一图流布局" })).toHaveCount(0);
@@ -573,7 +676,7 @@ test("website account Fluid Orb keeps its CSS fallback without WebGL", async ({ 
   await expect(websiteAvatar.locator("[data-fluid-orb-fallback]")).toHaveCSS("opacity", "1");
 });
 
-test("seven-day bindings stay visible and require QR renewal", async ({ page }) => {
+test("seven-day bindings stay visible and require renewed authorization", async ({ page }) => {
   await mockApis(page, { sklandConfigured: true, sklandBindingCount: 1, sklandRenewalDueCount: 1 });
   await seedPreferences(page);
   await page.goto("/");
@@ -583,7 +686,7 @@ test("seven-day bindings stay visible and require QR renewal", async ({ page }) 
   await expect(page.getByText("ACCOUNT TERMINAL", { exact: true })).toHaveCount(0);
   await expect(page.getByText("统一管理网站账号、登录设备和森空岛授权。森空岛凭据固定七天失效，到期后需要重新扫码。", { exact: true })).toHaveCount(0);
   await expect(page.locator("[data-skland-binding-summary]")).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "七天授权期已结束，请扫码续期" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "七天授权期已结束，请重新授权" })).toBeVisible();
   await expect(page.locator("[data-skland-login-panel]")).toBeVisible();
 });
 
@@ -695,6 +798,7 @@ test("server auth boundaries reject anonymous planning and every development Skl
     ["DELETE", "/api/skland/accounts/account_test"],
     ["POST", "/api/skland/auth/qr"],
     ["POST", "/api/skland/auth/qr/status"],
+    ["POST", "/api/skland/auth/credential"],
     ["POST", "/api/skland/sync"],
     ["POST", "/api/skland/role"],
     ["GET", "/api/skland/status"],

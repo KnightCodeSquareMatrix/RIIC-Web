@@ -6,7 +6,7 @@
 
 1. 从最新的 `develop` 创建功能分支。
 2. 将功能、修复、文档和资源同步 PR 的 base branch 设为 `develop`。
-3. 不要向 `main` 直接提交普通 PR。`main` 只接受维护者从本仓库 `release/**` 分支发起的发布 PR。
+3. 不要向 `main` 直接提交普通 PR。`main` 只接受维护者从本仓库 `release/**` 分支发起的发布 PR；确需跳过 `develop` 的特批发布，必须由维护者添加 `direct-main-release` 标签，且仍须通过其余全部质量门禁。
 4. PR 合并到 `develop` 后进入 development 发布通道；通过验收的变更再经 release PR 晋级 `main`。
 
 来自 fork 的 PR 使用只读 `GITHUB_TOKEN`，不会获得 Environment secrets，也不会触发部署。请不要为了验证部署而在 PR 中添加、打印或探测 secret。
