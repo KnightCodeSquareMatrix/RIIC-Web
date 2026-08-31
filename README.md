@@ -16,7 +16,7 @@
 - 按练度与基建收益查看练卡建议
 - 查询基建技能与适用设施
 - 对比当前进驻与排班计划，并导出 MAA JSON
-- 可选的森空岛二维码授权、状态同步、网站账号和云端工作区
+- 可选的森空岛扫码或凭证导入授权、状态同步、网站账号和云端工作区
 
 森空岛、网站账号和云同步都由部署者显式配置。未启用这些能力时，样例数据、布局配置、技能查询和已接入求解器的排班流程仍可独立使用。
 
@@ -26,7 +26,7 @@
 - React 19 与 TypeScript
 - Tailwind CSS 4、shadcn/ui、Base UI
 - Better Auth、Drizzle ORM 与 PostgreSQL
-- `skland-kit`，仅用于可选的森空岛二维码授权
+- `skland-kit`，仅用于可选的森空岛扫码或凭证导入授权
 - 外部长驻进程 `infra-cli serve`
 
 页面和 `/api/*` 由同一个 Next.js 服务提供，不需要单独启动 Express 或 Vite 服务。
@@ -93,7 +93,7 @@ cp .env.example .env.local
 
 ## 数据与隐私边界
 
-- 森空岛只提供官方二维码授权，不接收账号密码或短信验证码。
+- 森空岛支持官方二维码授权，以及由用户从已登录官网主动生成的凭证导入；本站不接收账号密码或短信验证码。
 - 森空岛凭据使用 AES-256-GCM 封装在 HttpOnly Cookie 中，不写入 localStorage、运行记录或反馈。
 - 排班 API 只公开白名单字段；调试字段在 production 强制关闭。
 - 运行记录、反馈、云工作区和分析数据各有独立的最小化与保留策略。
@@ -131,7 +131,7 @@ npm run db:generate
 npm run db:migrate
 ```
 
-所有功能和修复 PR 都应提交到 `develop`；`main` 只接收维护者从同仓库 `release/**` 分支发起的发布 PR。完整流程见 [CONTRIBUTING.md](./CONTRIBUTING.md)。不要把本地环境文件、求解器二进制、运行记录、用户数据或浏览器自动化产物加入提交。
+所有普通功能和修复 PR 都应提交到 `develop`；`main` 只接收维护者从同仓库 `release/**` 分支发起的发布 PR。特批的直接发布还必须带有维护者设置的 `direct-main-release` 标签，并通过其余全部质量门禁。完整流程见 [CONTRIBUTING.md](./CONTRIBUTING.md)。不要把本地环境文件、求解器二进制、运行记录、用户数据或浏览器自动化产物加入提交。
 
 ## 第三方素材
 

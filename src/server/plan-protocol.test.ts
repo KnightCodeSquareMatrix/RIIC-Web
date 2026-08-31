@@ -6,10 +6,58 @@ import {
   createPlanComputeParams,
   createSolverObservation,
   inspectPlanComputeCapability,
+  inspectSolverPingFingerprint,
   inspectSolverDeploymentReadiness,
   parsePlanComputePayload,
   solverObservationFromPlanRecord,
 } from "./plan-protocol.ts";
+
+test("normalizes the complete allowlisted Worker ping fingerprint", () => {
+  const contracts = {
+    "1": "a".repeat(64),
+    "2": "b".repeat(64),
+    "4": "d".repeat(64),
+  };
+  const fingerprint = inspectSolverPingFingerprint({
+    id: 1,
+    ok: true,
+    elapsed_ms: 7,
+    solver: {
+      git_commit: "1".repeat(40),
+      built_at: "2026-08-31T04:34:00Z",
+    },
+    result: {
+      pong: true,
+      protocol_version: 1,
+      plan_schema_version: 1,
+      supported_plan_schema_versions: [1, 2, 3, 4],
+      plan_contract_sha256: contracts["1"],
+      plan_contract_sha256_by_version: { ...contracts, invalid: "e".repeat(64), "3": "invalid" },
+      solver_executable_sha256: "f".repeat(64),
+      solver_git_commit: "2".repeat(40),
+      solver_built_at: "2026-08-31T04:34:00Z",
+    },
+  });
+
+  assert.deepEqual(fingerprint, {
+    elapsedMs: 7,
+    envelopeSolverGitCommit: "1".repeat(40),
+    envelopeSolverBuiltAt: "2026-08-31T04:34:00Z",
+    pong: true,
+    protocolVersion: 1,
+    planSchemaVersion: 1,
+    supportedPlanSchemaVersions: [1, 2, 3, 4],
+    planContractSha256: contracts["1"],
+    planContractSha256ByVersion: [
+      { version: 1, sha256: contracts["1"] },
+      { version: 2, sha256: contracts["2"] },
+      { version: 4, sha256: contracts["4"] },
+    ],
+    solverExecutableSha256: "f".repeat(64),
+    solverGitCommit: "2".repeat(40),
+    solverBuiltAt: "2026-08-31T04:34:00Z",
+  });
+});
 
 test("uses plan.compute for matching versions regardless of schema byte hash", () => {
   const contractHashes = [

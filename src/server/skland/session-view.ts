@@ -42,7 +42,7 @@ export async function resolveSklandSessionView<TStore>({
       data: {
         authenticated: Boolean(selectedAccountId && accounts.some((account) => account.accountId === selectedAccountId)),
         configured: true,
-        authMethods: { qr: true },
+        authMethods: { qr: true, credential: true },
         accounts,
         activeAccountId: selectedAccountId,
         bindingCount: bindingSummary.totalCount,
@@ -58,7 +58,7 @@ export async function resolveSklandSessionView<TStore>({
     data: {
       authenticated: Boolean(loaded.snapshot),
       configured: true,
-      authMethods: { qr: true },
+      authMethods: { qr: true, credential: true },
       accounts: accountSummaries(loaded.store),
       activeAccountId: activeAccountId(loaded.store),
       bindingCount: bindingSummary.totalCount,

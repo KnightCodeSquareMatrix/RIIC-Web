@@ -573,7 +573,7 @@ test("website account Fluid Orb keeps its CSS fallback without WebGL", async ({ 
   await expect(websiteAvatar.locator("[data-fluid-orb-fallback]")).toHaveCSS("opacity", "1");
 });
 
-test("seven-day bindings stay visible and require QR renewal", async ({ page }) => {
+test("seven-day bindings stay visible and require renewed authorization", async ({ page }) => {
   await mockApis(page, { sklandConfigured: true, sklandBindingCount: 1, sklandRenewalDueCount: 1 });
   await seedPreferences(page);
   await page.goto("/");
@@ -583,7 +583,7 @@ test("seven-day bindings stay visible and require QR renewal", async ({ page }) 
   await expect(page.getByText("ACCOUNT TERMINAL", { exact: true })).toHaveCount(0);
   await expect(page.getByText("统一管理网站账号、登录设备和森空岛授权。森空岛凭据固定七天失效，到期后需要重新扫码。", { exact: true })).toHaveCount(0);
   await expect(page.locator("[data-skland-binding-summary]")).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "七天授权期已结束，请扫码续期" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "七天授权期已结束，请重新授权" })).toBeVisible();
   await expect(page.locator("[data-skland-login-panel]")).toBeVisible();
 });
 
@@ -695,6 +695,7 @@ test("server auth boundaries reject anonymous planning and every development Skl
     ["DELETE", "/api/skland/accounts/account_test"],
     ["POST", "/api/skland/auth/qr"],
     ["POST", "/api/skland/auth/qr/status"],
+    ["POST", "/api/skland/auth/credential"],
     ["POST", "/api/skland/sync"],
     ["POST", "/api/skland/role"],
     ["GET", "/api/skland/status"],
