@@ -36,7 +36,7 @@ test("admin solver metrics trend query preserves PostgreSQL grouping identity", 
 
 const taskMasterKey = Buffer.alloc(32, 13);
 process.env.WORKSPACE_ACTIVE_KEY_VERSION = "integration";
-process.env.WORKSPACE_MASTER_KEYS = JSON.stringify({ integration: taskMasterKey.toString("base64") });
+process.env.WORKSPACE_MASTER_KEYS = JSON.stringify({ integration: `base64:${taskMasterKey.toString("base64")}` });
 
 const {
   cancelPlanTask,
