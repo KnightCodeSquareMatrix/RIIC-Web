@@ -132,7 +132,7 @@ All paths are selected by the frontend. After a successful response, the fronten
 
 ## Lifecycle
 
-1. Start one Worker per solver lane on demand. The production task queue currently runs four lanes.
+1. Start and ping one Worker per solver lane before publishing the task worker's first heartbeat. The production task queue currently runs four lanes, and deployment readiness fails if any configured lane cannot start.
 2. Ping it before a solve, record the version and diagnostic fingerprints, and select `plan.compute` or legacy `plan` from the version fields only.
 3. Write one request line and accept only a JSON object with the matching `id` and a boolean `ok`; retain the stdout/stderr text in that request's capped private capture.
 4. Persist the request, response, per-request stdout, per-request stderr, profile, MAA, rotation, and debug bundle.
