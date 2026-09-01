@@ -8,7 +8,6 @@ import { websiteAccountNameDatabaseHooks } from "./account-name-hooks";
 import { sendAuthEmail } from "./email";
 import { configuredAdminIds, requireAuthBaseUrl, requireAuthSecret } from "./config";
 import { passwordStrengthHook } from "./password-strength-hook";
-import { localDevelopmentAuthBypassSession } from "./local-bypass";
 
 function createAuth() {
   return betterAuth({
@@ -59,7 +58,5 @@ export function getAuth(): Auth {
 }
 
 export async function websiteSession(request: Request | Headers) {
-  const localSession = localDevelopmentAuthBypassSession(request);
-  if (localSession) return localSession;
   return getAuth().api.getSession({ headers: request instanceof Headers ? request : request.headers });
 }
