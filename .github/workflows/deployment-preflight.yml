@@ -34,6 +34,7 @@ jobs:
       cancel-in-progress: false
     env:
       DEPLOY_APP_ROOT: ${{ vars.DEPLOY_APP_ROOT }}
+      DEPLOY_SERVICE: ${{ vars.DEPLOY_SERVICE }}
       DEPLOY_RUN_USER: ${{ vars.DEPLOY_RUN_USER || 'arkinfra' }}
       DEPLOY_INTERNAL_PORT: ${{ vars.DEPLOY_INTERNAL_PORT }}
       DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
@@ -162,6 +163,27 @@ jobs:
             echo
             echo "Preflight is read-only: no archive, release directory, symlink switch, or service restart was requested."
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Inspect Admin solver metrics failure telemetry
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
+        run: |
+          set -euo pipefail
+          [[ "$DEPLOY_SERVICE" =~ ^[A-Za-z0-9@_.-]+$ ]]
+          logs="$(timeout --kill-after=5s 30s ssh \
+            -o BatchMode=yes \
+            -o ConnectTimeout=15 \
+            -o ConnectionAttempts=2 \
+            "${DEPLOY_SSH_USER}@${DEPLOY_HOST}" \
+            "journalctl --unit '$DEPLOY_SERVICE' --since '2 hours ago' --no-pager --output cat")"
+          matches="$(printf '%s\n' "$logs" | grep -F '"route":"/api/admin/solver-metrics"' | tail -n 30 || true)"
+          if [[ -n "$matches" ]]; then
+            printf '%s\n' "$matches"
+          else
+            echo "NO_MATCHING_SOLVER_METRICS_FAILURES"
+          fi
 
       - name: Remove SSH credentials from the runner
         if: always()
