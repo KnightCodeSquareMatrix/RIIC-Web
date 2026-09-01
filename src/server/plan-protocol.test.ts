@@ -14,16 +14,17 @@ import {
 
 test("normalizes the complete allowlisted Worker ping fingerprint", () => {
   const contracts = {
-    "1": "a".repeat(64),
-    "2": "b".repeat(64),
-    "4": "d".repeat(64),
+    "1": "60acbcf154da1f099f717a2952b6aa3d101bca1e7a1c3e237b0c81d9967eb9b6",
+    "2": "f52892acc41f3b1d94e38a05a0d3c342a6fecb209027d7641df8623c021fc4b1",
+    "3": "b6866e9dfc9b81ee0881caab4271098ce57e2fef4388650f8891da41b74f3901",
+    "4": "e23b4944e6199257856e65b468024b2fcc67e5714fcea591bf5a327bd55c36e2",
   };
   const fingerprint = inspectSolverPingFingerprint({
     id: 1,
     ok: true,
-    elapsed_ms: 7,
+    elapsed_ms: 0,
     solver: {
-      git_commit: "1".repeat(40),
+      git_commit: "d61cc4382480cf0a18b32a62fb55c050d620350d",
       built_at: "2026-08-31T04:34:00Z",
     },
     result: {
@@ -32,16 +33,16 @@ test("normalizes the complete allowlisted Worker ping fingerprint", () => {
       plan_schema_version: 1,
       supported_plan_schema_versions: [1, 2, 3, 4],
       plan_contract_sha256: contracts["1"],
-      plan_contract_sha256_by_version: { ...contracts, invalid: "e".repeat(64), "3": "invalid" },
-      solver_executable_sha256: "f".repeat(64),
-      solver_git_commit: "2".repeat(40),
+      plan_contract_sha256_by_version: { ...contracts, invalid: "e".repeat(64), "5": "invalid" },
+      solver_executable_sha256: "50e9ecd20047c13f97c538807f51669cff99fedc1026d38360f4eebfc8364a1e",
+      solver_git_commit: "d61cc4382480cf0a18b32a62fb55c050d620350d",
       solver_built_at: "2026-08-31T04:34:00Z",
     },
   });
 
   assert.deepEqual(fingerprint, {
-    elapsedMs: 7,
-    envelopeSolverGitCommit: "1".repeat(40),
+    elapsedMs: 0,
+    envelopeSolverGitCommit: "d61cc4382480cf0a18b32a62fb55c050d620350d",
     envelopeSolverBuiltAt: "2026-08-31T04:34:00Z",
     pong: true,
     protocolVersion: 1,
@@ -51,10 +52,11 @@ test("normalizes the complete allowlisted Worker ping fingerprint", () => {
     planContractSha256ByVersion: [
       { version: 1, sha256: contracts["1"] },
       { version: 2, sha256: contracts["2"] },
+      { version: 3, sha256: contracts["3"] },
       { version: 4, sha256: contracts["4"] },
     ],
-    solverExecutableSha256: "f".repeat(64),
-    solverGitCommit: "2".repeat(40),
+    solverExecutableSha256: "50e9ecd20047c13f97c538807f51669cff99fedc1026d38360f4eebfc8364a1e",
+    solverGitCommit: "d61cc4382480cf0a18b32a62fb55c050d620350d",
     solverBuiltAt: "2026-08-31T04:34:00Z",
   });
 });
