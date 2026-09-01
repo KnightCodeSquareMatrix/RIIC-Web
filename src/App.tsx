@@ -395,6 +395,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   const accountCanUseCurrentBox = boxSource === "sample" || Boolean(websiteSession);
   const hasBox = Boolean(operbox?.length);
   const hasPersonalBox = hasBox && boxSource !== "sample";
+  const feedbackDisabledForSampleBox = boxSource === "sample";
   const canRun = Boolean(operbox && operbox.length > 0 && cliReady && accountCanUseCurrentBox);
   const sklandBindingCount = sklandBindingSummary.totalCount;
   const websiteUserId = websiteSession?.user.id ?? null;
@@ -997,6 +998,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   }
 
   function handleMarkIssue(row: RoomRow) {
+    if (feedbackDisabledForSampleBox) return;
     setIssueDraftKind("room_issue");
     setIssueDraftRow(row);
     setIssueDraftNote("");
@@ -1005,6 +1007,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   }
 
   function handlePerformanceIssue() {
+    if (feedbackDisabledForSampleBox) return;
     if (!result?.diagnosticId) return;
     setIssueDraftKind("performance_issue");
     setIssueDraftRow(null);
@@ -1531,6 +1534,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       canRun,
       hasBox,
       hasPersonalBox,
+      feedbackDisabledForSampleBox,
       plannerReady: cliReady,
       websiteAuthenticated: Boolean(websiteSession),
       showOnboarding: onboardingPreference === "active" && !result,

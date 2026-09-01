@@ -1330,6 +1330,7 @@ export function ScheduleBoard({
   searchQuery = "",
   animateInitialView = false,
   onIssue,
+  feedbackDisabled = false,
   onFactoryRecipeChange,
   onTradeOrderChange,
   onViewModeChange,
@@ -1347,6 +1348,7 @@ export function ScheduleBoard({
   searchQuery?: string;
   animateInitialView?: boolean;
   onIssue: (row: RoomRow) => void;
+  feedbackDisabled?: boolean;
   onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
   onViewModeChange?: (viewMode: "list" | "compact") => void;
@@ -1699,20 +1701,23 @@ export function ScheduleBoard({
                     <Tooltip>
                       <TooltipTrigger
                         render={
+                          <span className="absolute right-2 top-2 z-10">
                           <Button
                             id={scheduleIssueTriggerId(row)}
                             type="button"
                             variant="ghost"
                             size="icon-sm"
-                            className="absolute right-2 top-2 z-10 border border-white/10 bg-[#3C3C3C]/55 text-white/70 hover:bg-[#4B4B4B] hover:text-white max-sm:size-11"
+                            className="border border-white/10 bg-[#3C3C3C]/55 text-white/70 hover:bg-[#4B4B4B] hover:text-white disabled:cursor-not-allowed disabled:opacity-45 max-sm:size-11"
                             aria-label={`${row.title} 反馈排班问题`}
+                            disabled={feedbackDisabled}
                             onClick={() => onIssue(row)}
                           >
                             <FileWarning />
                           </Button>
+                          </span>
                         }
                       />
-                      <TooltipContent side="left">反馈排班问题</TooltipContent>
+                      <TooltipContent side="left">{feedbackDisabled ? "全角色导入为体验数据，不能提交反馈" : "反馈排班问题"}</TooltipContent>
                     </Tooltip>
                   </div>
                 );
