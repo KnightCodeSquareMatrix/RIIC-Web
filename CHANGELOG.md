@@ -2,6 +2,18 @@
 
 All notable changes to RIIC-Web are documented in this file.
 
+## [0.2.2] - 2026-09-01
+
+### Changed
+
+- The production plan worker now runs three isolated solver lanes, balancing queue throughput against the host CPU headroom required by the website and health checks.
+- Standalone releases now synchronize their staged file tree with checksum-based rsync reuse before rebuilding and verifying the canonical archive on the server.
+- Deployment helper contract v6 keeps production activation inside a five-minute observation transaction and automatically rolls back on delayed internal or public health failures.
+
+### For contributors
+
+- `package.json` and `package-lock.json` record release `0.2.2`.
+
 ## [0.2.1] - 2026-09-01
 
 ### Changed
