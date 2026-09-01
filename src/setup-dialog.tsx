@@ -50,7 +50,7 @@ type SetupDialogProps = {
   onOpenSkland?: () => void;
   onUseSklandSnapshot?: () => void;
   onMaaFile: (file: File) => Promise<boolean>;
-  onMaaPaste: () => boolean;
+  onMaaPaste: () => Promise<boolean>;
   onManualBox: (entries: OperBoxEntry[]) => void;
   onRequireWebsiteAccount: () => void;
   presets: PresetDef[];
@@ -213,12 +213,12 @@ export function SetupDialog({
     }
   }
 
-  function importMaaPaste() {
+  async function importMaaPaste() {
     if (!websiteSession) {
       onRequireWebsiteAccount();
       return;
     }
-    if (onMaaPaste()) {
+    if (await onMaaPaste()) {
       setNeedsFacilityReview(true);
       setShowImportOptions(false);
       goToBasics();
@@ -436,7 +436,7 @@ export function SetupDialog({
                               aria-invalid={Boolean(inputError)}
                               aria-describedby={inputError ? "setup-box-error" : undefined}
                             />
-                            <Button type="button" variant="outline" className="h-10 w-full" disabled={!maaPaste.trim()} onClick={importMaaPaste}>
+                            <Button type="button" variant="outline" className="h-10 w-full" disabled={!maaPaste.trim()} onClick={() => void importMaaPaste()}>
                               {en ? "Import JSON" : "导入 JSON"}
                             </Button>
                           </div>

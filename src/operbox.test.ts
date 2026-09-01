@@ -27,7 +27,7 @@ test("JSON imports do not load the XLSX parser", async () => {
   assert.deepEqual(result, [entry]);
 });
 
-test("localized MAA JSON names are converted to Simplified Chinese during import", () => {
+test("localized MAA JSON names are converted to Simplified Chinese during import", async () => {
   const localizedEntries = [
     { ...entry, id: "char_002_amiya", name: "アーミヤ" },
     { ...entry, id: "char_003_kalts", name: "凱爾希" },
@@ -36,7 +36,7 @@ test("localized MAA JSON names are converted to Simplified Chinese during import
   ];
 
   assert.deepEqual(
-    readOperboxText(JSON.stringify(localizedEntries)).map(({ id, name }) => ({ id, name })),
+    (await readOperboxText(JSON.stringify(localizedEntries))).map(({ id, name }) => ({ id, name })),
     [
       { id: "char_002_amiya", name: "阿米娅" },
       { id: "char_003_kalts", name: "凯尔希" },

@@ -239,6 +239,9 @@ function CompactRoomCard({
 }
 
 function CompactFeedbackButton({ row, disabled, onIssue }: { row: RoomRow; disabled: boolean; onIssue: (row: RoomRow) => void }) {
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
+  const roomTitle = demoRoomTitle(row.title, row.group, locale);
   return (
     <Tooltip>
       <TooltipTrigger
@@ -249,7 +252,7 @@ function CompactFeedbackButton({ row, disabled, onIssue }: { row: RoomRow; disab
               variant="ghost"
               size="icon-sm"
               className="border border-white/10 bg-[#3C3C3C]/55 text-white/70 hover:bg-[#4B4B4B] hover:text-white disabled:cursor-not-allowed disabled:opacity-45"
-              aria-label={`${row.title} 反馈排班问题`}
+              aria-label={en ? `${roomTitle} report schedule issue` : `${roomTitle} 反馈排班问题`}
               disabled={disabled}
               onClick={() => onIssue(row)}
             >
@@ -258,18 +261,19 @@ function CompactFeedbackButton({ row, disabled, onIssue }: { row: RoomRow; disab
           </span>
         }
       />
-      <TooltipContent side="left">{disabled ? "全精二 Box 为体验数据，不能提交反馈" : "反馈排班问题"}</TooltipContent>
+      <TooltipContent side="left">{disabled ? (en ? "Sample BOX data cannot submit feedback" : "全精二 Box 为体验数据，不能提交反馈") : (en ? "Report schedule issue" : "反馈排班问题")}</TooltipContent>
     </Tooltip>
   );
 }
 
 export function CompactScheduleView(props: CompactScheduleViewProps) {
   const { rows, layout, currentMoraleByOperator, shiftDirection, onIssue, feedbackDisabled = false } = props;
+  const { locale } = useLanguageDemo();
 
   if (rows.length === 0) {
     return (
       <div className="flex min-h-[420px] items-center justify-center border-y border-dashed border-border/70 py-6 text-center text-sm text-muted-foreground">
-        没有可展示的布局房间。
+        {locale === "en" ? "No layout rooms to display." : "没有可展示的布局房间。"}
       </div>
     );
   }

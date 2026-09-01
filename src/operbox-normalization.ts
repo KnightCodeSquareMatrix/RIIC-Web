@@ -1,5 +1,4 @@
 import type { OperBoxEntry } from "./types";
-import { simplifiedChineseOperatorNameForId } from "./operator-name-normalization.ts";
 
 const UNSUPPORTED_OPERATOR_VARIANT_NAMES = new Set([
   "阿米娅（近卫）",
@@ -45,7 +44,7 @@ export function normalizeOperboxEntries(entries: readonly OperBoxEntry[]): OperB
     if (!importedName || UNSUPPORTED_OPERATOR_VARIANT_NAMES.has(importedName)) continue;
 
     const id = entry.id.trim();
-    const name = simplifiedChineseOperatorNameForId(id) ?? importedName;
+    const name = importedName;
 
     const candidate = id === entry.id && name === entry.name ? entry : { ...entry, id, name };
     const existingIndex = indexByName.get(name);

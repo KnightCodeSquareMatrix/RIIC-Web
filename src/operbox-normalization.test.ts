@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { normalizeOperboxEntries } from "./operbox-normalization.ts";
+import { normalizeImportedOperboxEntries } from "./operator-name-normalization.ts";
 import type { OperBoxEntry } from "./types.ts";
 
 function entry(overrides: Partial<OperBoxEntry> = {}): OperBoxEntry {
@@ -41,25 +42,25 @@ test("omits unsupported Amiya form labels before sending data to the planner", (
   assert.deepEqual(normalizeOperboxEntries(entries).map(({ name }) => name), ["阿米娅"]);
 });
 
-test("normalizes Chinese, Japanese, English and Traditional Chinese names by operator id", () => {
+test("normalizes Chinese, Japanese, English and Traditional Chinese names by operator id on import", () => {
   const localizedNames = ["凯尔希", "ケルシー", "Kal'tsit", "凱爾希"];
 
   for (const name of localizedNames) {
     assert.equal(
-      normalizeOperboxEntries([entry({ id: "char_003_kalts", name })])[0]?.name,
+      normalizeImportedOperboxEntries([entry({ id: "char_003_kalts", name })])[0]?.name,
       "凯尔希",
     );
   }
 
   assert.equal(
-    normalizeOperboxEntries([entry({ id: "003_kalts", name: "Kal'tsit" })])[0]?.name,
+    normalizeImportedOperboxEntries([entry({ id: "003_kalts", name: "Kal'tsit" })])[0]?.name,
     "凯尔希",
   );
 });
 
 test("preserves the imported name when a newer operator id is not in the local catalog", () => {
   assert.equal(
-    normalizeOperboxEntries([entry({ id: "char_future", name: "未来干员" })])[0]?.name,
+    normalizeImportedOperboxEntries([entry({ id: "char_future", name: "未来干员" })])[0]?.name,
     "未来干员",
   );
 });

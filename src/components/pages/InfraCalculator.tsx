@@ -178,7 +178,7 @@ function CalculatorStartPanel({
         size="lg"
         className="min-h-11 sm:min-w-44"
         aria-label={personalActionAriaLabel}
-        title={personalPlanUnavailable ? "排班服务尚未就绪" : undefined}
+        title={personalPlanUnavailable ? (en ? "Planner unavailable" : "排班服务尚未就绪") : undefined}
         disabled={sampleLoading || loading || personalPlanUnavailable || runCooldownSeconds > 0}
         onClick={hasPersonalBox && websiteAuthenticated ? onRun : onStartPersonalFlow}
       >
@@ -194,10 +194,10 @@ function CalculatorStartPanel({
             className={accountControl
               ? "h-9 rounded-r-none max-sm:h-11"
               : "h-9 max-sm:h-11"}
-            aria-label="配置Box与布局"
+            aria-label={en ? "Configure BOX and base" : "配置Box与布局"}
             onClick={onOpenSetup}
           >
-            <Settings2 />调整 BOX 与布局
+            <Settings2 />{en ? "Adjust BOX & base" : "调整 BOX 与布局"}
           </Button>
           {accountControl}
         </div>
@@ -212,7 +212,7 @@ function CalculatorStartPanel({
   return (
     <section
       className="relative isolate flex min-h-[calc(100svh-3.5rem)] items-center overflow-hidden bg-[#f7f5ec] px-4 py-8 sm:px-6 md:min-h-svh lg:px-8"
-      aria-label="生成排班起步区"
+      aria-label={en ? "Schedule setup" : "生成排班起步区"}
       data-calculator-start-panel
       data-onboarding-active="true"
     >
@@ -287,9 +287,9 @@ function CalculatorStartPanel({
                 </span>
                 <div className="min-w-0">
                   <h2 id="anonymous-sample-trial-title" className="text-sm font-semibold leading-6 text-[#313127]">
-                    不想登录？只想看看全角色导入之后的排班效果
+                     {en ? "Want to preview scheduling without signing in?" : "不想登录？只想看看全角色导入之后的排班效果"}
                   </h2>
-                  <p className="mt-0.5 text-xs leading-5 text-[#5d5b4d]">使用服务端示例数据，直接生成一份可浏览的三班排班。</p>
+                  <p className="mt-0.5 text-xs leading-5 text-[#5d5b4d]">{en ? "Use server-side sample data to generate a browsable three-shift schedule." : "使用服务端示例数据，直接生成一份可浏览的三班排班。"}</p>
                 </div>
               </div>
             </div>
@@ -299,11 +299,11 @@ function CalculatorStartPanel({
               variant="outline"
               className="min-h-11 shrink-0 border-[#313131] bg-[#313131] text-[#FFD800] hover:bg-[#454545] hover:text-[#FFD800] sm:min-w-52"
               disabled={sampleLoading || loading || !plannerReady || runCooldownSeconds > 0}
-              title={!plannerReady ? "排班服务尚未就绪" : undefined}
+              title={!plannerReady ? (en ? "Planner unavailable" : "排班服务尚未就绪") : undefined}
               onClick={() => void onRunSampleTrial()}
             >
               {sampleLoading ? <Loader2 className="animate-spin" /> : <Play />}
-              {sampleLoading ? "正在生成示例排班…" : "直接查看示例排班"}
+              {sampleLoading ? (en ? "Generating sample schedule…" : "正在生成示例排班…") : (en ? "View sample schedule" : "直接查看示例排班")}
             </Button>
           </section>
         ) : null}
@@ -435,7 +435,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
             type="button"
             onClick={() => { setOperatorQuery(""); searchInputRef.current?.focus(); }}
             className="absolute top-1/2 right-0 grid size-9 -translate-y-1/2 place-items-center text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#FFD800] max-sm:size-11"
-            aria-label="清空排班搜索"
+            aria-label={en ? "Clear schedule search" : "清空排班搜索"}
           >
             <X className="size-4" aria-hidden="true" />
           </button>
@@ -530,10 +530,10 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                           className="h-9 max-sm:h-11"
                           onClick={taskQueue.onResumePoll}
                           disabled={taskQueue.resumeDisabled}
-                          aria-label="查询进度"
+                          aria-label={en ? "Check progress" : "查询进度"}
                         >
                           <RefreshCw />
-                          查询进度
+                          {en ? "Check progress" : "查询进度"}
                         </Button>
                         {taskQueue.resumeCountdown > 0 ? (
                           <span
@@ -545,9 +545,9 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                         ) : null}
                       </div>
                     ) : null}
-                    <Button type="button" variant="destructive" className="h-9 max-sm:h-11" onClick={() => setCancelConfirmOpen(true)} aria-label="取消任务">
+                    <Button type="button" variant="destructive" className="h-9 max-sm:h-11" onClick={() => setCancelConfirmOpen(true)} aria-label={en ? "Cancel task" : "取消任务"}>
                       <Loader2 className="animate-spin" />
-                      取消任务
+                      {en ? "Cancel task" : "取消任务"}
                     </Button>
                   </div>
                 ) : <RunButton canRun={canRun} hasBox={hasBox} plannerReady={plannerReady} requiresAccount={requiresAccount} runCooldownSeconds={runCooldownSeconds} onRun={onRun} />}
@@ -626,13 +626,13 @@ export function InfraCalculator(props: InfraCalculatorProps) {
               onTradeOrderChange={onTradeOrderChange}
             /> : (
               <div className="flex min-h-[420px] items-center justify-center border-y border-dashed border-border/70 py-6 text-center text-sm text-muted-foreground">
-                没有可展示的布局房间。
+                {en ? "No layout rooms to display." : "没有可展示的布局房间。"}
               </div>
             )}
           </Panel>
           {feedbackResult ? (
             <div className="mt-3 border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700" role="status">
-              反馈已提交，编号：{feedbackResult.feedbackId}
+              {en ? "Feedback submitted. ID: " : "反馈已提交，编号："}{feedbackResult.feedbackId}
             </div>
           ) : null}
         </section>
@@ -642,12 +642,12 @@ export function InfraCalculator(props: InfraCalculatorProps) {
         <aside className="fixed left-1/2 top-[max(5rem,calc(env(safe-area-inset-top)+5rem))] z-[70] w-[min(720px,calc(100vw-2rem))] -translate-x-1/2 border border-[#FFD800]/70 bg-[#313131] px-4 py-3 text-white shadow-[0_16px_44px_rgba(0,0,0,0.35)]" aria-live="polite">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0">
-              <strong className="block text-sm font-semibold text-[#FFD800]">已清空旧求解结果</strong>
-              <span className="mt-0.5 block text-xs text-white/68">{resultClearNotice}，需要重新运行求解。</span>
+              <strong className="block text-sm font-semibold text-[#FFD800]">{en ? "Previous result cleared" : "已清空旧求解结果"}</strong>
+              <span className="mt-0.5 block text-xs text-white/68">{resultClearNotice}{en ? ". Run the planner again." : "，需要重新运行求解。"}</span>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              <Button type="button" size="sm" variant="ghost" className="text-white hover:bg-white/10 hover:text-white" onClick={onClearResultNotice}>知道了</Button>
-              <Button type="button" size="sm" variant="outline" className="border-white/25 bg-transparent text-white hover:bg-white/10 hover:text-white" onClick={onDismissResultClearWarning}>不再提示</Button>
+              <Button type="button" size="sm" variant="ghost" className="text-white hover:bg-white/10 hover:text-white" onClick={onClearResultNotice}>{en ? "Got it" : "知道了"}</Button>
+              <Button type="button" size="sm" variant="outline" className="border-white/25 bg-transparent text-white hover:bg-white/10 hover:text-white" onClick={onDismissResultClearWarning}>{en ? "Don't show again" : "不再提示"}</Button>
             </div>
           </div>
         </aside>
@@ -657,20 +657,20 @@ export function InfraCalculator(props: InfraCalculatorProps) {
         <Dialog open={cancelConfirmOpen} onOpenChange={setCancelConfirmOpen}>
           <DialogContent className="gap-5 max-sm:px-4 sm:max-w-sm sm:p-6">
             <DialogHeader className="gap-1.5 px-1 sm:px-2">
-              <DialogTitle className="text-lg font-semibold">取消当前任务？</DialogTitle>
+              <DialogTitle className="text-lg font-semibold">{en ? "Cancel the current task?" : "取消当前任务？"}</DialogTitle>
               <DialogDescription className="text-sm leading-6">
-                取消当前任务会退出排队，后续生成排班需要重新排队。
+                {en ? "Canceling exits the queue. A future schedule request will need to queue again." : "取消当前任务会退出排队，后续生成排班需要重新排队。"}
               </DialogDescription>
             </DialogHeader>
             <DialogFooter className="gap-2">
               <Button type="button" variant="outline" onClick={() => setCancelConfirmOpen(false)}>
-                继续等待
+                {en ? "Keep waiting" : "继续等待"}
               </Button>
               <Button type="button" variant="destructive" onClick={() => {
                 setCancelConfirmOpen(false);
                 onCancelRun();
               }}>
-                确认取消
+                {en ? "Cancel task" : "确认取消"}
               </Button>
             </DialogFooter>
           </DialogContent>

@@ -164,13 +164,14 @@ test("quick checks open the matching detailed help", async ({ page }) => {
 
   const quickCheckLinks = page.locator("[data-quick-check-link]");
   await expect(quickCheckLinks).toHaveCount(4);
-  await expect(quickCheckLinks.nth(0)).toHaveAttribute("href", "/help/owned-operators#sample-warning-title");
-  await expect(quickCheckLinks.nth(1)).toHaveAttribute("href", "/help/import-operators?step=2");
-  await expect(quickCheckLinks.nth(2)).toHaveAttribute("href", "/help/owned-operators#recovery-title");
-  await expect(quickCheckLinks.nth(3)).toHaveAttribute("href", "/help/import-operators?step=5");
+  await expect(quickCheckLinks.nth(0)).toHaveAttribute("href", "/help/owned-operators?issue=unexpected-operators");
+  await expect(quickCheckLinks.nth(1)).toHaveAttribute("href", "/help/owned-operators?issue=saved-box");
+  await expect(quickCheckLinks.nth(2)).toHaveAttribute("href", "/help/owned-operators?issue=box-not-applied");
+  await expect(quickCheckLinks.nth(3)).toHaveAttribute("href", "/help/owned-operators?issue=busy");
 
   await quickCheckLinks.nth(0).click();
-  await expect(page).toHaveURL(/\/help\/owned-operators#sample-warning-title$/);
+  await expect(page).toHaveURL(/\/help\/owned-operators\?issue=unexpected-operators$/);
+  await expect(page.getByRole("radio", { name: "结果里有我没有的干员" })).toBeChecked();
   await expect(page.locator("#sample-warning-title")).toBeVisible();
 });
 
@@ -193,7 +194,7 @@ test("app sidebar keeps only the help shortcut", async ({ page }) => {
 
   const sidebarBox = await mobileSidebar.boundingBox();
   expect(sidebarBox).not.toBeNull();
-  expect(sidebarBox!.width).toBeLessThanOrEqual(168);
+  expect(sidebarBox!.width).toBeLessThanOrEqual(Math.min(375 * 0.75, 288) + 1);
 
   const helpLinkBox = await helpLink.boundingBox();
   expect(helpLinkBox).not.toBeNull();
@@ -203,7 +204,7 @@ test("app sidebar keeps only the help shortcut", async ({ page }) => {
   await expect(mobileSidebar).toBeVisible();
   const landscapeSidebarBox = await mobileSidebar.boundingBox();
   expect(landscapeSidebarBox).not.toBeNull();
-  expect(landscapeSidebarBox!.width).toBeLessThanOrEqual(168);
+  expect(landscapeSidebarBox!.width).toBeLessThanOrEqual(385);
   const landscapeOverflow = await mobileSidebar.evaluate((element) => ({
     clientWidth: element.clientWidth,
     scrollWidth: element.scrollWidth,

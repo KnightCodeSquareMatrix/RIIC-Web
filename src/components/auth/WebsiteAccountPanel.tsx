@@ -69,8 +69,22 @@ interface WebsiteAccountPanelProps {
   onCloudDataChanged?: () => void;
 }
 
-function errorMessage(value: unknown): string {
-  return value instanceof Error ? value.message : "操作失败，请稍后重试。";
+const PASSWORD_STRENGTH_ERROR_EN = "Use at least 10 characters with letters, numbers, and mixed case or a symbol. Avoid common or repeated patterns.";
+const WEBSITE_ACCOUNT_NAME_HINT_EN = "2–20 characters using Chinese characters, letters, numbers, spaces, underscores, or hyphens.";
+
+function errorMessage(value: unknown, en: boolean): string {
+  return value instanceof Error ? value.message : en ? "Something went wrong. Try again later." : "操作失败，请稍后重试。";
+}
+
+function localizedWebsiteAccountName(value: unknown, en: boolean) {
+  const result = validateWebsiteAccountName(value);
+  return en && result.error ? { ...result, error: WEBSITE_ACCOUNT_NAME_HINT_EN } : result;
+}
+
+function localizedPasswordConfirmationError(password: string, confirmation: string, en: boolean): string | null {
+  const error = passwordConfirmationError(password, confirmation);
+  if (!error || !en) return error;
+  return confirmation ? "Passwords do not match." : "Enter your password again.";
 }
 
 function formatSessionExpiry(value: unknown, locale: "zh" | "en"): string | null {
@@ -162,7 +176,7 @@ export function WebsiteAccountPanel({
       setResendSeconds(60);
       setMessage(en ? "Verification code sent. Complete verification within 10 minutes." : "验证码已发送，请在 10 分钟内完成验证。");
     } catch (caught) {
-      setError(errorMessage(caught));
+      setError(errorMessage(caught, en));
     } finally {
       setBusy(false);
     }
@@ -170,18 +184,18 @@ export function WebsiteAccountPanel({
 
   async function submitDetails(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const validatedName = mode === "signup" ? validateWebsiteAccountName(name) : null;
+    const validatedName = mode === "signup" ? localizedWebsiteAccountName(name, en) : null;
     if (validatedName?.error) {
       setNameError(validatedName.error);
       return;
     }
     if (mode === "signup") {
       if (!isStrongPassword(password)) {
-        setPasswordStrengthError(PASSWORD_STRENGTH_ERROR);
+        setPasswordStrengthError(en ? PASSWORD_STRENGTH_ERROR_EN : PASSWORD_STRENGTH_ERROR);
         return;
       }
       setPasswordStrengthError(null);
-      const confirmationError = passwordConfirmationError(password, confirmPassword);
+      const confirmationError = localizedPasswordConfirmationError(password, confirmPassword, en);
       if (confirmationError) {
         setConfirmPasswordError(confirmationError);
         return;
@@ -221,7 +235,7 @@ export function WebsiteAccountPanel({
         await notifySessionChanged(true);
       }
     } catch (caught) {
-      setError(errorMessage(caught));
+      setError(errorMessage(caught, en));
     } finally {
       setBusy(false);
     }
@@ -242,7 +256,7 @@ export function WebsiteAccountPanel({
       setMessage(en ? "Email verified. You can now sign in." : "邮箱验证完成，现在可以登录网站账号。");
     } catch (caught) {
       setOtpStatus("error");
-      setError(errorMessage(caught));
+      setError(errorMessage(caught, en));
     } finally {
       setBusy(false);
     }
@@ -272,7 +286,7 @@ export function WebsiteAccountPanel({
       setDeletePassword("");
       await notifySessionChanged(false);
     } catch (caught) {
-      setError(errorMessage(caught));
+      setError(errorMessage(caught, en));
     } finally {
       setBusyAction(null);
     }
@@ -374,7 +388,7 @@ export function WebsiteAccountPanel({
                   minLength={10}
                   maxLength={128}
                   autoComplete="current-password"
-                  revealLabel="显示当前密码"
+                  revealLabel={en ? "Show current password" : "显示当前密码"}
                   toggleClassName={AUTH_PASSWORD_TOGGLE_CLASS}
                 />
               </div>
@@ -454,7 +468,7 @@ export function WebsiteAccountPanel({
                       value={name}
                       onChange={(event) => {
                         setName(event.target.value);
-                        if (nameError) setNameError(validateWebsiteAccountName(event.target.value).error);
+                        if (nameError) setNameError(localizedWebsiteAccountName(event.target.value, en).error);
                       }}
                       required
                       minLength={WEBSITE_ACCOUNT_NAME_MIN_LENGTH}
@@ -465,7 +479,7 @@ export function WebsiteAccountPanel({
                       aria-describedby={`${fieldId}-name-hint`}
                     />
                     <p id={`${fieldId}-name-hint`} role={nameError ? "alert" : undefined} className={`text-xs leading-5 ${nameError ? "text-destructive" : "text-muted-foreground"}`}>
-                      {nameError ?? WEBSITE_ACCOUNT_NAME_HINT}
+                      {nameError ?? (en ? WEBSITE_ACCOUNT_NAME_HINT_EN : WEBSITE_ACCOUNT_NAME_HINT)}
                     </p>
                   </div>
                 ) : null}
@@ -484,15 +498,15 @@ export function WebsiteAccountPanel({
                         const nextPassword = event.target.value;
                         setPassword(nextPassword);
                         if (passwordStrengthError) {
-                          setPasswordStrengthError(isStrongPassword(nextPassword) ? null : PASSWORD_STRENGTH_ERROR);
+                          setPasswordStrengthError(isStrongPassword(nextPassword) ? null : en ? PASSWORD_STRENGTH_ERROR_EN : PASSWORD_STRENGTH_ERROR);
                         }
                         if (confirmPasswordError && mode === "signup") {
-                          setConfirmPasswordError(passwordConfirmationError(nextPassword, confirmPassword));
+                          setConfirmPasswordError(localizedPasswordConfirmationError(nextPassword, confirmPassword, en));
                         }
                       }}
                       onBlur={() => {
                         if (mode === "signup" && password && !isStrongPassword(password)) {
-                          setPasswordStrengthError(PASSWORD_STRENGTH_ERROR);
+                          setPasswordStrengthError(en ? PASSWORD_STRENGTH_ERROR_EN : PASSWORD_STRENGTH_ERROR);
                         }
                       }}
                       required
@@ -500,6 +514,7 @@ export function WebsiteAccountPanel({
                       maxLength={128}
                       placeholder={en ? "10–128 characters" : "10–128 位"}
                       autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                      revealLabel={en ? "Show password" : "显示密码"}
                       toggleClassName={AUTH_PASSWORD_TOGGLE_CLASS}
                       aria-invalid={mode === "signup" && Boolean(passwordStrengthError)}
                       aria-describedby={mode === "signup" ? `${fieldId}-password-strength` : undefined}
@@ -525,10 +540,10 @@ export function WebsiteAccountPanel({
                         const nextConfirmation = event.target.value;
                         setConfirmPassword(nextConfirmation);
                         if (confirmPasswordError) {
-                          setConfirmPasswordError(passwordConfirmationError(password, nextConfirmation));
+                          setConfirmPasswordError(localizedPasswordConfirmationError(password, nextConfirmation, en));
                         }
                       }}
-                      onBlur={() => setConfirmPasswordError(passwordConfirmationError(password, confirmPassword))}
+                      onBlur={() => setConfirmPasswordError(localizedPasswordConfirmationError(password, confirmPassword, en))}
                       required
                       minLength={10}
                       maxLength={128}

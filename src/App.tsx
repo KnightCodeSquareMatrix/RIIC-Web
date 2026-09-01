@@ -16,7 +16,6 @@ import {
 } from "react";
 
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import { WebsiteAccountDialogLoading } from "@/components/auth/WebsiteAccountDialogLoading";
 import { useAccountCloudWorkspace } from "account-cloud-workspace-bridge";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { AppTopBar, SklandAccountControl } from "@/components/layout/AppTopBar";
@@ -27,7 +26,6 @@ import { LiveActivity, usePlanActivity } from "@/components/ui/live-activity";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { trackTelemetry } from "@/lib/telemetry-dispatch";
 import { loadClientFeature } from "@/client-lazy-loader";
-import { preloadProductIcons } from "@/product-assets";
 import { WorkbenchContext } from "@/workbench-context";
 import { WORKBENCH_PAGE_PATHS, workbenchHref, workbenchPageFromPathname, type AppPage } from "@/workbench-routes";
 import { useWebsiteSession } from "@/website-session";
@@ -59,7 +57,6 @@ import {
   updateRoomLevel,
   updateTradeOrder,
 } from "./blueprint";
-import { copyText, downloadJson } from "./download";
 import {
   ONBOARDING_COMPLETED_VALUE,
   ONBOARDING_DISMISSED_VALUE,
@@ -67,7 +64,6 @@ import {
   resolveOnboardingPreference,
   type OnboardingPreference,
 } from "./onboarding";
-import { readOperboxFile, readOperboxText } from "./operbox";
 import { normalizeOperboxEntries } from "./operbox-normalization";
 import { effectiveFiammettaSetting, resolvePlanPresentationLayout } from "./plan-presentation";
 import {
@@ -77,14 +73,12 @@ import {
   persistSession,
   RESULT_CLEAR_WARNING_DISMISSED_KEY,
 } from "./persistence";
-import { planToRows, RoomRow } from "./schedule";
+import type { RoomRow } from "./schedule";
 import { DEFAULT_ROTATION_PROFILE } from "./rotation-settings";
 import { MOTION_DURATION } from "./motion";
-import { closestShift, compareShifts } from "./skland";
 import { emptySklandBindingSummary } from "./skland-binding-state";
 import { createSklandRestoreGuard } from "./skland-restore-guard";
 import { setupConfigurationFingerprint } from "./setup-configuration";
-import { formatSolverDiagnostic } from "./solver-diagnostic";
 import {
   BaseBlueprint,
   BoxSource,
@@ -97,6 +91,7 @@ import {
   PresetDef,
   RotationProfile,
   SavedPlanData,
+  ShiftComparison,
   SklandAccountSummary,
   SklandBindingSummary,
   SklandSessionData,
@@ -390,10 +385,15 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   const activePlan = scheduleResult?.maa.plans?.[activeShift];
   const activeRotationShift = scheduleResult?.rotation.shifts?.[activeShift];
   const activeTrainingRoomShift = result?.trainingRoom?.shifts[activeShift];
-  const baseRows = useMemo(
-    () => planToRows(activePlan, activeRotationShift, layout, activeTrainingRoomShift),
-    [activePlan, activeRotationShift, activeTrainingRoomShift, layout],
-  );
+  const [baseRows, setBaseRows] = useState<RoomRow[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    setBaseRows([]);
+    void import("./schedule").then(({ planToRows }) => {
+      if (!cancelled) setBaseRows(planToRows(activePlan, activeRotationShift, layout, activeTrainingRoomShift));
+    });
+    return () => { cancelled = true; };
+  }, [activePlan, activeRotationShift, activeTrainingRoomShift, layout]);
   const [presentedRows, setPresentedRows] = useState<{ source: RoomRow[]; rows: RoomRow[] } | null>(null);
   useEffect(() => {
     if (!baseRows.some((row) => row.operatorSlots.length > 0)) {
@@ -427,16 +427,22 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       )
     );
   }, [boxSource, sklandScheduleSnapshot]);
-  const shiftComparisons = useMemo(
-    () => CLIENT_SKLAND_ENABLED
-      ? compareShifts(scheduleResult?.maa, sklandScheduleSnapshot?.infrastructure)
-      : [],
-    [scheduleResult?.maa, sklandScheduleSnapshot?.infrastructure]
-  );
-  const closestComparison = useMemo(
-    () => CLIENT_SKLAND_ENABLED ? closestShift(shiftComparisons) : null,
-    [shiftComparisons]
-  );
+  const [closestComparison, setClosestComparison] = useState<ShiftComparison | null>(null);
+  useEffect(() => {
+    const maa = scheduleResult?.maa;
+    const infrastructure = sklandScheduleSnapshot?.infrastructure;
+    if (!CLIENT_SKLAND_ENABLED || !maa || !infrastructure) {
+      setClosestComparison(null);
+      return;
+    }
+
+    let cancelled = false;
+    setClosestComparison(null);
+    void import("./skland").then(({ closestShift, compareShifts }) => {
+      if (!cancelled) setClosestComparison(closestShift(compareShifts(maa, infrastructure)));
+    });
+    return () => { cancelled = true; };
+  }, [scheduleResult?.maa, sklandScheduleSnapshot?.infrastructure]);
   const sklandLayoutMatches = useMemo(() => {
     if (!CLIENT_SKLAND_ENABLED) return false;
     const suggestion = sklandScheduleSnapshot?.infrastructure.layoutSuggestion;
@@ -835,13 +841,16 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     setResult(null);
     clearIssueState();
     try {
+      const { readOperboxFile } = await import("./operbox");
       const entries = await readOperboxFile(file);
       setOperbox(entries);
       setFileName(file.name);
       setBoxSource("maa");
       return true;
     } catch (error) {
-      setInputError(error instanceof Error ? error.message : "练度文件解析失败。");
+      setInputError(locale === "en"
+        ? "Could not parse the operator file. Check the file and try again."
+        : error instanceof Error ? error.message : "练度文件解析失败。");
       setInputErrorCode("AIC-BOX-1101");
       return false;
     }
@@ -881,17 +890,20 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     }
   }
 
-  function handleMaaPaste(): boolean {
+  async function handleMaaPaste(): Promise<boolean> {
     setInputError(null);
     try {
-      const entries = readOperboxText(maaPaste);
+      const { readOperboxText } = await import("./operbox");
+      const entries = await readOperboxText(maaPaste);
       setOperbox(entries);
-      setFileName("粘贴的 Arknights_OperBox_Export.json");
+      setFileName(locale === "en" ? "Pasted Arknights_OperBox_Export.json" : "粘贴的 Arknights_OperBox_Export.json");
       setBoxSource("maa");
       clearPlanResult();
       return true;
     } catch (error) {
-      setInputError(error instanceof Error ? error.message : "MAA JSON 解析失败。");
+      setInputError(locale === "en"
+        ? "Could not parse the MAA JSON. Paste the complete export and try again."
+        : error instanceof Error ? error.message : "MAA JSON 解析失败。");
       setInputErrorCode("AIC-BOX-1101");
       return false;
     }
@@ -900,7 +912,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   function handleManualBox(entries: OperBoxEntry[]) {
     setInputError(null);
     setOperbox(normalizeOperboxEntries(entries));
-    setFileName("手动选择的 Box");
+    setFileName(locale === "en" ? "Manually selected BOX" : "手动选择的 Box");
     setBoxSource("maa");
     clearPlanResult();
   }
@@ -985,7 +997,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       setApiError(displayError("AIC-PLAN-3001", "排班服务暂不可用，请稍后重试。", true));
       return false;
     }
-    preloadProductIcons();
+    void import("@/product-assets").then(({ preloadProductIcons }) => preloadProductIcons());
     setLoading(true);
     setResultClearNotice(null);
     setInputError(null);
@@ -1059,8 +1071,9 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     }
   }
 
-  function handleDownloadMaa() {
+  async function handleDownloadMaa() {
     if (!result?.maa) return;
+    const { downloadJson } = await import("./download");
     downloadJson("arknights-infra-schedule-maa.json", result.maa);
   }
 
@@ -1728,7 +1741,9 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
           setSetupOpen(true);
         },
         onOpenCalculator: () => navigateToPage("calculator"),
-        onCopyUid: (uid: string) => void copyText(uid),
+        onCopyUid: (uid: string) => {
+          void import("./download").then(({ copyText }) => copyText(uid));
+        },
       },
     } : null,
   };
@@ -1739,6 +1754,9 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     <div
       className="contents"
       data-workbench-hydrated={hasRestoredSession ? "true" : "false"}
+      onKeyDown={(event) => {
+        if (event.key === "Escape" && websiteAuthDialogOpen) handleWebsiteAuthDialogOpenChange(false);
+      }}
     >
     <SidebarProvider defaultOpen={false}>
       <AppSidebar page={page} onPageChange={handleAppPageChange} />
@@ -1749,7 +1767,10 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
           onRetry={() => void handleRetry()}
           retryCountdownSeconds={planRetryCountdown}
           onCopyDiagnostic={() => {
-            if (activity?.error) void copyText(formatSolverDiagnostic(activity.error));
+            const error = activity?.error;
+            if (!error) return;
+            void Promise.all([import("./download"), import("./solver-diagnostic")])
+              .then(([{ copyText }, { formatSolverDiagnostic }]) => copyText(formatSolverDiagnostic(error)));
           }}
         />
 
@@ -1798,10 +1819,30 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       {CLIENT_ACCOUNT_CLOUD_SYNC_ENABLED ? accountCloudWorkspace.syncElement : null}
 
       {websiteAuthDialogMounted ? <Suspense fallback={(
-        <WebsiteAccountDialogLoading
-          open={websiteAuthDialogOpen}
-          onOpenChange={handleWebsiteAuthDialogOpenChange}
-        />
+        websiteAuthDialogOpen ? (
+          <div
+            className="fixed inset-0 z-50 grid place-items-center bg-black/55 p-2"
+          >
+            <div
+              className="grid min-h-72 w-full max-w-[min(880px,calc(100vw-2rem))] place-items-center bg-background px-6 py-12 text-center shadow-xl"
+              role="dialog"
+              aria-modal="true"
+              aria-label={locale === "en" ? "Website account sign-in" : "登录网站账号"}
+              aria-busy="true"
+              data-website-account-dialog
+              data-website-account-dialog-loading
+            >
+              <div className="grid justify-items-center gap-3" role="status" aria-live="polite" aria-busy="true" data-website-account-loading>
+                <span
+                  className="size-8 animate-spin rounded-full border-2 border-muted border-t-muted-foreground motion-reduce:animate-none"
+                  aria-hidden="true"
+                  data-website-account-loading-spinner
+                />
+                <p className="text-sm text-muted-foreground">{locale === "en" ? "Loading sign-in…" : "正在加载登录界面…"}</p>
+              </div>
+            </div>
+          </div>
+        ) : null
       )}><WebsiteAccountDialog
           open={websiteAuthDialogOpen}
           onOpenChange={handleWebsiteAuthDialogOpenChange}
@@ -1844,7 +1885,9 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
         onFiammettaEnabledChange={handleFiammettaEnabledChange}
         onPresetSelect={handlePresetSelect}
         onLayoutFile={handleLayoutFile}
-        onDownloadLayout={() => downloadJson(`layout-${layout.template}.json`, layout)}
+        onDownloadLayout={() => {
+          void import("./download").then(({ downloadJson }) => downloadJson(`layout-${layout.template}.json`, layout));
+        }}
         onRestoreResultClearWarning={restoreResultClearWarning}
         storageNotice={storageNotice}
         onClearLocalData={handleClearLocalData}

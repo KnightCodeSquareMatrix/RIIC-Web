@@ -1,5 +1,8 @@
 import operatorCatalogJson from "./generated/arkntools/operator-catalog.json" with { type: "json" };
 
+import { normalizeOperboxEntries } from "./operbox-normalization.ts";
+import type { OperBoxEntry } from "./types.ts";
+
 interface OperatorNameRecord {
   id: string;
   name: string;
@@ -22,4 +25,18 @@ export function simplifiedChineseOperatorNameForId(id: string): string | undefin
     ?? (normalizedId.startsWith("char_")
       ? undefined
       : SIMPLIFIED_CHINESE_NAME_BY_ID.get(`char_${normalizedId}`));
+}
+
+/**
+ * Canonicalizes localized MAA names only on the user-import path. Keeping this
+ * helper in the catalog module lets the initial calculator bundle avoid
+ * downloading the complete operator-name table.
+ */
+export function normalizeImportedOperboxEntries(entries: readonly OperBoxEntry[]): OperBoxEntry[] {
+  return normalizeOperboxEntries(entries.map((entry) => {
+    const canonicalName = simplifiedChineseOperatorNameForId(entry.id);
+    return canonicalName && canonicalName !== entry.name
+      ? { ...entry, name: canonicalName }
+      : entry;
+  }));
 }

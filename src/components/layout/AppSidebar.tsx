@@ -82,12 +82,14 @@ export function AppSidebar({ page, onPageChange }: AppSidebarProps) {
     skills: "Skill Search",
     skland: "Skland Status",
     account: "Account",
+    help: "Help",
   } : {
     calculator: "基建计算器",
     training: "练卡建议",
     skills: "技能查询",
     skland: "森空岛状态中心",
     account: "账号管理",
+    help: "使用帮助",
   };
   return (
     <Sidebar collapsible="icon" data-primary-navigation-prefetch="eager">
@@ -112,10 +114,10 @@ export function AppSidebar({ page, onPageChange }: AppSidebarProps) {
           <SidebarMenuItem>
             <SidebarMenuButton
               render={<Link href="/help" data-help-link />}
-              tooltip="使用帮助"
+              tooltip={labels.help}
             >
               <CircleHelp className="size-5" />
-              <span>使用帮助</span>
+              <span>{labels.help}</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
