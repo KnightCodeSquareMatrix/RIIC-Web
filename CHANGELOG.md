@@ -2,6 +2,21 @@
 
 All notable changes to RIIC-Web are documented in this file.
 
+## [0.2.3] - 2026-09-02
+
+### Changed
+
+- Plan results no longer repeat the same training advice in the compact details view; the dedicated training section remains available.
+
+### Fixed
+
+- Skland imports now show the correct operator count when Amiya has multiple forms.
+- A delayed Skland restore no longer overwrites a MAA operator box imported while the restore is still in progress, while existing Skland boxes continue to refresh normally.
+
+### For contributors
+
+- `package.json` and `package-lock.json` record release `0.2.3`.
+
 ## [0.2.2] - 2026-09-01
 
 ### Changed
