@@ -34,6 +34,21 @@ test("admin solver metrics trend query preserves PostgreSQL grouping identity", 
   }
 });
 
+test("admin solver metrics queue percentile accepts PostgreSQL wait duration type", async () => {
+  const pool = new Pool({ connectionString: databaseUrl, max: 2 });
+  try {
+    const result = await pool.query(`
+      SELECT round(percentile_cont(0.95) within group (
+        order by extract(epoch from (started_at - created_at)) * 1000
+      ))::int AS p95_wait_ms
+      FROM app.plan_task
+    `);
+    assert.equal(result.rows[0]?.p95_wait_ms ?? null, null);
+  } finally {
+    await pool.end();
+  }
+});
+
 test("app schema stores only encrypted Box data and cascades account-owned business rows", async () => {
   const pool = new Pool({ connectionString: databaseUrl, max: 2 });
   const userId = randomUUID();
