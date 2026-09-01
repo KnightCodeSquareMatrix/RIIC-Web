@@ -142,8 +142,8 @@ export function LiveActivity({ activity, onRetry, onCopyDiagnostic, retryCountdo
           exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -6, scale: 0.98 }}
           transition={{ duration: reduceMotion ? 0 : MOTION_DURATION.state, ease: MOTION_EASE_OUT }}
         >
-          <div className="flex min-h-11 items-center gap-3 px-3 py-3">
-            <span className="grid size-7 shrink-0 place-items-center bg-black/5" aria-hidden="true">
+          <div className="flex min-h-11 flex-wrap items-center gap-3 px-3 py-3 max-sm:gap-y-1.5">
+            <span className="grid size-7 shrink-0 place-items-center bg-black/5 max-sm:order-1" aria-hidden="true">
               {activity.phase === "running" ? (
                 <ThinkingOrb state="solving" size={20} theme="light" className="shrink-0" data-slot="solving-orb" />
               ) : activity.phase === "queued" ? (
@@ -154,7 +154,7 @@ export function LiveActivity({ activity, onRetry, onCopyDiagnostic, retryCountdo
                 <AlertTriangle className="size-4 text-red-300" />
               )}
             </span>
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-1 max-sm:order-3 max-sm:basis-full">
               <strong className={cn("block truncate font-medium", activity.phase === "running" && "live-activity-shimmer")} data-text={activity.phase === "running" ? label : undefined}>{label}</strong>
               <span className="mt-0.5 block">
                 {activity.phase === "queued" ? (
@@ -188,7 +188,7 @@ export function LiveActivity({ activity, onRetry, onCopyDiagnostic, retryCountdo
               {diagnostic ? <span className="mt-1 block text-xs text-red-900">{diagnostic.suggestion}</span> : null}
             </div>
             {activity.phase === "error" ? (
-              <span className="flex shrink-0 items-center gap-1">
+              <span className="flex shrink-0 items-center gap-1 max-sm:order-4 max-sm:basis-full max-sm:justify-end">
                 {activity.error?.retryable ? (
                   <Button type="button" size="sm" variant="ghost" className="h-9 text-red-900 hover:bg-red-100 hover:text-red-950" onClick={onRetry} disabled={retryCountdownSeconds > 0}>
                     <RotateCcw />{retryCountdownSeconds > 0 ? `${retryCountdownSeconds} 秒后重试` : "重试"}
@@ -212,7 +212,7 @@ export function LiveActivity({ activity, onRetry, onCopyDiagnostic, retryCountdo
               type="button"
               onClick={() => setDismissed({ id: activity.id, phase: activity.phase })}
               aria-label="关闭提示"
-              className="grid size-8 shrink-0 place-items-center rounded-md text-[#313131]/45 outline-none transition-colors hover:bg-black/5 hover:text-[#313131] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#FFD800]"
+              className="grid size-8 shrink-0 place-items-center rounded-md text-[#313131]/45 outline-none transition-colors hover:bg-black/5 hover:text-[#313131] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#FFD800] max-sm:order-2 max-sm:ml-auto"
             >
               <X className="size-4" aria-hidden="true" />
             </button>
