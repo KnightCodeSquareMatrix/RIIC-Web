@@ -1243,6 +1243,26 @@ export interface AdminUserUpdateData {
   updated: true;
 }
 
+export interface AdminSolverMetricsData {
+  generatedAt: string;
+  solver: {
+    windowMinutes: number;
+    successCount: number;
+    failureCount: number;
+    completedCount: number;
+    errorRate: number | null;
+  };
+  cache: {
+    enabled: boolean;
+    hitCount: number;
+    missCount: number;
+    lookupCount: number;
+    hitRate: number | null;
+    readyEntryCount: number;
+    fillingEntryCount: number;
+  };
+}
+
 export interface SklandSessionData {
   authenticated: boolean;
   configured: boolean;
