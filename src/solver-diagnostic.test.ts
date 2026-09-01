@@ -8,13 +8,17 @@ import type { BaseBlueprint } from "./types.ts";
 test("maps common solver failures to actionable guidance", () => {
   assert.match(solverDiagnosticFor({ code: "AIC-LAYOUT-1201", message: "布局无效", retryable: false }).suggestion, /设施等级/);
   assert.match(solverDiagnosticFor({ code: "AIC-PLAN-3002", message: "请求过于频繁", retryable: true }).title, /暂未获准/);
+  assert.match(solverDiagnosticFor({ code: "AIC-PLAN-3006", message: "账号过于频繁", retryable: true }).title, /账号/);
+  assert.match(solverDiagnosticFor({ code: "AIC-PLAN-3007", message: "网络过于频繁", retryable: true }).title, /网络/);
+  assert.match(solverDiagnosticFor({ code: "AIC-PLAN-3008", message: "候选环已满", retryable: true }).title, /候选环/);
   assert.match(solverDiagnosticFor({ code: "AIC-PLAN-3003", message: "超时", retryable: true }).title, /超时/);
 });
 
 test("formats a complete copyable diagnostic with request id", () => {
-  const text = formatSolverDiagnostic({ code: "AIC-PLAN-3003", message: "计算超时", retryable: true, requestId: "req-123" });
+  const text = formatSolverDiagnostic({ code: "AIC-PLAN-3003", message: "计算超时", retryable: true, requestId: "req-123", retryAfterSeconds: 45 });
   assert.match(text, /错误码：AIC-PLAN-3003/);
   assert.match(text, /请求编号：req-123/);
+  assert.match(text, /建议等待：45 秒/);
   assert.match(text, /建议：/);
 });
 

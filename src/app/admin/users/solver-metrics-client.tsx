@@ -156,7 +156,7 @@ export function AdminSolverMetrics() {
             <Metric
               label="当前任务队列"
               value={`${metrics.queue.pendingCount} 排队`}
-              detail={`执行中 ${metrics.queue.runningCount} · 平均等待 ${duration(metrics.queue.averageWaitMs)}`}
+              detail={`候选 ${metrics.queue.bufferedCount} · 执行中 ${metrics.queue.runningCount} · 平均等待 ${duration(metrics.queue.averageWaitMs)}`}
               dataAttribute={{ "data-pending-task-count": metrics.queue.pendingCount }}
             />
           </div>

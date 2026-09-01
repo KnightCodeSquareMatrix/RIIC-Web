@@ -23,6 +23,7 @@ import {
   completePlanTask,
   recordPlanWorkerHeartbeat,
   recoverStaleRunningTasks,
+  PLAN_TASK_WORKER_CONCURRENCY,
   type ClaimedPlanTask,
 } from "../src/server/plan-task.ts";
 import { toPublicPlanData } from "../src/server/public-plan.ts";
@@ -38,7 +39,7 @@ function errorCodeOf(error: unknown) {
   return error instanceof PublicApiError ? error.code : "AIC-SYS-5000";
 }
 
-async function executeTask(task: ClaimedPlanTask): Promise<void> {
+async function executeTask(task: ClaimedPlanTask, serveLane: number): Promise<void> {
   const { id, payload } = task;
   let lease: Extract<PlanCacheResolution, { kind: "lease" }> | null = null;
   try {
@@ -97,7 +98,7 @@ async function executeTask(task: ClaimedPlanTask): Promise<void> {
       rotation: payload.rotation,
       fiammettaEnable: payload.fiammettaEnable,
       dataOwnerTag: payload.dataOwnerTag,
-    });
+    }, { serveLane });
     const publicResult = toPublicPlanData(
       result,
       {
@@ -174,6 +175,23 @@ async function executeTask(task: ClaimedPlanTask): Promise<void> {
   }
 }
 
+async function runTaskLoop(serveLane: number, isShuttingDown: () => boolean): Promise<void> {
+  while (!isShuttingDown()) {
+    try {
+      const task = await claimNextPlanTask();
+      if (!task) {
+        await sleep(500);
+        continue;
+      }
+      console.log(`[plan-worker] lane=${serveLane} executing task ${task.id} attempt=${task.attempts}`);
+      await executeTask(task, serveLane);
+    } catch (error) {
+      console.error(`[plan-worker] lane=${serveLane} loop error:`, error);
+      await sleep(2_000);
+    }
+  }
+}
+
 export async function runPlanWorker(): Promise<void> {
   const releaseSha = process.env.APP_RELEASE_SHA?.trim() ?? "";
   if (!/^[0-9a-f]{40}$/.test(releaseSha)) throw new Error("APP_RELEASE_SHA must be a full lowercase Git commit SHA.");
@@ -182,7 +200,7 @@ export async function runPlanWorker(): Promise<void> {
   const recovery = await recoverStaleRunningTasks(startedAt);
   await cleanupExpiredPlanTasks(startedAt);
   await recordPlanWorkerHeartbeat({ releaseSha, startedAt });
-  console.log(`[plan-worker] started release=${releaseSha} recovered=${recovery.recovered} failed=${recovery.failed}`);
+  console.log(`[plan-worker] started release=${releaseSha} concurrency=${PLAN_TASK_WORKER_CONCURRENCY} recovered=${recovery.recovered} failed=${recovery.failed}`);
 
   let shuttingDown = false;
   let heartbeatInFlight = false;
@@ -207,20 +225,10 @@ export async function runPlanWorker(): Promise<void> {
   process.on("SIGINT", () => { shuttingDown = true; });
   process.on("SIGTERM", () => { shuttingDown = true; });
 
-  while (!shuttingDown) {
-    try {
-      const task = await claimNextPlanTask();
-      if (!task) {
-        await sleep(500);
-        continue;
-      }
-      console.log(`[plan-worker] executing task ${task.id} attempt=${task.attempts}`);
-      await executeTask(task);
-    } catch (error) {
-      console.error("[plan-worker] loop error:", error);
-      await sleep(2_000);
-    }
-  }
+  await Promise.all(Array.from(
+    { length: PLAN_TASK_WORKER_CONCURRENCY },
+    (_, serveLane) => runTaskLoop(serveLane, () => shuttingDown),
+  ));
 
   clearInterval(heartbeatTimer);
   clearInterval(cleanupTimer);

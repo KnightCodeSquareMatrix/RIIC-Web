@@ -40,6 +40,9 @@ export const ERROR_DEFINITIONS: Record<AppErrorCode, ErrorDefinition> = {
   "AIC-PLAN-3003": { status: 504, message: "排班计算超时，请稍后重试。", retryable: true },
   "AIC-PLAN-3004": { status: 502, message: "排班结果暂时无法解析，请稍后重试。", retryable: true },
   "AIC-PLAN-3005": { status: 409, message: "已有任务在排队，请等待完成后再试。", retryable: false },
+  "AIC-PLAN-3006": { status: 429, message: "当前账号提交排班过于频繁，请稍后重试。", retryable: true },
+  "AIC-PLAN-3007": { status: 429, message: "当前网络提交排班过于频繁，请稍后重试。", retryable: true },
+  "AIC-PLAN-3008": { status: 503, message: "排班候选环已满，请稍后重试。", retryable: true },
   "AIC-FEEDBACK-4001": { status: 422, message: "反馈内容无效，请检查后重试。", retryable: false },
   "AIC-FEEDBACK-4002": { status: 500, message: "反馈保存失败，请稍后重试。", retryable: true },
   "AIC-SYS-5000": { status: 500, message: "服务暂时出现问题，请稍后重试。", retryable: true },
@@ -134,6 +137,7 @@ export function failureResponse(
         message: known.message,
         requestId,
         retryable: known.retryable,
+        ...(known.retryAfter ? { retryAfterSeconds: known.retryAfter } : {}),
         ...(known.fieldErrors?.length ? { fieldErrors: known.fieldErrors } : {}),
       },
     },
@@ -294,11 +298,11 @@ export function enforceRateLimit(
 
 export type PlanAccountAdmissionClass = "new" | "established";
 
-export const MAX_CONCURRENT_AUTHENTICATED_PLAN_ADMISSIONS = 5;
-export const MAX_CONCURRENT_NEW_ACCOUNT_PLAN_ADMISSIONS = 3;
-export const MAX_CONCURRENT_PLAN_ACCOUNTS_PER_IP = 2;
-export const MAX_PLAN_STARTS_PER_ACCOUNT = 3;
-export const MAX_PLAN_STARTS_PER_IP = 8;
+export const MAX_CONCURRENT_AUTHENTICATED_PLAN_ADMISSIONS = 1000;
+export const MAX_CONCURRENT_NEW_ACCOUNT_PLAN_ADMISSIONS = 600;
+export const MAX_CONCURRENT_PLAN_ACCOUNTS_PER_IP = 100;
+export const MAX_PLAN_STARTS_PER_ACCOUNT = 10;
+export const MAX_PLAN_STARTS_PER_IP = 200;
 export const PLAN_START_WINDOW_MS = 10 * 60_000;
 export const PLAN_ESTABLISHED_ACCOUNT_AGE_MS = 24 * 60 * 60_000;
 export const MAX_CONCURRENT_ANONYMOUS_SAMPLE_PLAN_ADMISSIONS = 1;
@@ -358,8 +362,14 @@ export function acquirePlanSlot({
   const activeForIp = guardState.planIpCounts.get(ip) ?? 0;
   if (
     guardState.planAccounts.has(accountId)
-    || activeForIp >= MAX_CONCURRENT_PLAN_ACCOUNTS_PER_IP
-    || guardState.planGlobal >= MAX_CONCURRENT_AUTHENTICATED_PLAN_ADMISSIONS
+  ) {
+    throw new PublicApiError("AIC-PLAN-3005");
+  }
+  if (activeForIp >= MAX_CONCURRENT_PLAN_ACCOUNTS_PER_IP) {
+    throw new PublicApiError("AIC-PLAN-3007", { retryAfter: 5 });
+  }
+  if (
+    guardState.planGlobal >= MAX_CONCURRENT_AUTHENTICATED_PLAN_ADMISSIONS
     || (
       accountClass === "new"
       && guardState.planNewAccounts.size >= MAX_CONCURRENT_NEW_ACCOUNT_PLAN_ADMISSIONS
@@ -372,12 +382,13 @@ export function acquirePlanSlot({
   prunePlanStarts(now);
   const accountStartKey = `account:${accountId}`;
   const ipStartKey = `ip:${ip}`;
-  const retryAfter = Math.max(
-    planStartRetryAfter(accountStartKey, MAX_PLAN_STARTS_PER_ACCOUNT, now) ?? 0,
-    planStartRetryAfter(ipStartKey, MAX_PLAN_STARTS_PER_IP, now) ?? 0,
-  );
+  const retryAfter = planStartRetryAfter(accountStartKey, MAX_PLAN_STARTS_PER_ACCOUNT, now) ?? 0;
   if (retryAfter > 0) {
-    throw new PublicApiError("AIC-PLAN-3002", { retryAfter });
+    throw new PublicApiError("AIC-PLAN-3006", { retryAfter });
+  }
+  const ipRetryAfter = planStartRetryAfter(ipStartKey, MAX_PLAN_STARTS_PER_IP, now);
+  if (ipRetryAfter) {
+    throw new PublicApiError("AIC-PLAN-3007", { retryAfter: ipRetryAfter });
   }
 
   guardState.planAccounts.add(accountId);

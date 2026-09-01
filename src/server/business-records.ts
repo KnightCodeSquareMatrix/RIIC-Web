@@ -294,12 +294,13 @@ export async function queryAdminSolverMetrics(now = new Date()) {
     )),
     buildAdminSolverTrendQuery(database, trendStartedAt, now, trendBucketSeconds),
     database.select({
+      bufferedCount: sql<number>`count(*) filter (where ${planTask.status} = 'buffered')::int`,
       pendingCount: sql<number>`count(*) filter (where ${planTask.status} = 'pending')::int`,
       runningCount: sql<number>`count(*) filter (where ${planTask.status} = 'running')::int`,
       averageWaitMs: sql<number | null>`round(avg(extract(epoch from (${planTask.startedAt} - ${planTask.createdAt})) * 1000) filter (where ${planTask.startedAt} is not null and ${planTask.createdAt} >= ${windowStartedAt}))::int`,
       p95WaitMs: sql<number | null>`round(percentile_cont(0.95) within group (order by extract(epoch from (${planTask.startedAt} - ${planTask.createdAt})) * 1000) filter (where ${planTask.startedAt} is not null and ${planTask.createdAt} >= ${windowStartedAt}))::int`,
     }).from(planTask).where(or(
-      inArray(planTask.status, ["pending", "running"]),
+      inArray(planTask.status, ["buffered", "pending", "running"]),
       and(gte(planTask.createdAt, windowStartedAt), lte(planTask.createdAt, now)),
     )),
     database.select({
@@ -319,6 +320,7 @@ export async function queryAdminSolverMetrics(now = new Date()) {
     maaCount: solverRows[0]?.maaCount ?? 0,
     sklandCount: solverRows[0]?.sklandCount ?? 0,
     sampleCount: solverRows[0]?.sampleCount ?? 0,
+    bufferedTaskCount: taskRows[0]?.bufferedCount ?? 0,
     pendingTaskCount: taskRows[0]?.pendingCount ?? 0,
     runningTaskCount: taskRows[0]?.runningCount ?? 0,
     averageWaitMs: taskRows[0]?.averageWaitMs ?? null,

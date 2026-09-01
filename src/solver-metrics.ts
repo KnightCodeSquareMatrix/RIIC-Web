@@ -22,6 +22,7 @@ type AdminSolverMetricCounts = {
   maaCount: number;
   sklandCount: number;
   sampleCount: number;
+  bufferedTaskCount: number;
   pendingTaskCount: number;
   runningTaskCount: number;
   averageWaitMs: number | null;
@@ -111,6 +112,7 @@ export function buildAdminSolverMetricsData(input: AdminSolverMetricCounts): Adm
       trend: buildTrend(input.generatedAt, input.trend),
     },
     queue: {
+      bufferedCount: count(input.bufferedTaskCount),
       pendingCount: count(input.pendingTaskCount),
       runningCount: count(input.runningTaskCount),
       averageWaitMs: duration(input.averageWaitMs),
