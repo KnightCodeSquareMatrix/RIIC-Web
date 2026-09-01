@@ -7,6 +7,7 @@ import test from "node:test";
 import { Pool } from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
 
+import { buildAdminSolverAggregateQueries } from "./admin-solver-metrics-queries.ts";
 import { buildAdminSolverTrendQuery } from "./admin-solver-metrics-trend.ts";
 import * as schema from "./db/schema.ts";
 import {
@@ -34,40 +35,17 @@ test("admin solver metrics trend query preserves PostgreSQL grouping identity", 
   }
 });
 
-test("admin solver metrics aggregates execute on PostgreSQL", async () => {
+test("admin solver metrics aggregate queries execute on PostgreSQL", async () => {
   const pool = new Pool({ connectionString: databaseUrl, max: 2 });
+  const database = drizzle({ client: pool, schema });
+  const now = new Date();
+  const windowStartedAt = new Date(now.getTime() - 15 * 60_000);
   try {
-    const [solver, queue, cache] = await Promise.all([
-      pool.query(`
-        SELECT
-          count(*) filter (where status = 'success')::int AS success_count,
-          count(*) filter (where status = 'failed')::int AS failure_count,
-          round(avg(duration_ms) filter (where status = 'success' and duration_ms is not null))::int AS average_duration_ms,
-          round(percentile_cont(0.95) within group (order by duration_ms) filter (where status = 'success' and duration_ms is not null))::int AS p95_duration_ms
-        FROM app.plan_run
-        WHERE created_at >= now() - interval '15 minutes' AND created_at <= now()
-      `),
-      pool.query(`
-        SELECT
-          count(*) filter (where status = 'pending')::int AS pending_count,
-          count(*) filter (where status = 'running')::int AS running_count,
-          round(avg(extract(epoch from (started_at - created_at)) * 1000) filter (where started_at is not null and created_at >= now() - interval '15 minutes'))::int AS average_wait_ms,
-          round(percentile_cont(0.95) within group (order by extract(epoch from (started_at - created_at)) * 1000) filter (where started_at is not null and created_at >= now() - interval '15 minutes'))::int AS p95_wait_ms
-        FROM app.plan_task
-        WHERE status in ('pending', 'running') OR created_at >= now() - interval '15 minutes'
-      `),
-      pool.query(`
-        SELECT
-          coalesce(sum(hit_count) filter (where public_result is not null), 0)::int AS hit_count,
-          count(*) filter (where public_result is not null)::int AS ready_entry_count,
-          count(*) filter (where public_result is null and lease_expires_at > now())::int AS filling_entry_count
-        FROM app.plan_cache
-        WHERE expires_at > now()
-      `),
-    ]);
-    assert.equal(solver.rowCount, 1);
-    assert.equal(queue.rowCount, 1);
-    assert.equal(cache.rowCount, 1);
+    const queries = buildAdminSolverAggregateQueries(database, windowStartedAt, now);
+    const [solver, queue, cache] = await Promise.all([queries.solver, queries.task, queries.cache]);
+    assert.equal(solver.length, 1);
+    assert.equal(queue.length, 1);
+    assert.equal(cache.length, 1);
   } finally {
     await pool.end();
   }

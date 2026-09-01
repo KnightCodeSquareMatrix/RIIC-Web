@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { and, desc, eq, gt, gte, inArray, lte, lt, or, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, gte, lte, lt, sql, type SQL } from "drizzle-orm";
 
 import { PRIVACY_VERSION, TERMS_VERSION } from "@/legal-policy";
 import {
@@ -10,6 +10,7 @@ import {
 } from "@/solver-metrics-config";
 import { buildAdminSolverMetricsData } from "@/solver-metrics";
 import type { AppErrorCode, FeedbackRequest, SavedPlanCalculationContext, SolverObservation } from "@/types";
+import { buildAdminSolverAggregateQueries } from "./admin-solver-metrics-queries";
 import { buildAdminSolverTrendQuery } from "./admin-solver-metrics-trend";
 import { BUSINESS_DATA_TTL_MS, isBusinessDatabaseEnabled, isPlanCacheEnabled } from "./business-config";
 import { getDatabase } from "./db";
@@ -19,7 +20,6 @@ import {
   operboxSnapshot,
   planCache,
   planRun,
-  planTask,
   policyConsent,
   savedPlan,
   telemetryEvent,
@@ -279,34 +279,12 @@ export async function queryAdminSolverMetrics(now = new Date()) {
   const trendStartedAt = new Date(now.getTime() - ADMIN_SOLVER_TREND_WINDOW_MINUTES * 60_000);
   const trendBucketSeconds = ADMIN_SOLVER_TREND_BUCKET_MINUTES * 60;
   const database = getDatabase();
+  const aggregateQueries = buildAdminSolverAggregateQueries(database, windowStartedAt, now);
   const [solverRows, trendRows, taskRows, cacheRows] = await Promise.all([
-    database.select({
-      successCount: sql<number>`count(*) filter (where ${planRun.status} = 'success')::int`,
-      failureCount: sql<number>`count(*) filter (where ${planRun.status} = 'failed')::int`,
-      averageDurationMs: sql<number | null>`round(avg(${planRun.durationMs}) filter (where ${planRun.status} = 'success' and ${planRun.durationMs} is not null))::int`,
-      p95DurationMs: sql<number | null>`round(percentile_cont(0.95) within group (order by ${planRun.durationMs}) filter (where ${planRun.status} = 'success' and ${planRun.durationMs} is not null))::int`,
-      maaCount: sql<number>`count(*) filter (where ${planRun.sourceType} = 'maa')::int`,
-      sklandCount: sql<number>`count(*) filter (where ${planRun.sourceType} = 'skland')::int`,
-      sampleCount: sql<number>`count(*) filter (where ${planRun.sourceType} = 'sample')::int`,
-    }).from(planRun).where(and(
-      gte(planRun.createdAt, windowStartedAt),
-      lte(planRun.createdAt, now),
-    )),
+    aggregateQueries.solver,
     buildAdminSolverTrendQuery(database, trendStartedAt, now, trendBucketSeconds),
-    database.select({
-      pendingCount: sql<number>`count(*) filter (where ${planTask.status} = 'pending')::int`,
-      runningCount: sql<number>`count(*) filter (where ${planTask.status} = 'running')::int`,
-      averageWaitMs: sql<number | null>`round(avg(extract(epoch from (${planTask.startedAt} - ${planTask.createdAt})) * 1000) filter (where ${planTask.startedAt} is not null and ${planTask.createdAt} >= ${windowStartedAt}))::int`,
-      p95WaitMs: sql<number | null>`round(percentile_cont(0.95) within group (order by extract(epoch from (${planTask.startedAt} - ${planTask.createdAt})) * 1000) filter (where ${planTask.startedAt} is not null and ${planTask.createdAt} >= ${windowStartedAt}))::int`,
-    }).from(planTask).where(or(
-      inArray(planTask.status, ["pending", "running"]),
-      and(gte(planTask.createdAt, windowStartedAt), lte(planTask.createdAt, now)),
-    )),
-    database.select({
-      hitCount: sql<number>`coalesce(sum(${planCache.hitCount}) filter (where ${planCache.publicResult} is not null), 0)::int`,
-      readyEntryCount: sql<number>`count(*) filter (where ${planCache.publicResult} is not null)::int`,
-      fillingEntryCount: sql<number>`count(*) filter (where ${planCache.publicResult} is null and ${planCache.leaseExpiresAt} > ${now})::int`,
-    }).from(planCache).where(gt(planCache.expiresAt, now)),
+    aggregateQueries.task,
+    aggregateQueries.cache,
   ]);
 
   return buildAdminSolverMetricsData({
