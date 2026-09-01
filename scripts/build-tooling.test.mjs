@@ -61,14 +61,16 @@ test("production builds prepare a solver-free standalone runtime with static ass
   assert.doesNotMatch(stageStandalone, /outputRoot, "\.next", "cache"/);
 });
 
-test("the plan worker runs two isolated solver lanes and closes every persistent client", async () => {
+test("the plan worker runs four isolated solver lanes and closes every persistent client", async () => {
   const [workerRuntime, planTask, infra] = await Promise.all([
     readRepoFile("scripts/plan-worker-runtime.mts"),
     readRepoFile("src/server/plan-task.ts"),
     readRepoFile("src/server/infra.ts"),
   ]);
 
-  assert.match(planTask, /PLAN_TASK_WORKER_CONCURRENCY = 2/);
+  assert.match(planTask, /PLAN_TASK_WORKER_CONCURRENCY = 4/);
+  assert.match(infra, /export async function warmPlanServeLane[\s\S]+getPlanServeClient\(serveLane\)[\s\S]+await serveClient\.ping\(\)[\s\S]+inspectSolverDeploymentReadiness/);
+  assert.match(workerRuntime, /warmPlanServeLane[\s\S]+length: PLAN_TASK_WORKER_CONCURRENCY[\s\S]+warmPlanServeLane\(serveLane\)[\s\S]+recoverStaleRunningTasks[\s\S]+recordPlanWorkerHeartbeat/);
   assert.match(workerRuntime, /length: PLAN_TASK_WORKER_CONCURRENCY[\s\S]+runTaskLoop\(serveLane/);
   assert.match(workerRuntime, /runPlan\([\s\S]+\{ serveLane \}/);
   assert.match(infra, /__infraCliPlanServeClients\?: Map<number, InfraCliServeClient>/);
