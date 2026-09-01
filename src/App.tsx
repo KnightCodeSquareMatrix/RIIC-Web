@@ -263,6 +263,11 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   const initialLayoutForRestore = useRef(defaultLayout);
   const initialBoxSource = useRef(boxSource);
   const initialOperbox = useRef(operbox);
+  // 当前是否存在可用的 Box（跟随 operbox 实时更新）；只在没有 Box 时才自动应用森空岛数据。
+  const currentBoxAvailableRef = useRef(Boolean(operbox?.length));
+  useEffect(() => {
+    currentBoxAvailableRef.current = Boolean(operbox?.length);
+  }, [operbox]);
   const initialLayoutDirty = useRef(layoutDirty);
   const initialLayoutSource = useRef<"local" | "skland">("local");
   const initialLocalLayoutBackup = useRef<BaseBlueprint | null>(null);
@@ -729,7 +734,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
         setSklandStatusSnapshot(session.statusSnapshot ?? null);
         if (session.authenticated && session.scheduleSnapshot) {
           setSklandScheduleSnapshot(session.scheduleSnapshot);
-          if (initialBoxSource.current === "skland" || !initialOperbox.current) {
+          if (!currentBoxAvailableRef.current) {
             setOperbox(normalizeOperboxEntries(session.scheduleSnapshot.operbox));
             setFileName(session.scheduleSnapshot.sourceName);
             setBoxSource("skland");
