@@ -1,6 +1,6 @@
 {
   "name": "arknights-infra-calc-beta-test",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "license": "PolyForm-Noncommercial-1.0.0",
   "private": true,
   "type": "module",

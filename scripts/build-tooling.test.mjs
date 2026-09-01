@@ -61,14 +61,14 @@ test("production builds prepare a solver-free standalone runtime with static ass
   assert.doesNotMatch(stageStandalone, /outputRoot, "\.next", "cache"/);
 });
 
-test("the plan worker runs four isolated solver lanes and closes every persistent client", async () => {
+test("the plan worker runs three isolated solver lanes and closes every persistent client", async () => {
   const [workerRuntime, planTask, infra] = await Promise.all([
     readRepoFile("scripts/plan-worker-runtime.mts"),
     readRepoFile("src/server/plan-task.ts"),
     readRepoFile("src/server/infra.ts"),
   ]);
 
-  assert.match(planTask, /PLAN_TASK_WORKER_CONCURRENCY = 4/);
+  assert.match(planTask, /PLAN_TASK_WORKER_CONCURRENCY = 3/);
   assert.match(infra, /export async function warmPlanServeLane[\s\S]+getPlanServeClient\(serveLane\)[\s\S]+await serveClient\.ping\(\)[\s\S]+inspectSolverDeploymentReadiness/);
   assert.match(workerRuntime, /warmPlanServeLane[\s\S]+length: PLAN_TASK_WORKER_CONCURRENCY[\s\S]+warmPlanServeLane\(serveLane\)[\s\S]+recoverStaleRunningTasks[\s\S]+recordPlanWorkerHeartbeat/);
   assert.match(workerRuntime, /length: PLAN_TASK_WORKER_CONCURRENCY[\s\S]+runTaskLoop\(serveLane/);
@@ -191,6 +191,10 @@ test("public deployment automation is repository-bound, opt-in, and secret-safe"
     preflightWorkflow.indexOf("    env:"),
     preflightWorkflow.indexOf("    steps:"),
   );
+  const runtimeDiagnostics = preflightWorkflow.slice(
+    preflightWorkflow.indexOf("      - name: Read-only incident diagnostics"),
+    preflightWorkflow.indexOf("      - name: Remove SSH credentials from the runner"),
+  );
 
   assert.match(qualityWorkflow, /HEAD_REPOSITORY[\s\S]+EXPECTED_REPOSITORY: KnightCodeSquareMatrix\/RIIC-Web[\s\S]+"\$HEAD_REF" == release\/\*/);
   assert.match(qualityWorkflow, /types: \[opened, synchronize, reopened, labeled, unlabeled\]/);
@@ -198,7 +202,7 @@ test("public deployment automation is repository-bound, opt-in, and secret-safe"
   assert.match(qualityWorkflow, /git merge-base --is-ancestor "\$HEAD_SHA" refs\/remotes\/origin\/develop/);
   assert.match(qualityWorkflow, /github\.event_name == 'push'[\s\S]+needs\.quality\.result == 'success'[\s\S]+needs\.changes\.outputs\.deploy_required == 'true'[\s\S]+vars\.DEPLOY_AUTOMATION_ENABLED == '1'[\s\S]+github\.repository == 'KnightCodeSquareMatrix\/RIIC-Web'/);
   assert.match(deployWorkflow, /github\.event_name == 'push'[\s\S]+vars\.DEPLOY_AUTOMATION_ENABLED == '1'[\s\S]+github\.repository == 'KnightCodeSquareMatrix\/RIIC-Web'/);
-  assert.match(deployWorkflow, /DEPLOY_APPROVED_SOLVER_SHA256: \$\{\{ vars\.DEPLOY_APPROVED_SOLVER_SHA256 \}\}[\s\S]+DEPLOY_EXPECTED_REPOSITORY: KnightCodeSquareMatrix\/RIIC-Web[\s\S]+DEPLOY_RELEASE_HELPER_CONTRACT: "5"/);
+  assert.match(deployWorkflow, /DEPLOY_APPROVED_SOLVER_SHA256: \$\{\{ vars\.DEPLOY_APPROVED_SOLVER_SHA256 \}\}[\s\S]+DEPLOY_EXPECTED_REPOSITORY: KnightCodeSquareMatrix\/RIIC-Web[\s\S]+DEPLOY_RELEASE_HELPER_CONTRACT: "6"/);
   assert.doesNotMatch(deployWorkflow, /DEPLOY_PREPARE_HELPER_CONTRACT|arknights-infra-prepare-release/);
   assert.match(deployWorkflow, /DEPLOY_PUBLIC_HEALTH_URL: \$\{\{ secrets\.DEPLOY_PUBLIC_HEALTH_URL \}\}/);
   assert.doesNotMatch(deployWorkflow, /DEPLOY_PUBLIC_HEALTH_URL: \$\{\{ vars\./);
@@ -209,12 +213,21 @@ test("public deployment automation is repository-bound, opt-in, and secret-safe"
   assert.match(preflightWorkflow, /PREFLIGHT_MODE: \$\{\{ inputs\.mode \}\}/);
   assert.match(preflightWorkflow, /DEPLOY_ENVIRONMENT: \$\{\{ inputs\.environment \}\}/);
   assert.match(preflightWorkflow, /if \[\[ "\$PREFLIGHT_MODE" == "cutover-ready" \]\][\s\S]+test "\$actual_contract" = "\$expected_contract"/);
-  assert.match(preflightWorkflow, /DEPLOY_APPROVED_SOLVER_SHA256: \$\{\{ vars\.DEPLOY_APPROVED_SOLVER_SHA256 \}\}[\s\S]+DEPLOY_RELEASE_HELPER_CONTRACT: "5"/);
+  assert.match(preflightWorkflow, /DEPLOY_APPROVED_SOLVER_SHA256: \$\{\{ vars\.DEPLOY_APPROVED_SOLVER_SHA256 \}\}[\s\S]+DEPLOY_RELEASE_HELPER_CONTRACT: "6"/);
   assert.match(preflightWorkflow, /Inspect deploy helper, solver, and disk[\s\S]+verify_helper deploy \/usr\/local\/sbin\/arknights-infra-deploy/);
   assert.match(preflightWorkflow, /sudo -n \/usr\/local\/sbin\/arknights-infra-deploy[\s\S]+--preflight "\$deployment_environment" "\$app_root"[\s\S]+"\$expected_repository" "\$approved_solver_sha256"/);
   assert.match(preflightWorkflow, /solver_source=not-inspected-root-only/);
   assert.doesNotMatch(preflightWorkflow, /DEPLOY_PREPARE_HELPER_CONTRACT|arknights-infra-prepare-release|cache_repository|expected_origin|public_cache_ready|cache_public_origin_ready|repository\.git|git --git-dir/);
   assert.doesNotMatch(preflightWorkflow, /current_release\/\.env\.production\.local|current_release="\$\(readlink/);
+  assert.match(runtimeDiagnostics, /if: inputs\.mode == 'baseline'/);
+  assert.match(runtimeDiagnostics, /ps -u "\$run_user" -o pid=,ppid=,etimes=,rss=,comm=/);
+  assert.match(runtimeDiagnostics, /awk -F: '\$1 == "0" \{ print \$3 \}' "\/proc\/\$pid\/cgroup"/);
+  assert.match(runtimeDiagnostics, /grep -v '@\\\.service\$'/);
+  assert.match(runtimeDiagnostics, /systemctl show --no-pager[\s\S]+journalctl --no-pager/);
+  assert.doesNotMatch(
+    runtimeDiagnostics,
+    /^\s+(?:sudo|systemctl (?:start|stop|restart)|kill |rm )/m,
+  );
   assert.match(preflightWorkflow, /Remove SSH credentials from the runner[\s\S]+rm -f -- "\$HOME\/\.ssh\/id_ed25519" "\$HOME\/\.ssh\/known_hosts"/);
   assert.match(deployWorkflow, /printf '%s\\n' "\$DEPLOY_PUBLIC_HEALTH_URL" \| ssh[\s\S]+'\$public_health_argument'/);
   assert.match(deployWorkflow, /'\$DEPLOY_EXPECTED_REPOSITORY'[\s\S]+'\$DEPLOY_APPROVED_SOLVER_SHA256'[\s\S]+'\$DEPLOY_TREE_SHA'/);
@@ -244,14 +257,19 @@ test("deploy builds and transfers a verified solver-free standalone artifact", a
   assert.match(deployWorkflow, /run: npm run build && npm run worker:build/);
   assert.match(qualityWorkflow, /Production worker build[\s\S]+npm run worker:build && node --check dist\/plan-worker\.cjs/);
   assert.match(deployWorkflow, /RELEASE_SHA="\$DEPLOY_SHA" RELEASE_TREE_SHA="\$DEPLOY_TREE_SHA"[\s\S]+npm run release:stage -- --output "\$artifact_root"/);
-  assert.match(deployWorkflow, /tar --sort=name[\s\S]+--mtime="@\$SOURCE_DATE_EPOCH"[\s\S]+gzip --best --no-name --rsyncable[\s\S]+gzip -t "\$local_archive"/);
+  assert.match(deployWorkflow, /tar --sort=name[\s\S]+--mtime="@\$SOURCE_DATE_EPOCH"[\s\S]+--mode='u\+rwX,go\+rX,go-w'[\s\S]+gzip --best --no-name --rsyncable[\s\S]+gzip -t "\$local_archive"/);
   assert.match(deployWorkflow, /archive_sha256="\$\(sha256sum "\$local_archive"[\s\S]+DEPLOY_ARCHIVE_SHA256=%s/);
   assert.match(deployWorkflow, /Build standalone release[\s\S]+APP_BUILD_ID: \$\{\{ env\.DEPLOY_SHA \}\}/);
-  assert.match(deployWorkflow, /Upload standalone release archive[\s\S]+--checksum[\s\S]+--partial[\s\S]+--inplace[\s\S]+remote_prefix_sha256[\s\S]+upload_chunk_bytes[\s\S]+test "\$remote_sha256" = "\$DEPLOY_ARCHIVE_SHA256"/);
-  assert.match(deployWorkflow, /archive_cache="\.cache\/riic-web\/\$\{DEPLOYMENT_ENV\}-standalone\.tar\.gz"/);
-  assert.match(deployWorkflow, /staged_archive=[\s\S]+mktemp[\s\S]+install -m 600[\s\S]+mv -fT/);
+  assert.match(
+    deployWorkflow,
+    /Sync standalone release tree[\s\S]+release_tree_cache="\.cache\/riic-web\/\$\{DEPLOYMENT_ENV\}-standalone-tree"[\s\S]+--recursive[\s\S]+--times[\s\S]+--perms[\s\S]+--checksum[\s\S]+--compress[\s\S]+--delete-delay[\s\S]+--partial[\s\S]+--inplace[\s\S]+"\$DEPLOY_ARTIFACT_ROOT\/"[\s\S]+"\$ssh_target:\$release_tree_cache\/"/,
+  );
+  assert.match(deployWorkflow, /find "\$DEPLOY_ARTIFACT_ROOT"[\s\S]+! -type f ! -type d[\s\S]+release tree contains unsupported filesystem entries/);
+  assert.match(deployWorkflow, /remote_cache_path=\\"\\\$HOME\/\$release_tree_cache\\"[\s\S]+test ! -L \\"\\\$remote_cache_path\\"[\s\S]+stat -c '%U:%a'/);
+  assert.match(deployWorkflow, /tar --sort=name[\s\S]+--mtime='@\$SOURCE_DATE_EPOCH'[\s\S]+--mode='u\+rwX,go\+rX,go-w'[\s\S]+-C \\"\\\$remote_cache_path\\" \.[\s\S]+gzip --best --no-name --rsyncable[\s\S]+test \\"\\\$remote_sha256\\" = '\$DEPLOY_ARCHIVE_SHA256'[\s\S]+mv -fT/);
+  assert.doesNotMatch(deployWorkflow, /archive_cache=|remote_prefix_sha256|upload_chunk_bytes/);
   assert.doesNotMatch(deployWorkflow, /\bscp\b/);
-  assert.match(deployWorkflow, /DEPLOY_RELEASE_HELPER_CONTRACT: "5"/);
+  assert.match(deployWorkflow, /DEPLOY_RELEASE_HELPER_CONTRACT: "6"/);
   assert.match(deployWorkflow, /'\$DEPLOY_APPROVED_SOLVER_SHA256' \\\n\s+'\$DEPLOY_TREE_SHA'/);
   assert.match(deployWorkflow, /Remove staged release artifacts from the runner[\s\S]+if: always\(\)[\s\S]+"\$RUNNER_TEMP"\/riic-web-release\.\*[\s\S]+"\$RUNNER_TEMP"\/arknights-infra-\*\.tar\.gz/);
   assert.doesNotMatch(deployWorkflow, /git (?:archive|bundle)|repository\.git|DEPLOY_PREVIOUS_SHA|remote_bundle|bin\/infra-cli/);
