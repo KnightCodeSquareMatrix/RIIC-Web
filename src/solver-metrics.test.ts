@@ -4,67 +4,121 @@ import test from "node:test";
 
 import { buildAdminSolverMetricsData } from "./solver-metrics.ts";
 
-test("admin solver metrics calculate rolling errors and active-cache hit rate", () => {
-  const metrics = buildAdminSolverMetricsData({
-    generatedAt: new Date("2026-09-01T08:00:00.000Z"),
+function metricInput(overrides: Partial<Parameters<typeof buildAdminSolverMetricsData>[0]> = {}) {
+  return {
+    generatedAt: new Date("2026-09-01T08:02:00.000Z"),
     cacheEnabled: true,
     successCount: 18,
     failureCount: 2,
+    averageDurationMs: 1_240,
+    p95DurationMs: 2_890,
+    maaCount: 12,
+    sklandCount: 5,
+    sampleCount: 3,
+    pendingTaskCount: 2,
+    runningTaskCount: 1,
+    averageWaitMs: 340,
+    p95WaitMs: 810,
+    trend: [
+      { bucketStartedAt: new Date("2026-09-01T07:56:00.000Z"), successCount: 4, failureCount: 1, averageDurationMs: 1_100 },
+      { bucketStartedAt: new Date("2026-09-01T08:00:00.000Z"), successCount: 2, failureCount: 0, averageDurationMs: 900 },
+    ],
     cacheHitCount: 8,
     readyCacheEntryCount: 2,
     fillingCacheEntryCount: 1,
-  });
+    ...overrides,
+  };
+}
 
-  assert.deepEqual(metrics, {
-    generatedAt: "2026-09-01T08:00:00.000Z",
-    solver: {
-      windowMinutes: 15,
-      successCount: 18,
-      failureCount: 2,
-      completedCount: 20,
-      errorRate: 0.1,
-    },
-    cache: {
-      enabled: true,
-      hitCount: 8,
-      missCount: 2,
-      lookupCount: 10,
-      hitRate: 0.8,
-      readyEntryCount: 2,
-      fillingEntryCount: 1,
-    },
+test("admin solver metrics calculate errors, latency, throughput, queue, and active-cache hit rate", () => {
+  const metrics = buildAdminSolverMetricsData(metricInput());
+
+  assert.deepEqual(metrics.solver.sourceCounts, { maa: 12, skland: 5, sample: 3 });
+  assert.equal(metrics.solver.windowMinutes, 15);
+  assert.equal(metrics.solver.trendWindowMinutes, 60);
+  assert.equal(metrics.solver.trendBucketMinutes, 5);
+  assert.equal(metrics.solver.completedCount, 20);
+  assert.equal(metrics.solver.errorRate, 0.1);
+  assert.equal(metrics.solver.throughputPerMinute, 1.33);
+  assert.equal(metrics.solver.averageDurationMs, 1_240);
+  assert.equal(metrics.solver.p95DurationMs, 2_890);
+  assert.deepEqual(metrics.queue, {
+    pendingCount: 2,
+    runningCount: 1,
+    averageWaitMs: 340,
+    p95WaitMs: 810,
+  });
+  assert.deepEqual(metrics.cache, {
+    enabled: true,
+    hitCount: 8,
+    missCount: 2,
+    lookupCount: 10,
+    hitRate: 0.8,
+    readyEntryCount: 2,
+    fillingEntryCount: 1,
   });
 });
 
-test("admin solver metrics report an unavailable rate when there is no denominator", () => {
-  const metrics = buildAdminSolverMetricsData({
-    generatedAt: new Date("2026-09-01T08:00:00.000Z"),
+test("admin solver metrics fill missing five-minute trend buckets", () => {
+  const metrics = buildAdminSolverMetricsData(metricInput());
+
+  assert.equal(metrics.solver.trend.length, 12);
+  assert.equal(metrics.solver.trend[0]?.bucketStartedAt, "2026-09-01T07:05:00.000Z");
+  assert.deepEqual(metrics.solver.trend.at(-2), {
+    bucketStartedAt: "2026-09-01T07:55:00.000Z",
+    successCount: 4,
+    failureCount: 1,
+    completedCount: 5,
+    errorRate: 0.2,
+    averageDurationMs: 1_100,
+  });
+  assert.equal(metrics.solver.trend.at(-1)?.completedCount, 2);
+});
+
+test("admin solver metrics report unavailable rates and durations without samples", () => {
+  const metrics = buildAdminSolverMetricsData(metricInput({
     cacheEnabled: false,
     successCount: 0,
     failureCount: 0,
+    averageDurationMs: null,
+    p95DurationMs: null,
+    averageWaitMs: null,
+    p95WaitMs: null,
+    trend: [],
     cacheHitCount: 0,
     readyCacheEntryCount: 0,
     fillingCacheEntryCount: 0,
-  });
+  }));
 
   assert.equal(metrics.solver.errorRate, null);
+  assert.equal(metrics.solver.averageDurationMs, null);
   assert.equal(metrics.cache.hitRate, null);
   assert.equal(metrics.solver.completedCount, 0);
   assert.equal(metrics.cache.lookupCount, 0);
+  assert.equal(metrics.solver.trend.every((point) => point.completedCount === 0), true);
 });
 
-test("admin solver metrics normalize invalid database counts before exposing them", () => {
-  const metrics = buildAdminSolverMetricsData({
-    generatedAt: new Date("2026-09-01T08:00:00.000Z"),
-    cacheEnabled: true,
+test("admin solver metrics normalize invalid database values before exposing them", () => {
+  const metrics = buildAdminSolverMetricsData(metricInput({
     successCount: Number.NaN,
     failureCount: -1,
+    averageDurationMs: Number.POSITIVE_INFINITY,
+    p95DurationMs: -4,
+    maaCount: -2,
+    pendingTaskCount: Number.NaN,
+    averageWaitMs: -20,
+    trend: [{ bucketStartedAt: new Date("invalid"), successCount: 4, failureCount: 1, averageDurationMs: 10 }],
     cacheHitCount: 1.9,
     readyCacheEntryCount: -2,
     fillingCacheEntryCount: Number.POSITIVE_INFINITY,
-  });
+  }));
 
   assert.equal(metrics.solver.completedCount, 0);
+  assert.equal(metrics.solver.averageDurationMs, null);
+  assert.equal(metrics.solver.p95DurationMs, 0);
+  assert.equal(metrics.solver.sourceCounts.maa, 0);
+  assert.equal(metrics.queue.pendingCount, 0);
+  assert.equal(metrics.queue.averageWaitMs, 0);
   assert.equal(metrics.cache.hitCount, 1);
   assert.equal(metrics.cache.lookupCount, 1);
   assert.equal(metrics.cache.hitRate, 1);
@@ -90,4 +144,20 @@ test("admin solver metrics polling deduplicates requests and pauses in hidden ta
   assert.equal(source.includes('document.addEventListener("visibilitychange", refreshWhenVisible)'), true);
   assert.equal(source.includes('cache: "no-store"'), true);
   assert.equal(source.includes("activeRequest?.abort()"), true);
+});
+
+test("admin dashboard exposes three sections and lazy-loads an accessible area chart", async () => {
+  const [page, chartClient, chart] = await Promise.all([
+    readFile(new URL("./app/admin/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("./app/admin/users/solver-metrics-client.tsx", import.meta.url), "utf8"),
+    readFile(new URL("./app/admin/users/solver-metrics-chart.tsx", import.meta.url), "utf8"),
+  ]);
+
+  assert.equal(page.includes("<SolverVersion"), true);
+  assert.equal(page.includes("<AdminSolverMetrics"), true);
+  assert.equal(page.includes("<AdminUserManagement"), true);
+  assert.equal(chartClient.includes("dynamic("), true);
+  assert.equal(chartClient.includes("ssr: false"), true);
+  assert.equal(chart.includes("<AreaChart accessibilityLayer"), true);
+  assert.equal(chart.match(/<Area/g)?.length, 3);
 });

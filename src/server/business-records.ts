@@ -1,12 +1,14 @@
 import { randomUUID } from "node:crypto";
 
-import { and, desc, eq, gt, gte, lte, lt, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, gt, gte, inArray, lte, lt, or, sql, type SQL } from "drizzle-orm";
 
 import { PRIVACY_VERSION, TERMS_VERSION } from "@/legal-policy";
 import {
   ADMIN_SOLVER_ERROR_WINDOW_MINUTES,
-  buildAdminSolverMetricsData,
-} from "@/solver-metrics";
+  ADMIN_SOLVER_TREND_BUCKET_MINUTES,
+  ADMIN_SOLVER_TREND_WINDOW_MINUTES,
+} from "@/solver-metrics-config";
+import { buildAdminSolverMetricsData } from "@/solver-metrics";
 import type { AppErrorCode, FeedbackRequest, SavedPlanCalculationContext, SolverObservation } from "@/types";
 import { BUSINESS_DATA_TTL_MS, isBusinessDatabaseEnabled, isPlanCacheEnabled } from "./business-config";
 import { getDatabase } from "./db";
@@ -16,6 +18,7 @@ import {
   operboxSnapshot,
   planCache,
   planRun,
+  planTask,
   policyConsent,
   savedPlan,
   telemetryEvent,
@@ -272,14 +275,40 @@ export async function queryBusinessRecords(query: BusinessRecordQuery) {
 
 export async function queryAdminSolverMetrics(now = new Date()) {
   const windowStartedAt = new Date(now.getTime() - ADMIN_SOLVER_ERROR_WINDOW_MINUTES * 60_000);
+  const trendStartedAt = new Date(now.getTime() - ADMIN_SOLVER_TREND_WINDOW_MINUTES * 60_000);
+  const trendBucketSeconds = ADMIN_SOLVER_TREND_BUCKET_MINUTES * 60;
+  const trendBucket = sql<Date>`to_timestamp(floor(extract(epoch from ${planRun.createdAt}) / ${trendBucketSeconds}) * ${trendBucketSeconds})`;
   const database = getDatabase();
-  const [solverRows, cacheRows] = await Promise.all([
+  const [solverRows, trendRows, taskRows, cacheRows] = await Promise.all([
     database.select({
       successCount: sql<number>`count(*) filter (where ${planRun.status} = 'success')::int`,
       failureCount: sql<number>`count(*) filter (where ${planRun.status} = 'failed')::int`,
+      averageDurationMs: sql<number | null>`round(avg(${planRun.durationMs}) filter (where ${planRun.status} = 'success' and ${planRun.durationMs} is not null))::int`,
+      p95DurationMs: sql<number | null>`round(percentile_cont(0.95) within group (order by ${planRun.durationMs}) filter (where ${planRun.status} = 'success' and ${planRun.durationMs} is not null))::int`,
+      maaCount: sql<number>`count(*) filter (where ${planRun.sourceType} = 'maa')::int`,
+      sklandCount: sql<number>`count(*) filter (where ${planRun.sourceType} = 'skland')::int`,
+      sampleCount: sql<number>`count(*) filter (where ${planRun.sourceType} = 'sample')::int`,
     }).from(planRun).where(and(
       gte(planRun.createdAt, windowStartedAt),
       lte(planRun.createdAt, now),
+    )),
+    database.select({
+      bucketStartedAt: trendBucket,
+      successCount: sql<number>`count(*) filter (where ${planRun.status} = 'success')::int`,
+      failureCount: sql<number>`count(*) filter (where ${planRun.status} = 'failed')::int`,
+      averageDurationMs: sql<number | null>`round(avg(${planRun.durationMs}) filter (where ${planRun.status} = 'success' and ${planRun.durationMs} is not null))::int`,
+    }).from(planRun).where(and(
+      gte(planRun.createdAt, trendStartedAt),
+      lte(planRun.createdAt, now),
+    )).groupBy(trendBucket).orderBy(trendBucket),
+    database.select({
+      pendingCount: sql<number>`count(*) filter (where ${planTask.status} = 'pending')::int`,
+      runningCount: sql<number>`count(*) filter (where ${planTask.status} = 'running')::int`,
+      averageWaitMs: sql<number | null>`round(avg(extract(epoch from (${planTask.startedAt} - ${planTask.createdAt})) * 1000) filter (where ${planTask.startedAt} is not null and ${planTask.createdAt} >= ${windowStartedAt}))::int`,
+      p95WaitMs: sql<number | null>`round(percentile_cont(0.95) within group (order by extract(epoch from (${planTask.startedAt} - ${planTask.createdAt})) * 1000) filter (where ${planTask.startedAt} is not null and ${planTask.createdAt} >= ${windowStartedAt}))::int`,
+    }).from(planTask).where(or(
+      inArray(planTask.status, ["pending", "running"]),
+      and(gte(planTask.createdAt, windowStartedAt), lte(planTask.createdAt, now)),
     )),
     database.select({
       hitCount: sql<number>`coalesce(sum(${planCache.hitCount}) filter (where ${planCache.publicResult} is not null), 0)::int`,
@@ -293,6 +322,16 @@ export async function queryAdminSolverMetrics(now = new Date()) {
     cacheEnabled: isPlanCacheEnabled(),
     successCount: solverRows[0]?.successCount ?? 0,
     failureCount: solverRows[0]?.failureCount ?? 0,
+    averageDurationMs: solverRows[0]?.averageDurationMs ?? null,
+    p95DurationMs: solverRows[0]?.p95DurationMs ?? null,
+    maaCount: solverRows[0]?.maaCount ?? 0,
+    sklandCount: solverRows[0]?.sklandCount ?? 0,
+    sampleCount: solverRows[0]?.sampleCount ?? 0,
+    pendingTaskCount: taskRows[0]?.pendingCount ?? 0,
+    runningTaskCount: taskRows[0]?.runningCount ?? 0,
+    averageWaitMs: taskRows[0]?.averageWaitMs ?? null,
+    p95WaitMs: taskRows[0]?.p95WaitMs ?? null,
+    trend: trendRows,
     cacheHitCount: cacheRows[0]?.hitCount ?? 0,
     readyCacheEntryCount: cacheRows[0]?.readyEntryCount ?? 0,
     fillingCacheEntryCount: cacheRows[0]?.fillingEntryCount ?? 0,

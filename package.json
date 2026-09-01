@@ -51,6 +51,7 @@
     "qrcode.react": "4.2.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "recharts": "^3.8.0",
     "resend": "^6.20.0",
     "shadcn": "^4.16.0",
     "skland-kit": "0.3.5",

@@ -1247,10 +1247,34 @@ export interface AdminSolverMetricsData {
   generatedAt: string;
   solver: {
     windowMinutes: number;
+    trendWindowMinutes: number;
+    trendBucketMinutes: number;
     successCount: number;
     failureCount: number;
     completedCount: number;
     errorRate: number | null;
+    throughputPerMinute: number;
+    averageDurationMs: number | null;
+    p95DurationMs: number | null;
+    sourceCounts: {
+      maa: number;
+      skland: number;
+      sample: number;
+    };
+    trend: Array<{
+      bucketStartedAt: string;
+      successCount: number;
+      failureCount: number;
+      completedCount: number;
+      errorRate: number | null;
+      averageDurationMs: number | null;
+    }>;
+  };
+  queue: {
+    pendingCount: number;
+    runningCount: number;
+    averageWaitMs: number | null;
+    p95WaitMs: number | null;
   };
   cache: {
     enabled: boolean;

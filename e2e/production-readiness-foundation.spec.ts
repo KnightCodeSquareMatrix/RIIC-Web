@@ -822,6 +822,7 @@ test("server auth boundaries reject anonymous planning and every development Skl
 
   const nativeAdmin = await request.post("/api/auth/admin/list-users", { data: {} });
   expect(nativeAdmin.status()).toBe(404);
+  expect((await request.get("/admin")).status()).toBe(404);
   expect((await request.get("/admin/users")).status()).toBe(404);
 });
 
