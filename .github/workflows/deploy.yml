@@ -53,8 +53,13 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$DEPLOY_SHA"
           deploy_tree_sha="$(git rev-parse 'HEAD^{tree}')"
+          source_date_epoch="$(git show -s --format=%ct HEAD)"
           [[ "$deploy_tree_sha" =~ ^[0-9a-f]{40}$ ]]
-          printf 'DEPLOY_TREE_SHA=%s\n' "$deploy_tree_sha" >> "$GITHUB_ENV"
+          [[ "$source_date_epoch" =~ ^[1-9][0-9]*$ ]]
+          {
+            printf 'DEPLOY_TREE_SHA=%s\n' "$deploy_tree_sha"
+            printf 'SOURCE_DATE_EPOCH=%s\n' "$source_date_epoch"
+          } >> "$GITHUB_ENV"
 
       - name: Validate deployment configuration
         shell: bash
@@ -129,14 +134,10 @@ jobs:
             printf 'DEPLOY_LOCAL_ARCHIVE=%s\n' "$local_archive"
           } >> "$GITHUB_ENV"
 
-          release_public_mtime_epoch="$(git show -s --format=%ct "$DEPLOY_SHA")"
-          [[ "$release_public_mtime_epoch" =~ ^[1-9][0-9]*$ ]]
           RELEASE_SHA="$DEPLOY_SHA" RELEASE_TREE_SHA="$DEPLOY_TREE_SHA" \
-            RELEASE_PUBLIC_MTIME_EPOCH="$release_public_mtime_epoch" \
             npm run release:stage -- --output "$artifact_root"
-          # Staging fixes non-public mtimes for rsync reuse while browser-served assets
-          # retain a release mtime for safe Last-Modified and ETag validation.
           tar --sort=name \
+            --mtime="@$SOURCE_DATE_EPOCH" \
             --owner=0 \
             --group=0 \
             --numeric-owner \
@@ -297,7 +298,6 @@ jobs:
               --no-group \
               --chmod=F600 \
               --info=progress2 \
-              --stats \
               -e "ssh ${ssh_options[*]}" \
               -- "$DEPLOY_LOCAL_ARCHIVE" "$ssh_target:$archive_cache"
           else

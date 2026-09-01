@@ -3,7 +3,6 @@ import { cp, copyFile, lstat, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath, URL } from "node:url";
-import { normalizeReleaseMtimes } from "./normalize-release-mtimes.mjs";
 
 const repoRoot = path.resolve(fileURLToPath(new URL("../", import.meta.url)));
 const args = process.argv.slice(2);
@@ -13,12 +12,10 @@ assert.equal(args[0], "--output", "usage: stage-standalone-release.mjs --output 
 const outputRoot = path.resolve(args[1]);
 const releaseSha = process.env.RELEASE_SHA ?? "";
 const releaseTreeSha = process.env.RELEASE_TREE_SHA ?? "";
-const releasePublicMtimeEpoch = process.env.RELEASE_PUBLIC_MTIME_EPOCH ?? "";
 const relativeToRepository = path.relative(repoRoot, outputRoot);
 
 assert.match(releaseSha, /^[0-9a-f]{40}$/, "RELEASE_SHA must be a full lowercase Git commit SHA");
 assert.match(releaseTreeSha, /^[0-9a-f]{40}$/, "RELEASE_TREE_SHA must be a full lowercase Git tree SHA");
-assert.match(releasePublicMtimeEpoch, /^[1-9][0-9]*$/, "RELEASE_PUBLIC_MTIME_EPOCH must be a Unix timestamp");
 assert.ok(
   path.isAbsolute(relativeToRepository)
     || relativeToRepository === ".."
@@ -106,7 +103,5 @@ for (const forbiddenRootEntry of ["node_modules", "bin"]) {
     if (error?.code !== "ENOENT") throw error;
   }
 }
-
-await normalizeReleaseMtimes(outputRoot, new Date(Number(releasePublicMtimeEpoch) * 1000));
 
 process.stdout.write(`${outputRoot}\n`);
