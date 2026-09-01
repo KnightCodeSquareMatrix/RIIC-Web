@@ -34,15 +34,15 @@ test("admin solver metrics aggregates run against PostgreSQL", async () => {
       ),
       pool.query(
         `SELECT
-           to_timestamp(floor(extract(epoch FROM created_at) / 300) * 300) AS bucket_started_at,
+           to_timestamp(floor(extract(epoch FROM created_at) / $3) * $4) AS bucket_started_at,
            count(*) FILTER (WHERE status = 'success')::int AS success_count,
            count(*) FILTER (WHERE status = 'failed')::int AS failure_count,
            round(avg(duration_ms) FILTER (WHERE status = 'success' AND duration_ms IS NOT NULL))::int AS average_duration_ms
          FROM app.plan_run
          WHERE created_at >= $1 AND created_at <= $2
-         GROUP BY to_timestamp(floor(extract(epoch FROM created_at) / 300) * 300)
-         ORDER BY to_timestamp(floor(extract(epoch FROM created_at) / 300) * 300)`,
-        [trendStartedAt, now],
+         GROUP BY to_timestamp(floor(extract(epoch FROM created_at) / $5) * $6)
+         ORDER BY to_timestamp(floor(extract(epoch FROM created_at) / $7) * $8)`,
+        [trendStartedAt, now, 300, 300, 300, 300, 300, 300],
       ),
       pool.query(
         `SELECT
