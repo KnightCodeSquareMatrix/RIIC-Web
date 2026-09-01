@@ -2,6 +2,18 @@
 
 All notable changes to RIIC-Web are documented in this file.
 
+## [0.2.1] - 2026-09-01
+
+### Changed
+
+- The production plan worker now runs four isolated persistent solver lanes instead of two, doubling task execution capacity while keeping per-lane protocol output isolated.
+- Queue ETA calculations now use the four-lane execution capacity.
+- Deployment readiness now starts and pings every configured solver lane before the task worker publishes its first heartbeat.
+
+### For contributors
+
+- `package.json` and `package-lock.json` record release `0.2.1`.
+
 ## [0.2.0] - 2026-09-01
 
 ### Added

@@ -7,6 +7,7 @@ import {
   getPlanCacheSolverIdentity,
   runPlan,
   stopInfraServeClients,
+  warmPlanServeLane,
 } from "../src/server/infra.ts";
 import {
   completePlanCache,
@@ -197,6 +198,10 @@ export async function runPlanWorker(): Promise<void> {
   if (!/^[0-9a-f]{40}$/.test(releaseSha)) throw new Error("APP_RELEASE_SHA must be a full lowercase Git commit SHA.");
 
   const startedAt = new Date();
+  await Promise.all(Array.from(
+    { length: PLAN_TASK_WORKER_CONCURRENCY },
+    (_, serveLane) => warmPlanServeLane(serveLane),
+  ));
   const recovery = await recoverStaleRunningTasks(startedAt);
   await cleanupExpiredPlanTasks(startedAt);
   await recordPlanWorkerHeartbeat({ releaseSha, startedAt });

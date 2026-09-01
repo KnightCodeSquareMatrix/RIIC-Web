@@ -61,7 +61,7 @@ export const PLAN_TASK_TTL_MS = 24 * 60 * 60 * 1000;
 export const MAX_BUFFERED_PLAN_TASKS = 2_000;
 export const PLAN_TASK_ETA_PER_TASK_SECONDS = 3;
 export const PLAN_TASK_MAX_ATTEMPTS = 3;
-export const PLAN_TASK_WORKER_CONCURRENCY = 2;
+export const PLAN_TASK_WORKER_CONCURRENCY = 4;
 export const PLAN_WORKER_HEARTBEAT_MAX_AGE_MS = 20_000;
 
 const ACTIVE_STATUSES: PlanTaskStatus[] = ["pending", "running"];
