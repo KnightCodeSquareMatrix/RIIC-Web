@@ -15,6 +15,65 @@ import {
 const databaseUrl = process.env.AUTH_INTEGRATION_DATABASE_URL?.trim();
 if (!databaseUrl) throw new Error("AUTH_INTEGRATION_DATABASE_URL is required for the business-data integration test.");
 
+test("admin solver metrics aggregates run against PostgreSQL", async () => {
+  const pool = new Pool({ connectionString: databaseUrl, max: 4 });
+  const now = new Date();
+  const windowStartedAt = new Date(now.getTime() - 15 * 60_000);
+  const trendStartedAt = new Date(now.getTime() - 60 * 60_000);
+  try {
+    const [solverRows, trendRows, taskRows, cacheRows] = await Promise.all([
+      pool.query(
+        `SELECT
+           count(*) FILTER (WHERE status = 'success')::int AS success_count,
+           count(*) FILTER (WHERE status = 'failed')::int AS failure_count,
+           round(avg(duration_ms) FILTER (WHERE status = 'success' AND duration_ms IS NOT NULL))::int AS average_duration_ms,
+           round(percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_ms) FILTER (WHERE status = 'success' AND duration_ms IS NOT NULL))::int AS p95_duration_ms
+         FROM app.plan_run
+         WHERE created_at >= $1 AND created_at <= $2`,
+        [windowStartedAt, now],
+      ),
+      pool.query(
+        `SELECT
+           to_timestamp(floor(extract(epoch FROM created_at) / 300) * 300) AS bucket_started_at,
+           count(*) FILTER (WHERE status = 'success')::int AS success_count,
+           count(*) FILTER (WHERE status = 'failed')::int AS failure_count,
+           round(avg(duration_ms) FILTER (WHERE status = 'success' AND duration_ms IS NOT NULL))::int AS average_duration_ms
+         FROM app.plan_run
+         WHERE created_at >= $1 AND created_at <= $2
+         GROUP BY to_timestamp(floor(extract(epoch FROM created_at) / 300) * 300)
+         ORDER BY to_timestamp(floor(extract(epoch FROM created_at) / 300) * 300)`,
+        [trendStartedAt, now],
+      ),
+      pool.query(
+        `SELECT
+           count(*) FILTER (WHERE status = 'pending')::int AS pending_count,
+           count(*) FILTER (WHERE status = 'running')::int AS running_count,
+           round(avg(extract(epoch FROM (started_at - created_at)) * 1000) FILTER (WHERE started_at IS NOT NULL AND created_at >= $1))::int AS average_wait_ms,
+           round(percentile_cont(0.95) WITHIN GROUP (ORDER BY extract(epoch FROM (started_at - created_at)) * 1000) FILTER (WHERE started_at IS NOT NULL AND created_at >= $1))::int AS p95_wait_ms
+         FROM app.plan_task
+         WHERE status IN ('pending', 'running') OR (created_at >= $1 AND created_at <= $2)`,
+        [windowStartedAt, now],
+      ),
+      pool.query(
+        `SELECT
+           coalesce(sum(hit_count) FILTER (WHERE public_result IS NOT NULL), 0)::int AS hit_count,
+           count(*) FILTER (WHERE public_result IS NOT NULL)::int AS ready_entry_count,
+           count(*) FILTER (WHERE public_result IS NULL AND lease_expires_at > $1)::int AS filling_entry_count
+         FROM app.plan_cache
+         WHERE expires_at > $1`,
+        [now],
+      ),
+    ]);
+
+    assert.equal(solverRows.rowCount, 1);
+    assert.ok(Array.isArray(trendRows.rows));
+    assert.equal(taskRows.rowCount, 1);
+    assert.equal(cacheRows.rowCount, 1);
+  } finally {
+    await pool.end();
+  }
+});
+
 test("app schema stores only encrypted Box data and cascades account-owned business rows", async () => {
   const pool = new Pool({ connectionString: databaseUrl, max: 2 });
   const userId = randomUUID();
