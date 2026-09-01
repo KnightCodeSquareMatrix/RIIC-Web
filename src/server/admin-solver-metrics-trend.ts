@@ -17,7 +17,11 @@ export function buildAdminSolverTrendQuery(
   // A bound value would become a different PostgreSQL placeholder each time,
   // so embed this trusted internal constant to preserve expression identity.
   const bucketSecondsLiteral = sql.raw(String(bucketSeconds));
-  const trendBucket = sql<Date>`to_timestamp(floor(extract(epoch from ${schema.planRun.createdAt}) / ${bucketSecondsLiteral}) * ${bucketSecondsLiteral})`;
+  // sql<Date> only describes the TypeScript result; computed SQL expressions do
+  // not inherit a runtime decoder. Reuse the timestamp column decoder so the
+  // metrics formatter receives a Date instead of PostgreSQL's timestamp string.
+  const trendBucket = sql`to_timestamp(floor(extract(epoch from ${schema.planRun.createdAt}) / ${bucketSecondsLiteral}) * ${bucketSecondsLiteral})`
+    .mapWith(schema.planRun.createdAt);
 
   return database.select({
     bucketStartedAt: trendBucket,
