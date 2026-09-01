@@ -2,6 +2,17 @@
 
 All notable changes to RIIC-Web are documented in this file.
 
+## [0.2.2] - 2026-09-01
+
+### Changed
+
+- Production release archives now normalize non-public metadata so repeat deployments can reuse rsync's remote delta cache instead of retransmitting the full standalone bundle, while browser-served assets retain release timestamps for safe cache validation.
+- Deployment logs now report rsync transfer statistics, making slow uploads and cache effectiveness directly observable.
+
+### For contributors
+
+- `package.json` and `package-lock.json` record release `0.2.2`.
+
 ## [0.2.1] - 2026-09-01
 
 ### Changed

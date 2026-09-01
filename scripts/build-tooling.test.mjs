@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
-import { readdir, readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import test from "node:test";
 import { URL } from "node:url";
+import { normalizeReleaseMtimes } from "./normalize-release-mtimes.mjs";
 
 const repoRoot = new URL("../", import.meta.url);
 
@@ -52,13 +55,37 @@ test("production builds prepare a solver-free standalone runtime with static ass
   assert.match(prepareStandalone, /src\/server\/business-backfill\.ts/);
   assert.match(startStandalone, /ARKNIGHTS_INFRA_HOSTNAME \|\| "0\.0\.0\.0"/);
   assert.match(startStandalone, /process\.env\.PORT = String\(numericPort\)/);
+  assert.doesNotMatch(startStandalone, /utimes|refreshStaticFileMtimes/);
   assert.match(startStandalone, /\.next\/standalone\/server\.js/);
   assert.match(stageStandalone, /kind: "riic-web-standalone"/);
+  assert.match(stageStandalone, /normalizeReleaseMtimes\(outputRoot/);
   assert.match(stageStandalone, /standalone release root must not contain/);
   assert.match(stageStandalone, /\["bin\/infra-cli", "infra-cli"\]/);
   assert.match(stageStandalone, /\["\.env\.production\.local", "\.env\.production\.local"\]/);
   assert.match(stageStandalone, /dereference: true/);
   assert.doesNotMatch(stageStandalone, /outputRoot, "\.next", "cache"/);
+});
+
+test("release staging keeps runtime metadata reproducible and public validators fresh", async (context) => {
+  const fixtureRoot = await mkdtemp(path.join(tmpdir(), "riic-release-mtimes-"));
+  context.after(() => rm(fixtureRoot, { recursive: true, force: true }));
+  const publicRoot = path.join(fixtureRoot, ".next", "standalone", "public", "images");
+  const runtimeFile = path.join(fixtureRoot, ".next", "standalone", "server.js");
+  const publicAsset = path.join(publicRoot, "operator.png");
+  await mkdir(publicRoot, { recursive: true });
+  await Promise.all([writeFile(runtimeFile, "runtime"), writeFile(publicAsset, "public")]);
+  const publicTimestamp = new Date("2026-09-01T00:00:00.000Z");
+
+  await normalizeReleaseMtimes(fixtureRoot, publicTimestamp);
+
+  const [rootStat, runtimeStat, publicStat] = await Promise.all([
+    stat(fixtureRoot),
+    stat(runtimeFile),
+    stat(publicAsset),
+  ]);
+  assert.equal(rootStat.mtimeMs, 0);
+  assert.equal(runtimeStat.mtimeMs, 0);
+  assert.equal(publicStat.mtimeMs, publicTimestamp.getTime());
 });
 
 test("the plan worker runs four isolated solver lanes and closes every persistent client", async () => {
@@ -243,11 +270,20 @@ test("deploy builds and transfers a verified solver-free standalone artifact", a
   assert.match(deployWorkflow, /Build standalone release[\s\S]+APP_DEPLOYMENT_ENV:[\s\S]+SKLAND_FEATURE_ENABLED: "1"[\s\S]+ACCOUNT_CLOUD_SYNC_ENABLED: "1"[\s\S]+run: npm run build/);
   assert.match(deployWorkflow, /run: npm run build && npm run worker:build/);
   assert.match(qualityWorkflow, /Production worker build[\s\S]+npm run worker:build && node --check dist\/plan-worker\.cjs/);
-  assert.match(deployWorkflow, /RELEASE_SHA="\$DEPLOY_SHA" RELEASE_TREE_SHA="\$DEPLOY_TREE_SHA"[\s\S]+npm run release:stage -- --output "\$artifact_root"/);
-  assert.match(deployWorkflow, /tar --sort=name[\s\S]+--mtime="@\$SOURCE_DATE_EPOCH"[\s\S]+gzip --best --no-name --rsyncable[\s\S]+gzip -t "\$local_archive"/);
+  assert.match(deployWorkflow, /release_public_mtime_epoch="\$\(git show -s --format=%ct "\$DEPLOY_SHA"\)"[\s\S]+RELEASE_PUBLIC_MTIME_EPOCH="\$release_public_mtime_epoch"[\s\S]+npm run release:stage -- --output "\$artifact_root"/);
+  assert.match(
+    deployWorkflow,
+    /tar --sort=name[\s\S]+--owner=0[\s\S]+gzip --best --no-name --rsyncable[\s\S]+gzip -t "\$local_archive"/,
+  );
+  assert.doesNotMatch(deployWorkflow, /tar --sort=name[\s\S]+--mtime=/);
+  assert.doesNotMatch(
+    deployWorkflow,
+    /SOURCE_DATE_EPOCH/,
+    "release-specific archive mtimes invalidate every rsync cache block",
+  );
   assert.match(deployWorkflow, /archive_sha256="\$\(sha256sum "\$local_archive"[\s\S]+DEPLOY_ARCHIVE_SHA256=%s/);
   assert.match(deployWorkflow, /Build standalone release[\s\S]+APP_BUILD_ID: \$\{\{ env\.DEPLOY_SHA \}\}/);
-  assert.match(deployWorkflow, /Upload standalone release archive[\s\S]+--checksum[\s\S]+--partial[\s\S]+--inplace[\s\S]+remote_prefix_sha256[\s\S]+upload_chunk_bytes[\s\S]+test "\$remote_sha256" = "\$DEPLOY_ARCHIVE_SHA256"/);
+  assert.match(deployWorkflow, /Upload standalone release archive[\s\S]+--checksum[\s\S]+--partial[\s\S]+--inplace[\s\S]+--stats[\s\S]+remote_prefix_sha256[\s\S]+upload_chunk_bytes[\s\S]+test "\$remote_sha256" = "\$DEPLOY_ARCHIVE_SHA256"/);
   assert.match(deployWorkflow, /archive_cache="\.cache\/riic-web\/\$\{DEPLOYMENT_ENV\}-standalone\.tar\.gz"/);
   assert.match(deployWorkflow, /staged_archive=[\s\S]+mktemp[\s\S]+install -m 600[\s\S]+mv -fT/);
   assert.doesNotMatch(deployWorkflow, /\bscp\b/);
