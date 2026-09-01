@@ -5,7 +5,10 @@ import process from "node:process";
 import test from "node:test";
 
 import { Pool } from "pg";
+import { drizzle } from "drizzle-orm/node-postgres";
 
+import { buildAdminSolverTrendQuery } from "./admin-solver-metrics-trend.ts";
+import * as schema from "./db/schema.ts";
 import {
   decryptOperboxSnapshot,
   encryptOperboxSnapshot,
@@ -14,6 +17,22 @@ import {
 
 const databaseUrl = process.env.AUTH_INTEGRATION_DATABASE_URL?.trim();
 if (!databaseUrl) throw new Error("AUTH_INTEGRATION_DATABASE_URL is required for the business-data integration test.");
+
+test("admin solver metrics trend query preserves PostgreSQL grouping identity", async () => {
+  const pool = new Pool({ connectionString: databaseUrl, max: 2 });
+  const database = drizzle({ client: pool, schema });
+  const now = new Date();
+  const trendStartedAt = new Date(now.getTime() - 60 * 60_000);
+  try {
+    const query = buildAdminSolverTrendQuery(database, trendStartedAt, now, 300);
+    const generated = query.toSQL();
+    assert.equal(generated.params.includes(300), false);
+    assert.match(generated.sql, /\/ 300\) \* 300\)/);
+    assert.ok(Array.isArray(await query));
+  } finally {
+    await pool.end();
+  }
+});
 
 test("app schema stores only encrypted Box data and cascades account-owned business rows", async () => {
   const pool = new Pool({ connectionString: databaseUrl, max: 2 });
