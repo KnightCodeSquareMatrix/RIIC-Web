@@ -2,12 +2,13 @@ export function loadClientFeature(key: "websiteAccountDialog"): Promise<typeof i
 export function loadClientFeature(key: "setupDialog"): Promise<typeof import("./setup-dialog")>;
 export function loadClientFeature(key: "sharedComponents"): Promise<typeof import("./components")>;
 export function loadClientFeature(key: "planResultSummary"): Promise<typeof import("@/components/PlanResultSummary")>;
+export function loadClientFeature(key: "recommendationCard"): Promise<typeof import("@/components/RecommendationCard")>;
 export function loadClientFeature(key: "operatorPortraits"): Promise<typeof import("@/operatorPortraits")>;
 export function loadClientFeature(key: "compactScheduleView"): Promise<typeof import("@/components/CompactScheduleView")>;
 export function loadClientFeature(key: "operatorSkillTooltip"): Promise<typeof import("@/components/OperatorSkillTooltip")>;
 export function loadClientFeature(key: "schedulePortraitPreload"): Promise<typeof import("@/schedule-portrait-preload")>;
 export function loadClientFeature(
-  key: "websiteAccountDialog" | "setupDialog" | "sharedComponents" | "planResultSummary" | "operatorPortraits" | "compactScheduleView" | "operatorSkillTooltip" | "schedulePortraitPreload",
+  key: "websiteAccountDialog" | "setupDialog" | "sharedComponents" | "planResultSummary" | "recommendationCard" | "operatorPortraits" | "compactScheduleView" | "operatorSkillTooltip" | "schedulePortraitPreload",
 ): Promise<unknown> {
   switch (key) {
     case "websiteAccountDialog":
@@ -18,6 +19,8 @@ export function loadClientFeature(
       return import("./components");
     case "planResultSummary":
       return import("@/components/PlanResultSummary");
+    case "recommendationCard":
+      return import("@/components/RecommendationCard");
     case "operatorPortraits":
       return import("@/operatorPortraits");
     case "compactScheduleView":
