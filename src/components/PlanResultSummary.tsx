@@ -7,7 +7,6 @@ import { useEffect, useRef, useState } from "react";
 
 import { AnimatedNumber, AnimatedText } from "@/components/AnimatedText";
 import { ShiftComparisonDetails } from "@/components/ShiftComparisonCard";
-import { RecommendationCard } from "@/components/RecommendationCard";
 import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -353,7 +352,6 @@ function EfficiencyDetails({ profile, rotation, layout, metrics, productGroups }
       </div>
       {summary ? <dl className="mt-4 flex flex-wrap gap-x-4 gap-y-1 border-y border-border/70 py-2 text-xs" aria-label="账号准备度"><div className="flex gap-1"><dt className="text-muted-foreground">候选干员</dt><dd className="font-number font-semibold">贸易 {summary.trade_pool_ready} · 制造 {manufacturePoolReady(summary) ?? "—"}</dd></div><div className="flex gap-1"><dt className="text-muted-foreground">中枢</dt><dd className="font-number font-semibold">Lv.{layout.rooms.find((room) => room.kind === "control_center")?.level ?? "—"}</dd></div><div className="flex gap-1"><dt className="text-muted-foreground">班次</dt><dd className="font-number font-semibold">{rotation?.shifts.length ?? 0}</dd></div><div className="flex gap-1"><dt className="text-muted-foreground">可用干员</dt><dd className="font-number font-semibold">{summary.owned} / 进阶 {summary.tier_up_owned}</dd></div></dl> : null}
       {domains.length ? <div className="mt-5 border-t border-border/70 pt-4"><h3 className="text-sm font-semibold">设施组合提升空间</h3><div className="mt-2 grid gap-1">{[...domains].sort((a, b) => ({ critical: 0, warn: 1, ok: 2 })[a.severity] - ({ critical: 0, warn: 1, ok: 2 })[b.severity]).map((domain) => <div key={domain.id} className="grid gap-2 border-b border-border/60 py-3 text-xs sm:grid-cols-[minmax(0,1fr)_auto]" data-domain-state={domain.severity}><div className="min-w-0"><strong className="block truncate">{domain.label}</strong><span className="mt-0.5 block text-muted-foreground">当前干员：{domain.current.operators.length ? domain.current.operators.join(" / ") : "暂无可用组合"}</span></div><div className="flex items-center justify-between gap-2 sm:block sm:text-right"><span className="tabular-nums">{domainComparison(domain.gap_ratio)}</span><span className={cn("ml-2 px-1.5 py-0.5 font-semibold", severityClass(domain.severity))}>{domainStatus(domain.severity)}</span></div></div>)}</div></div> : null}
-      {profile?.actions.length ? <div className="mt-5 border-t border-border/70 pt-4"><h3 className="text-sm font-semibold">下一步建议</h3><div className="mt-1">{profile.actions.map((action, index) => <RecommendationCard key={`${action.domain_id}-${action.operator}-${index}`} action={action} variant="compact" index={index} />)}</div></div> : null}
       {profile?.flags.length || profile?.narration_hints.length ? <div className="mt-5 flex flex-wrap gap-1.5 border-t border-border/70 pt-4">{[...(profile?.flags ?? []), ...(profile?.narration_hints ?? [])].map((flag) => <span key={flag} className="bg-muted px-2 py-1 text-xs text-muted-foreground">{flag}</span>)}</div> : null}
     </section>
   );

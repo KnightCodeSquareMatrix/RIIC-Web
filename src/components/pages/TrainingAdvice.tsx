@@ -1,9 +1,9 @@
-import { useState, type ReactNode } from "react";
+import { lazy, Suspense, useState, type ReactNode } from "react";
 import { CircleAlert, ClipboardCheck, ChevronDown, GraduationCap } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 
 import { InfraTechnicalCard, InfraTechnicalHeading } from "@/components/InfraTechnicalCard";
-import { RecommendationCard } from "@/components/RecommendationCard";
+import { loadClientFeature } from "@/client-lazy-loader";
 import { cn } from "@/lib/utils";
 import { MOTION_DURATION, MOTION_EASE_IN_OUT } from "@/motion";
 import { TrainingAdviceActionCard } from "@/components/training-advice/TrainingAdviceActionCard";
@@ -20,6 +20,10 @@ import type {
   UserProfile,
   UserProfileAction,
 } from "@/types";
+
+const RecommendationCard = lazy(() => loadClientFeature("recommendationCard").then((module) => ({
+  default: module.RecommendationCard,
+})));
 
 export type TrainingAdviceProps = {
   operbox?: OperBoxEntry[] | null;
@@ -351,9 +355,11 @@ export function TrainingAdvice({
         >
           {actions.length ? (
             <div className="grid min-w-0 gap-3" data-training-advice-list>
-              {actions.map((action, index) => (
-                <RecommendationCard key={actionKey(action, index)} action={action} entry={ownedByName.get(action.operator)} index={index} showSkillTooltip={false} />
-              ))}
+              <Suspense fallback={<p className="py-4 text-sm text-white/62" role="status">正在加载培养建议…</p>}>
+                {actions.map((action, index) => (
+                  <RecommendationCard key={actionKey(action, index)} action={action} entry={ownedByName.get(action.operator)} index={index} showSkillTooltip={false} />
+                ))}
+              </Suspense>
             </div>
           ) : (
             <InfraTechnicalCard
