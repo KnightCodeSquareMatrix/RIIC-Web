@@ -393,7 +393,6 @@ async function maintainPrivateRecordsIfDue(now = Date.now()): Promise<void> {
 export async function deleteSklandOwnedData(ownerTags: string[]): Promise<{ runs: number; feedback: number }> {
   const allowed = new Set(ownerTags.filter((value) => /^[a-f0-9]{64}$/.test(value)));
   if (allowed.size === 0) return { runs: 0, feedback: 0 };
-  await maintainPrivateRecords();
   const diagnosticIds = new Set<string>();
   let runs = 0;
   for (const directory of await runDirectories()) {

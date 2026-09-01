@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -49,4 +49,22 @@ test("runtime data override is used only when the solver data set is complete", 
 
   await writeFile(path.join(configuredDataDir, REQUIRED_RUNTIME_DATA_FILES.at(-1)!), "{}", "utf-8");
   assert.equal(resolveRuntimeDataDir(cliPath, configuredDataDir), path.resolve(configuredDataDir));
+});
+
+test("Skland account-data deletion stays scoped to the verified website account", async () => {
+  const infraSource = await readFile(new URL("./infra.ts", import.meta.url), "utf-8");
+  const ownedDeletionStart = infraSource.indexOf("export async function deleteSklandOwnedData");
+  const ownedDeletionEnd = infraSource.indexOf("\nasync function privateRunForDiagnostic", ownedDeletionStart);
+  assert.ok(ownedDeletionStart >= 0 && ownedDeletionEnd > ownedDeletionStart);
+  const ownedDeletionSource = infraSource.slice(ownedDeletionStart, ownedDeletionEnd);
+  assert.doesNotMatch(ownedDeletionSource, /maintainPrivateRecords/);
+  assert.match(ownedDeletionSource, /allowed\.has\(metadata\.ownerTag\)/);
+
+  const apiSource = await readFile(new URL("./skland/account-data-api.ts", import.meta.url), "utf-8");
+  assert.match(apiSource, /readSklandAccountStore\(website\.user\.id\)/);
+  const deleteOwnedIndex = apiSource.indexOf("await deleteSklandOwnedData");
+  const removeBindingsIndex = apiSource.indexOf("await removeSklandBindings(website.user.id)");
+  const clearCookiesIndex = apiSource.indexOf("setSklandAccountStoreCookies(response");
+  assert.ok(deleteOwnedIndex >= 0 && removeBindingsIndex > deleteOwnedIndex);
+  assert.ok(clearCookiesIndex > removeBindingsIndex);
 });
