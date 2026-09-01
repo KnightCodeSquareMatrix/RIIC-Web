@@ -2,12 +2,19 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { ApiClientError, cancelPlanTask, pollPlanTask, type PlanTaskStatus } from "@/api";
+import {
+  ApiClientError,
+  cancelPlanTask,
+  pollPlanTask,
+  type PlanTaskStatus,
+  type PlanTaskSubmitData,
+} from "@/api";
 import { planTaskCancellationDecision } from "@/plan-task-cancellation";
 import type { PublicPlanData } from "@/types";
 
 const STORAGE_KEY = "aic-plan-task-v1";
 const BACKOFF_MS = [2_000, 4_000, 8_000, 16_000, 32_000];
+const STEADY_POLL_MS = 60_000;
 const RESUME_COOLDOWN_SECONDS = 30;
 
 export type PlanTaskUiState = {
@@ -157,8 +164,8 @@ export function usePlanTask({ onDone, onFailed }: PlanTaskOptions) {
       if (attempt < BACKOFF_MS.length) {
         timerRef.current = setTimeout(() => void pollOnceRef.current(taskId, attempt + 1), BACKOFF_MS[attempt]);
       } else {
-        setState((current) => ({ ...current, pollStopped: true }));
-        startResumeCooldown();
+        // 长队列和候选环可能持续数分钟；低频轮询可持续更新状态，避免用户反复提交。
+        timerRef.current = setTimeout(() => void pollOnceRef.current(taskId, attempt), STEADY_POLL_MS);
       }
     } catch (error) {
       if (taskIdRef.current !== taskId) return;
@@ -200,16 +207,20 @@ export function usePlanTask({ onDone, onFailed }: PlanTaskOptions) {
     pollOnceRef.current = pollOnce;
   }, [pollOnce]);
 
-  const begin = useCallback((taskId: string) => {
+  const begin = useCallback((submitted: string | Exclude<PlanTaskSubmitData, { status: "done" }>) => {
+    const initial = typeof submitted === "string"
+      ? { taskId: submitted, status: "pending" as const, queuePosition: 1, etaSeconds: 3 }
+      : submitted;
+    const { taskId } = initial;
     clearTimer();
     stopResumeCooldown();
     taskIdRef.current = taskId;
     writeStoredTaskId(taskId);
     setState({
       taskId,
-      status: "pending",
-      queuePosition: 1,
-      etaSeconds: 2,
+      status: initial.status,
+      queuePosition: initial.queuePosition ?? null,
+      etaSeconds: initial.etaSeconds ?? null,
       pollStopped: false,
       result: null,
       error: null,

@@ -285,6 +285,8 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   const [cliReady, setCliReady] = useState(false);
   const [taskQueueEnabled, setTaskQueueEnabled] = useState(false);
   const [apiError, setApiError] = useState<DisplayError | null>(null);
+  const [planRetryCountdown, setPlanRetryCountdown] = useState(0);
+  const planRetryTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [storageNotice, setStorageNotice] = useState<DisplayError | null>(null);
   const [activeShift, setActiveShift] = useState(0);
   const [issueDraftKind, setIssueDraftKind] = useState<FeedbackKind>("room_issue");
@@ -296,6 +298,33 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   const [resultClearNotice, setResultClearNotice] = useState<string | null>(null);
   const [resultClearWarningDismissed, setResultClearWarningDismissed] = useState(false);
   const [pendingProductChange, setPendingProductChange] = useState<ProductChange | null>(null);
+
+  function clearPlanRetryCooldown() {
+    if (planRetryTimerRef.current) {
+      clearInterval(planRetryTimerRef.current);
+      planRetryTimerRef.current = null;
+    }
+    setPlanRetryCountdown(0);
+  }
+
+  function startPlanRetryCooldown(seconds: number) {
+    clearPlanRetryCooldown();
+    setPlanRetryCountdown(Math.max(1, Math.ceil(seconds)));
+    planRetryTimerRef.current = setInterval(() => {
+      setPlanRetryCountdown((current) => {
+        if (current <= 1) {
+          if (planRetryTimerRef.current) clearInterval(planRetryTimerRef.current);
+          planRetryTimerRef.current = null;
+          return 0;
+        }
+        return current - 1;
+      });
+    }, 1_000);
+  }
+
+  useEffect(() => () => {
+    if (planRetryTimerRef.current) clearInterval(planRetryTimerRef.current);
+  }, []);
 
   const planTask = usePlanTask({
     onDone: (finalizedResult) => {
@@ -396,7 +425,13 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   const hasBox = Boolean(operbox?.length);
   const hasPersonalBox = hasBox && boxSource !== "sample";
   const feedbackDisabledForSampleBox = boxSource === "sample";
-  const canRun = Boolean(operbox && operbox.length > 0 && cliReady && accountCanUseCurrentBox);
+  const canRun = Boolean(
+    operbox
+    && operbox.length > 0
+    && cliReady
+    && accountCanUseCurrentBox
+    && planRetryCountdown === 0
+  );
   const sklandBindingCount = sklandBindingSummary.totalCount;
   const websiteUserId = websiteSession?.user.id ?? null;
   const accountCloudWorkspace = useAccountCloudWorkspace(CLIENT_ACCOUNT_CLOUD_SYNC_ENABLED ? {
@@ -901,6 +936,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     },
   ): Promise<boolean> {
     if (!planInput.operbox) return false;
+    if (planRetryCountdown > 0) return false;
     planClickAtRef.current = performance.now();
     trackTelemetry({ type: "interaction", name: "plan_click", page: "calculator" });
     const layoutError = layoutValidationError(planLayout);
@@ -935,10 +971,12 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       }
       const submitted = await submitPlanTask(payload);
       if (submitted.status === "done") planTask.complete(submitted.result);
-      else planTask.begin(submitted.taskId);
+      else planTask.begin(submitted);
       return true;
     } catch (error) {
-      setApiError(toDisplayError(error, "排班请求失败，请稍后重试。"));
+      const normalized = toDisplayError(error, "排班请求失败，请稍后重试。");
+      setApiError(normalized);
+      if (normalized.retryAfterSeconds) startPlanRetryCooldown(normalized.retryAfterSeconds);
       setLoading(false);
       return false;
     }
@@ -1465,6 +1503,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   }
 
   async function handleRetry() {
+    if (planRetryCountdown > 0) return;
     if (apiError?.code === "AIC-PLAN-3001") {
       await runPlanForLayout(layout, true);
       return;
@@ -1494,9 +1533,14 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     loading,
     error: statusError,
     completed: planTask.status === "done",
-    queued: loading && planTask.pollStopped,
+    queued: loading && (
+      planTask.status === "buffered"
+      || planTask.status === "pending"
+      || planTask.pollStopped
+    ),
     queuePosition: planTask.queuePosition,
     etaSeconds: planTask.etaSeconds,
+    buffered: planTask.status === "buffered",
   });
   useEffect(() => {
     if (page !== "calculator" || !result?.maa) return;
@@ -1532,6 +1576,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       sampleLoading,
       loading,
       canRun,
+      runCooldownSeconds: planRetryCountdown,
       hasBox,
       hasPersonalBox,
       feedbackDisabledForSampleBox,
@@ -1665,6 +1710,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
         <LiveActivity
           activity={activity}
           onRetry={() => void handleRetry()}
+          retryCountdownSeconds={planRetryCountdown}
           onCopyDiagnostic={() => {
             if (activity?.error) void copyText(formatSolverDiagnostic(activity.error));
           }}

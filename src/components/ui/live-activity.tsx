@@ -19,12 +19,14 @@ export interface Activity {
   error: DisplayError | null;
   queuePosition?: number | null;
   etaSeconds?: number | null;
+  buffered?: boolean;
 }
 
 export interface LiveActivityProps {
   activity: Activity | null;
   onRetry: () => void;
   onCopyDiagnostic: () => void;
+  retryCountdownSeconds?: number;
 }
 
 export function usePlanActivity({
@@ -34,6 +36,7 @@ export function usePlanActivity({
   queued = false,
   queuePosition = null,
   etaSeconds = null,
+  buffered = false,
 }: {
   loading: boolean;
   error: DisplayError | null;
@@ -42,6 +45,7 @@ export function usePlanActivity({
   queued?: boolean;
   queuePosition?: number | null;
   etaSeconds?: number | null;
+  buffered?: boolean;
 }) {
   const [activity, setActivity] = useState<Activity | null>(null);
   const wasLoading = useRef(false);
@@ -56,12 +60,13 @@ export function usePlanActivity({
         error: null,
         queuePosition,
         etaSeconds,
+        buffered,
       });
     } else if (loading && wasLoading.current) {
       // loading 期间 running ↔ queued 互相切换（轮询停止/恢复）。
       setActivity((current) =>
         current && current.id === sequence.current && (current.phase === "running" || current.phase === "queued")
-          ? { ...current, phase: queued ? "queued" : "running", queuePosition, etaSeconds }
+          ? { ...current, phase: queued ? "queued" : "running", queuePosition, etaSeconds, buffered }
           : current,
       );
     } else if (!loading && wasLoading.current) {
@@ -73,12 +78,12 @@ export function usePlanActivity({
           : null);
     }
     wasLoading.current = loading;
-  }, [completed, error, loading, queued, queuePosition, etaSeconds]);
+  }, [buffered, completed, error, etaSeconds, loading, queued, queuePosition]);
 
   return activity;
 }
 
-export function LiveActivity({ activity, onRetry, onCopyDiagnostic }: LiveActivityProps) {
+export function LiveActivity({ activity, onRetry, onCopyDiagnostic, retryCountdownSeconds = 0 }: LiveActivityProps) {
   const reduceMotion = useReducedMotion();
   const [copied, setCopied] = useState(false);
   const [dismissed, setDismissed] = useState<{ id: number; phase: ActivityPhase } | null>(null);
@@ -154,7 +159,11 @@ export function LiveActivity({ activity, onRetry, onCopyDiagnostic }: LiveActivi
               <span className="mt-0.5 block">
                 {activity.phase === "queued" ? (
                   <span className="text-sm text-[#313131]/75">
-                    前面还有 <strong className="font-semibold">{activity.queuePosition ?? "—"}</strong> 人，预计 <strong className="font-semibold">{formatDuration(activity.etaSeconds)}</strong>
+                    {activity.buffered ? (
+                      <>当前进入候选环，名额释放后随机抽取。</>
+                    ) : (
+                      <>前面还有 <strong className="font-semibold">{activity.queuePosition ?? "—"}</strong> 人，预计 <strong className="font-semibold">{formatDuration(activity.etaSeconds)}</strong></>
+                    )}
                   </span>
                 ) : activity.phase === "running" ? (
                   <span className="text-sm text-[#313131]/70">
@@ -173,7 +182,7 @@ export function LiveActivity({ activity, onRetry, onCopyDiagnostic }: LiveActivi
               </span>
               {activity.phase === "queued" ? (
                 <span className="mt-1 block text-sm text-[#313131]/58">
-                  排队中，请耐心等待，可以通过点击<strong className="font-semibold">“查询进度”</strong>按钮进行查询。
+                  页面会自动更新，无需重复提交。
                 </span>
               ) : null}
               {diagnostic ? <span className="mt-1 block text-xs text-red-900">{diagnostic.suggestion}</span> : null}
@@ -181,8 +190,8 @@ export function LiveActivity({ activity, onRetry, onCopyDiagnostic }: LiveActivi
             {activity.phase === "error" ? (
               <span className="flex shrink-0 items-center gap-1">
                 {activity.error?.retryable ? (
-                  <Button type="button" size="sm" variant="ghost" className="h-9 text-red-900 hover:bg-red-100 hover:text-red-950" onClick={onRetry}>
-                    <RotateCcw />重试
+                  <Button type="button" size="sm" variant="ghost" className="h-9 text-red-900 hover:bg-red-100 hover:text-red-950" onClick={onRetry} disabled={retryCountdownSeconds > 0}>
+                    <RotateCcw />{retryCountdownSeconds > 0 ? `${retryCountdownSeconds} 秒后重试` : "重试"}
                   </Button>
                 ) : null}
                 <Button
