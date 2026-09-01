@@ -1,6 +1,6 @@
 # Frontend Serve Guide
 
-The plan task worker keeps two isolated `infra-cli serve` processes alive, one per solver lane, instead of spawning a CLI process for every layout. Health checks use a separate client. Each lane still owns at most one active request, so logs and protocol responses retain an unambiguous owner.
+The plan task worker keeps four isolated `infra-cli serve` processes alive, one per solver lane, instead of spawning a CLI process for every layout. Health checks use a separate client. Each lane still owns at most one active request, so logs and protocol responses retain an unambiguous owner.
 
 ## Transport
 
@@ -132,7 +132,7 @@ All paths are selected by the frontend. After a successful response, the fronten
 
 ## Lifecycle
 
-1. Start one Worker per solver lane on demand. The production task queue currently runs two lanes.
+1. Start one Worker per solver lane on demand. The production task queue currently runs four lanes.
 2. Ping it before a solve, record the version and diagnostic fingerprints, and select `plan.compute` or legacy `plan` from the version fields only.
 3. Write one request line and accept only a JSON object with the matching `id` and a boolean `ok`; retain the stdout/stderr text in that request's capped private capture.
 4. Persist the request, response, per-request stdout, per-request stderr, profile, MAA, rotation, and debug bundle.
@@ -160,10 +160,10 @@ return successResponse(toPublicPlanData(internalResult, labels, requestId), requ
 
 ### Persistent task admission
 
-Authenticated `POST /api/tasks` requests persist an encrypted task payload before returning. An admitted task returns a deterministic queue position and an ETA derived from the two solver lanes:
+Authenticated `POST /api/tasks` requests persist an encrypted task payload before returning. An admitted task returns a deterministic queue position and an ETA derived from the four solver lanes:
 
 ```json
-{"success":true,"data":{"taskId":"<opaque-id>","status":"pending","queuePosition":12,"etaSeconds":18}}
+{"success":true,"data":{"taskId":"<opaque-id>","status":"pending","queuePosition":12,"etaSeconds":9}}
 ```
 
 When the 1,000-task global activity limit or the 600-new-account activity limit is full, an otherwise eligible task enters the bounded candidate ring instead:
