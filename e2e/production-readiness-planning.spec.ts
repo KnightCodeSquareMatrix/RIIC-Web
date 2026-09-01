@@ -632,7 +632,7 @@ test("failed plan remains expanded with retry and diagnostic actions", async ({ 
 
 test("dialog and mobile sheet motion preserve direction, exit timing, and focus", async ({ page }) => {
   await mockApis(page);
-  await seedV4Session(page, scheduleVisualPlanData);
+  await seedV4Session(page, scheduleVisualPlanData, { boxSource: "maa" });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
 
@@ -800,7 +800,7 @@ test("a stored sample BOX completes generation, shifts, MAA export, and disables
 
   const feedbackButton = page.getByRole("button", { name: "加工站 反馈排班问题" });
   await expect(feedbackButton).toBeDisabled();
-  await feedbackButton.hover();
+  await feedbackButton.locator("xpath=..").hover();
   await expect(page.getByText("全角色导入为体验数据，不能提交反馈")).toBeVisible();
 });
 
@@ -820,7 +820,7 @@ test("plan timing stays passive and performance feedback waits for result detail
       }),
     });
   });
-  await seedV4Session(page, { ...planData, durationMs: 2764 });
+  await seedV4Session(page, { ...planData, durationMs: 2764 }, { boxSource: "maa" });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
 
