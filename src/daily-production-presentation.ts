@@ -136,14 +136,11 @@ function estimateGroups(production: DailyProductionEstimate): DailyProductionGro
   ];
 }
 
-const HYBRID_ESTIMATE_NOTE = "拆分为前端估算，总量以求解器为准";
-
 function withSolverTotal(product: ProductionDetailProduct, value: number): ProductionDetailProduct {
   return {
     ...product,
     amount: { ...product.amount, value },
     rows: product.rows.map(([label, rowValue, unit]) => [`估算${label}`, rowValue, unit]),
-    note: product.note ? `${product.note}；${HYBRID_ESTIMATE_NOTE}` : HYBRID_ESTIMATE_NOTE,
   };
 }
 
