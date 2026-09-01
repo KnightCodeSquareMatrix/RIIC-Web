@@ -23,13 +23,23 @@ test("admin solver metrics trend query preserves PostgreSQL grouping identity", 
   const database = drizzle({ client: pool, schema });
   const now = new Date();
   const trendStartedAt = new Date(now.getTime() - 60 * 60_000);
+  const diagnosticId = randomUUID();
   try {
+    await pool.query(
+      `INSERT INTO app.plan_run
+       (diagnostic_id,source_type,status,layout_template,room_count,operator_count,rotation,fiammetta_enable,created_at,expires_at)
+       VALUES ($1,'sample','success','243',1,1,'abc',false,$2,now()+interval '1 day')`,
+      [diagnosticId, now],
+    );
     const query = buildAdminSolverTrendQuery(database, trendStartedAt, now, 300);
     const generated = query.toSQL();
     assert.equal(generated.params.includes(300), false);
     assert.match(generated.sql, /\/ 300\) \* 300\)/);
-    assert.ok(Array.isArray(await query));
+    const rows = await query;
+    assert.ok(rows.length > 0);
+    assert.ok(rows.every((row) => row.bucketStartedAt instanceof Date));
   } finally {
+    await pool.query("DELETE FROM app.plan_run WHERE diagnostic_id=$1", [diagnosticId]).catch(() => undefined);
     await pool.end();
   }
 });
