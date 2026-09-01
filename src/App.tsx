@@ -2,7 +2,18 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from "react";
 
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { WebsiteAccountDialogLoading } from "@/components/auth/WebsiteAccountDialogLoading";
@@ -235,9 +246,25 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   const [preset, setPreset] = useState<PresetDef>(defaultPreset);
   const [layout, setLayout] = useState<BaseBlueprint>(defaultLayout);
   const powerBudget = useMemo(() => computePowerBudget(layout), [layout]);
-  const [operbox, setOperbox] = useState<OperBoxEntry[] | null>(null);
+  const [operbox, setOperboxState] = useState<OperBoxEntry[] | null>(null);
+  const currentOperboxRef = useRef<OperBoxEntry[] | null>(operbox);
+  const setOperbox = useCallback<Dispatch<SetStateAction<OperBoxEntry[] | null>>>((nextOperbox) => {
+    const resolvedOperbox = typeof nextOperbox === "function"
+      ? nextOperbox(currentOperboxRef.current)
+      : nextOperbox;
+    currentOperboxRef.current = resolvedOperbox;
+    setOperboxState(resolvedOperbox);
+  }, []);
   const [fileName, setFileName] = useState<string | null>(null);
-  const [boxSource, setBoxSource] = useState<BoxSource>("sample");
+  const [boxSource, setBoxSourceState] = useState<BoxSource>("sample");
+  const currentBoxSourceRef = useRef<BoxSource>(boxSource);
+  const setBoxSource = useCallback<Dispatch<SetStateAction<BoxSource>>>((nextSource) => {
+    const resolvedSource = typeof nextSource === "function"
+      ? nextSource(currentBoxSourceRef.current)
+      : nextSource;
+    currentBoxSourceRef.current = resolvedSource;
+    setBoxSourceState(resolvedSource);
+  }, []);
   const [layoutDirty, setLayoutDirty] = useState(false);
   const [layoutSource, setLayoutSource] = useState<"local" | "skland">("local");
   const [localLayoutBackup, setLocalLayoutBackup] = useState<BaseBlueprint | null>(null);
@@ -263,11 +290,6 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   const initialLayoutForRestore = useRef(defaultLayout);
   const initialBoxSource = useRef(boxSource);
   const initialOperbox = useRef(operbox);
-  // 当前是否存在可用的 Box（跟随 operbox 实时更新）；只在没有 Box 时才自动应用森空岛数据。
-  const currentBoxAvailableRef = useRef(Boolean(operbox?.length));
-  useEffect(() => {
-    currentBoxAvailableRef.current = Boolean(operbox?.length);
-  }, [operbox]);
   const initialLayoutDirty = useRef(layoutDirty);
   const initialLayoutSource = useRef<"local" | "skland">("local");
   const initialLocalLayoutBackup = useRef<BaseBlueprint | null>(null);
@@ -577,7 +599,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     } finally {
       setHasRestoredSession(true);
     }
-  }, []);
+  }, [setBoxSource, setOperbox]);
 
   useEffect(() => {
     if (!hasRestoredSession || typeof window === "undefined") return;
@@ -734,7 +756,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
         setSklandStatusSnapshot(session.statusSnapshot ?? null);
         if (session.authenticated && session.scheduleSnapshot) {
           setSklandScheduleSnapshot(session.scheduleSnapshot);
-          if (!currentBoxAvailableRef.current) {
+          if (currentBoxSourceRef.current === "skland" || !currentOperboxRef.current?.length) {
             setOperbox(normalizeOperboxEntries(session.scheduleSnapshot.operbox));
             setFileName(session.scheduleSnapshot.sourceName);
             setBoxSource("skland");
@@ -770,7 +792,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [hasRestoredSession, page, setupOpen, websiteAuthReloadKey, websiteSessionPending, websiteUserId]);
+  }, [hasRestoredSession, page, setBoxSource, setOperbox, setupOpen, websiteAuthReloadKey, websiteSessionPending, websiteUserId]);
 
   useEffect(() => {
     if (
