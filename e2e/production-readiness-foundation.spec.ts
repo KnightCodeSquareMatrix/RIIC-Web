@@ -1209,11 +1209,11 @@ test("two-shift output drives product estimates, room formulas, and profile deta
   await expect(detailsSheet.getByRole("heading", { name: "设施组合提升空间" })).toBeVisible();
   await expect(detailsSheet.getByText("领先推荐组合 10.7%", { exact: true })).toBeVisible();
   await expect(detailsSheet.getByText("状态良好", { exact: true })).toBeVisible();
-  await expect(detailsSheet.getByText("下一步建议", { exact: true })).toBeVisible();
+  await expect(detailsSheet.getByText("下一步建议", { exact: true })).toHaveCount(0);
   await expect(detailsSheet.getByText("原效率与基准", { exact: true })).toHaveCount(0);
   await expect(detailsSheet.getByText("领域指标", { exact: true })).toHaveCount(0);
   await expect(detailsSheet.getByText(/机制等效|当前 1\.42|参考 1\.31/)).toHaveCount(0);
-  await expect(detailsSheet.locator('[data-recommendation-card="compact"]')).toHaveCount(1);
+  await expect(detailsSheet.locator('[data-recommendation-card="compact"]')).toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(page.locator('[data-slot="drawer-root"]')).toHaveCount(0);
   await expect(detailsTrigger).toBeFocused();
