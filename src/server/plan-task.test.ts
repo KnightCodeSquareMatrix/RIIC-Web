@@ -24,7 +24,7 @@ test("plan task IP admission keys are deterministic, secret-bound and never cont
 
 test("plan task admission uses 1000 global slots, 600 new-account slots, and a bounded candidate pool", () => {
   assert.equal(MAX_BUFFERED_PLAN_TASKS, 2_000);
-  assert.equal(PLAN_TASK_WORKER_CONCURRENCY, 4);
+  assert.equal(PLAN_TASK_WORKER_CONCURRENCY, 3);
   assert.equal(planTaskAdmissionStatus({
     activeTotal: 999,
     activeNewAccounts: 600,
@@ -47,10 +47,10 @@ test("plan task admission uses 1000 global slots, 600 new-account slots, and a b
   }), "buffered");
 });
 
-test("plan task ETA reflects four solver lanes", () => {
+test("plan task ETA reflects three solver lanes", () => {
   assert.equal(planTaskEtaSeconds(1), 3);
-  assert.equal(planTaskEtaSeconds(4), 3);
-  assert.equal(planTaskEtaSeconds(5), 6);
+  assert.equal(planTaskEtaSeconds(3), 3);
+  assert.equal(planTaskEtaSeconds(4), 6);
 });
 
 test("candidate pool rejects the exact 2000-task boundary", () => {
