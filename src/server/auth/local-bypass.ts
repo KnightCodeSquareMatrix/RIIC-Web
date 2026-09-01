@@ -63,7 +63,7 @@ export function localDevelopmentAuthBypassSession(
     },
     user: {
       id: LOCAL_BYPASS_USER_ID,
-      name: "本地预览",
+      name: "Local Preview",
       email: "local-preview@localhost.invalid",
       emailVerified: true,
       image: null,
