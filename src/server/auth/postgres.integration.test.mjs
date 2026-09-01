@@ -16,6 +16,7 @@ import * as schema from "../db/schema.ts";
 import { summarizeSklandBindings } from "../../skland-binding-state.ts";
 import { websiteAccountNameDatabaseHooks } from "./account-name-hooks.ts";
 import { websiteAdminAccess } from "./admin-access.ts";
+import { passwordStrengthHook } from "./password-strength-hook.ts";
 
 const databaseUrl = process.env.AUTH_INTEGRATION_DATABASE_URL?.trim();
 if (!databaseUrl) throw new Error("AUTH_INTEGRATION_DATABASE_URL is required for the PostgreSQL authentication integration test.");
@@ -39,6 +40,7 @@ test("Better Auth completes the PostgreSQL account lifecycle", async () => {
     secret: "integration-test-secret-at-least-32-bytes-long",
     database: drizzleAdapter(drizzle({ client: pool, schema }), { provider: "pg" }),
     databaseHooks: websiteAccountNameDatabaseHooks,
+    hooks: { before: passwordStrengthHook },
     emailAndPassword: {
       enabled: true,
       minPasswordLength: 10,
@@ -113,9 +115,20 @@ test("Better Auth completes the PostgreSQL account lifecycle", async () => {
   const delegatedAdminEmail = `auth-admin-${suffix}@example.test`;
   const bannedEmail = `auth-banned-${suffix}@example.test`;
   const invalidNameEmail = `auth-invalid-name-${suffix}@example.test`;
+  const weakPasswordEmail = `auth-weak-password-${suffix}@example.test`;
+  const weakAdminCreatedEmail = `auth-weak-admin-created-${suffix}@example.test`;
   const createdUserIds = [];
 
   try {
+    const weakPasswordRegistration = await post("/sign-up/email", {
+      name: "Weak password user",
+      email: weakPasswordEmail,
+      password: "weakpassword1",
+      callbackURL: origin,
+    });
+    assert.equal(weakPasswordRegistration.status, 400, await weakPasswordRegistration.clone().text());
+    assert.match((await weakPasswordRegistration.json()).message, /密码强度不足/);
+
     const invalidNameRegistration = await post("/sign-up/email", { name: "博士😀", email: invalidNameEmail, password, callbackURL: origin });
     assert.equal(invalidNameRegistration.status, 400, await invalidNameRegistration.clone().text());
     assert.match((await invalidNameRegistration.json()).message, /昵称只能使用/);
@@ -161,11 +174,34 @@ test("Better Auth completes the PostgreSQL account lifecycle", async () => {
     const resetToken = new URL(resetEmail.url).pathname.split("/").at(-1);
     assert.ok(resetToken);
 
+    const weakReset = await post("/reset-password", { token: resetToken, newPassword: "weakpassword1" });
+    assert.equal(weakReset.status, 400, await weakReset.clone().text());
+    assert.match((await weakReset.json()).message, /密码强度不足/);
+
     const reset = await post("/reset-password", { token: resetToken, newPassword: replacementPassword });
     assert.equal(reset.status, 200, await reset.clone().text());
     await expectNoSession(passwordResetCookie);
     assert.equal((await signIn(primaryEmail, password)).status, 401, "old password must stop working");
-    assert.equal((await signIn(primaryEmail, replacementPassword)).status, 200, "replacement password should sign in");
+    const replacementSignIn = await signIn(primaryEmail, replacementPassword);
+    assert.equal(replacementSignIn.status, 200, "replacement password should sign in");
+    const replacementCookie = cookieHeader(replacementSignIn);
+
+    const weakChange = await post("/change-password", {
+      currentPassword: replacementPassword,
+      newPassword: "weakpassword1",
+      revokeOtherSessions: false,
+    }, replacementCookie);
+    assert.equal(weakChange.status, 400, await weakChange.clone().text());
+    assert.match((await weakChange.json()).message, /密码强度不足/);
+
+    const weakOtpReset = await post("/email-otp/reset-password", {
+      email: primaryEmail,
+      otp: "000000",
+      password: "weakpassword1",
+    });
+    assert.equal(weakOtpReset.status, 400, await weakOtpReset.clone().text());
+    assert.match((await weakOtpReset.json()).message, /密码强度不足/);
+    assert.equal((await signIn(primaryEmail, replacementPassword)).status, 200, "rejected password changes must preserve the replacement password");
 
     const delegatedAdminId = await registerAndVerify(delegatedAdminEmail);
     createdUserIds.push(delegatedAdminId);
@@ -177,6 +213,29 @@ test("Better Auth completes the PostgreSQL account lifecycle", async () => {
     const delegatedAccess = websiteAdminAccess(delegatedAdminId, grantedRole.rows[0].role, bootstrapIds);
     assert.equal(delegatedAccess.isAdmin, true, "database admin role should grant administrator access");
     assert.equal(delegatedAccess.canManageAdminRoles, false, "delegated administrators must not grant roles");
+    const delegatedAdminSignIn = await signIn(delegatedAdminEmail);
+    assert.equal(delegatedAdminSignIn.status, 200, await delegatedAdminSignIn.clone().text());
+    const delegatedAdminCookie = cookieHeader(delegatedAdminSignIn);
+
+    const weakAdminCreate = await post("/admin/create-user", {
+      name: "Weak admin-created user",
+      email: weakAdminCreatedEmail,
+      password: "weakpassword1",
+      role: "user",
+    }, delegatedAdminCookie);
+    assert.equal(weakAdminCreate.status, 400, await weakAdminCreate.clone().text());
+    assert.match((await weakAdminCreate.json()).message, /密码强度不足/);
+
+    const weakAdminPassword = await post("/admin/set-user-password", {
+      userId: primaryUserId,
+      newPassword: "weakpassword1",
+    }, delegatedAdminCookie);
+    assert.equal(weakAdminPassword.status, 400, await weakAdminPassword.clone().text());
+    assert.match((await weakAdminPassword.json()).message, /密码强度不足/);
+    const weakAdminCreatedUser = await pool.query('SELECT count(*)::int AS count FROM "user" WHERE email = $1', [weakAdminCreatedEmail]);
+    assert.equal(weakAdminCreatedUser.rows[0].count, 0, "rejected admin creation must not persist a user");
+    assert.equal((await signIn(primaryEmail, replacementPassword)).status, 200, "rejected admin password changes must preserve the replacement password");
+
     await pool.query('UPDATE "user" SET role = $1, updated_at = now() WHERE id = $2', ["user", delegatedAdminId]);
     const revokedRole = await pool.query('SELECT role FROM "user" WHERE id = $1', [delegatedAdminId]);
     assert.equal(websiteAdminAccess(delegatedAdminId, revokedRole.rows[0].role, bootstrapIds).isAdmin, false, "revoked role should remove access immediately");
