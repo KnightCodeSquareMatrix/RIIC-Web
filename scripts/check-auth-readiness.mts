@@ -23,6 +23,8 @@ const expectedBusinessTables = [
   "plan_cache",
   "plan_cache_reference",
   "plan_run",
+  "plan_task",
+  "plan_worker_heartbeat",
   "policy_consent",
   "saved_plan",
   "telemetry_event",
@@ -55,16 +57,19 @@ try {
   const businessFound = new Set(businessResult.rows.map((row) => row.table_name));
   const missingBusiness = expectedBusinessTables.filter((table) => !businessFound.has(table));
   if (missingBusiness.length > 0) throw new Error(`Business database is missing committed tables: ${missingBusiness.join(", ")}`);
-  if (process.env.ACCOUNT_CLOUD_SYNC_ENABLED === "1") {
+  if (process.env.PLAN_TASK_QUEUE_ENABLED === "1" && process.env.BETA_BUSINESS_DB_ENABLED !== "1") {
+    throw new Error("PLAN_TASK_QUEUE_ENABLED requires BETA_BUSINESS_DB_ENABLED=1.");
+  }
+  if (process.env.ACCOUNT_CLOUD_SYNC_ENABLED === "1" || process.env.PLAN_TASK_QUEUE_ENABLED === "1") {
     const active = process.env.WORKSPACE_ACTIVE_KEY_VERSION?.trim();
     const raw = process.env.WORKSPACE_MASTER_KEYS?.trim();
-    if (!active || !raw) throw new Error("Cloud sync requires versioned workspace encryption keys.");
+    if (!active || !raw) throw new Error("Cloud sync and task encryption require versioned workspace encryption keys.");
     const keys = JSON.parse(raw) as Record<string, unknown>;
     const activeKey = keys[active];
     if (typeof activeKey !== "string") throw new Error("The active workspace encryption key version is unavailable.");
     if (secretBytes(activeKey) !== 32) throw new Error("The active workspace encryption key must contain exactly 32 bytes.");
   }
-  if (process.env.PLAN_CACHE_ENABLED === "1") {
+  if (process.env.PLAN_CACHE_ENABLED === "1" || process.env.PLAN_TASK_QUEUE_ENABLED === "1") {
     const key = process.env.PLAN_CACHE_HMAC_KEY?.trim() ?? "";
     if (secretBytes(key) < 32) throw new Error("PLAN_CACHE_HMAC_KEY must contain at least 32 bytes.");
   }

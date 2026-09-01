@@ -23,6 +23,7 @@ import {
   createPlanComputeParams,
   createSolverObservation,
   inspectPlanComputeCapability,
+  inspectSolverPingFingerprint,
   inspectSolverDeploymentReadiness,
   parsePlanComputePayload,
   solverObservationFromPlanRecord,
@@ -506,7 +507,7 @@ function formatPlanFailure({
 
 const globalForInfra = globalThis as typeof globalThis & {
   __infraCliHealthServeClient?: InfraCliServeClient;
-  __infraCliPlanServeClient?: InfraCliServeClient;
+  __infraCliPlanServeClients?: Map<number, InfraCliServeClient>;
   __infraCliCleanupRegistered?: boolean;
   __infraPrivateMaintenance?: {
     lastCompletedAt: number;
@@ -527,20 +528,40 @@ function getHealthServeClient() {
   return globalForInfra.__infraCliHealthServeClient;
 }
 
-function getPlanServeClient() {
-  globalForInfra.__infraCliPlanServeClient ??= new InfraCliServeClient(serveClientOptions());
-  return globalForInfra.__infraCliPlanServeClient;
+function getPlanServeClient(lane = 0) {
+  globalForInfra.__infraCliPlanServeClients ??= new Map();
+  const existing = globalForInfra.__infraCliPlanServeClients.get(lane);
+  if (existing) return existing;
+  const client = new InfraCliServeClient(serveClientOptions());
+  globalForInfra.__infraCliPlanServeClients.set(lane, client);
+  return client;
 }
 
-function stopServeClient(reason: string) {
+export async function warmPlanServeLane(serveLane: number): Promise<void> {
+  if (!Number.isSafeInteger(serveLane) || serveLane < 0) {
+    throw new Error("Plan solver lane must be a non-negative integer.");
+  }
+  const serveClient = getPlanServeClient(serveLane);
+  const ping = await serveClient.ping();
+  const capability = inspectPlanComputeCapability(ping.response);
+  const readiness = inspectSolverDeploymentReadiness(
+    capability,
+    process.env.INFRA_CLI_EXPECTED_SHA256,
+  );
+  if (!readiness.ready) {
+    throw new Error(`Plan solver lane ${serveLane} is not ready: ${readiness.reason ?? "unknown reason"}`);
+  }
+}
+
+export function stopInfraServeClients(reason: string) {
   globalForInfra.__infraCliHealthServeClient?.stop(reason);
-  globalForInfra.__infraCliPlanServeClient?.stop(reason);
+  for (const client of globalForInfra.__infraCliPlanServeClients?.values() ?? []) client.stop(reason);
 }
 
 function registerServeClientCleanup() {
   if (globalForInfra.__infraCliCleanupRegistered) return;
   globalForInfra.__infraCliCleanupRegistered = true;
-  registerProcessCleanup(process, stopServeClient);
+  registerProcessCleanup(process, stopInfraServeClients);
 }
 
 registerServeClientCleanup();
@@ -569,6 +590,7 @@ export async function getHealth(): Promise<HealthApiResponse> {
       try {
         const pingResult = await healthServeClient.ping();
         const planCompute = inspectPlanComputeCapability(pingResult.response);
+        const fingerprint = inspectSolverPingFingerprint(pingResult.response);
         const deploymentReadiness = inspectSolverDeploymentReadiness(
           planCompute,
           process.env.INFRA_CLI_EXPECTED_SHA256
@@ -577,6 +599,7 @@ export async function getHealth(): Promise<HealthApiResponse> {
           ...healthServeClient.info(),
           protocolMode: planCompute.supported ? "plan.compute" : "legacy",
           planCompute,
+          fingerprint,
         };
         if (!deploymentReadiness.ready) {
           serveError = deploymentReadiness.reason;
@@ -715,7 +738,10 @@ export async function describePlanArtifact(result: PlanApiResponse): Promise<Pri
   return artifactDescriptor(result.runId, [resolved]);
 }
 
-export async function runPlan(body: unknown): Promise<PlanApiResponse> {
+export async function runPlan(
+  body: unknown,
+  options: { serveLane?: number } = {},
+): Promise<PlanApiResponse> {
   let runDir = "";
   let ephemeralRunDir = "";
   let resultPath = "";
@@ -785,7 +811,7 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
     await writeJson(layoutPath, body.layout);
     await writeJson(operboxPath, body.operbox);
 
-    const serveClient = getPlanServeClient();
+    const serveClient = getPlanServeClient(options.serveLane);
     const pingResult = await serveClient.ping();
     const planCompute = inspectPlanComputeCapability(pingResult.response);
     solver = createSolverObservation(planCompute, new Date().toISOString());
@@ -1111,7 +1137,7 @@ export async function activateCliRelease(id: string) {
   const temp = `${activeCliPath}.${randomUUID()}.tmp`;
   await writeJson(temp, { releaseId: id, path: metadata.path, activatedAt: new Date().toISOString() });
   await rename(temp, activeCliPath);
-  stopServeClient("CLI 版本已切换，等待下次请求重启。");
+  stopInfraServeClients("CLI 版本已切换，等待下次请求重启。");
   return { releaseId: id, path: metadata.path };
 }
 

@@ -1,5 +1,3 @@
-import "server-only";
-
 const MINIMUM_SECRET_BYTES = 32;
 
 export const BUSINESS_DATA_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -27,6 +25,10 @@ export function isPlanCacheEnabled(): boolean {
   return isBusinessDatabaseEnabled() && process.env.PLAN_CACHE_ENABLED === "1";
 }
 
+export function isPlanTaskQueueEnabled(): boolean {
+  return isBusinessDatabaseEnabled() && process.env.PLAN_TASK_QUEUE_ENABLED === "1";
+}
+
 function decodeSecret(value: string, name: string): Buffer {
   const trimmed = value.trim();
   const decoded = trimmed.startsWith("base64:")
@@ -42,7 +44,7 @@ export function workspaceMasterKeys(): { activeVersion: string; keys: Map<string
   const activeVersion = process.env.WORKSPACE_ACTIVE_KEY_VERSION?.trim();
   const encoded = process.env.WORKSPACE_MASTER_KEYS?.trim();
   if (!activeVersion || !encoded) {
-    throw new Error("WORKSPACE_ACTIVE_KEY_VERSION and WORKSPACE_MASTER_KEYS are required for cloud sync.");
+    throw new Error("WORKSPACE_ACTIVE_KEY_VERSION and WORKSPACE_MASTER_KEYS are required for cloud sync and task encryption.");
   }
 
   let parsed: unknown;

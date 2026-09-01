@@ -1,10 +1,10 @@
 # Frontend Serve Guide
 
-The Next server keeps one `infra-cli serve` process alive instead of spawning a CLI process for every layout.
+The plan task worker keeps four isolated `infra-cli serve` processes alive, one per solver lane, instead of spawning a CLI process for every layout. Health checks use a separate client. Each lane still owns at most one active request, so logs and protocol responses retain an unambiguous owner.
 
 ## Transport
 
-Start the worker once:
+Each solver lane starts its Worker with:
 
 ```bash
 infra-cli serve
@@ -14,7 +14,7 @@ infra-cli serve
 - stdout: mixed logs and NDJSON responses. A line is a response only when it is a JSON object whose `id` matches the active request and whose `ok` value is a boolean. Plain text, malformed JSON, JSON logs, unknown request IDs and response-shaped objects with a non-boolean `ok` remain stdout logs.
 - stderr: logs only; never parse stderr as protocol output or copy stdout noise into it.
 
-The frontend sends one request at a time so unstructured stage logs have an unambiguous owner. It preserves the raw stdout and stderr emitted during that request, including the final protocol response in stdout. Parsing accepts split chunks, partial lines, LF or CRLF, and a log plus response delivered in one chunk. Each stream is capped at 8 MiB; after overflow, the oldest content is removed, an explicit truncation marker is prepended, and the newest output is retained. A retry after Worker restart starts fresh stream captures, and late events from the old process are ignored.
+Each solver lane sends one request at a time so unstructured stage logs have an unambiguous owner. It preserves the raw stdout and stderr emitted during that request, including the final protocol response in stdout. Parsing accepts split chunks, partial lines, LF or CRLF, and a log plus response delivered in one chunk. Each stream is capped at 8 MiB; after overflow, the oldest content is removed, an explicit truncation marker is prepended, and the newest output is retained. A retry after Worker restart starts fresh stream captures, and late events from the old process are ignored.
 
 ## Capability gate
 
@@ -132,11 +132,11 @@ All paths are selected by the frontend. After a successful response, the fronten
 
 ## Lifecycle
 
-1. Start one Worker on demand.
+1. Start and ping one Worker per solver lane before publishing the task worker's first heartbeat. The production task queue currently runs four lanes, and deployment readiness fails if any configured lane cannot start.
 2. Ping it before a solve, record the version and diagnostic fingerprints, and select `plan.compute` or legacy `plan` from the version fields only.
 3. Write one request line and accept only a JSON object with the matching `id` and a boolean `ok`; retain the stdout/stderr text in that request's capped private capture.
 4. Persist the request, response, per-request stdout, per-request stderr, profile, MAA, rotation, and debug bundle.
-5. If the process exits while a request is active, restart it and retry the active request once.
+5. If one lane's process exits while a request is active, restart that lane and retry the active request once.
 
 ## Public API boundary
 
@@ -157,3 +157,28 @@ return NextResponse.json({ success: true, data: { ...internalResult } });
 // Correct: construct the allowlist through the boundary mapper.
 return successResponse(toPublicPlanData(internalResult, labels, requestId), requestId);
 ```
+
+### Persistent task admission
+
+Authenticated `POST /api/tasks` requests persist an encrypted task payload before returning. An admitted task returns a deterministic queue position and an ETA derived from the four solver lanes:
+
+```json
+{"success":true,"data":{"taskId":"<opaque-id>","status":"pending","queuePosition":12,"etaSeconds":9}}
+```
+
+When the 1,000-task global activity limit or the 600-new-account activity limit is full, an otherwise eligible task enters the bounded candidate ring instead:
+
+```json
+{"success":true,"data":{"taskId":"<opaque-id>","status":"buffered","selectionPoolSize":37}}
+```
+
+`GET /api/tasks/<taskId>` returns the same `pending` or `buffered` state until the task is running or terminal. `selectionPoolSize` is the current candidate-ring size, not a queue position: capacity releases promote one eligible candidate at random. Clients should keep polling the returned task ID and must not resubmit while that task is reserved.
+
+Admission failures use both the standard `Retry-After` response header and `error.retryAfterSeconds` in the JSON envelope:
+
+- `AIC-PLAN-3005`: the account already owns a buffered, pending, or running task; wait for that task to finish or cancel it.
+- `AIC-PLAN-3006`: the account reached 10 starts in 10 minutes.
+- `AIC-PLAN-3007`: the network reached either 100 active accounts or 200 starts in 10 minutes.
+- `AIC-PLAN-3008`: the 2,000-task candidate ring is full.
+
+The browser backs off from 2 to 32 seconds, then continues polling once per minute for long waits. Retry buttons remain disabled for the server-provided countdown.

@@ -5,7 +5,11 @@ export interface SolverDiagnostic { title: string; suggestion: string }
 export function solverDiagnosticFor(error: DisplayError): SolverDiagnostic {
   if (error.code === "AIC-BOX-1101") return { title: "干员数据需要处理", suggestion: "重新导入 BOX，并确认文件来自受支持的导出格式。" };
   if (error.code === "AIC-LAYOUT-1201") return { title: "基建配置存在冲突", suggestion: "检查设施等级、产物配方和供电是否有效。" };
-  if (error.code === "AIC-PLAN-3002" || error.code === "AIC-RATE-6001") return { title: "请求暂未获准", suggestion: "等待几秒后重试，请勿连续点击生成。" };
+  if (error.code === "AIC-PLAN-3002" || error.code === "AIC-RATE-6001") return { title: "请求暂未获准", suggestion: "请按页面倒计时等待后重试，无需连续点击生成。" };
+  if (error.code === "AIC-PLAN-3005") return { title: "已有任务在排队", suggestion: "请等待当前任务完成后，再提交新的排班。" };
+  if (error.code === "AIC-PLAN-3006") return { title: "账号提交过于频繁", suggestion: "请按页面倒计时等待；倒计时结束后再为当前账号提交。" };
+  if (error.code === "AIC-PLAN-3007") return { title: "当前网络提交过于频繁", suggestion: "同一网络下可能有较多请求，请按页面倒计时等待后再试。" };
+  if (error.code === "AIC-PLAN-3008") return { title: "候选环暂时已满", suggestion: "候选名额释放后即可重试，请勿连续提交。" };
   if (error.code === "AIC-PLAN-3003") return { title: "本次计算超时", suggestion: "稍后重试；持续出现时请复制诊断信息反馈。" };
   if (["AIC-PLAN-3001", "AIC-PLAN-3004", "AIC-SYS-5000"].includes(error.code)) return { title: "排班服务暂时异常", suggestion: "可以重试；若仍失败，请复制诊断信息交给维护者。" };
   if (error.code.startsWith("AIC-AUTH-")) return { title: "账号状态需要处理", suggestion: "重新登录或刷新账号状态后再生成排班。" };
@@ -14,5 +18,12 @@ export function solverDiagnosticFor(error: DisplayError): SolverDiagnostic {
 
 export function formatSolverDiagnostic(error: DisplayError) {
   const diagnostic = solverDiagnosticFor(error);
-  return [diagnostic.title, error.message, `错误码：${error.code}`, ...(error.requestId ? [`请求编号：${error.requestId}`] : []), `建议：${diagnostic.suggestion}`].join("\n");
+  return [
+    diagnostic.title,
+    error.message,
+    `错误码：${error.code}`,
+    ...(error.requestId ? [`请求编号：${error.requestId}`] : []),
+    ...(error.retryAfterSeconds ? [`建议等待：${error.retryAfterSeconds} 秒`] : []),
+    `建议：${diagnostic.suggestion}`,
+  ].join("\n");
 }

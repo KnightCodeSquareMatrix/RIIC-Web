@@ -30,7 +30,6 @@ const PANEL_TRANSITION = { type: "spring", stiffness: 420, damping: 38, mass: 0.
 
 type SetupDialogProps = {
   open: boolean;
-  initialStep: SetupStep;
   onOpenChange: (open: boolean) => void;
   operbox: OperBoxEntry[] | null;
   boxSource: BoxSource;
@@ -86,7 +85,6 @@ function formatSyncTime(timestamp: number | null | undefined): string {
 
 export function SetupDialog({
   open,
-  initialStep,
   onOpenChange,
   operbox,
   boxSource,
@@ -128,7 +126,7 @@ export function SetupDialog({
   onSkip,
 }: SetupDialogProps) {
   const { data: websiteSession } = useWebsiteSession();
-  const [step, setStep] = useState<SetupStep>(initialStep);
+  const [step, setStep] = useState<SetupStep>("box");
   const [stepDirection, setStepDirection] = useState(0);
   const [needsFacilityReview, setNeedsFacilityReview] = useState(false);
   const [showImportOptions, setShowImportOptions] = useState(false);
@@ -153,14 +151,14 @@ export function SetupDialog({
     const justOpened = open && !wasOpenRef.current;
     wasOpenRef.current = open;
     if (!justOpened) return;
-    setStep(initialStep);
+    setStep("box");
     setStepDirection(0);
     setNeedsFacilityReview(pendingExternalReviewRef.current);
     pendingExternalReviewRef.current = false;
     setShowImportOptions(!hasBox);
     setShowMaaPaste(false);
     setOpeningConfigurationKey(configurationKey);
-  }, [configurationKey, hasBox, initialStep, open]);
+  }, [configurationKey, hasBox, open]);
 
   const configurationChanged = open && hasSetupConfigurationChanged(openingConfigurationKey, configurationKey);
 
@@ -303,7 +301,7 @@ export function SetupDialog({
                     <div className="flex min-w-0 items-center gap-3">
                       <Database className="size-4 shrink-0 text-primary" aria-hidden="true" />
                       <div className="min-w-0">
-                        <h3 id="setup-current-data-title" className="truncate text-sm font-semibold">{currentDataLabel}</h3>
+                        <h3 id="setup-current-data-title" className="font-number truncate text-sm font-semibold">{currentDataLabel}</h3>
                         <p className="mt-0.5 truncate text-xs text-muted-foreground">
                           <span className="font-number">{operbox?.length ?? 0}</span> 名干员 · <span className="font-number">{ownedCount}</span> 名可用
                         </p>
@@ -349,7 +347,7 @@ export function SetupDialog({
                             ) : !sklandConfigured && sklandDisabledReason ? (
                               <span className="mt-0.5 block text-xs text-muted-foreground">{sklandDisabledReason}</span>
                             ) : sklandBindingCount > 0 ? (
-                              <span className="mt-0.5 block text-xs text-muted-foreground">网站账号已绑定，当前浏览器需要重新扫码授权</span>
+                              <span className="mt-0.5 block text-xs text-muted-foreground">网站账号已绑定，当前浏览器需要重新授权</span>
                             ) : null}
                           </div>
                           {sklandSnapshot && boxSource !== "skland" ? (
@@ -546,7 +544,7 @@ export function SetupDialog({
             </>
           ) : step === "layout" ? (
             <>
-              <Button className="max-sm:min-w-16 sm:min-w-[88px]" size="dialog" type="button" variant="ghost" onClick={goToBox}>返回</Button>
+              <Button className="max-sm:min-w-16 sm:min-w-[88px]" size="dialog" type="button" variant="ghost" onClick={goToBox}>上一步</Button>
               <Button size="dialog" type="button" onClick={reviewFacilities}>
                 {mustReviewFacilities ? "检查设施" : "继续"}
               </Button>
@@ -566,7 +564,7 @@ export function SetupDialog({
                     : `电力不足 ${powerBudget.consumed - powerBudget.generated} · ${powerBudget.consumed}/${powerBudget.generated}`}
                 </span>
               </span>
-              <Button className="max-sm:min-w-16 sm:min-w-[88px]" size="dialog" type="button" variant="ghost" onClick={goToBasics}>返回</Button>
+              <Button className="max-sm:min-w-16 sm:min-w-[88px]" size="dialog" type="button" variant="ghost" onClick={goToBasics}>上一步</Button>
               <Button className="shrink-0" size="dialog" type="button" disabled={!powerBudget.ok} onClick={onFinish}><Check />完成</Button>
             </>
           )}

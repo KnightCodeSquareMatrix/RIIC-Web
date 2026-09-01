@@ -11,14 +11,26 @@
 ## 功能
 
 - 导入 MAA `Arknights_OperBox_Export.json` 和兼容的一图流 xlsx
+- 匿名用户可直接载入全角色样例并生成可浏览的示例排班，无需登录
 - 配置 243、153、333、252、342 等基建布局与设施等级
 - 生成三班排班，查看房间效率、换班调整和预计日产出
 - 按练度与基建收益查看练卡建议
 - 查询基建技能与适用设施
 - 对比当前进驻与排班计划，并导出 MAA JSON
-- 可选的森空岛二维码授权、状态同步、网站账号和云端工作区
+- 可选的森空岛扫码或凭证导入授权、状态同步、网站账号和云端工作区
 
 森空岛、网站账号和云同步都由部署者显式配置。未启用这些能力时，样例数据、布局配置、技能查询和已接入求解器的排班流程仍可独立使用。
+
+## 排班队列与提交限制
+
+登录账号提交的排班任务会写入持久化队列，刷新页面后仍可继续查询。排队与执行中的任务全站最多 1,000 个，其中注册未满 24 小时的新账号最多占用 600 个；达到任一上限后，任务进入最多容纳 2,000 个任务的候选环。活动名额释放时，系统会从仍符合账号和网络限制的候选任务中随机抽取，因此候选环不保证先到先得。
+
+- 同一账号只能保留一个候选、排队或执行中的任务。
+- 同一网络最多同时占用 100 个活动名额。
+- 每个账号在 10 分钟内最多启动 10 次排班，同一网络最多启动 200 次。
+- 页面会自动更新候选、排队和执行状态。出现 `AIC-PLAN-3006`、`AIC-PLAN-3007` 或 `AIC-PLAN-3008` 时，请等待页面倒计时结束后再提交，不要连续点击生成。
+
+任务 API 的状态与重试字段见 [Frontend Serve Guide](./docs/FRONTEND_SERVE_GUIDE.md#persistent-task-admission)。
 
 ## 技术栈
 
@@ -26,8 +38,8 @@
 - React 19 与 TypeScript
 - Tailwind CSS 4、shadcn/ui、Base UI
 - Better Auth、Drizzle ORM 与 PostgreSQL
-- `skland-kit`，仅用于可选的森空岛二维码授权
-- 外部长驻进程 `infra-cli serve`
+- `skland-kit`，仅用于可选的森空岛扫码或凭证导入授权
+- 外部长驻进程 `infra-cli serve`；生产排班 Worker 使用四个相互隔离的求解通道
 
 页面和 `/api/*` 由同一个 Next.js 服务提供，不需要单独启动 Express 或 Vite 服务。
 
@@ -93,7 +105,7 @@ cp .env.example .env.local
 
 ## 数据与隐私边界
 
-- 森空岛只提供官方二维码授权，不接收账号密码或短信验证码。
+- 森空岛支持官方二维码授权，以及由用户从已登录官网主动生成的凭证导入；本站不接收账号密码或短信验证码。
 - 森空岛凭据使用 AES-256-GCM 封装在 HttpOnly Cookie 中，不写入 localStorage、运行记录或反馈。
 - 排班 API 只公开白名单字段；调试字段在 production 强制关闭。
 - 运行记录、反馈、云工作区和分析数据各有独立的最小化与保留策略。
@@ -116,6 +128,15 @@ cp .env.example .env.local
 
 求解器协议与公共 DTO 的说明见 [Frontend Serve Guide](./docs/FRONTEND_SERVE_GUIDE.md)。
 
+## 文档索引
+
+- 使用与数据：[键盘和移动端操作](./docs/keyboard-shortcuts.md)、[预计日产物计算逻辑](./docs/计算逻辑.md)、[森空岛数据能力矩阵](./docs/SKLAND_DATA_CAPABILITIES.md)
+- 求解器与协议：[Frontend Serve Guide](./docs/FRONTEND_SERVE_GUIDE.md)、[`final_efficiency` 接入口径](./docs/TRADE_PRODUCTION_CONTRACT_GAP.md)、[本地求解器目录](./bin/README.md)
+- 部署与仓库管理：[PostgreSQL 部署模板](./deploy/postgres/README.md)、[systemd runtime settings](./deploy/SYSTEMD.md)、[公开仓库管理清单](./docs/REPOSITORY_ADMIN_CHECKLIST.md)
+- 贡献与发布：[参与贡献](./CONTRIBUTING.md)、[公开仓库迁移说明](./MIGRATION.md)、[Changelog](./CHANGELOG.md)、[Contributors](./CONTRIBUTORS.md)
+- 安全与权利：[安全政策](./SECURITY.md)、[第三方素材来源](./THIRD_PARTY_ASSETS.md)、[许可证](./LICENSE.md)
+- 代码代理说明：[AGENTS.md](./AGENTS.md)、[CLAUDE.md](./CLAUDE.md)
+
 ## 开发与检查
 
 ```bash
@@ -131,7 +152,7 @@ npm run db:generate
 npm run db:migrate
 ```
 
-所有功能和修复 PR 都应提交到 `develop`；`main` 只接收维护者从同仓库 `release/**` 分支发起的发布 PR。完整流程见 [CONTRIBUTING.md](./CONTRIBUTING.md)。不要把本地环境文件、求解器二进制、运行记录、用户数据或浏览器自动化产物加入提交。
+所有普通功能和修复 PR 都应提交到 `develop`；`main` 只接收维护者从同仓库 `release/**` 分支发起的发布 PR。特批的直接发布还必须带有维护者设置的 `direct-main-release` 标签，并通过其余全部质量门禁。完整流程见 [CONTRIBUTING.md](./CONTRIBUTING.md)。不要把本地环境文件、求解器二进制、运行记录、用户数据或浏览器自动化产物加入提交。
 
 ## 第三方素材
 

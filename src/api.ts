@@ -30,6 +30,7 @@ export class ApiClientError extends Error implements DisplayError {
   readonly code: AppErrorCode;
   readonly requestId?: string;
   readonly retryable: boolean;
+  readonly retryAfterSeconds?: number;
   readonly fieldErrors?: ApiFailure["error"]["fieldErrors"];
 
   constructor(error: DisplayError) {
@@ -38,6 +39,7 @@ export class ApiClientError extends Error implements DisplayError {
     this.code = error.code;
     this.requestId = error.requestId;
     this.retryable = error.retryable;
+    this.retryAfterSeconds = error.retryAfterSeconds;
     this.fieldErrors = error.fieldErrors;
   }
 }
@@ -64,6 +66,7 @@ function nonApiResponseError(path: string, response: Response): ApiClientError {
         : "请求过于频繁，请稍后重试。",
       requestId,
       retryable: true,
+      ...(retryAfterSeconds !== null ? { retryAfterSeconds } : {}),
     });
   }
 
@@ -86,7 +89,16 @@ async function requestData<T>(path: string, init?: RequestInit): Promise<T> {
 
   const body = (await response.json().catch(() => null)) as ApiResponse<T> | null;
   if (body?.success === true) return body.data;
-  if (body?.success === false) throw new ApiClientError(body.error);
+  if (body?.success === false) {
+    const retryAfter = response.headers.get("Retry-After")?.trim();
+    const retryAfterSeconds = retryAfter && /^\d+$/.test(retryAfter)
+      ? Number.parseInt(retryAfter, 10)
+      : undefined;
+    throw new ApiClientError({
+      ...body.error,
+      retryAfterSeconds: body.error.retryAfterSeconds ?? retryAfterSeconds,
+    });
+  }
   throw nonApiResponseError(path, response);
 }
 
@@ -106,6 +118,7 @@ export function toDisplayError(error: unknown, fallback: string): DisplayError {
       message: error.message,
       requestId: error.requestId,
       retryable: error.retryable,
+      retryAfterSeconds: error.retryAfterSeconds,
       fieldErrors: error.fieldErrors,
     };
   }
@@ -139,6 +152,59 @@ export function computePlan(payload: {
   });
 }
 
+export type PlanTaskStatus = "buffered" | "pending" | "running" | "done" | "failed" | "cancelled";
+
+export type PlanTaskSubmitData = {
+  status: "done";
+  result: PublicPlanData;
+} | {
+  taskId: string;
+  status: "buffered" | "pending";
+  queuePosition?: number;
+  etaSeconds?: number;
+  selectionPoolSize?: number;
+};
+
+export type PlanTaskPollData = {
+  taskId: string;
+  status: PlanTaskStatus;
+  queuePosition?: number;
+  etaSeconds?: number;
+  selectionPoolSize?: number;
+  result?: PublicPlanData;
+  error?: string | null;
+};
+
+export function submitPlanTask(payload: {
+  layout: BaseBlueprint;
+  operbox: OperBoxEntry[];
+  sourceName: string | null;
+  boxSource: "skland" | "maa" | "sample";
+  rotation: RotationProfile;
+  fiammetta_enable?: boolean;
+}): Promise<PlanTaskSubmitData> {
+  const requestPayload = payload.boxSource === "sample"
+    ? { layout: payload.layout, sourceName: payload.sourceName, boxSource: payload.boxSource, rotation: payload.rotation, fiammetta_enable: payload.fiammetta_enable }
+    : payload;
+  return requestData("/api/tasks", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(requestPayload),
+  });
+}
+
+export function pollPlanTask(taskId: string): Promise<PlanTaskPollData> {
+  return requestData(`/api/tasks/${encodeURIComponent(taskId)}`);
+}
+
+export function cancelPlanTask(taskId: string): Promise<{
+  taskId: string;
+  cancelled: boolean;
+  reason: "running" | "unavailable" | null;
+}> {
+  return requestData(`/api/tasks/${encodeURIComponent(taskId)}`, { method: "DELETE" });
+}
+
 export function getHealth(): Promise<PublicHealthData> {
   return requestData("/api/health");
 }
@@ -152,6 +218,17 @@ export function startSklandQr(consent: SklandPolicyConsentRequest): Promise<Skla
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ consent }),
+  });
+}
+
+export function importSklandCredential(
+  credential: string,
+  consent: SklandPolicyConsentRequest,
+): Promise<SklandSessionData> {
+  return requestData(sklandApiPath("/auth/credential"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ credential, consent }),
   });
 }
 

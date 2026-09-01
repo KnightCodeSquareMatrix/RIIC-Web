@@ -84,7 +84,17 @@ function normalizedRoomLine(value: unknown): RotationRoomLine {
     "power_skill_efficiency",
     "power_display_efficiency",
   ].some((field) => field in value);
-  if (usesWorkerFields) return normalizeServeRoomEfficiency(value);
+  if (usesWorkerFields) {
+    const normalized = normalizeServeRoomEfficiency(value) as unknown as Record<string, unknown>;
+    // 幂等：行可能已被归一化过一次（worker 字段已转成 score/pct 旧字段），
+    // 二次归一化时把这些旧字段原样保留，避免把 power_skill_pct / trade_skill_pct /
+    // manu_prod_skill / power_score 等吞掉。
+    for (const field of ROOM_EFFICIENCY_FIELDS) {
+      const number = finiteNumber(value[field]);
+      if (number !== undefined) (normalized as Record<string, unknown>)[field] = number;
+    }
+    return normalized as unknown as RotationRoomLine;
+  }
 
   const line: RotationRoomLine = {
     room_id: typeof value.room_id === "string" ? value.room_id : "",

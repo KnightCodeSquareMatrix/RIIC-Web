@@ -5,6 +5,7 @@ import type {
   PlanComputeParams,
   RotationProfile,
   SolverObservation,
+  SolverPingFingerprint,
   TrainingAdviceReport,
   TrainingRoomSchedule,
 } from "../types";
@@ -17,6 +18,7 @@ export const PLAN_PROTOCOL_VERSION = 1;
 export const PLAN_SCHEMA_VERSION = 3;
 
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
+const GIT_COMMIT_PATTERN = /^[0-9a-f]{40}$/;
 
 export type PlanComputeCapability = {
   supported: boolean;
@@ -74,16 +76,61 @@ export function normalizeSha256(value: unknown): string | null {
   return typeof value === "string" && SHA256_PATTERN.test(value) ? value : null;
 }
 
+function normalizeGitCommit(value: unknown): string | null {
+  return typeof value === "string" && GIT_COMMIT_PATTERN.test(value) ? value : null;
+}
+
+function normalizeTimestamp(value: unknown): string | null {
+  return typeof value === "string" && Number.isFinite(Date.parse(value)) ? value : null;
+}
+
+function inspectContractSha256ByVersion(value: unknown): SolverPingFingerprint["planContractSha256ByVersion"] {
+  if (!isProtocolRecord(value)) return [];
+
+  return Object.entries(value)
+    .flatMap(([rawVersion, rawSha256]) => {
+      const version = Number(rawVersion);
+      const sha256 = normalizeSha256(rawSha256);
+      return Number.isSafeInteger(version) && version > 0 && String(version) === rawVersion && sha256
+        ? [{ version, sha256 }]
+        : [];
+    })
+    .sort((left, right) => left.version - right.version);
+}
+
+export function inspectSolverPingFingerprint(response: unknown): SolverPingFingerprint {
+  const envelope = isProtocolRecord(response) ? response : {};
+  const solver = isProtocolRecord(envelope.solver) ? envelope.solver : {};
+  const result = isProtocolRecord(envelope.result) ? envelope.result : {};
+
+  return {
+    elapsedMs: typeof envelope.elapsed_ms === "number" && Number.isFinite(envelope.elapsed_ms) && envelope.elapsed_ms >= 0
+      ? envelope.elapsed_ms
+      : null,
+    envelopeSolverGitCommit: normalizeGitCommit(solver.git_commit),
+    envelopeSolverBuiltAt: normalizeTimestamp(solver.built_at),
+    pong: result.pong === true,
+    protocolVersion: Number.isInteger(result.protocol_version) ? result.protocol_version as number : null,
+    planSchemaVersion: Number.isInteger(result.plan_schema_version) ? result.plan_schema_version as number : null,
+    supportedPlanSchemaVersions: Array.isArray(result.supported_plan_schema_versions)
+      ? result.supported_plan_schema_versions.filter((version): version is number => Number.isInteger(version))
+      : [],
+    planContractSha256: normalizeSha256(result.plan_contract_sha256),
+    planContractSha256ByVersion: inspectContractSha256ByVersion(result.plan_contract_sha256_by_version),
+    solverExecutableSha256: normalizeSha256(result.solver_executable_sha256),
+    solverGitCommit: normalizeGitCommit(result.solver_git_commit),
+    solverBuiltAt: normalizeTimestamp(result.solver_built_at),
+  };
+}
+
 export function inspectPlanComputeCapability(response: unknown): PlanComputeCapability {
   const envelope = isProtocolRecord(response) ? response : {};
-  const result = isProtocolRecord(envelope.result) ? envelope.result : {};
-  const protocolVersion = typeof result.protocol_version === "number" ? result.protocol_version : null;
-  const schemaVersion = typeof result.plan_schema_version === "number" ? result.plan_schema_version : null;
-  const supportedSchemaVersions = Array.isArray(result.supported_plan_schema_versions)
-    ? result.supported_plan_schema_versions.filter((value): value is number => Number.isInteger(value))
-    : [];
-  const contractSha256 = normalizeSha256(result.plan_contract_sha256);
-  const solverExecutableSha256 = normalizeSha256(result.solver_executable_sha256);
+  const fingerprint = inspectSolverPingFingerprint(response);
+  const protocolVersion = fingerprint.protocolVersion;
+  const schemaVersion = fingerprint.planSchemaVersion;
+  const supportedSchemaVersions = fingerprint.supportedPlanSchemaVersions;
+  const contractSha256 = fingerprint.planContractSha256;
+  const solverExecutableSha256 = fingerprint.solverExecutableSha256;
   const base = {
     protocolVersion,
     schemaVersion,

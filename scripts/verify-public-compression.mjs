@@ -5,6 +5,7 @@ import { fileURLToPath, URL } from "node:url";
 
 const ACCEPTED_ENCODINGS = new Set(["br", "gzip"]);
 const MINIMUM_SCRIPT_BYTES = 1_024;
+const RELEASE_ID_PATTERN = /^[0-9a-f]{40}$/;
 
 function responseEncoding(response) {
   return response.headers.get("content-encoding")?.trim().toLowerCase() ?? "";
@@ -19,7 +20,17 @@ function assertCompressed(response, label) {
   return encoding;
 }
 
-export async function verifyPublicCompression(healthUrl, fetchImpl = globalThis.fetch) {
+function metaContent(document, name) {
+  const metaTags = document.match(/<meta\b[^>]*>/giu) ?? [];
+  const namedTag = metaTags.find((tag) => new RegExp(`\\bname=["']${name}["']`, "iu").test(tag));
+  return namedTag?.match(/\bcontent=["']([^"']*)["']/iu)?.[1] ?? "";
+}
+
+export async function verifyPublicCompression(
+  healthUrl,
+  fetchImpl = globalThis.fetch,
+  expectedBuildId = process.env.DEPLOY_SHA ?? "",
+) {
   const health = new URL(healthUrl);
   assert.ok(health.protocol === "https:" || health.protocol === "http:", "public health URL must use HTTP or HTTPS");
 
@@ -32,7 +43,24 @@ export async function verifyPublicCompression(healthUrl, fetchImpl = globalThis.
   const pageResponse = await fetchImpl(rootUrl, requestOptions);
   assert.ok(pageResponse.ok, `public page request failed with HTTP ${pageResponse.status}`);
   const pageEncoding = assertCompressed(pageResponse, "public HTML");
+  const pageCacheControl = pageResponse.headers.get("cache-control")?.trim() ?? "";
+  assert.match(
+    pageCacheControl,
+    /(?:^|,)\s*(?:private|no-store)(?:\s|,|$)/iu,
+    `public HTML must not be stored by a shared cache; received ${pageCacheControl || "no Cache-Control"}`,
+  );
+  assert.doesNotMatch(
+    pageCacheControl,
+    /(?:^|,)\s*s-maxage\s*=/iu,
+    `public HTML must not advertise shared-cache freshness; received ${pageCacheControl}`,
+  );
   const document = await pageResponse.text();
+  let buildId = "";
+  if (expectedBuildId) {
+    assert.match(expectedBuildId, RELEASE_ID_PATTERN, "expected public build ID must be a full lowercase commit SHA");
+    buildId = metaContent(document, "riic-build-id");
+    assert.equal(buildId, expectedBuildId, `public HTML build ID is ${buildId || "missing"}; expected ${expectedBuildId}`);
+  }
   const scriptPaths = [...document.matchAll(/<script[^>]+src="([^"]+\.js(?:\?[^"]*)?)"/g)]
     .map((match) => match[1]);
   assert.ok(scriptPaths.length > 0, "public HTML does not reference any JavaScript chunks");
@@ -49,7 +77,9 @@ export async function verifyPublicCompression(healthUrl, fetchImpl = globalThis.
   );
 
   return {
+    buildId,
     pageEncoding,
+    pageCacheControl,
     pageUrl: pageResponse.url || rootUrl.href,
     scriptBytes: scriptBody.byteLength,
     scriptEncoding,
@@ -62,14 +92,16 @@ const entryPath = process.argv[1] ? path.normalize(path.resolve(process.argv[1])
 
 if (entryPath === modulePath) {
   const healthUrl = process.argv[2] ?? process.env.DEPLOY_PUBLIC_HEALTH_URL;
+  const expectedBuildId = process.env.DEPLOY_SHA ?? "";
   if (!healthUrl) {
     stderr.write("usage: node scripts/verify-public-compression.mjs <public-health-url>\n");
     process.exitCode = 1;
   } else {
     try {
-      const result = await verifyPublicCompression(healthUrl);
+      assert.match(expectedBuildId, RELEASE_ID_PATTERN, "DEPLOY_SHA must identify the public build being verified");
+      const result = await verifyPublicCompression(healthUrl, globalThis.fetch, expectedBuildId);
       stdout.write(
-        `public compression passed: HTML ${result.pageEncoding}; JavaScript ${result.scriptEncoding}, ${result.scriptBytes} decoded bytes\n`,
+        `public release ${result.buildId} passed: HTML ${result.pageEncoding} with non-shared caching; JavaScript ${result.scriptEncoding}, ${result.scriptBytes} decoded bytes\n`,
       );
     } catch (error) {
       stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);

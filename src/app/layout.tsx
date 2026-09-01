@@ -30,6 +30,9 @@ const numberFont = localFont({
 export const metadata: Metadata = {
   title: "可露希尔基建终端",
   description: "导入干员数据，生成三班排班并导出到 MAA。",
+  other: {
+    "riic-build-id": process.env.APP_CLIENT_BUILD_ID ?? "local-development",
+  },
 };
 
 export default function RootLayout({
