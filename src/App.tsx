@@ -245,7 +245,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   const [localLayoutBackup, setLocalLayoutBackup] = useState<BaseBlueprint | null>(null);
   const [rotationProfile, setRotationProfile] = useState<RotationProfile>(DEFAULT_ROTATION_PROFILE);
   const [fiammettaEnabled, setFiammettaEnabled] = useState(false);
-  const [inputMode, setInputMode] = useState<"skland" | "maa">(CLIENT_SKLAND_ENABLED ? "skland" : "maa");
+  const [inputMode, setInputMode] = useState<"skland" | "maa" | "manual">(CLIENT_SKLAND_ENABLED ? "skland" : "maa");
   const [maaPaste, setMaaPaste] = useState("");
   const [sklandScheduleSnapshot, setSklandScheduleSnapshot] = useState<SklandScheduleSnapshot | null>(null);
   const [sklandStatusSnapshot, setSklandStatusSnapshot] = useState<SklandStatusSnapshot | null>(null);
@@ -832,6 +832,14 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       setInputErrorCode("AIC-BOX-1101");
       return false;
     }
+  }
+
+  function handleManualBox(entries: OperBoxEntry[]) {
+    setInputError(null);
+    setOperbox(normalizeOperboxEntries(entries));
+    setFileName("手动选择的 Box");
+    setBoxSource("maa");
+    clearPlanResult();
   }
 
   async function handleSklandRole(accountId: string, uid: string) {
@@ -1746,6 +1754,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
         resultClearWarningDismissed={resultClearWarningDismissed}
         onMaaFile={handleFile}
         onMaaPaste={handleMaaPaste}
+        onManualBox={handleManualBox}
         onRequireWebsiteAccount={requireWebsiteAccountFromSetup}
         presets={PRESETS}
         preset={preset}

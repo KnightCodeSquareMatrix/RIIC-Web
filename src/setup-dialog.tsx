@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Check, Database, FileJson, ScanLine, Trash2, Upload } from "lucide-react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { Check, Database, FileJson, ListChecks, ScanLine, Trash2, Upload } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -25,9 +25,11 @@ import type { SetupStep } from "./onboarding";
 import type { BaseBlueprint, BoxSource, DisplayError, OperBoxEntry, PresetDef, RotationProfile, SklandScheduleSnapshot } from "./types";
 
 const CLIENT_SKLAND_ENABLED = process.env.APP_CLIENT_SKLAND_ENABLED === "1";
+const ManualOperboxPicker = lazy(() => import("@/components/setup/ManualOperboxPicker").then((module) => ({ default: module.ManualOperboxPicker })));
 
 const SETUP_STEP_ORDER: SetupStep[] = ["box", "layout", "facilities"];
 const PANEL_TRANSITION = { type: "spring", stiffness: 420, damping: 38, mass: 0.55 } as const;
+type OperatorInputMode = "skland" | "maa" | "manual";
 
 type SetupDialogProps = {
   open: boolean;
@@ -35,8 +37,8 @@ type SetupDialogProps = {
   operbox: OperBoxEntry[] | null;
   boxSource: BoxSource;
   fileName: string | null;
-  inputMode: "skland" | "maa";
-  onInputModeChange: (mode: "skland" | "maa") => void;
+  inputMode: OperatorInputMode;
+  onInputModeChange: (mode: OperatorInputMode) => void;
   maaPaste: string;
   onMaaPasteChange: (value: string) => void;
   inputError: string | null;
@@ -49,6 +51,7 @@ type SetupDialogProps = {
   onUseSklandSnapshot?: () => void;
   onMaaFile: (file: File) => Promise<boolean>;
   onMaaPaste: () => boolean;
+  onManualBox: (entries: OperBoxEntry[]) => void;
   onRequireWebsiteAccount: () => void;
   presets: PresetDef[];
   preset: PresetDef;
@@ -104,6 +107,7 @@ export function SetupDialog({
   onUseSklandSnapshot,
   onMaaFile,
   onMaaPaste,
+  onManualBox,
   onRequireWebsiteAccount,
   presets,
   preset,
@@ -221,6 +225,17 @@ export function SetupDialog({
     }
   }
 
+  function applyManualBox(entries: OperBoxEntry[]) {
+    if (!websiteSession) {
+      onRequireWebsiteAccount();
+      return;
+    }
+    onManualBox(entries);
+    setNeedsFacilityReview(true);
+    setShowImportOptions(false);
+    goToBasics();
+  }
+
   function handlePresetSelect(nextPreset: PresetDef) {
     if (nextPreset.label !== preset.label) setNeedsFacilityReview(true);
     onPresetSelect(nextPreset);
@@ -331,13 +346,18 @@ export function SetupDialog({
                 {showImportOptions ? (
                   <section id="setup-import-options" className="setup-config-panel p-4 sm:p-5" aria-labelledby="setup-import-title">
                     <h3 id="setup-import-title" className="sr-only">{en ? "Choose operator data source" : "选择干员数据来源"}</h3>
-                    <Tabs value={CLIENT_SKLAND_ENABLED ? inputMode : "maa"} onValueChange={(value) => onInputModeChange(value as "skland" | "maa")}>
-                      {CLIENT_SKLAND_ENABLED ? (
-                        <TabsList className="h-auto w-full rounded-[4px] sm:w-auto" aria-label={en ? "Operator data source" : "干员数据来源"}>
-                          <TabsTrigger value="skland" className="rounded-[4px]"><Database />{en ? "Skland" : "森空岛"}</TabsTrigger>
-                          <TabsTrigger value="maa" className="rounded-[4px]"><FileJson />MAA</TabsTrigger>
-                        </TabsList>
-                      ) : null}
+                    <Tabs
+                      value={!CLIENT_SKLAND_ENABLED && inputMode === "skland" ? "maa" : inputMode}
+                      onValueChange={(value) => onInputModeChange(value as OperatorInputMode)}
+                    >
+                      <TabsList
+                        className={`grid h-auto w-full rounded-[4px] ${CLIENT_SKLAND_ENABLED ? "grid-cols-3" : "grid-cols-2"} sm:w-auto`}
+                        aria-label={en ? "Operator data source" : "干员数据来源"}
+                      >
+                        {CLIENT_SKLAND_ENABLED ? <TabsTrigger value="skland" className="rounded-[4px]"><Database />{en ? "Skland" : "森空岛"}</TabsTrigger> : null}
+                        <TabsTrigger value="maa" className="rounded-[4px]"><FileJson />MAA</TabsTrigger>
+                        <TabsTrigger value="manual" className="rounded-[4px]"><ListChecks />{en ? "Manual" : "手动选择"}</TabsTrigger>
+                      </TabsList>
                       {CLIENT_SKLAND_ENABLED ? <TabsContent value="skland" className="pt-4">
                         <div className="setup-import-action flex flex-wrap items-center justify-between gap-4 px-4 py-4">
                           <div className="min-w-0">
@@ -421,6 +441,22 @@ export function SetupDialog({
                             </Button>
                           </div>
                         ) : null}
+                      </TabsContent>
+                      <TabsContent value="manual" className="grid gap-3 pt-4">
+                        {!websiteSession ? (
+                          <Alert>
+                            <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                              <span>{en ? "A manually selected Box is personal data and requires a verified website account." : "手动选择的 Box 属于个人数据，需要先登录已验证的网站账号。"}</span>
+                              <Button type="button" size="sm" className="min-h-11 shrink-0" onClick={onRequireWebsiteAccount}>
+                                {en ? "Sign in to continue" : "登录后选择"}
+                              </Button>
+                            </AlertDescription>
+                          </Alert>
+                        ) : (
+                          <Suspense fallback={<div className="grid min-h-40 place-items-center border border-dashed border-border text-sm text-muted-foreground">{en ? "Loading operator roster" : "正在加载干员列表"}</div>}>
+                            <ManualOperboxPicker operbox={boxSource === "sample" ? null : operbox} onApply={applyManualBox} />
+                          </Suspense>
+                        )}
                       </TabsContent>
                     </Tabs>
                     {inputError ? <p id="setup-box-error" className="mt-3 text-sm text-destructive" role="alert">{inputError}</p> : null}
@@ -548,7 +584,16 @@ export function SetupDialog({
           {step === "box" ? (
             <>
               <Button className="max-sm:min-w-16 sm:min-w-[88px]" size="dialog" type="button" variant="ghost" onClick={onSkip}>{en ? "Later" : "稍后"}</Button>
-              <Button size="dialog" type="button" disabled={!hasBox} onClick={goToBasics}>{en ? "Continue" : "继续"}</Button>
+              <Button
+                size="dialog"
+                type="button"
+                disabled={!hasBox || (showImportOptions && inputMode === "manual")}
+                onClick={goToBasics}
+              >
+                {showImportOptions && inputMode === "manual"
+                  ? (en ? "Apply selection first" : "请先应用选择")
+                  : (en ? "Continue" : "继续")}
+              </Button>
             </>
           ) : step === "layout" ? (
             <>
