@@ -5,6 +5,10 @@ import { isStrongPassword, PASSWORD_STRENGTH_ERROR } from "../../password-streng
 const PASSWORD_FIELDS = new Map([
   ["/sign-up/email", "password"],
   ["/reset-password", "newPassword"],
+  ["/change-password", "newPassword"],
+  ["/email-otp/reset-password", "password"],
+  ["/admin/create-user", "password"],
+  ["/admin/set-user-password", "newPassword"],
 ]);
 
 export const passwordStrengthHook = createAuthMiddleware(async (context) => {
