@@ -7,40 +7,22 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
 
+import { evaluatePasswordStrength } from "@/password-strength";
+
 const CELL = { type: "spring", stiffness: 520, damping: 34, mass: 0.45 } as const;
 const CROSSFADE = { type: "spring", stiffness: 260, damping: 34, mass: 0.8 } as const;
 const INSTANT = { duration: 0 } as const;
-const COMMON = /^(?:password|passw0rd|qwerty|letmein|welcome|admin|iloveyou|monkey|dragon|abc123|111111|123123|123456)/i;
-const RUN = /(.)\1{3,}/;
-const RUN_UP = /(?:0123|1234|2345|3456|4567|5678|6789|abcd|bcde|cdef|defg|qwer|wert|erty|asdf)/i;
-
-export type PasswordRule = {
-  id: string;
-  label: string;
-  test: (value: string) => boolean;
-};
-
-const DEFAULT_RULES: readonly PasswordRule[] = [
-  { id: "length", label: "至少 10 个字符", test: (value) => value.length >= 10 },
-  { id: "letter", label: "包含字母", test: (value) => /[a-z]/i.test(value) },
-  { id: "digit", label: "包含数字", test: (value) => /\d/.test(value) },
-  { id: "variety", label: "包含大小写或符号", test: (value) => (/[a-z]/.test(value) && /[A-Z]/.test(value)) || /[^a-z0-9]/i.test(value) },
-];
-
 const DEFAULT_LABELS = ["尚未输入", "较弱", "一般", "良好", "强"] as const;
 
-export function PasswordStrength({ value, className = "" }: { value: string; className?: string }) {
+export function PasswordStrength({ value, className = "", id }: { value: string; className?: string; id?: string }) {
   const reduced = useReducedMotion();
   const state = useMemo(() => {
-    const rules = DEFAULT_RULES.map((rule) => ({ ...rule, met: rule.test(value) }));
-    const passed = rules.filter((rule) => rule.met).length;
-    const guessable = value.length > 0 && (COMMON.test(value) || RUN.test(value) || RUN_UP.test(value));
-    const score = value.length === 0 ? 0 : guessable ? 1 : Math.min(DEFAULT_RULES.length, Math.max(1, passed));
-    const unmet = rules.filter((rule) => !rule.met);
+    const strength = evaluatePasswordStrength(value);
+    const unmet = strength.rules.filter((rule) => !rule.met);
     const announcement = value.length === 0
       ? ""
-      : `密码强度${DEFAULT_LABELS[score]}。${guessable ? "这个密码模式容易被猜到。" : ""}${unmet.length ? `还需要：${unmet.map((rule) => rule.label).join("、")}。` : "全部建议均已满足。"}`;
-    return { rules, guessable, score, announcement };
+      : `密码强度${DEFAULT_LABELS[strength.score]}。${strength.guessable ? "这个密码模式容易被猜到。" : ""}${unmet.length ? `还需要：${unmet.map((rule) => rule.label).join("、")}。` : "全部规则均已满足。"}`;
+    return { ...strength, announcement };
   }, [value]);
   const [announcement, setAnnouncement] = useState("");
 
@@ -62,17 +44,17 @@ export function PasswordStrength({ value, className = "" }: { value: string; cla
         : { bar: "bg-emerald-500", text: "text-emerald-700" };
 
   return (
-    <div className={`w-full ${className}`} data-password-strength>
+    <div id={id} className={`w-full ${className}`} data-password-strength>
       <div
         role="meter"
         aria-label="密码强度"
         aria-valuemin={0}
-        aria-valuemax={DEFAULT_RULES.length}
+        aria-valuemax={4}
         aria-valuenow={state.score}
         aria-valuetext={DEFAULT_LABELS[state.score]}
         className="grid grid-cols-4 gap-1.5"
       >
-        {DEFAULT_RULES.map((rule, index) => (
+        {state.rules.map((rule, index) => (
           <div key={rule.id} className="relative h-1.5 overflow-hidden rounded-sm bg-muted">
             <motion.span
               className={`absolute inset-0 origin-left rounded-sm ${tone.bar}`}

@@ -62,15 +62,19 @@ function RunButton({
   hasBox,
   plannerReady,
   requiresAccount,
+  runCooldownSeconds,
   onRun,
 }: {
   canRun: boolean;
   hasBox: boolean;
   plannerReady: boolean;
   requiresAccount: boolean;
+  runCooldownSeconds: number;
   onRun: () => void;
 }) {
-  const unavailableLabel = requiresAccount
+  const unavailableLabel = runCooldownSeconds > 0
+    ? `请等待 ${runCooldownSeconds} 秒后重试`
+    : requiresAccount
     ? "请先登录网站账号"
     : plannerReady
       ? "请先导入干员数据"
@@ -79,13 +83,13 @@ function RunButton({
     <Button
       size="sm"
       className="h-9 min-w-0 max-sm:h-11 max-sm:px-3 max-sm:text-xs"
-      aria-label={canRun || hasBox ? "生成排班" : unavailableLabel}
-      title={!canRun && !(requiresAccount && hasBox && plannerReady) ? unavailableLabel : undefined}
+      aria-label={runCooldownSeconds > 0 ? unavailableLabel : canRun || hasBox ? "生成排班" : unavailableLabel}
+      title={runCooldownSeconds > 0 || (!canRun && !(requiresAccount && hasBox && plannerReady)) ? unavailableLabel : undefined}
       onClick={onRun}
-      disabled={!canRun && !(requiresAccount && hasBox && plannerReady)}
+      disabled={runCooldownSeconds > 0 || (!canRun && !(requiresAccount && hasBox && plannerReady))}
     >
       <Play />
-      <span>{requiresAccount && hasBox ? "登录后生成" : !plannerReady ? "排班服务未就绪" : canRun ? "生成排班" : "导入后生成"}</span>
+      <span>{runCooldownSeconds > 0 ? `${runCooldownSeconds} 秒后重试` : requiresAccount && hasBox ? "登录后生成" : !plannerReady ? "排班服务未就绪" : canRun ? "生成排班" : "导入后生成"}</span>
     </Button>
   );
 }
@@ -96,6 +100,7 @@ function CalculatorStartPanel({
   sampleLoading,
   loading,
   plannerReady,
+  runCooldownSeconds,
   accountControl,
   onStartPersonalFlow,
   onRunSampleTrial,
@@ -108,6 +113,7 @@ function CalculatorStartPanel({
   sampleLoading: boolean;
   loading: boolean;
   plannerReady: boolean;
+  runCooldownSeconds: number;
   accountControl?: ReactNode;
   onStartPersonalFlow: () => void;
   onRunSampleTrial: () => Promise<boolean>;
@@ -140,7 +146,9 @@ function CalculatorStartPanel({
       group: "manufacture",
     },
   ] as const;
-  const personalActionLabel = !websiteAuthenticated
+  const personalActionLabel = runCooldownSeconds > 0 && websiteAuthenticated && hasPersonalBox
+    ? `${runCooldownSeconds} 秒后可重试`
+    : !websiteAuthenticated
     ? hasPersonalBox ? "登录并继续生成" : "登录并导入 BOX"
     : hasPersonalBox && !plannerReady ? "排班服务未就绪" : hasPersonalBox ? "生成第一份方案" : "导入自己的 BOX";
   const personalActionAriaLabel = hasPersonalBox ? "生成排班" : "配置Box与布局";
@@ -158,7 +166,7 @@ function CalculatorStartPanel({
         className="min-h-11 sm:min-w-44"
         aria-label={personalActionAriaLabel}
         title={personalPlanUnavailable ? "排班服务尚未就绪" : undefined}
-        disabled={sampleLoading || loading || personalPlanUnavailable}
+        disabled={sampleLoading || loading || personalPlanUnavailable || runCooldownSeconds > 0}
         onClick={hasPersonalBox && websiteAuthenticated ? onRun : onStartPersonalFlow}
       >
         {loading && hasPersonalBox ? <Loader2 className="animate-spin" /> : <Play />}
@@ -275,7 +283,7 @@ function CalculatorStartPanel({
               size="lg"
               variant="outline"
               className="min-h-11 shrink-0 border-[#313131] bg-[#313131] text-[#FFD800] hover:bg-[#454545] hover:text-[#FFD800] sm:min-w-52"
-              disabled={sampleLoading || loading || !plannerReady}
+              disabled={sampleLoading || loading || !plannerReady || runCooldownSeconds > 0}
               title={!plannerReady ? "排班服务尚未就绪" : undefined}
               onClick={() => void onRunSampleTrial()}
             >
@@ -305,8 +313,10 @@ export interface InfraCalculatorProps {
   sampleLoading: boolean;
   loading: boolean;
   canRun: boolean;
+  runCooldownSeconds: number;
   hasBox: boolean;
   hasPersonalBox: boolean;
+  feedbackDisabledForSampleBox: boolean;
   plannerReady: boolean;
   websiteAuthenticated: boolean;
   showOnboarding: boolean;
@@ -347,7 +357,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     activePlan, closestComparison,
     resultClearNotice,
     feedbackResult,
-    sampleLoading, loading, canRun, hasBox, hasPersonalBox, plannerReady, websiteAuthenticated, showOnboarding, taskQueue, animatePlanEntrance, animateEmptyScheduleEntrance, onPlanEntranceConsumed, requiresAccount = false, accountControl,
+    sampleLoading, loading, canRun, runCooldownSeconds, hasBox, hasPersonalBox, feedbackDisabledForSampleBox, plannerReady, websiteAuthenticated, showOnboarding, taskQueue, animatePlanEntrance, animateEmptyScheduleEntrance, onPlanEntranceConsumed, requiresAccount = false, accountControl,
     onRunSampleTrial, onStartPersonalFlow, onDismissOnboarding, onOpenSetup, onRun, onCancelRun,
     onSetActiveShift, onMarkIssue, onPerformanceIssue,
     onFactoryRecipeChange, onTradeOrderChange,
@@ -523,7 +533,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                       取消任务
                     </Button>
                   </div>
-                ) : <RunButton canRun={canRun} hasBox={hasBox} plannerReady={plannerReady} requiresAccount={requiresAccount} onRun={onRun} />}
+                ) : <RunButton canRun={canRun} hasBox={hasBox} plannerReady={plannerReady} requiresAccount={requiresAccount} runCooldownSeconds={runCooldownSeconds} onRun={onRun} />}
               </div>
             ) : null}
           >
@@ -542,6 +552,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                     animateEntrance={animatePlanEntrance}
                     onEntranceConsumed={onPlanEntranceConsumed}
                     onPerformanceIssue={onPerformanceIssue}
+                    feedbackDisabled={feedbackDisabledForSampleBox}
                   />
                 </Suspense>
               </>
@@ -553,6 +564,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                 sampleLoading={sampleLoading}
                 loading={loading}
                 plannerReady={plannerReady}
+                runCooldownSeconds={runCooldownSeconds}
                 accountControl={accountControl}
                 onStartPersonalFlow={onStartPersonalFlow}
                 onRunSampleTrial={onRunSampleTrial}
@@ -592,6 +604,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                 </div>
               )}
               onIssue={onMarkIssue}
+              feedbackDisabled={feedbackDisabledForSampleBox}
               onFactoryRecipeChange={onFactoryRecipeChange}
               onTradeOrderChange={onTradeOrderChange}
             /> : (

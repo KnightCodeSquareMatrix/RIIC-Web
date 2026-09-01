@@ -20,6 +20,12 @@ test("Next.js commands use the default Turbopack bundler", async () => {
   assert.doesNotMatch(productionPlaywrightConfig, /--webpack\b/);
 });
 
+test("PostgreSQL integration tests register the TypeScript path alias loader", async () => {
+  const packageJson = JSON.parse(await readRepoFile("package.json"));
+
+  assert.match(packageJson.scripts["test:auth-integration"], /--import \.\/scripts\/register-hooks\.mjs/);
+});
+
 test("production builds prepare a solver-free standalone runtime with static assets", async () => {
   const packageJson = JSON.parse(await readRepoFile("package.json"));
   const nextConfig = await readRepoFile("next.config.ts");
@@ -55,11 +61,20 @@ test("production builds prepare a solver-free standalone runtime with static ass
   assert.doesNotMatch(stageStandalone, /outputRoot, "\.next", "cache"/);
 });
 
-test("the plan worker closes persistent solver clients before exiting", async () => {
-  const workerRuntime = await readRepoFile("scripts/plan-worker-runtime.mts");
+test("the plan worker runs two isolated solver lanes and closes every persistent client", async () => {
+  const [workerRuntime, planTask, infra] = await Promise.all([
+    readRepoFile("scripts/plan-worker-runtime.mts"),
+    readRepoFile("src/server/plan-task.ts"),
+    readRepoFile("src/server/infra.ts"),
+  ]);
 
+  assert.match(planTask, /PLAN_TASK_WORKER_CONCURRENCY = 2/);
+  assert.match(workerRuntime, /length: PLAN_TASK_WORKER_CONCURRENCY[\s\S]+runTaskLoop\(serveLane/);
+  assert.match(workerRuntime, /runPlan\([\s\S]+\{ serveLane \}/);
+  assert.match(infra, /__infraCliPlanServeClients\?: Map<number, InfraCliServeClient>/);
   assert.match(workerRuntime, /stopInfraServeClients\("计划任务 Worker 正在退出。"\)/);
   assert.match(workerRuntime, /stopInfraServeClients[\s\S]+getDatabase\(\)\.\$client[\s\S]+\[plan-worker\] stopped/);
+  assert.match(infra, /for \(const client of globalForInfra\.__infraCliPlanServeClients\?\.values\(\) \?\? \[\]\) client\.stop\(reason\)/);
 });
 
 test("Next.js owns graceful shutdown while systemd accepts its signal exit statuses", async () => {
@@ -131,7 +146,7 @@ test("CI gates releases on Chromium and schedules the full WebKit suite", async 
   assert.match(workflow, /deploy:[\s\S]+needs: \[changes, quality\]/);
   assert.match(workflow, /cancel-in-progress: \$\{\{ github\.event_name == 'pull_request' \}\}/);
   assert.equal(readinessSpecs.length, 4);
-  assert.equal(readinessTestCount, 85);
+  assert.equal(readinessTestCount, 86);
   assert.equal(e2eFiles.includes("production-readiness.spec.ts"), false);
   assert.match(playwrightConfig, /fullyParallel: false/);
   assert.match(playwrightConfig, /workers: process\.env\.CI \? 3 : undefined/);
