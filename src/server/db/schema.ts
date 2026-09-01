@@ -136,12 +136,13 @@ export const planTask = appSchema.table("plan_task", {
   index("plan_task_claim_idx").on(table.status, table.createdAt),
   index("plan_task_expires_at_idx").on(table.expiresAt),
   index("plan_task_ip_created_at_idx").on(table.requestIpHmac, table.createdAt),
+  index("plan_task_user_created_at_idx").on(table.userId, table.createdAt),
   uniqueIndex("plan_task_one_active_per_user_idx").on(table.userId)
-    .where(sql`${table.status} in ('pending', 'running')`),
-  check("plan_task_status_check", sql`${table.status} in ('pending', 'running', 'done', 'failed', 'cancelled')`),
+    .where(sql`${table.status} in ('buffered', 'pending', 'running')`),
+  check("plan_task_status_check", sql`${table.status} in ('buffered', 'pending', 'running', 'done', 'failed', 'cancelled')`),
   check("plan_task_account_class_check", sql`${table.accountClass} in ('new', 'established')`),
   check("plan_task_payload_lifecycle_check", sql`(
-    (${table.status} in ('pending', 'running')
+    (${table.status} in ('buffered', 'pending', 'running')
       and ${table.encryptedPayload} is not null
       and ${table.payloadIv} is not null
       and ${table.wrappedDataKey} is not null

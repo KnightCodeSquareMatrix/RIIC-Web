@@ -15,6 +15,7 @@ function metricInput(overrides: Partial<Parameters<typeof buildAdminSolverMetric
     maaCount: 12,
     sklandCount: 5,
     sampleCount: 3,
+    bufferedTaskCount: 3,
     pendingTaskCount: 2,
     runningTaskCount: 1,
     averageWaitMs: 340,
@@ -43,6 +44,7 @@ test("admin solver metrics calculate errors, latency, throughput, queue, and act
   assert.equal(metrics.solver.averageDurationMs, 1_240);
   assert.equal(metrics.solver.p95DurationMs, 2_890);
   assert.deepEqual(metrics.queue, {
+    bufferedCount: 3,
     pendingCount: 2,
     runningCount: 1,
     averageWaitMs: 340,
@@ -105,6 +107,7 @@ test("admin solver metrics normalize invalid database values before exposing the
     averageDurationMs: Number.POSITIVE_INFINITY,
     p95DurationMs: -4,
     maaCount: -2,
+    bufferedTaskCount: Number.POSITIVE_INFINITY,
     pendingTaskCount: Number.NaN,
     averageWaitMs: -20,
     trend: [{ bucketStartedAt: new Date("invalid"), successCount: 4, failureCount: 1, averageDurationMs: 10 }],
@@ -117,6 +120,7 @@ test("admin solver metrics normalize invalid database values before exposing the
   assert.equal(metrics.solver.averageDurationMs, null);
   assert.equal(metrics.solver.p95DurationMs, 0);
   assert.equal(metrics.solver.sourceCounts.maa, 0);
+  assert.equal(metrics.queue.bufferedCount, 0);
   assert.equal(metrics.queue.pendingCount, 0);
   assert.equal(metrics.queue.averageWaitMs, 0);
   assert.equal(metrics.cache.hitCount, 1);

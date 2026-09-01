@@ -39,7 +39,13 @@ import { publicPlanSha256, resolveSavedPlanCalculationContext } from "@/server/p
 import { safeDisplayName } from "@/server/public-plan";
 import { activeSklandAccount, readSklandAccountStore } from "@/server/skland/http";
 import { sklandDataOwnerTag } from "@/server/skland/session";
-import { createPlanTask, planTaskIpHmac, PLAN_TASK_ETA_PER_TASK_SECONDS } from "@/server/plan-task";
+import {
+  createPlanTask,
+  planQueuePosition,
+  planSelectionPoolSize,
+  planTaskEtaSeconds,
+  planTaskIpHmac,
+} from "@/server/plan-task";
 import { planOperboxContentHmac } from "@/server/workspace-crypto";
 import { validateSavedPlanCalculationContext } from "@/server/workspace-payload";
 import type { BaseBlueprint, OperBoxEntry, RotationProfile } from "@/types";
@@ -69,7 +75,8 @@ export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
     const ip = requestClientIp(request);
-    enforceRateLimit("plan-submit", ip, 20, 10 * 60_000, "AIC-PLAN-3002");
+    // 登录账号在持久化队列中按账号优先限流；这里仅保留共享出口 IP 的高位防滥用上限。
+    enforceRateLimit("plan-submit", ip, 1_000, 10 * 60_000, "AIC-PLAN-3007");
 
     const body = await readJsonBody(request, 2 * 1024 * 1024) as SubmitBody | null;
     if (!body) throw new PublicApiError("AIC-REQ-1001");
@@ -251,11 +258,19 @@ export async function POST(request: Request) {
       throw error;
     }
 
+    if (task.status === "buffered") {
+      return successResponse({
+        taskId: task.id,
+        status: "buffered",
+        selectionPoolSize: await planSelectionPoolSize(),
+      }, requestId);
+    }
+    const queuePosition = await planQueuePosition(task.id);
     return successResponse({
       taskId: task.id,
       status: "pending",
-      queuePosition: 1,
-      etaSeconds: PLAN_TASK_ETA_PER_TASK_SECONDS,
+      queuePosition,
+      etaSeconds: planTaskEtaSeconds(queuePosition),
     }, requestId);
   } catch (error) {
     if (cacheLease) await releasePlanCacheLease(cacheLease);

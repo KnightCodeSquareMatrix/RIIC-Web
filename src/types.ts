@@ -1019,6 +1019,9 @@ export type AppErrorCode =
   | "AIC-PLAN-3003"
   | "AIC-PLAN-3004"
   | "AIC-PLAN-3005"
+  | "AIC-PLAN-3006"
+  | "AIC-PLAN-3007"
+  | "AIC-PLAN-3008"
   | "AIC-FEEDBACK-4001"
   | "AIC-FEEDBACK-4002"
   | "AIC-SYS-5000"
@@ -1048,6 +1051,7 @@ export type ApiFailure = {
     message: string;
     requestId: string;
     retryable: boolean;
+    retryAfterSeconds?: number;
     fieldErrors?: ApiFieldError[];
   };
 };
@@ -1271,6 +1275,7 @@ export interface AdminSolverMetricsData {
     }>;
   };
   queue: {
+    bufferedCount: number;
     pendingCount: number;
     runningCount: number;
     averageWaitMs: number | null;
@@ -1327,5 +1332,6 @@ export interface DisplayError {
   message: string;
   requestId?: string;
   retryable: boolean;
+  retryAfterSeconds?: number;
   fieldErrors?: ApiFieldError[];
 }

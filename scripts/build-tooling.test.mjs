@@ -55,11 +55,20 @@ test("production builds prepare a solver-free standalone runtime with static ass
   assert.doesNotMatch(stageStandalone, /outputRoot, "\.next", "cache"/);
 });
 
-test("the plan worker closes persistent solver clients before exiting", async () => {
-  const workerRuntime = await readRepoFile("scripts/plan-worker-runtime.mts");
+test("the plan worker runs two isolated solver lanes and closes every persistent client", async () => {
+  const [workerRuntime, planTask, infra] = await Promise.all([
+    readRepoFile("scripts/plan-worker-runtime.mts"),
+    readRepoFile("src/server/plan-task.ts"),
+    readRepoFile("src/server/infra.ts"),
+  ]);
 
+  assert.match(planTask, /PLAN_TASK_WORKER_CONCURRENCY = 2/);
+  assert.match(workerRuntime, /length: PLAN_TASK_WORKER_CONCURRENCY[\s\S]+runTaskLoop\(serveLane/);
+  assert.match(workerRuntime, /runPlan\([\s\S]+\{ serveLane \}/);
+  assert.match(infra, /__infraCliPlanServeClients\?: Map<number, InfraCliServeClient>/);
   assert.match(workerRuntime, /stopInfraServeClients\("计划任务 Worker 正在退出。"\)/);
   assert.match(workerRuntime, /stopInfraServeClients[\s\S]+getDatabase\(\)\.\$client[\s\S]+\[plan-worker\] stopped/);
+  assert.match(infra, /for \(const client of globalForInfra\.__infraCliPlanServeClients\?\.values\(\) \?\? \[\]\) client\.stop\(reason\)/);
 });
 
 test("Next.js owns graceful shutdown while systemd accepts its signal exit statuses", async () => {

@@ -34,6 +34,110 @@ test("admin solver metrics trend query preserves PostgreSQL grouping identity", 
   }
 });
 
+const taskMasterKey = Buffer.alloc(32, 13);
+process.env.WORKSPACE_ACTIVE_KEY_VERSION = "integration";
+process.env.WORKSPACE_MASTER_KEYS = JSON.stringify({ integration: taskMasterKey.toString("base64") });
+
+const {
+  cancelPlanTask,
+  claimNextPlanTask,
+  cleanupExpiredPlanTasks,
+  createPlanTask,
+  planQueuePosition,
+} = await import("./plan-task.ts");
+const { queryAdminSolverMetrics } = await import("./business-records.ts");
+const { getDatabase } = await import("./db/index.ts");
+
+test.after(async () => {
+  await getDatabase().$client.end().catch(() => undefined);
+});
+
+function integrationTaskPayload() {
+  const layout = { template: "243", drone_cap: 0, scenario: {}, rooms: [] };
+  return {
+    layout,
+    operbox: [],
+    sourceName: null,
+    sourceType: "maa",
+    rotation: "abc_12_6_6",
+    fiammettaEnable: false,
+    layoutTemplate: "243",
+    roomCount: 0,
+    operatorCount: 0,
+    dataOwnerTag: null,
+    calculationContext: {
+      presetLabel: "243",
+      layout,
+      rotationProfile: "abc_12_6_6",
+      fiammettaEnabled: false,
+    },
+    operboxContentHmac: null,
+    operboxHmacKeyVersion: null,
+    cacheReferenceUserId: null,
+  };
+}
+
+async function insertIntegrationUsers(pool, userIds) {
+  await pool.query(
+    `INSERT INTO "user" (id,name,email,email_verified,created_at,updated_at)
+     SELECT id,'Plan task integration',id || '@example.test',true,now(),now()
+     FROM unnest($1::text[]) AS ids(id)`,
+    [userIds],
+  );
+}
+
+async function insertBufferedTask(pool, { taskId, userId, requestIpHmac }) {
+  const envelope = encryptPlanTaskPayload({
+    userId,
+    taskId,
+    plaintext: JSON.stringify(integrationTaskPayload()),
+    activeVersion: "integration",
+    masterKey: taskMasterKey,
+  });
+  await pool.query(
+    `INSERT INTO app.plan_task
+     (id,user_id,account_class,request_ip_hmac,status,encrypted_payload,payload_iv,wrapped_data_key,wrapped_key_iv,key_version,schema_version,expires_at)
+     VALUES ($1,$2,'established',$3,'buffered',$4,$5,$6,$7,$8,$9,now()+interval '1 day')`,
+    [
+      taskId,
+      userId,
+      requestIpHmac,
+      envelope.encryptedPayload,
+      envelope.payloadIv,
+      envelope.wrappedDataKey,
+      envelope.wrappedKeyIv,
+      envelope.keyVersion,
+      envelope.schemaVersion,
+    ],
+  );
+}
+
+async function insertActiveTasks(pool, {
+  taskIds,
+  userIds,
+  accountClass,
+  status = "pending",
+  requestIpHmac = null,
+}) {
+  await pool.query(
+    `INSERT INTO app.plan_task
+     (id,user_id,account_class,request_ip_hmac,status,encrypted_payload,payload_iv,wrapped_data_key,wrapped_key_iv,key_version,schema_version,expires_at)
+     SELECT task_id,user_id,$3,coalesce($5,md5(task_id)),$4,'AA==','AA==','AA==','AA==','integration',1,now()+interval '1 day'
+     FROM unnest($1::text[],$2::text[]) AS rows(task_id,user_id)`,
+    [taskIds, userIds, accountClass, status, requestIpHmac],
+  );
+}
+
+async function insertTerminalTasks(pool, { taskIds, userIds, requestIpHmac = null }) {
+  await pool.query(
+    `INSERT INTO app.plan_task
+     (id,user_id,account_class,request_ip_hmac,status,created_at,finished_at,expires_at)
+     SELECT task_id,user_id,'established',coalesce($3,md5(task_id)),'done',now()-interval '1 minute',now(),now()+interval '1 day'
+     FROM unnest($1::text[],$2::text[]) AS rows(task_id,user_id)`,
+    [taskIds, userIds, requestIpHmac],
+  );
+}
+
 test("app schema stores only encrypted Box data and cascades account-owned business rows", async () => {
   const pool = new Pool({ connectionString: databaseUrl, max: 2 });
   const userId = randomUUID();
@@ -207,6 +311,219 @@ test("plan tasks persist only encrypted Box payloads and scrub them at terminal 
     });
   } finally {
     await pool.query('DELETE FROM "user" WHERE id=$1', [userId]).catch(() => undefined);
+    await pool.end();
+  }
+});
+
+test("candidate promotion respects IP capacity, cancellation scrubs payloads, and expired runners release accounts", async () => {
+  const pool = new Pool({ connectionString: databaseUrl, max: 4 });
+  const blockedIp = "1".repeat(64);
+  const blockedUserIds = Array.from({ length: 100 }, () => randomUUID());
+  const blockedTaskIds = blockedUserIds.map(() => randomUUID());
+  const candidateUserIds = Array.from({ length: 3 }, () => randomUUID());
+  const candidateTaskIds = candidateUserIds.map(() => randomUUID());
+  const staleUserId = randomUUID();
+  const staleTaskId = randomUUID();
+  const replacementTaskId = randomUUID();
+  const allUserIds = [...blockedUserIds, ...candidateUserIds, staleUserId];
+
+  try {
+    await insertIntegrationUsers(pool, allUserIds);
+    await pool.query(
+      `INSERT INTO app.plan_task
+       (id,user_id,account_class,request_ip_hmac,status,encrypted_payload,payload_iv,wrapped_data_key,wrapped_key_iv,key_version,schema_version,started_at,expires_at)
+       SELECT task_id,user_id,'established',$3,'running','AA==','AA==','AA==','AA==','integration',1,now(),now()+interval '1 day'
+       FROM unnest($1::text[],$2::text[]) AS rows(task_id,user_id)`,
+      [blockedTaskIds, blockedUserIds, blockedIp],
+    );
+
+    await insertBufferedTask(pool, {
+      taskId: candidateTaskIds[0],
+      userId: candidateUserIds[0],
+      requestIpHmac: blockedIp,
+    });
+    await insertBufferedTask(pool, {
+      taskId: candidateTaskIds[1],
+      userId: candidateUserIds[1],
+      requestIpHmac: "2".repeat(64),
+    });
+    await insertBufferedTask(pool, {
+      taskId: candidateTaskIds[2],
+      userId: candidateUserIds[2],
+      requestIpHmac: "3".repeat(64),
+    });
+
+    const claimed = await claimNextPlanTask();
+    assert.ok(claimed, "one eligible candidate should be promoted and claimed");
+    assert.ok(candidateTaskIds.slice(1).includes(claimed.id));
+    assert.equal(claimed.status, "running");
+    assert.equal(claimed.payload.sourceType, "maa");
+
+    const candidateStatuses = await pool.query(
+      "SELECT id,status FROM app.plan_task WHERE id = ANY($1::text[]) ORDER BY id",
+      [candidateTaskIds],
+    );
+    assert.equal(candidateStatuses.rows.find((row) => row.id === candidateTaskIds[0])?.status, "buffered");
+    assert.equal(candidateStatuses.rows.filter((row) => row.status === "running").length, 1);
+    assert.equal(candidateStatuses.rows.filter((row) => row.status === "buffered").length, 2);
+
+    assert.equal(await cancelPlanTask(candidateTaskIds[0]), "cancelled");
+    const cancelled = await pool.query(
+      `SELECT status,encrypted_payload,payload_iv,wrapped_data_key,wrapped_key_iv,key_version,schema_version
+       FROM app.plan_task WHERE id=$1`,
+      [candidateTaskIds[0]],
+    );
+    assert.deepEqual(cancelled.rows[0], {
+      status: "cancelled",
+      encrypted_payload: null,
+      payload_iv: null,
+      wrapped_data_key: null,
+      wrapped_key_iv: null,
+      key_version: null,
+      schema_version: null,
+    });
+
+    await pool.query(
+      `INSERT INTO app.plan_task
+       (id,user_id,account_class,request_ip_hmac,status,encrypted_payload,payload_iv,wrapped_data_key,wrapped_key_iv,key_version,schema_version,started_at,expires_at)
+       VALUES ($1,$2,'established',$3,'running','AA==','AA==','AA==','AA==','integration',1,now()-interval '2 days',now()-interval '1 day')`,
+      [staleTaskId, staleUserId, "4".repeat(64)],
+    );
+    await cleanupExpiredPlanTasks(new Date());
+    assert.equal((await pool.query("SELECT count(*)::int AS count FROM app.plan_task WHERE id=$1", [staleTaskId])).rows[0].count, 0);
+
+    await pool.query(
+      `INSERT INTO app.plan_task
+       (id,user_id,account_class,request_ip_hmac,status,encrypted_payload,payload_iv,wrapped_data_key,wrapped_key_iv,key_version,schema_version,expires_at)
+       VALUES ($1,$2,'established',$3,'pending','AA==','AA==','AA==','AA==','integration',1,now()+interval '1 day')`,
+      [replacementTaskId, staleUserId, "5".repeat(64)],
+    );
+    assert.equal((await pool.query("SELECT status FROM app.plan_task WHERE id=$1", [replacementTaskId])).rows[0].status, "pending");
+  } finally {
+    await pool.query('DELETE FROM "user" WHERE id = ANY($1::text[])', [allUserIds]).catch(() => undefined);
+    await pool.end();
+  }
+});
+
+test("database admission serializes hard limits and reports deterministic queue state", async () => {
+  const pool = new Pool({ connectionString: databaseUrl, max: 8 });
+  const allUserIds = [];
+  const addUsers = async (count) => {
+    const userIds = Array.from({ length: count }, () => randomUUID());
+    allUserIds.push(...userIds);
+    await insertIntegrationUsers(pool, userIds);
+    return userIds;
+  };
+  const submit = (userId, accountClass, requestIpHmac = randomUUID().replaceAll("-", "")) => createPlanTask({
+    userId,
+    accountClass,
+    requestIpHmac,
+    payload: integrationTaskPayload(),
+  });
+
+  try {
+    const establishedActiveUsers = await addUsers(999);
+    await insertActiveTasks(pool, {
+      taskIds: establishedActiveUsers.map(() => randomUUID()),
+      userIds: establishedActiveUsers,
+      accountClass: "established",
+    });
+    const establishedSubmitters = await addUsers(2);
+    const establishedResults = await Promise.all(establishedSubmitters.map((userId) => submit(userId, "established")));
+    assert.deepEqual(establishedResults.map((task) => task.status).sort(), ["buffered", "pending"]);
+    await pool.query('DELETE FROM "user" WHERE id = ANY($1::text[])', [[...establishedActiveUsers, ...establishedSubmitters]]);
+
+    const newActiveUsers = await addUsers(599);
+    await insertActiveTasks(pool, {
+      taskIds: newActiveUsers.map(() => randomUUID()),
+      userIds: newActiveUsers,
+      accountClass: "new",
+    });
+    const newSubmitters = await addUsers(2);
+    const newResults = await Promise.all(newSubmitters.map((userId) => submit(userId, "new")));
+    assert.deepEqual(newResults.map((task) => task.status).sort(), ["buffered", "pending"]);
+
+    const bufferedUsers = await addUsers(1_999);
+    await insertActiveTasks(pool, {
+      taskIds: bufferedUsers.map(() => randomUUID()),
+      userIds: bufferedUsers,
+      accountClass: "established",
+      status: "buffered",
+    });
+    const overflowUser = (await addUsers(1))[0];
+    await assert.rejects(
+      submit(overflowUser, "new"),
+      (error) => error?.code === "AIC-PLAN-3008" && error?.retryAfter === 30,
+    );
+
+    await pool.query('DELETE FROM "user" WHERE id = ANY($1::text[])', [[...newActiveUsers, ...newSubmitters, ...bufferedUsers, overflowUser]]);
+
+    const accountLimitedUser = (await addUsers(1))[0];
+    const accountTerminalIds = Array.from({ length: 10 }, () => randomUUID());
+    await insertTerminalTasks(pool, {
+      taskIds: accountTerminalIds,
+      userIds: accountTerminalIds.map(() => accountLimitedUser),
+    });
+    await assert.rejects(
+      submit(accountLimitedUser, "established"),
+      (error) => error?.code === "AIC-PLAN-3006" && error?.retryAfter > 0,
+    );
+
+    const ipActiveUsers = await addUsers(101);
+    const activeIpHmac = "e".repeat(64);
+    await insertActiveTasks(pool, {
+      taskIds: ipActiveUsers.slice(0, 100).map(() => randomUUID()),
+      userIds: ipActiveUsers.slice(0, 100),
+      accountClass: "established",
+      requestIpHmac: activeIpHmac,
+    });
+    await assert.rejects(
+      submit(ipActiveUsers[100], "established", activeIpHmac),
+      (error) => error?.code === "AIC-PLAN-3007" && error?.retryAfter === 5,
+    );
+
+    const ipLimitedUsers = await addUsers(201);
+    const sharedIpHmac = "f".repeat(64);
+    await insertTerminalTasks(pool, {
+      taskIds: ipLimitedUsers.slice(0, 200).map(() => randomUUID()),
+      userIds: ipLimitedUsers.slice(0, 200),
+      requestIpHmac: sharedIpHmac,
+    });
+    await assert.rejects(
+      submit(ipLimitedUsers[200], "established", sharedIpHmac),
+      (error) => error?.code === "AIC-PLAN-3007" && error?.retryAfter > 0,
+    );
+
+    await pool.query('DELETE FROM "user" WHERE id = ANY($1::text[])', [[accountLimitedUser, ...ipActiveUsers, ...ipLimitedUsers]]);
+
+    const queueUsers = await addUsers(3);
+    const queueIds = ["queue-a", "queue-b", "queue-c"].map((prefix) => `${prefix}-${randomUUID()}`);
+    const queueCreatedAt = new Date();
+    await pool.query(
+      `INSERT INTO app.plan_task
+       (id,user_id,account_class,request_ip_hmac,status,encrypted_payload,payload_iv,wrapped_data_key,wrapped_key_iv,key_version,schema_version,created_at,expires_at)
+       SELECT task_id,user_id,'established',md5(task_id),'pending','AA==','AA==','AA==','AA==','integration',1,$3,now()+interval '1 day'
+       FROM unnest($1::text[],$2::text[]) AS rows(task_id,user_id)`,
+      [queueIds, queueUsers, queueCreatedAt],
+    );
+    assert.equal(await planQueuePosition(queueIds[1]), 2);
+
+    for (const duplicateStatus of ["buffered", "running"]) {
+      await assert.rejects(
+        insertActiveTasks(pool, {
+          taskIds: [randomUUID()],
+          userIds: [queueUsers[1]],
+          accountClass: "established",
+          status: duplicateStatus,
+        }),
+        (error) => error?.code === "23505",
+      );
+    }
+
+    const metrics = await queryAdminSolverMetrics();
+    assert.ok(metrics.queue.pendingCount >= 3);
+  } finally {
+    await pool.query('DELETE FROM "user" WHERE id = ANY($1::text[])', [allUserIds]).catch(() => undefined);
     await pool.end();
   }
 });
