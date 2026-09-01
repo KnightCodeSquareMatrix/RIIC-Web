@@ -191,6 +191,10 @@ test("public deployment automation is repository-bound, opt-in, and secret-safe"
     preflightWorkflow.indexOf("    env:"),
     preflightWorkflow.indexOf("    steps:"),
   );
+  const runtimeDiagnostics = preflightWorkflow.slice(
+    preflightWorkflow.indexOf("      - name: Read-only incident diagnostics"),
+    preflightWorkflow.indexOf("      - name: Remove SSH credentials from the runner"),
+  );
 
   assert.match(qualityWorkflow, /HEAD_REPOSITORY[\s\S]+EXPECTED_REPOSITORY: KnightCodeSquareMatrix\/RIIC-Web[\s\S]+"\$HEAD_REF" == release\/\*/);
   assert.match(qualityWorkflow, /types: \[opened, synchronize, reopened, labeled, unlabeled\]/);
@@ -215,6 +219,13 @@ test("public deployment automation is repository-bound, opt-in, and secret-safe"
   assert.match(preflightWorkflow, /solver_source=not-inspected-root-only/);
   assert.doesNotMatch(preflightWorkflow, /DEPLOY_PREPARE_HELPER_CONTRACT|arknights-infra-prepare-release|cache_repository|expected_origin|public_cache_ready|cache_public_origin_ready|repository\.git|git --git-dir/);
   assert.doesNotMatch(preflightWorkflow, /current_release\/\.env\.production\.local|current_release="\$\(readlink/);
+  assert.match(runtimeDiagnostics, /if: inputs\.mode == 'baseline'/);
+  assert.match(runtimeDiagnostics, /ps -u "\$run_user" -o pid=,ppid=,etimes=,rss=,comm=/);
+  assert.match(runtimeDiagnostics, /systemctl show --no-pager[\s\S]+journalctl --no-pager/);
+  assert.doesNotMatch(
+    runtimeDiagnostics,
+    /^\s+(?:sudo|systemctl (?:start|stop|restart)|kill |rm )/m,
+  );
   assert.match(preflightWorkflow, /Remove SSH credentials from the runner[\s\S]+rm -f -- "\$HOME\/\.ssh\/id_ed25519" "\$HOME\/\.ssh\/known_hosts"/);
   assert.match(deployWorkflow, /printf '%s\\n' "\$DEPLOY_PUBLIC_HEALTH_URL" \| ssh[\s\S]+'\$public_health_argument'/);
   assert.match(deployWorkflow, /'\$DEPLOY_EXPECTED_REPOSITORY'[\s\S]+'\$DEPLOY_APPROVED_SOLVER_SHA256'[\s\S]+'\$DEPLOY_TREE_SHA'/);
