@@ -21,6 +21,17 @@
 
 森空岛、网站账号和云同步都由部署者显式配置。未启用这些能力时，样例数据、布局配置、技能查询和已接入求解器的排班流程仍可独立使用。
 
+## 排班队列与提交限制
+
+登录账号提交的排班任务会写入持久化队列，刷新页面后仍可继续查询。排队与执行中的任务全站最多 1,000 个，其中注册未满 24 小时的新账号最多占用 600 个；达到任一上限后，任务进入最多容纳 2,000 个任务的候选环。活动名额释放时，系统会从仍符合账号和网络限制的候选任务中随机抽取，因此候选环不保证先到先得。
+
+- 同一账号只能保留一个候选、排队或执行中的任务。
+- 同一网络最多同时占用 100 个活动名额。
+- 每个账号在 10 分钟内最多启动 10 次排班，同一网络最多启动 200 次。
+- 页面会自动更新候选、排队和执行状态。出现 `AIC-PLAN-3006`、`AIC-PLAN-3007` 或 `AIC-PLAN-3008` 时，请等待页面倒计时结束后再提交，不要连续点击生成。
+
+任务 API 的状态与重试字段见 [Frontend Serve Guide](./docs/FRONTEND_SERVE_GUIDE.md#persistent-task-admission)。
+
 ## 技术栈
 
 - Next.js 16 App Router
@@ -28,7 +39,7 @@
 - Tailwind CSS 4、shadcn/ui、Base UI
 - Better Auth、Drizzle ORM 与 PostgreSQL
 - `skland-kit`，仅用于可选的森空岛扫码或凭证导入授权
-- 外部长驻进程 `infra-cli serve`
+- 外部长驻进程 `infra-cli serve`；生产排班 Worker 使用两个相互隔离的求解通道
 
 页面和 `/api/*` 由同一个 Next.js 服务提供，不需要单独启动 Express 或 Vite 服务。
 
@@ -116,6 +127,15 @@ cp .env.example .env.local
 | `scripts` | 构建、公开测试、资源同步和仓库卫生检查 |
 
 求解器协议与公共 DTO 的说明见 [Frontend Serve Guide](./docs/FRONTEND_SERVE_GUIDE.md)。
+
+## 文档索引
+
+- 使用与数据：[键盘和移动端操作](./docs/keyboard-shortcuts.md)、[预计日产物计算逻辑](./docs/计算逻辑.md)、[森空岛数据能力矩阵](./docs/SKLAND_DATA_CAPABILITIES.md)
+- 求解器与协议：[Frontend Serve Guide](./docs/FRONTEND_SERVE_GUIDE.md)、[`final_efficiency` 接入口径](./docs/TRADE_PRODUCTION_CONTRACT_GAP.md)、[本地求解器目录](./bin/README.md)
+- 部署与仓库管理：[PostgreSQL 部署模板](./deploy/postgres/README.md)、[systemd runtime settings](./deploy/SYSTEMD.md)、[公开仓库管理清单](./docs/REPOSITORY_ADMIN_CHECKLIST.md)
+- 贡献与发布：[参与贡献](./CONTRIBUTING.md)、[公开仓库迁移说明](./MIGRATION.md)、[Changelog](./CHANGELOG.md)、[Contributors](./CONTRIBUTORS.md)
+- 安全与权利：[安全政策](./SECURITY.md)、[第三方素材来源](./THIRD_PARTY_ASSETS.md)、[许可证](./LICENSE.md)
+- 代码代理说明：[AGENTS.md](./AGENTS.md)、[CLAUDE.md](./CLAUDE.md)
 
 ## 开发与检查
 

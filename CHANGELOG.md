@@ -13,11 +13,14 @@ All notable changes to RIIC-Web are documented in this file.
 ### Changed
 
 - Plan admission now enforces 100 active accounts per network, 10 starts per account and 200 starts per network in ten minutes, plus a bounded 2,000-task candidate ring.
-- Queue ordering is deterministic for tasks created at the same instant, and account-window queries use a dedicated composite index.
-- The release version is now `0.2.0`, with `package.json` recorded as the repository's version source.
+- Plans submitted at the same instant now keep stable queue positions, while a dedicated account-history index keeps admission checks fast as the queue grows.
 
 ### Fixed
 
 - Expired running tasks now release their account reservation and clear encrypted task input instead of permanently blocking later submissions.
 - Candidate promotion skips networks already at their active-account limit, and buffered cancellations scrub encrypted payloads before releasing the reservation.
 - Candidate and pending tasks remain visibly queued while automatic polling continues, without exceeding the production JavaScript budget.
+
+### For contributors
+
+- `package.json` is now the repository's version source and records release `0.2.0`.
