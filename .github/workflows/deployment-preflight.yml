@@ -197,12 +197,18 @@ jobs:
 
           echo '=== application processes ==='
           ps -u "$run_user" -o pid=,ppid=,etimes=,rss=,comm= | sort -k5,5 -k1,1n
+          while read -r pid; do
+            [[ "$pid" =~ ^[0-9]+$ ]]
+            printf 'pid=%s cgroup=' "$pid"
+            awk -F: '$1 == "0" { print $3 }' "/proc/$pid/cgroup"
+          done < <(ps -u "$run_user" -o pid=)
 
           echo '=== application units ==='
           mapfile -t units < <(
             systemctl list-unit-files --type=service --no-legend "${service}*.service" \
               | awk '{ print $1 }' \
               | grep -E '^arknights-infra[-A-Za-z0-9_.@]*\.service$' \
+              | grep -v '@\.service$' \
               | sort -u
           )
           ((${#units[@]} > 0))
