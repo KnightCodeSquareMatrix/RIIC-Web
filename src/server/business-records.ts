@@ -1,10 +1,14 @@
 import { randomUUID } from "node:crypto";
 
-import { and, desc, eq, gte, lte, lt, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, gt, gte, lte, lt, sql, type SQL } from "drizzle-orm";
 
 import { PRIVACY_VERSION, TERMS_VERSION } from "@/legal-policy";
+import {
+  ADMIN_SOLVER_ERROR_WINDOW_MINUTES,
+  buildAdminSolverMetricsData,
+} from "@/solver-metrics";
 import type { AppErrorCode, FeedbackRequest, SavedPlanCalculationContext, SolverObservation } from "@/types";
-import { BUSINESS_DATA_TTL_MS, isBusinessDatabaseEnabled } from "./business-config";
+import { BUSINESS_DATA_TTL_MS, isBusinessDatabaseEnabled, isPlanCacheEnabled } from "./business-config";
 import { getDatabase } from "./db";
 import {
   feedback,
@@ -264,6 +268,35 @@ export async function queryBusinessRecords(query: BusinessRecordQuery) {
     getDatabase().select({ count: sql<number>`count(*)::int` }).from(feedback).where(where),
   ]);
   return { items, total: total[0]?.count ?? 0, limit, offset };
+}
+
+export async function queryAdminSolverMetrics(now = new Date()) {
+  const windowStartedAt = new Date(now.getTime() - ADMIN_SOLVER_ERROR_WINDOW_MINUTES * 60_000);
+  const database = getDatabase();
+  const [solverRows, cacheRows] = await Promise.all([
+    database.select({
+      successCount: sql<number>`count(*) filter (where ${planRun.status} = 'success')::int`,
+      failureCount: sql<number>`count(*) filter (where ${planRun.status} = 'failed')::int`,
+    }).from(planRun).where(and(
+      gte(planRun.createdAt, windowStartedAt),
+      lte(planRun.createdAt, now),
+    )),
+    database.select({
+      hitCount: sql<number>`coalesce(sum(${planCache.hitCount}) filter (where ${planCache.publicResult} is not null), 0)::int`,
+      readyEntryCount: sql<number>`count(*) filter (where ${planCache.publicResult} is not null)::int`,
+      fillingEntryCount: sql<number>`count(*) filter (where ${planCache.publicResult} is null and ${planCache.leaseExpiresAt} > ${now})::int`,
+    }).from(planCache).where(gt(planCache.expiresAt, now)),
+  ]);
+
+  return buildAdminSolverMetricsData({
+    generatedAt: now,
+    cacheEnabled: isPlanCacheEnabled(),
+    successCount: solverRows[0]?.successCount ?? 0,
+    failureCount: solverRows[0]?.failureCount ?? 0,
+    cacheHitCount: cacheRows[0]?.hitCount ?? 0,
+    readyCacheEntryCount: cacheRows[0]?.readyEntryCount ?? 0,
+    fillingCacheEntryCount: cacheRows[0]?.fillingEntryCount ?? 0,
+  });
 }
 
 export async function updateFeedbackRecord(input: {

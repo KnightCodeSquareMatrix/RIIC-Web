@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import type { AdminSessionData, AdminUserAction, AdminUserData, SolverPingFingerprint } from "@/types";
+import { AdminSolverMetrics } from "./solver-metrics-client";
 
 const CLIENT_SKLAND_ENABLED = process.env.APP_CLIENT_SKLAND_ENABLED === "1";
 
@@ -222,6 +223,8 @@ export function AdminUsers({
           </div>
         </details>
       </section>
+
+      <AdminSolverMetrics />
 
       <form
         className="flex gap-2 max-sm:flex-col"

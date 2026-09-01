@@ -488,8 +488,15 @@ test("resource-oriented admin APIs keep authentication and method boundaries", a
     "/api/admin/users/user_test/sessions",
     "/api/admin/plan-runs",
     "/api/admin/feedback",
+    "/api/admin/solver-metrics",
   ];
-  for (const path of reads) expect((await request.get(path)).status(), path).toBe(401);
+  for (const path of reads) {
+    const response = await request.get(path);
+    expect(response.status(), path).toBe(401);
+    if (path === "/api/admin/solver-metrics") {
+      expect(response.headers()["cache-control"]).toContain("no-store");
+    }
+  }
 
   expect((await request.patch("/api/admin/users/user_test", {
     data: { banned: true },
