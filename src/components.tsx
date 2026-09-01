@@ -13,7 +13,7 @@ import {
   Upload,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { CSSProperties, ChangeEvent, lazy, ReactElement, ReactNode, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { CSSProperties, ChangeEvent, DragEvent, lazy, ReactElement, ReactNode, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { AnimatedNumber, AnimatedText } from "@/components/AnimatedText";
 import { Accordion, AccordionItem, AccordionPanel, AccordionTrigger } from "@/components/ui/accordion";
@@ -259,18 +259,53 @@ export function FileDrop({
   fileName: string | null;
   onFile: (file: File) => void;
 }) {
-  function handleChange(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
+  const [dragActive, setDragActive] = useState(false);
+
+  function importFirstFile(files: FileList | null) {
+    const file = files?.[0];
     if (file) onFile(file);
+  }
+
+  function handleChange(event: ChangeEvent<HTMLInputElement>) {
+    importFirstFile(event.target.files);
     event.currentTarget.value = "";
   }
 
+  function handleDragEnter(event: DragEvent<HTMLLabelElement>) {
+    event.preventDefault();
+    if (event.dataTransfer.types.includes("Files")) setDragActive(true);
+  }
+
+  function handleDragLeave(event: DragEvent<HTMLLabelElement>) {
+    if (event.currentTarget.contains(event.relatedTarget as Node)) return;
+    setDragActive(false);
+  }
+
+  function handleDrop(event: DragEvent<HTMLLabelElement>) {
+    event.preventDefault();
+    setDragActive(false);
+    importFirstFile(event.dataTransfer.files);
+  }
+
   return (
-    <Label pressable className="flex min-h-32 cursor-pointer flex-col items-center justify-center gap-2 rounded-[4px] border border-dashed bg-background px-4 py-5 text-center transition-[color,background-color,border-color] duration-[var(--motion-duration-state)] ease-[var(--motion-ease-out)] hover:border-primary/40 hover:bg-muted/40">
+    <Label
+      pressable
+      className={cn(
+        "flex min-h-32 cursor-pointer flex-col items-center justify-center gap-2 rounded-[4px] border border-dashed bg-background px-4 py-5 text-center transition-[color,background-color,border-color] duration-[var(--motion-duration-state)] ease-[var(--motion-ease-out)] hover:border-primary/40 hover:bg-muted/40",
+        dragActive && "border-primary bg-primary/10 text-primary ring-2 ring-primary/25 ring-offset-2",
+      )}
+      aria-label="拖放或选择干员数据文件"
+      data-slot="file-drop"
+      data-dragging={dragActive || undefined}
+      onDragEnter={handleDragEnter}
+      onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; }}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
       <Upload className="size-5 text-primary" />
-      <span className="font-medium text-foreground">{fileName ?? "上传练度 JSON / XLSX"}</span>
+      <span className="font-medium text-foreground">{dragActive ? "松开即可导入" : fileName ?? "上传练度 JSON / XLSX"}</span>
       <span className="text-xs text-muted-foreground">
-        支持 MAA 导出的干员数据 JSON，也支持一图流 XLSX
+        可直接拖入文件；支持 MAA 导出的干员数据 JSON，也支持一图流 XLSX
       </span>
       <input className="sr-only" type="file" accept=".json,.xlsx,.xls" onChange={handleChange} />
     </Label>
@@ -1330,6 +1365,7 @@ export function ScheduleBoard({
   searchQuery = "",
   animateInitialView = false,
   onIssue,
+  feedbackDisabled = false,
   onFactoryRecipeChange,
   onTradeOrderChange,
   onViewModeChange,
@@ -1347,6 +1383,7 @@ export function ScheduleBoard({
   searchQuery?: string;
   animateInitialView?: boolean;
   onIssue: (row: RoomRow) => void;
+  feedbackDisabled?: boolean;
   onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
   onViewModeChange?: (viewMode: "list" | "compact") => void;
@@ -1699,20 +1736,23 @@ export function ScheduleBoard({
                     <Tooltip>
                       <TooltipTrigger
                         render={
+                          <span className="absolute right-2 top-2 z-10">
                           <Button
                             id={scheduleIssueTriggerId(row)}
                             type="button"
                             variant="ghost"
                             size="icon-sm"
-                            className="absolute right-2 top-2 z-10 border border-white/10 bg-[#3C3C3C]/55 text-white/70 hover:bg-[#4B4B4B] hover:text-white max-sm:size-11"
+                            className="border border-white/10 bg-[#3C3C3C]/55 text-white/70 hover:bg-[#4B4B4B] hover:text-white disabled:cursor-not-allowed disabled:opacity-45 max-sm:size-11"
                             aria-label={`${row.title} 反馈排班问题`}
+                            disabled={feedbackDisabled}
                             onClick={() => onIssue(row)}
                           >
                             <FileWarning />
                           </Button>
+                          </span>
                         }
                       />
-                      <TooltipContent side="left">反馈排班问题</TooltipContent>
+                      <TooltipContent side="left">{feedbackDisabled ? "全角色导入为体验数据，不能提交反馈" : "反馈排班问题"}</TooltipContent>
                     </Tooltip>
                   </div>
                 );
