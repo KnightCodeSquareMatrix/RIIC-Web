@@ -537,6 +537,22 @@ function getPlanServeClient(lane = 0) {
   return client;
 }
 
+export async function warmPlanServeLane(serveLane: number): Promise<void> {
+  if (!Number.isSafeInteger(serveLane) || serveLane < 0) {
+    throw new Error("Plan solver lane must be a non-negative integer.");
+  }
+  const serveClient = getPlanServeClient(serveLane);
+  const ping = await serveClient.ping();
+  const capability = inspectPlanComputeCapability(ping.response);
+  const readiness = inspectSolverDeploymentReadiness(
+    capability,
+    process.env.INFRA_CLI_EXPECTED_SHA256,
+  );
+  if (!readiness.ready) {
+    throw new Error(`Plan solver lane ${serveLane} is not ready: ${readiness.reason ?? "unknown reason"}`);
+  }
+}
+
 export function stopInfraServeClients(reason: string) {
   globalForInfra.__infraCliHealthServeClient?.stop(reason);
   for (const client of globalForInfra.__infraCliPlanServeClients?.values() ?? []) client.stop(reason);
