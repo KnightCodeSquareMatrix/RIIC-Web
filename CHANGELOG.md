@@ -2,6 +2,22 @@
 
 All notable changes to RIIC-Web are documented in this file.
 
+## [0.2.4] - 2026-09-02
+
+### Changed
+
+- Daily production details no longer show the solver-total estimate disclaimer; solver totals and the natural/drone estimate rows remain unchanged.
+
+### Fixed
+
+- Deleting all Skland data no longer runs unrelated global private-record maintenance, preventing maintenance failures from surfacing as `AIC-SYS-5000` before account cleanup.
+- Successful all-data deletion now resolves the account store with the verified website user, removes every persisted Skland binding for that user, and clears the browser account state.
+
+### For contributors
+
+- `package.json` and `package-lock.json` record release `0.2.4`.
+- Account-data deletion has direct route-level and private-artifact regression coverage.
+
 ## [0.2.3] - 2026-09-02
 
 ### Changed
