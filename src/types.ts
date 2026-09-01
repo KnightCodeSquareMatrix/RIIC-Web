@@ -1019,6 +1019,9 @@ export type AppErrorCode =
   | "AIC-PLAN-3003"
   | "AIC-PLAN-3004"
   | "AIC-PLAN-3005"
+  | "AIC-PLAN-3006"
+  | "AIC-PLAN-3007"
+  | "AIC-PLAN-3008"
   | "AIC-FEEDBACK-4001"
   | "AIC-FEEDBACK-4002"
   | "AIC-SYS-5000"
@@ -1048,6 +1051,7 @@ export type ApiFailure = {
     message: string;
     requestId: string;
     retryable: boolean;
+    retryAfterSeconds?: number;
     fieldErrors?: ApiFieldError[];
   };
 };
@@ -1243,6 +1247,51 @@ export interface AdminUserUpdateData {
   updated: true;
 }
 
+export interface AdminSolverMetricsData {
+  generatedAt: string;
+  solver: {
+    windowMinutes: number;
+    trendWindowMinutes: number;
+    trendBucketMinutes: number;
+    successCount: number;
+    failureCount: number;
+    completedCount: number;
+    errorRate: number | null;
+    throughputPerMinute: number;
+    averageDurationMs: number | null;
+    p95DurationMs: number | null;
+    sourceCounts: {
+      maa: number;
+      skland: number;
+      sample: number;
+    };
+    trend: Array<{
+      bucketStartedAt: string;
+      successCount: number;
+      failureCount: number;
+      completedCount: number;
+      errorRate: number | null;
+      averageDurationMs: number | null;
+    }>;
+  };
+  queue: {
+    bufferedCount: number;
+    pendingCount: number;
+    runningCount: number;
+    averageWaitMs: number | null;
+    p95WaitMs: number | null;
+  };
+  cache: {
+    enabled: boolean;
+    hitCount: number;
+    missCount: number;
+    lookupCount: number;
+    hitRate: number | null;
+    readyEntryCount: number;
+    fillingEntryCount: number;
+  };
+}
+
 export interface SklandSessionData {
   authenticated: boolean;
   configured: boolean;
@@ -1283,5 +1332,6 @@ export interface DisplayError {
   message: string;
   requestId?: string;
   retryable: boolean;
+  retryAfterSeconds?: number;
   fieldErrors?: ApiFieldError[];
 }

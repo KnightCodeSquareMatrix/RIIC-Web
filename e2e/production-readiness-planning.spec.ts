@@ -632,7 +632,7 @@ test("failed plan remains expanded with retry and diagnostic actions", async ({ 
 
 test("dialog and mobile sheet motion preserve direction, exit timing, and focus", async ({ page }) => {
   await mockApis(page);
-  await seedV4Session(page, scheduleVisualPlanData);
+  await seedV4Session(page, scheduleVisualPlanData, { boxSource: "maa" });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
 
@@ -770,7 +770,7 @@ test("tooltips wait once and then open adjacent help instantly within the provid
   )))).toBe(true);
 });
 
-test("a stored sample BOX completes generation, shifts, MAA export, and feedback", async ({ page }) => {
+test("a stored sample BOX completes generation, shifts, MAA export, and disables feedback", async ({ page }) => {
   await mockApis(page);
   await seedV4Session(page, null);
   await page.goto("/");
@@ -798,19 +798,10 @@ test("a stored sample BOX completes generation, shifts, MAA export, and feedback
   };
   expect(downloadedMaa.plans?.every((plan) => !("training" in (plan.rooms ?? {})))).toBe(true);
 
-  await page.getByRole("button", { name: "加工站 反馈排班问题" }).click();
-  const feedbackDialog = page.getByRole("dialog");
-  await expectUnifiedDialogTypography(feedbackDialog);
-  const feedbackFooter = feedbackDialog.locator('[data-slot="dialog-footer"]');
-  await expect(feedbackFooter).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
-  await expect(feedbackFooter).toHaveCSS("border-top-width", "0px");
-  await expect(feedbackFooter).toHaveCSS("box-shadow", "none");
-  await expectUnifiedDialogAction(feedbackDialog.getByRole("button", { name: "取消" }), { height: "46px" });
-  await expectUnifiedDialogAction(feedbackDialog.getByRole("button", { name: "提交反馈" }), { width: "196px", height: "46px" });
-  await page.getByPlaceholder(/这组应该换成/).fill("加工站排班与预期不一致");
-  await page.getByRole("checkbox").check();
-  await page.getByRole("button", { name: "提交反馈" }).click();
-  await expect(page.getByText("反馈已提交，编号：feedback-001")).toBeVisible();
+  const feedbackButton = page.getByRole("button", { name: "加工站 反馈排班问题" });
+  await expect(feedbackButton).toBeDisabled();
+  await feedbackButton.locator("xpath=..").hover();
+  await expect(page.getByText("全角色导入为体验数据，不能提交反馈")).toBeVisible();
 });
 
 test("plan timing stays passive and performance feedback waits for result details to close", async ({ page }) => {
@@ -829,7 +820,7 @@ test("plan timing stays passive and performance feedback waits for result detail
       }),
     });
   });
-  await seedV4Session(page, { ...planData, durationMs: 2764 });
+  await seedV4Session(page, { ...planData, durationMs: 2764 }, { boxSource: "maa" });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
 

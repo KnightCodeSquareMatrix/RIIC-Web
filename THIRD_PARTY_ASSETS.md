@@ -21,6 +21,12 @@ The frontend consumes only public JSON and PNG artifacts. It does not execute pr
 
 The Rainyun logo at `public/images/partners/rainyun-logo.png` was provided for this site integration and links only to [Rainyun](https://www.rainyun.com/riic_). The Rainyun name and logo remain the property of their respective rights holder; this project does not claim ownership of the mark. The image is bundled locally, so loading the page does not contact Rainyun before a visitor chooses the link.
 
+## Site icon
+
+The Closure artwork at `assets/branding/closure-site-icon.png` was provided for this site integration. The generated Next.js, Apple touch, and favicon variants preserve the supplied artwork and transparency. Arknights character designs and related rights remain the property of Hypergryph and their respective rights holders; this project does not claim ownership of the artwork.
+
+Run `npm run assets:site-icon` after updating the source PNG. CI regenerates the browser variants and rejects stale output.
+
 ## Updating
 
 The `Sync arkntools assets` GitHub Actions workflow performs shallow sparse checkouts of both public sources once per day at 10:17 Asia/Shanghai and opens or refreshes a pull request in this frontend repository when generated content changes. It uses the repository-scoped `GITHUB_TOKEN`; maintainers must enable **Allow GitHub Actions to create and approve pull requests** in the repository Actions settings. The workflow creates pull requests but never approves or merges them.
