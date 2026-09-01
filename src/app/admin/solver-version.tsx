@@ -20,7 +20,9 @@ export function SolverVersion({
   plannerReady: boolean;
   solverFingerprint: SolverPingFingerprint | null;
 }) {
-  const executableSha256 = solverFingerprint?.solverExecutableSha256 ?? null;
+  const executableSha256 = solverFingerprint?.pong
+    ? solverFingerprint.solverExecutableSha256
+    : null;
 
   return (
     <section
@@ -47,8 +49,9 @@ export function SolverVersion({
         <code
           className="mt-2 block break-all rounded-xl bg-muted/55 px-4 py-3 font-mono text-xs leading-5 ring-1 ring-foreground/5"
           data-solver-fingerprint={executableSha256 ?? "unavailable"}
+          data-solver-fingerprint-source="ping.result.solver_executable_sha256"
         >
-          {executableSha256 ?? "Worker 未返回有效指纹"}
+          {executableSha256 ?? "Worker ping 未返回有效的 solver_executable_sha256"}
         </code>
 
         <details className="group mt-4 border-t pt-2" data-solver-fingerprint-details>

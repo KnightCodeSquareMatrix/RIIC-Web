@@ -307,6 +307,7 @@ export interface InfraCalculatorProps {
   canRun: boolean;
   hasBox: boolean;
   hasPersonalBox: boolean;
+  feedbackDisabledForSampleBox: boolean;
   plannerReady: boolean;
   websiteAuthenticated: boolean;
   showOnboarding: boolean;
@@ -347,7 +348,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     activePlan, closestComparison,
     resultClearNotice,
     feedbackResult,
-    sampleLoading, loading, canRun, hasBox, hasPersonalBox, plannerReady, websiteAuthenticated, showOnboarding, taskQueue, animatePlanEntrance, animateEmptyScheduleEntrance, onPlanEntranceConsumed, requiresAccount = false, accountControl,
+    sampleLoading, loading, canRun, hasBox, hasPersonalBox, feedbackDisabledForSampleBox, plannerReady, websiteAuthenticated, showOnboarding, taskQueue, animatePlanEntrance, animateEmptyScheduleEntrance, onPlanEntranceConsumed, requiresAccount = false, accountControl,
     onRunSampleTrial, onStartPersonalFlow, onDismissOnboarding, onOpenSetup, onRun, onCancelRun,
     onSetActiveShift, onMarkIssue, onPerformanceIssue,
     onFactoryRecipeChange, onTradeOrderChange,
@@ -542,6 +543,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                     animateEntrance={animatePlanEntrance}
                     onEntranceConsumed={onPlanEntranceConsumed}
                     onPerformanceIssue={onPerformanceIssue}
+                    feedbackDisabled={feedbackDisabledForSampleBox}
                   />
                 </Suspense>
               </>
@@ -592,6 +594,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                 </div>
               )}
               onIssue={onMarkIssue}
+              feedbackDisabled={feedbackDisabledForSampleBox}
               onFactoryRecipeChange={onFactoryRecipeChange}
               onTradeOrderChange={onTradeOrderChange}
             /> : (
