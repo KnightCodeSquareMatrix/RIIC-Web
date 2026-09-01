@@ -1,14 +1,54 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { passwordConfirmationError } from "@/components/auth/password-confirmation";
 import { PasswordInput } from "@/components/auth/password-input";
-import { PasswordStrength } from "@/components/interior/password-strength";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
-import { isStrongPassword, PASSWORD_STRENGTH_ERROR } from "@/password-strength";
+import { evaluatePasswordStrength, isStrongPassword, PASSWORD_STRENGTH_ERROR } from "@/password-strength";
+
+const PASSWORD_STRENGTH_LABELS = ["尚未输入", "较弱", "一般", "良好", "强"] as const;
+
+function ResetPasswordStrength({ value, id }: { value: string; id: string }) {
+  const strength = useMemo(() => evaluatePasswordStrength(value), [value]);
+  const tone = strength.score === 0
+    ? "bg-muted-foreground/25"
+    : strength.score <= 1
+      ? "bg-destructive"
+      : strength.score <= 2
+        ? "bg-amber-500"
+        : "bg-emerald-500";
+
+  return (
+    <div id={id} className="mt-1.5 w-full" data-password-strength>
+      <div
+        role="meter"
+        aria-label="密码强度"
+        aria-valuemin={0}
+        aria-valuemax={4}
+        aria-valuenow={strength.score}
+        aria-valuetext={PASSWORD_STRENGTH_LABELS[strength.score]}
+        className="grid grid-cols-4 gap-1.5"
+      >
+        {strength.rules.map((rule, index) => (
+          <span key={rule.id} className={`h-1.5 rounded-sm ${index < strength.score ? tone : "bg-muted"}`} />
+        ))}
+      </div>
+      <p aria-live="polite" className="mt-2 text-xs text-muted-foreground">
+        密码强度：{PASSWORD_STRENGTH_LABELS[strength.score]}。{strength.guessable ? "请避免容易猜测的常见模式。" : ""}
+      </p>
+      <ul className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
+        {strength.rules.map((rule) => (
+          <li key={rule.id} className={`text-xs ${rule.met ? "text-foreground" : "text-muted-foreground"}`}>
+            {rule.met ? "✓" : "○"} {rule.label}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 export function ResetPassword() {
   const [password, setPassword] = useState("");
@@ -81,7 +121,7 @@ export function ResetPassword() {
           aria-invalid={Boolean(passwordStrengthError)}
           aria-describedby="reset-password-strength"
         />
-        <PasswordStrength id="reset-password-strength" value={password} className="mt-1.5" />
+        <ResetPasswordStrength id="reset-password-strength" value={password} />
         {passwordStrengthError ? (
           <p role="alert" className="text-xs leading-5 text-destructive">{passwordStrengthError}</p>
         ) : null}
