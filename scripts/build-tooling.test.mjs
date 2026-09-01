@@ -221,6 +221,8 @@ test("public deployment automation is repository-bound, opt-in, and secret-safe"
   assert.doesNotMatch(preflightWorkflow, /current_release\/\.env\.production\.local|current_release="\$\(readlink/);
   assert.match(runtimeDiagnostics, /if: inputs\.mode == 'baseline'/);
   assert.match(runtimeDiagnostics, /ps -u "\$run_user" -o pid=,ppid=,etimes=,rss=,comm=/);
+  assert.match(runtimeDiagnostics, /awk -F: '\$1 == "0" \{ print \$3 \}' "\/proc\/\$pid\/cgroup"/);
+  assert.match(runtimeDiagnostics, /grep -v '@\\\.service\$'/);
   assert.match(runtimeDiagnostics, /systemctl show --no-pager[\s\S]+journalctl --no-pager/);
   assert.doesNotMatch(
     runtimeDiagnostics,
