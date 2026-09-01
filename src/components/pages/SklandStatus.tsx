@@ -429,7 +429,7 @@ function OverviewTab({
                 已同步到排班助手
               </OverviewTechnicalHeading>
               <p className="mt-4 text-2xl font-semibold tabular-nums text-[var(--room-accent)]">
-                {snapshot.operators.length}
+                {snapshot.operbox.length}
                 <span className="ml-1 text-sm font-normal text-white/60">名干员</span>
               </p>
               <p className="font-number mt-1 text-xs text-white/58">
