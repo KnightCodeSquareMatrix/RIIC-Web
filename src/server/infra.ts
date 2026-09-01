@@ -507,7 +507,7 @@ function formatPlanFailure({
 
 const globalForInfra = globalThis as typeof globalThis & {
   __infraCliHealthServeClient?: InfraCliServeClient;
-  __infraCliPlanServeClient?: InfraCliServeClient;
+  __infraCliPlanServeClients?: Map<number, InfraCliServeClient>;
   __infraCliCleanupRegistered?: boolean;
   __infraPrivateMaintenance?: {
     lastCompletedAt: number;
@@ -528,14 +528,18 @@ function getHealthServeClient() {
   return globalForInfra.__infraCliHealthServeClient;
 }
 
-function getPlanServeClient() {
-  globalForInfra.__infraCliPlanServeClient ??= new InfraCliServeClient(serveClientOptions());
-  return globalForInfra.__infraCliPlanServeClient;
+function getPlanServeClient(lane = 0) {
+  globalForInfra.__infraCliPlanServeClients ??= new Map();
+  const existing = globalForInfra.__infraCliPlanServeClients.get(lane);
+  if (existing) return existing;
+  const client = new InfraCliServeClient(serveClientOptions());
+  globalForInfra.__infraCliPlanServeClients.set(lane, client);
+  return client;
 }
 
 export function stopInfraServeClients(reason: string) {
   globalForInfra.__infraCliHealthServeClient?.stop(reason);
-  globalForInfra.__infraCliPlanServeClient?.stop(reason);
+  for (const client of globalForInfra.__infraCliPlanServeClients?.values() ?? []) client.stop(reason);
 }
 
 function registerServeClientCleanup() {
@@ -718,7 +722,10 @@ export async function describePlanArtifact(result: PlanApiResponse): Promise<Pri
   return artifactDescriptor(result.runId, [resolved]);
 }
 
-export async function runPlan(body: unknown): Promise<PlanApiResponse> {
+export async function runPlan(
+  body: unknown,
+  options: { serveLane?: number } = {},
+): Promise<PlanApiResponse> {
   let runDir = "";
   let ephemeralRunDir = "";
   let resultPath = "";
@@ -788,7 +795,7 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
     await writeJson(layoutPath, body.layout);
     await writeJson(operboxPath, body.operbox);
 
-    const serveClient = getPlanServeClient();
+    const serveClient = getPlanServeClient(options.serveLane);
     const pingResult = await serveClient.ping();
     const planCompute = inspectPlanComputeCapability(pingResult.response);
     solver = createSolverObservation(planCompute, new Date().toISOString());

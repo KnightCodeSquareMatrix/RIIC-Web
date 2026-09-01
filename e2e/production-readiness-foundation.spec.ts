@@ -488,8 +488,15 @@ test("resource-oriented admin APIs keep authentication and method boundaries", a
     "/api/admin/users/user_test/sessions",
     "/api/admin/plan-runs",
     "/api/admin/feedback",
+    "/api/admin/solver-metrics",
   ];
-  for (const path of reads) expect((await request.get(path)).status(), path).toBe(401);
+  for (const path of reads) {
+    const response = await request.get(path);
+    expect(response.status(), path).toBe(401);
+    if (path === "/api/admin/solver-metrics") {
+      expect(response.headers()["cache-control"]).toContain("no-store");
+    }
+  }
 
   expect((await request.patch("/api/admin/users/user_test", {
     data: { banned: true },
@@ -756,6 +763,44 @@ test("password reset rejects a link without a token before making a request", as
   expect(resetRequests).toBe(0);
 });
 
+test("password reset requires matching password confirmation before making a request", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  let resetRequests = 0;
+  await page.route("**/api/auth/reset-password", async (route) => {
+    resetRequests += 1;
+    expect(route.request().postDataJSON()).toMatchObject({
+      newPassword: "Strong-password-1",
+      token: "valid-reset-token",
+    });
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ status: true }) });
+  });
+  await page.goto("/account/reset-password?token=valid-reset-token");
+
+  await page.getByLabel("新密码", { exact: true }).fill("weakpassword1");
+  await page.getByLabel("确认新密码", { exact: true }).fill("weakpassword1");
+  await page.getByRole("button", { name: "确认重置" }).click();
+  await expect(page.getByText(/密码强度不足：请满足全部强度规则/)).toBeVisible();
+  expect(resetRequests).toBe(0);
+
+  await page.getByLabel("新密码", { exact: true }).fill("Strong-password-1");
+  await page.getByLabel("确认新密码", { exact: true }).fill("Different-password-1");
+  await expect(page.getByText(/密码强度不足：请满足全部强度规则/)).toHaveCount(0);
+  await expect(page.getByLabel("新密码", { exact: true })).toHaveAttribute("type", "password");
+  await page.getByRole("button", { name: "显示新密码" }).click();
+  await expect(page.getByLabel("新密码", { exact: true })).toHaveAttribute("type", "text");
+  await page.getByRole("button", { name: "隐藏新密码" }).click();
+  await expect(page.getByLabel("新密码", { exact: true })).toHaveAttribute("type", "password");
+  await page.getByRole("button", { name: "确认重置" }).click();
+  await expect(page.getByText("两次输入的密码不一致。", { exact: true })).toBeVisible();
+  expect(resetRequests).toBe(0);
+
+  await page.getByLabel("确认新密码", { exact: true }).fill("Strong-password-1");
+  await expect(page.getByText("两次输入的密码不一致。", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "确认重置" }).click();
+  await expect.poll(() => resetRequests).toBe(1);
+  await expect(page.getByText("密码已重置，旧 Session 已撤销，请返回首页登录。", { exact: true })).toBeVisible();
+});
+
 test("anonymous MAA data cannot drive planning or training advice", async ({ page }) => {
   await page.unroute("**/api/auth/get-session");
   await page.route("**/api/auth/get-session", (route) => route.fulfill({ status: 200, contentType: "application/json", body: "null" }));
@@ -815,6 +860,7 @@ test("server auth boundaries reject anonymous planning and every development Skl
 
   const nativeAdmin = await request.post("/api/auth/admin/list-users", { data: {} });
   expect(nativeAdmin.status()).toBe(404);
+  expect((await request.get("/admin")).status()).toBe(404);
   expect((await request.get("/admin/users")).status()).toBe(404);
 });
 
@@ -1149,12 +1195,12 @@ test("two-shift output drives product estimates, room formulas, and profile deta
   await expect(detailsSheet.locator('[data-production-group="orundum"] [data-production-detail]').nth(0)).toHaveAttribute("data-production-detail", "orundum");
   await expect(detailsSheet.locator('[data-production-group="orundum"] [data-production-detail]').nth(1)).toHaveAttribute("data-production-detail", "shards");
   await expect(detailsSheet.locator('[data-production-detail="shards"]')).toContainText("制造环节");
-  await expect(detailsSheet.locator('[data-production-detail="experience"]')).toContainText(/求解器日产量.*22,400 经验/s);
-  await expect(detailsSheet.locator('[data-production-detail="lmd-orders"]')).toContainText(/求解器日产量.*34,254 龙门币/s);
-  await expect(detailsSheet.locator('[data-production-detail="gold"]')).toContainText(/求解器日产量.*106 枚/s);
-  await expect(detailsSheet.locator('[data-production-detail="orundum"]')).toContainText(/求解器日产量.*360 合成玉/s);
-  await expect(detailsSheet.locator('[data-production-detail="shards"]')).toContainText(/求解器日产量.*48 枚/s);
-  await expect(detailsSheet.getByText(/限制环节：/)).toHaveCount(0);
+  await expect(detailsSheet.locator('[data-production-detail="experience"]')).toContainText(/22,400.*估算自然制造.*估算无人机制造.*拆分为前端估算，总量以求解器为准/s);
+  await expect(detailsSheet.locator('[data-production-detail="lmd-orders"]')).toContainText(/34,254.*估算自然订单.*估算无人机订单.*拆分为前端估算，总量以求解器为准/s);
+  await expect(detailsSheet.locator('[data-production-detail="gold"]')).toContainText(/106.*估算自然制造.*估算无人机制造.*拆分为前端估算，总量以求解器为准/s);
+  await expect(detailsSheet.locator('[data-production-detail="orundum"]')).toContainText(/360.*估算碎片阶段可供.*估算订单阶段可交付.*限制环节：.*拆分为前端估算，总量以求解器为准/s);
+  await expect(detailsSheet.locator('[data-production-detail="shards"]')).toContainText(/48.*估算自然制造.*估算无人机制造.*拆分为前端估算，总量以求解器为准/s);
+  await expect(detailsSheet.getByText(/限制环节：/)).toHaveCount(1);
   await expect(detailsSheet.locator("[data-production-method]")).toHaveCount(0);
   await expect(detailsSheet.getByRole("heading", { name: "产线提升空间" })).toBeVisible();
   await expect(detailsSheet.getByText("贸易产线", { exact: true }).locator("..")).toContainText("领先推荐方案 6.4%");
@@ -1278,9 +1324,11 @@ for (const viewport of [
   { width: 1440, height: 900 },
 ]) {
   test(`website account registration is reachable and explains consent at ${viewport.width}px`, async ({ page }) => {
+    let signUpRequests = 0;
     await page.unroute("**/api/auth/get-session");
     await page.route("**/api/auth/get-session", (route) => route.fulfill({ status: 200, contentType: "application/json", body: "null" }));
     await page.route("**/api/auth/sign-up/email", async (route) => {
+      signUpRequests += 1;
       const body = route.request().postDataJSON() as { email?: string; password?: string };
       expect(body.email).toBe(`account-${viewport.width}@example.test`);
       expect(body.password).toBe("secure-password-1");
@@ -1324,13 +1372,32 @@ for (const viewport of [
     await expect(accountPanel.getByRole("link", { name: "隐私政策", exact: true })).toHaveAttribute("href", "/privacy");
     await expect(accountPanel.getByText("2–20 个字符，可使用中文、英文字母、数字、空格、下划线和短横线。", { exact: true })).toBeVisible();
     await accountPanel.getByRole("textbox", { name: "邮箱", exact: true }).fill(`account-${viewport.width}@example.test`);
-    await page.getByLabel("密码", { exact: true }).fill("secure-password-1");
+    await page.getByLabel("密码", { exact: true }).fill("weakpassword1");
+    await page.getByLabel("确认密码", { exact: true }).fill("weakpassword1");
+    await expect(page.getByLabel("密码", { exact: true })).toHaveAttribute("type", "password");
+    await page.getByRole("button", { name: "显示密码" }).click();
+    await expect(page.getByLabel("密码", { exact: true })).toHaveAttribute("type", "text");
+    await page.getByRole("button", { name: "隐藏密码" }).click();
+    await expect(page.getByLabel("密码", { exact: true })).toHaveAttribute("type", "password");
     await page.getByLabel("昵称").fill("博士😀");
     await page.getByRole("button", { name: "创建账号并发送验证码" }).click();
     await expect(accountPanel.getByText(/昵称只能使用中文、英文字母、数字/)).toBeVisible();
     await page.getByLabel("昵称").fill("测试用户");
+    await expect(accountPanel.getByRole("meter", { name: "密码强度" })).toHaveAttribute("aria-valuetext", "良好");
+    await page.getByRole("button", { name: "创建账号并发送验证码" }).click();
+    await expect(accountPanel.getByText(/密码强度不足：请满足全部强度规则/)).toBeVisible();
+    expect(signUpRequests).toBe(0);
+    await page.getByLabel("密码", { exact: true }).fill("secure-password-1");
+    await page.getByLabel("确认密码", { exact: true }).fill("different-password-1");
+    await expect(accountPanel.getByText(/密码强度不足：请满足全部强度规则/)).toHaveCount(0);
     await expect(accountPanel.getByRole("meter", { name: "密码强度" })).toHaveAttribute("aria-valuetext", "强");
     await page.getByRole("button", { name: "创建账号并发送验证码" }).click();
+    await expect(accountPanel.getByText("两次输入的密码不一致。", { exact: true })).toBeVisible();
+    expect(signUpRequests).toBe(0);
+    await page.getByLabel("确认密码", { exact: true }).fill("secure-password-1");
+    await expect(accountPanel.getByText("两次输入的密码不一致。", { exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: "创建账号并发送验证码" }).click();
+    expect(signUpRequests).toBe(1);
     await expect(accountPanel.locator("[data-wizard-steps]")).toHaveCount(0);
     for (const [index, digit] of [..."123456"].entries()) {
       await accountPanel.getByRole("textbox", { name: `邮箱验证码第 ${index + 1} 位，共 6 位` }).fill(digit);

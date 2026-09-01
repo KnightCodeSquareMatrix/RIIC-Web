@@ -10,7 +10,8 @@ import {
   cancelPlanTask,
   getPlanTask,
   planQueuePosition,
-  PLAN_TASK_ETA_PER_TASK_SECONDS,
+  planSelectionPoolSize,
+  planTaskEtaSeconds,
 } from "@/server/plan-task";
 
 export const runtime = "nodejs";
@@ -33,13 +34,20 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     assertSameOrigin(request);
     const { id: taskId } = await params;
     const task = await authorizeTask(taskId, request);
+    if (task.status === "buffered") {
+      return successResponse({
+        taskId,
+        status: "buffered",
+        selectionPoolSize: await planSelectionPoolSize(),
+      }, requestId);
+    }
     if (task.status === "pending") {
       const queuePosition = await planQueuePosition(taskId);
       return successResponse({
         taskId,
         status: "pending",
         queuePosition,
-        etaSeconds: queuePosition * PLAN_TASK_ETA_PER_TASK_SECONDS,
+        etaSeconds: planTaskEtaSeconds(queuePosition),
       }, requestId);
     }
     if (task.status === "running") {
@@ -47,7 +55,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         taskId,
         status: "running",
         queuePosition: 0,
-        etaSeconds: PLAN_TASK_ETA_PER_TASK_SECONDS,
+        etaSeconds: planTaskEtaSeconds(1),
       }, requestId);
     }
     if (task.status === "done") {

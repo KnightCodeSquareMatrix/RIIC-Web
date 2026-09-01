@@ -7,6 +7,7 @@ import { getDatabase } from "@/server/db";
 import { websiteAccountNameDatabaseHooks } from "./account-name-hooks";
 import { sendAuthEmail } from "./email";
 import { configuredAdminIds, requireAuthBaseUrl, requireAuthSecret } from "./config";
+import { passwordStrengthHook } from "./password-strength-hook";
 
 function createAuth() {
   return betterAuth({
@@ -15,6 +16,7 @@ function createAuth() {
     secret: requireAuthSecret(),
     database: drizzleAdapter(getDatabase(), { provider: "pg" }),
     databaseHooks: websiteAccountNameDatabaseHooks,
+    hooks: { before: passwordStrengthHook },
     emailAndPassword: {
       enabled: true,
       minPasswordLength: 10,

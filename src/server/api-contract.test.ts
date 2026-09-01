@@ -47,6 +47,10 @@ test("error catalog keeps the required HTTP status mapping", () => {
   assert.equal(ERROR_DEFINITIONS["AIC-PLAN-3002"].status, 429);
   assert.equal(ERROR_DEFINITIONS["AIC-PLAN-3003"].status, 504);
   assert.equal(ERROR_DEFINITIONS["AIC-PLAN-3004"].status, 502);
+  assert.equal(ERROR_DEFINITIONS["AIC-PLAN-3005"].status, 409);
+  assert.equal(ERROR_DEFINITIONS["AIC-PLAN-3006"].status, 429);
+  assert.equal(ERROR_DEFINITIONS["AIC-PLAN-3007"].status, 429);
+  assert.equal(ERROR_DEFINITIONS["AIC-PLAN-3008"].status, 503);
   assert.equal(ERROR_DEFINITIONS["AIC-FEEDBACK-4001"].status, 422);
   assert.equal(ERROR_DEFINITIONS["AIC-FEEDBACK-4002"].status, 500);
   assert.equal(ERROR_DEFINITIONS["AIC-SYS-5000"].status, 500);
@@ -79,6 +83,26 @@ test("success and failure responses include the request id", async () => {
   const body = await failure.json();
   assert.equal(body.error.requestId, "request-2");
   assert.equal(body.error.code, "AIC-RATE-6001");
+  assert.equal(body.error.retryAfterSeconds, 7);
+});
+
+test("persistent plan admission errors expose Retry-After in both response boundaries", async () => {
+  for (const [code, retryAfter] of [
+    ["AIC-PLAN-3006", 45],
+    ["AIC-PLAN-3007", 60],
+    ["AIC-PLAN-3008", 30],
+  ] as const) {
+    const response = failureResponse(
+      new PublicApiError(code, { retryAfter }),
+      `request-${code}`,
+      "/api/tasks",
+      performance.now(),
+    );
+    assert.equal(response.headers.get("Retry-After"), String(retryAfter));
+    const body = await response.json();
+    assert.equal(body.error.code, code);
+    assert.equal(body.error.retryAfterSeconds, retryAfter);
+  }
 });
 
 test("health returns 503 while the planner is unavailable", () => {
@@ -271,23 +295,30 @@ test("rate limiting returns retryable 429 errors", () => {
 test("authenticated plan admission is account-primary and IP-secondary", () => {
   __resetRequestGuardsForTests();
   try {
-    assert.equal(MAX_CONCURRENT_AUTHENTICATED_PLAN_ADMISSIONS, 5);
-    assert.equal(MAX_CONCURRENT_NEW_ACCOUNT_PLAN_ADMISSIONS, 3);
-    assert.equal(MAX_CONCURRENT_PLAN_ACCOUNTS_PER_IP, 2);
+    assert.equal(MAX_CONCURRENT_AUTHENTICATED_PLAN_ADMISSIONS, 1_000);
+    assert.equal(MAX_CONCURRENT_NEW_ACCOUNT_PLAN_ADMISSIONS, 600);
+    assert.equal(MAX_CONCURRENT_PLAN_ACCOUNTS_PER_IP, 100);
 
     const releaseFirst = acquirePlanSlot({ ip: "shared-ip", accountId: "account-a", accountClass: "established" });
     assert.throws(
       () => acquirePlanSlot({ ip: "other-ip", accountId: "account-a", accountClass: "established" }),
-      (error: unknown) => error instanceof PublicApiError && error.code === "AIC-PLAN-3002"
+      (error: unknown) => error instanceof PublicApiError && error.code === "AIC-PLAN-3005"
     );
 
-    const releaseSecond = acquirePlanSlot({ ip: "shared-ip", accountId: "account-b", accountClass: "established" });
+    const sharedIpReleases = Array.from(
+      { length: MAX_CONCURRENT_PLAN_ACCOUNTS_PER_IP - 1 },
+      (_, index) => acquirePlanSlot({
+        ip: "shared-ip",
+        accountId: `shared-account-${index}`,
+        accountClass: "established",
+      }),
+    );
     assert.throws(
       () => acquirePlanSlot({ ip: "shared-ip", accountId: "account-c", accountClass: "established" }),
-      (error: unknown) => error instanceof PublicApiError && error.code === "AIC-PLAN-3002"
+      (error: unknown) => error instanceof PublicApiError && error.code === "AIC-PLAN-3007"
     );
 
-    releaseSecond();
+    sharedIpReleases.forEach((release) => release());
     releaseFirst();
   } finally {
     __resetRequestGuardsForTests();
@@ -430,26 +461,26 @@ test("plan account admission class requires verified email and a server-observed
 test("plan start windows limit accounts and shared IPs without charging rejected attempts", () => {
   __resetRequestGuardsForTests();
   try {
-    assert.equal(MAX_PLAN_STARTS_PER_ACCOUNT, 3);
+    assert.equal(MAX_PLAN_STARTS_PER_ACCOUNT, 10);
     for (let index = 0; index < MAX_PLAN_STARTS_PER_ACCOUNT; index += 1) {
       acquirePlanSlot({ ip: "account-ip", accountId: "account-a", accountClass: "established" })();
     }
     assert.throws(
       () => acquirePlanSlot({ ip: "account-ip", accountId: "account-a", accountClass: "established" }),
       (error: unknown) => error instanceof PublicApiError
-        && error.code === "AIC-PLAN-3002"
+        && error.code === "AIC-PLAN-3006"
         && Boolean(error.retryAfter)
     );
 
     __resetRequestGuardsForTests();
-    assert.equal(MAX_PLAN_STARTS_PER_IP, 8);
+    assert.equal(MAX_PLAN_STARTS_PER_IP, 200);
     for (let index = 0; index < MAX_PLAN_STARTS_PER_IP; index += 1) {
       acquirePlanSlot({ ip: "shared-ip", accountId: `account-${index}`, accountClass: "established" })();
     }
     assert.throws(
       () => acquirePlanSlot({ ip: "shared-ip", accountId: "account-rejected", accountClass: "established" }),
       (error: unknown) => error instanceof PublicApiError
-        && error.code === "AIC-PLAN-3002"
+        && error.code === "AIC-PLAN-3007"
         && Boolean(error.retryAfter)
     );
   } finally {
