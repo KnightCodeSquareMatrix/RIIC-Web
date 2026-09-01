@@ -115,13 +115,14 @@ const OperatorSkillTooltip = lazy(() => loadClientFeature("operatorSkillTooltip"
 })));
 
 function CompactScheduleLoading() {
+  const { locale } = useLanguageDemo();
   return (
     <div
       className="grid min-h-[560px] place-items-center border-y border-dashed border-border/70 text-sm text-muted-foreground"
       data-compact-schedule-loading
       role="status"
     >
-      正在准备一图流布局
+      {locale === "en" ? "Preparing overview" : "正在准备一图流布局"}
     </div>
   );
 }
@@ -262,6 +263,8 @@ export function FileDrop({
   fileName: string | null;
   onFile: (file: File) => void;
 }) {
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
   function handleChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (file) onFile(file);
@@ -271,16 +274,16 @@ export function FileDrop({
   return (
     <Label pressable className="flex min-h-36 cursor-pointer flex-col items-center justify-center gap-2 rounded-[4px] border border-dashed bg-background px-4 py-5 text-center transition-[color,background-color,border-color] duration-[var(--motion-duration-state)] ease-[var(--motion-ease-out)] hover:border-primary/40 hover:bg-muted/40">
       <Upload className="size-5 text-primary" />
-      <span className="font-medium text-foreground">{fileName ?? "上传练度 JSON / XLSX"}</span>
-      <span className="flex flex-wrap items-center justify-center gap-1.5 text-xs" role="list" aria-label="支持的 MAA JSON 语言">
-        {["简中", "繁中", "日文", "英文"].map((language) => (
+      <span className="font-medium text-foreground">{fileName ?? (en ? "Upload roster JSON / XLSX" : "上传练度 JSON / XLSX")}</span>
+      <span className="flex flex-wrap items-center justify-center gap-1.5 text-xs" role="list" aria-label={en ? "Supported MAA JSON languages" : "支持的 MAA JSON 语言"}>
+        {(en ? ["Simplified Chinese", "Traditional Chinese", "Japanese", "English"] : ["简中", "繁中", "日文", "英文"]).map((language) => (
           <span key={language} role="listitem" className="rounded-full border border-border bg-muted/70 px-2 py-0.5 font-medium text-foreground">
             {language}
           </span>
         ))}
       </span>
       <span className="text-xs leading-relaxed text-muted-foreground">
-        导入后在本地自动转为简中，再提交排班 · 也支持一图流 XLSX
+        {en ? "Names are converted locally to Simplified Chinese before scheduling · XLSX imports are also supported" : "导入后在本地自动转为简中，再提交排班 · 也支持一图流 XLSX"}
       </span>
       <input className="sr-only" type="file" accept=".json,.xlsx,.xls" onChange={handleChange} />
     </Label>
@@ -296,9 +299,11 @@ export function PresetSelector({
   selected: PresetDef;
   onSelect: (preset: PresetDef) => void;
 }) {
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
   return (
     <ToggleGroup
-      aria-label="布局预设"
+      aria-label={en ? "Layout presets" : "布局预设"}
       value={[selected.label]}
       onValueChange={(nextValue) => {
         const next = presets.find((preset) => preset.label === nextValue[0]);
@@ -327,7 +332,7 @@ export function PresetSelector({
           <span className="relative z-10 flex min-w-0 flex-col items-start gap-1">
             <span className="text-lg font-semibold leading-none tabular-nums">{preset.label}</span>
             <span className="text-xs font-normal text-white/58">
-              <span className="font-number">{preset.trading}</span> 贸 / <span className="font-number">{preset.manufacture}</span> 制 / <span className="font-number">{preset.power}</span> 电
+              <span className="font-number">{preset.trading}</span> {en ? "trade" : "贸"} / <span className="font-number">{preset.manufacture}</span> {en ? "factory" : "制"} / <span className="font-number">{preset.power}</span> {en ? "power" : "电"}
             </span>
           </span>
           {selected.label === preset.label ? <Check className="relative z-10 size-4 shrink-0 text-[#FFD800]" aria-hidden="true" /> : null}
@@ -350,6 +355,8 @@ function RoomLevelControl({
   onChange: (level: number) => void;
   surface?: "default" | "room";
 }) {
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
   const [draft, setDraft] = useState<string | null>(null);
   const display = draft ?? String(level);
 
@@ -373,7 +380,7 @@ function RoomLevelControl({
           type="button"
           variant="ghost"
           size="icon-sm"
-          aria-label={`${roomId} 等级减一`}
+          aria-label={en ? `${roomId} decrease level` : `${roomId} 等级减一`}
           className={cn(
             "h-full w-7 rounded-none",
             surface === "room" ? "text-white/62 hover:bg-white/10 hover:text-white disabled:text-white/28" : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -389,7 +396,7 @@ function RoomLevelControl({
         <Input
           type="text"
           inputMode="numeric"
-          aria-label={`${roomId} 等级`}
+          aria-label={en ? `${roomId} level` : `${roomId} 等级`}
           value={display}
           onFocus={() => setDraft(String(level))}
           onChange={(event) => setDraft(event.target.value)}
@@ -409,7 +416,7 @@ function RoomLevelControl({
           type="button"
           variant="ghost"
           size="icon-sm"
-          aria-label={`${roomId} 等级加一`}
+          aria-label={en ? `${roomId} increase level` : `${roomId} 等级加一`}
           className={cn(
             "h-full w-7 rounded-none",
             surface === "room" ? "text-white/62 hover:bg-white/10 hover:text-white disabled:text-white/28" : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -436,7 +443,7 @@ function RoomLevelControl({
           itemToStringValue={(item) => item}
         >
           <ComboboxInput
-            aria-label={`${roomId} 等级`}
+            aria-label={en ? `${roomId} level` : `${roomId} 等级`}
             className={cn(
               "w-20 rounded-[4px] [&_[data-slot=input-group-control]]:text-center",
               surface === "room" && "border-white/20 bg-[#3C3C3C]/78 text-white shadow-none [&_[data-slot=input-group-button]]:text-white/62 [&_[data-slot=input-group-control]]:text-white"
@@ -1767,7 +1774,7 @@ export function ScheduleBoard({
             />
           ) : compactScheduleLoadFailed ? (
             <div className="grid min-h-[420px] place-items-center border-y border-destructive/35 text-sm text-destructive" role="alert">
-              一图流布局加载失败，请切换到列表式布局。
+              {en ? "Overview failed to load. Switch to the list view." : "一图流布局加载失败，请切换到列表式布局。"}
             </div>
           ) : (
             <CompactScheduleLoading />
@@ -1789,25 +1796,27 @@ export function ShortcutGuideDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="gap-5 sm:max-w-2xl sm:p-6">
         <DialogHeader className="gap-1.5 px-1 sm:px-2">
-          <DialogTitle className="text-xl font-semibold">快捷键</DialogTitle>
-          <DialogDescription className="max-w-lg text-sm leading-6">在排班主界面快速定位搜索、关闭临时状态或切换导航。</DialogDescription>
+          <DialogTitle className="text-xl font-semibold">{en ? "Keyboard shortcuts" : "快捷键"}</DialogTitle>
+          <DialogDescription className="max-w-lg text-sm leading-6">{en ? "Quickly focus search, close temporary states, or toggle navigation from the scheduler." : "在排班主界面快速定位搜索、关闭临时状态或切换导航。"}</DialogDescription>
         </DialogHeader>
         <div className="divide-y divide-border/70 border-y border-border/70 px-1 sm:px-2">
           <div className="flex min-h-14 items-center justify-between gap-8 py-3 max-sm:flex-wrap max-sm:gap-2">
-            <span className="text-[15px] font-medium leading-6">聚焦排班搜索</span>
-            <KbdGroup className="shrink-0" aria-label="Control 加 K"><Kbd>Ctrl</Kbd><span aria-hidden="true">+</span><Kbd>K</Kbd></KbdGroup>
+            <span className="text-[15px] font-medium leading-6">{en ? "Focus schedule search" : "聚焦排班搜索"}</span>
+            <KbdGroup className="shrink-0" aria-label={en ? "Control plus K" : "Control 加 K"}><Kbd>Ctrl</Kbd><span aria-hidden="true">+</span><Kbd>K</Kbd></KbdGroup>
           </div>
           <div className="flex min-h-14 items-center justify-between gap-8 py-3 max-sm:flex-wrap max-sm:gap-2">
-            <span className="text-[15px] font-medium leading-6">清空搜索；计算中取消请求</span>
+            <span className="text-[15px] font-medium leading-6">{en ? "Clear search; cancel an active calculation" : "清空搜索；计算中取消请求"}</span>
             <Kbd className="shrink-0">Esc</Kbd>
           </div>
           <div className="flex min-h-14 items-center justify-between gap-8 py-3 max-sm:flex-wrap max-sm:gap-2">
-            <span className="text-[15px] font-medium leading-6">展开或收起侧边栏</span>
-            <KbdGroup className="shrink-0" aria-label="Control 加 B"><Kbd>Ctrl</Kbd><span aria-hidden="true">+</span><Kbd>B</Kbd></KbdGroup>
+            <span className="text-[15px] font-medium leading-6">{en ? "Expand or collapse sidebar" : "展开或收起侧边栏"}</span>
+            <KbdGroup className="shrink-0" aria-label={en ? "Control plus B" : "Control 加 B"}><Kbd>Ctrl</Kbd><span aria-hidden="true">+</span><Kbd>B</Kbd></KbdGroup>
           </div>
         </div>
       </DialogContent>
@@ -1834,6 +1843,8 @@ export function IssueNoteModal({
   onSave: () => void;
   onCancel: () => void;
 }) {
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
   const [consented, setConsented] = useState(false);
   const returnFocusId = useRef<string | null>(null);
   const returnToPlanSummary = useRef(false);
@@ -1870,20 +1881,20 @@ export function IssueNoteModal({
         }}
       >
         <DialogHeader>
-          <DialogTitle>{isPerformance ? "提交性能反馈" : row?.title ?? "反馈排班问题"}</DialogTitle>
-          <DialogDescription>{isPerformance ? "反馈本次求解性能" : "反馈排班问题"}</DialogDescription>
+          <DialogTitle>{isPerformance ? (en ? "Submit performance feedback" : "提交性能反馈") : row?.title ?? (en ? "Report schedule issue" : "反馈排班问题")}</DialogTitle>
+          <DialogDescription>{isPerformance ? (en ? "Share feedback about this solve" : "反馈本次求解性能") : (en ? "Report a schedule issue" : "反馈排班问题")}</DialogDescription>
         </DialogHeader>
         <DialogBody>
           <p className="text-[13px] leading-5 text-muted-foreground">
             {isPerformance
-              ? "将提交本次排班的诊断编号、求解耗时、换班方式、布局和你的说明；不会附带任意房间或完整干员数据。"
-              : "将提交本次排班的诊断编号、房间名称、当前干员和你的说明；不会重复上传完整干员数据或调试包。"}
+              ? (en ? "This submits the diagnostic ID, solve time, rotation, layout, and your note. It does not include arbitrary rooms or the complete operator roster." : "将提交本次排班的诊断编号、求解耗时、换班方式、布局和你的说明；不会附带任意房间或完整干员数据。")
+              : (en ? "This submits the diagnostic ID, room name, current operators, and your note. It does not upload the complete roster or debug bundle again." : "将提交本次排班的诊断编号、房间名称、当前干员和你的说明；不会重复上传完整干员数据或调试包。")}
           </p>
           <Textarea
             autoFocus
             value={note}
             onChange={(event) => onNoteChange(event.target.value)}
-            placeholder={isPerformance ? "例如：同一份 Box 之前通常可以更快完成。" : "例如：这组应该换成可露希尔 / 当前站位有误。"}
+            placeholder={isPerformance ? (en ? "Example: This same BOX usually completed faster before." : "例如：同一份 Box 之前通常可以更快完成。") : (en ? "Example: This team should use Closure / the current placement is wrong." : "例如：这组应该换成可露希尔 / 当前站位有误。")}
             className="min-h-36 text-[13px]"
             maxLength={1000}
           />
@@ -1894,16 +1905,16 @@ export function IssueNoteModal({
               onChange={(event) => setConsented(event.target.checked)}
               className="size-4"
             />
-            <span>我确认提交以上{isPerformance ? "性能" : "排班问题"}信息。</span>
+            <span>{en ? `I confirm submitting the ${isPerformance ? "performance" : "schedule issue"} information above.` : <>我确认提交以上{isPerformance ? "性能" : "排班问题"}信息。</>}</span>
           </label>
         </DialogBody>
         <DialogFooter>
           <Button className="max-sm:min-w-16 sm:min-w-[88px]" size="dialog" variant="ghost" onClick={onCancel}>
-            取消
+            {en ? "Cancel" : "取消"}
           </Button>
           <Button size="dialog" onClick={onSave} disabled={!note.trim() || note.trim().length > 1000 || !consented || saving}>
             {saving ? <Loader2 className="animate-spin" /> : <Save />}
-            {saving ? "提交中" : "提交反馈"}
+            {saving ? (en ? "Submitting" : "提交中") : (en ? "Submit feedback" : "提交反馈")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1928,6 +1939,8 @@ export function ProductChangeConfirmModal({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
   return (
     <Dialog
       open={open}
@@ -1943,24 +1956,24 @@ export function ProductChangeConfirmModal({
         data-product-change-confirm
       >
         <DialogHeader>
-          <DialogTitle>更改配置并重新排班？</DialogTitle>
+          <DialogTitle>{en ? "Change settings and regenerate?" : "更改配置并重新排班？"}</DialogTitle>
           <DialogDescription>
-            {roomLabel} 的{changeKind}将切换为「{nextValueLabel}」。当前排班结果会被替换，并立即使用新配置重新排班。
+            {en ? `${roomLabel}'s ${changeKind === "制造配方" ? "factory recipe" : "trade strategy"} will change to “${nextValueLabel}”. The current result will be replaced and regenerated immediately.` : `${roomLabel} 的${changeKind}将切换为「${nextValueLabel}」。当前排班结果会被替换，并立即使用新配置重新排班。`}
           </DialogDescription>
         </DialogHeader>
         <DialogBody className="py-2">
           <p className="flex items-start gap-2 text-[13px] leading-5 text-muted-foreground">
             <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden="true" />
-            重新排班完成前，配置修改会暂时锁定。
+            {en ? "Settings remain locked until regeneration completes." : "重新排班完成前，配置修改会暂时锁定。"}
           </p>
         </DialogBody>
         <DialogFooter>
           <Button className="max-sm:min-w-16 sm:min-w-[88px]" type="button" size="dialog" variant="ghost" disabled={busy} autoFocus onClick={onCancel}>
-            取消
+            {en ? "Cancel" : "取消"}
           </Button>
           <Button type="button" size="dialog" variant="destructive" disabled={busy} onClick={onConfirm}>
             {busy ? <Loader2 className="animate-spin" /> : <RotateCcw />}
-            {busy ? "重新排班中" : "确认并重新排班"}
+            {busy ? (en ? "Regenerating" : "重新排班中") : (en ? "Confirm and regenerate" : "确认并重新排班")}
           </Button>
         </DialogFooter>
       </DialogContent>

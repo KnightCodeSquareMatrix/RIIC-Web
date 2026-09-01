@@ -6,6 +6,7 @@ import type { EnglishCatalog } from "./language-demo-data";
 export type DemoLocale = "zh" | "en";
 
 const STORAGE_KEY = "infra-demo-locale";
+const DEFAULT_LOCALE: DemoLocale = process.env.NEXT_PUBLIC_DEFAULT_LOCALE === "en" ? "en" : "zh";
 let englishCatalog: EnglishCatalog | null = null;
 let englishCatalogRequest: Promise<EnglishCatalog> | null = null;
 
@@ -24,14 +25,25 @@ const LanguageDemoContext = createContext<{
 } | null>(null);
 
 export function LanguageDemoProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<DemoLocale>("zh");
+  const [locale, setLocaleState] = useState<DemoLocale>(DEFAULT_LOCALE);
   const [, setEnglishSkillVersion] = useState(0);
 
   useEffect(() => {
     try {
-      if (window.localStorage.getItem(STORAGE_KEY) === "en") setLocaleState("en");
+      const storedLocale = window.localStorage.getItem(STORAGE_KEY);
+      if (storedLocale === "zh" || storedLocale === "en") setLocaleState(storedLocale);
     } catch { /* Demo 仍可在当前会话切换。 */ }
   }, []);
+
+  useEffect(() => {
+    const en = locale === "en";
+    document.documentElement.lang = en ? "en" : "zh-CN";
+    document.title = en ? "Closure Infrastructure Terminal" : "可露希尔基建终端";
+    const description = document.querySelector<HTMLMetaElement>('meta[name="description"]');
+    if (description) description.content = en
+      ? "Import operator data, generate multi-shift infrastructure schedules, and export to MAA."
+      : "导入干员数据，生成三班排班并导出到 MAA。";
+  }, [locale]);
 
   useEffect(() => {
     if (locale !== "en" || englishCatalog) return;
@@ -44,7 +56,6 @@ export function LanguageDemoProvider({ children }: { children: ReactNode }) {
 
   function setLocale(nextLocale: DemoLocale) {
     setLocaleState(nextLocale);
-    document.documentElement.lang = nextLocale === "en" ? "en" : "zh-CN";
     try { window.localStorage.setItem(STORAGE_KEY, nextLocale); } catch { /* 当前会话仍有效。 */ }
   }
 
