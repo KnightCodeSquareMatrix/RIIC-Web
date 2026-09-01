@@ -10,6 +10,7 @@ import {
 } from "@/solver-metrics-config";
 import { buildAdminSolverMetricsData } from "@/solver-metrics";
 import type { AppErrorCode, FeedbackRequest, SavedPlanCalculationContext, SolverObservation } from "@/types";
+import { buildAdminSolverTrendQuery } from "./admin-solver-metrics-trend";
 import { BUSINESS_DATA_TTL_MS, isBusinessDatabaseEnabled, isPlanCacheEnabled } from "./business-config";
 import { getDatabase } from "./db";
 import {
@@ -277,7 +278,6 @@ export async function queryAdminSolverMetrics(now = new Date()) {
   const windowStartedAt = new Date(now.getTime() - ADMIN_SOLVER_ERROR_WINDOW_MINUTES * 60_000);
   const trendStartedAt = new Date(now.getTime() - ADMIN_SOLVER_TREND_WINDOW_MINUTES * 60_000);
   const trendBucketSeconds = ADMIN_SOLVER_TREND_BUCKET_MINUTES * 60;
-  const trendBucket = sql<Date>`to_timestamp(floor(extract(epoch from ${planRun.createdAt}) / ${trendBucketSeconds}) * ${trendBucketSeconds})`;
   const database = getDatabase();
   const [solverRows, trendRows, taskRows, cacheRows] = await Promise.all([
     database.select({
@@ -292,15 +292,7 @@ export async function queryAdminSolverMetrics(now = new Date()) {
       gte(planRun.createdAt, windowStartedAt),
       lte(planRun.createdAt, now),
     )),
-    database.select({
-      bucketStartedAt: trendBucket,
-      successCount: sql<number>`count(*) filter (where ${planRun.status} = 'success')::int`,
-      failureCount: sql<number>`count(*) filter (where ${planRun.status} = 'failed')::int`,
-      averageDurationMs: sql<number | null>`round(avg(${planRun.durationMs}) filter (where ${planRun.status} = 'success' and ${planRun.durationMs} is not null))::int`,
-    }).from(planRun).where(and(
-      gte(planRun.createdAt, trendStartedAt),
-      lte(planRun.createdAt, now),
-    )).groupBy(trendBucket).orderBy(trendBucket),
+    buildAdminSolverTrendQuery(database, trendStartedAt, now, trendBucketSeconds),
     database.select({
       pendingCount: sql<number>`count(*) filter (where ${planTask.status} = 'pending')::int`,
       runningCount: sql<number>`count(*) filter (where ${planTask.status} = 'running')::int`,
