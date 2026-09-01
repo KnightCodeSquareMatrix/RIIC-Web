@@ -67,10 +67,11 @@ test("solver totals stay authoritative while estimate rows split natural and dro
     ["估算自然制造", 15_000, "经验"],
     ["估算无人机制造", 6_000, "经验"],
   ]);
-  assert.equal(groups[0].primary.note, "拆分为前端估算，总量以求解器为准");
+  assert.equal(groups[0].primary.note, undefined);
   assert.equal(groups[1].primary.amount.value, 34_254);
   assert.equal(groups[1].supporting?.amount.value, 52_999 / 500);
   assert.equal(groups[2].primary.amount.value, 360);
+  assert.equal(groups[2].primary.note, "限制环节：合成玉订单");
   assert.equal(groups[2].supporting?.amount.value, 48);
 });
 
