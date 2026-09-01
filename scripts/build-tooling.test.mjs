@@ -20,6 +20,12 @@ test("Next.js commands use the default Turbopack bundler", async () => {
   assert.doesNotMatch(productionPlaywrightConfig, /--webpack\b/);
 });
 
+test("PostgreSQL integration tests register the TypeScript path alias loader", async () => {
+  const packageJson = JSON.parse(await readRepoFile("package.json"));
+
+  assert.match(packageJson.scripts["test:auth-integration"], /--import \.\/scripts\/register-hooks\.mjs/);
+});
+
 test("production builds prepare a solver-free standalone runtime with static assets", async () => {
   const packageJson = JSON.parse(await readRepoFile("package.json"));
   const nextConfig = await readRepoFile("next.config.ts");
