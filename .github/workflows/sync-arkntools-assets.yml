@@ -29,7 +29,7 @@ jobs:
       - name: Checkout frontend without credentials
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: develop
+          ref: main
           fetch-depth: 0
           persist-credentials: false
 
@@ -166,14 +166,14 @@ jobs:
       contents: write
       pull-requests: write
     env:
-      BASE_BRANCH: develop
+      BASE_BRANCH: main
       UPDATE_BRANCH: automation/arkntools-assets
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout publication base
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: develop
+          ref: main
           fetch-depth: 0
 
       - name: Download reviewed publication artifact
@@ -229,7 +229,7 @@ jobs:
         shell: bash
         run: |
           body="$RUNNER_TEMP/arkntools-publication/pull-request-body.md"
-          number="$(gh pr list --base "$BASE_BRANCH" --head "$UPDATE_BRANCH" --state open --json number --jq '.[0].number // empty')"
+          number="$(gh pr list --head "$UPDATE_BRANCH" --state open --json number --jq '.[0].number // empty')"
           if [[ -z "$number" ]]; then
             gh pr create \
               --base "$BASE_BRANCH" \
@@ -238,6 +238,7 @@ jobs:
               --body-file "$body"
           else
             gh pr edit "$number" \
+              --base "$BASE_BRANCH" \
               --title "chore: 同步 arkntools 干员素材与基建技能" \
               --body-file "$body"
           fi
@@ -251,4 +252,4 @@ jobs:
         shell: bash
         run: |
           echo "## arkntools 资源发布失败" >> "$GITHUB_STEP_SUMMARY"
-          echo "未创建或刷新自动资源 PR；develop 中最后一次已验证资源保持不变。" >> "$GITHUB_STEP_SUMMARY"
+          echo "未创建或刷新自动资源 PR；main 中最后一次已验证资源保持不变。" >> "$GITHUB_STEP_SUMMARY"

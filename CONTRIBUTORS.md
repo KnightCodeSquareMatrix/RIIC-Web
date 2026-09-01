@@ -9,4 +9,4 @@ The public root commit intentionally contains no private-repository history or h
 - LanceKrager
 - 夜游船
 
-Contributors after the reset are also credited by the public Git history. Display-name corrections are welcome through a pull request to `develop`.
+Contributors after the reset are also credited by the public Git history. Display-name corrections are welcome through a pull request to `main`.

@@ -8,19 +8,19 @@
 
 1. 删除或归档旧仓库的脱离 fork；
 2. 重新 fork `KnightCodeSquareMatrix/RIIC-Web`；
-3. 从公开仓库最新 `develop` 创建新分支；
+3. 从公开仓库最新 `main` 创建新分支；
 4. 只移植仍需要的代码，不复制旧 merge commit；
-5. 向 `develop` 创建新 PR，并在描述中注明原 PR 编号。
+5. 向 `main` 创建新 PR，并在描述中注明原 PR 编号。
 
 可在旧 PR 中使用下面的通知：
 
-> 项目已迁移到无旧历史的公开仓库。为避免公开旧私有提交和邮箱，请基于新仓库的 `develop` 重新 fork 并提交 PR；新 PR 中可以引用此 PR 编号以保留讨论上下文。
+> 项目已迁移到无旧历史的公开仓库。为避免公开旧私有提交和邮箱，请基于新仓库的 `main` 重新 fork 并提交 PR；新 PR 中可以引用此 PR 编号以保留讨论上下文。
 
 ## 新协作流程
 
-- 外部和普通功能 PR 统一进入 `develop`。
-- `develop` 合并后的运行时改动进入 development 发布通道。
-- `main` 只接受维护者从同仓库 `release/**` 发起的发布 PR。
+- 外部和普通功能 PR 统一进入 `main`，包括来自 fork 的贡献。
+- PR 使用只读权限运行完整质量门禁，不会获得部署凭据。
+- 合并到 `main` 后才可能触发 production 发布。
 - production 发布由受保护的 GitHub Environment 进行人工审批。
 
 安全问题请按 [SECURITY.md](./SECURITY.md) 私密报告。
