@@ -763,6 +763,44 @@ test("password reset rejects a link without a token before making a request", as
   expect(resetRequests).toBe(0);
 });
 
+test("password reset requires matching password confirmation before making a request", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  let resetRequests = 0;
+  await page.route("**/api/auth/reset-password", async (route) => {
+    resetRequests += 1;
+    expect(route.request().postDataJSON()).toMatchObject({
+      newPassword: "Strong-password-1",
+      token: "valid-reset-token",
+    });
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ status: true }) });
+  });
+  await page.goto("/account/reset-password?token=valid-reset-token");
+
+  await page.getByLabel("新密码", { exact: true }).fill("weakpassword1");
+  await page.getByLabel("确认新密码", { exact: true }).fill("weakpassword1");
+  await page.getByRole("button", { name: "确认重置" }).click();
+  await expect(page.getByText(/密码强度不足：请满足全部强度规则/)).toBeVisible();
+  expect(resetRequests).toBe(0);
+
+  await page.getByLabel("新密码", { exact: true }).fill("Strong-password-1");
+  await page.getByLabel("确认新密码", { exact: true }).fill("Different-password-1");
+  await expect(page.getByText(/密码强度不足：请满足全部强度规则/)).toHaveCount(0);
+  await expect(page.getByLabel("新密码", { exact: true })).toHaveAttribute("type", "password");
+  await page.getByRole("button", { name: "显示新密码" }).click();
+  await expect(page.getByLabel("新密码", { exact: true })).toHaveAttribute("type", "text");
+  await page.getByRole("button", { name: "隐藏新密码" }).click();
+  await expect(page.getByLabel("新密码", { exact: true })).toHaveAttribute("type", "password");
+  await page.getByRole("button", { name: "确认重置" }).click();
+  await expect(page.getByText("两次输入的密码不一致。", { exact: true })).toBeVisible();
+  expect(resetRequests).toBe(0);
+
+  await page.getByLabel("确认新密码", { exact: true }).fill("Strong-password-1");
+  await expect(page.getByText("两次输入的密码不一致。", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "确认重置" }).click();
+  await expect.poll(() => resetRequests).toBe(1);
+  await expect(page.getByText("密码已重置，旧 Session 已撤销，请返回首页登录。", { exact: true })).toBeVisible();
+});
+
 test("anonymous MAA data cannot drive planning or training advice", async ({ page }) => {
   await page.unroute("**/api/auth/get-session");
   await page.route("**/api/auth/get-session", (route) => route.fulfill({ status: 200, contentType: "application/json", body: "null" }));
@@ -1286,9 +1324,11 @@ for (const viewport of [
   { width: 1440, height: 900 },
 ]) {
   test(`website account registration is reachable and explains consent at ${viewport.width}px`, async ({ page }) => {
+    let signUpRequests = 0;
     await page.unroute("**/api/auth/get-session");
     await page.route("**/api/auth/get-session", (route) => route.fulfill({ status: 200, contentType: "application/json", body: "null" }));
     await page.route("**/api/auth/sign-up/email", async (route) => {
+      signUpRequests += 1;
       const body = route.request().postDataJSON() as { email?: string; password?: string };
       expect(body.email).toBe(`account-${viewport.width}@example.test`);
       expect(body.password).toBe("secure-password-1");
@@ -1332,13 +1372,32 @@ for (const viewport of [
     await expect(accountPanel.getByRole("link", { name: "隐私政策", exact: true })).toHaveAttribute("href", "/privacy");
     await expect(accountPanel.getByText("2–20 个字符，可使用中文、英文字母、数字、空格、下划线和短横线。", { exact: true })).toBeVisible();
     await accountPanel.getByRole("textbox", { name: "邮箱", exact: true }).fill(`account-${viewport.width}@example.test`);
-    await page.getByLabel("密码", { exact: true }).fill("secure-password-1");
+    await page.getByLabel("密码", { exact: true }).fill("weakpassword1");
+    await page.getByLabel("确认密码", { exact: true }).fill("weakpassword1");
+    await expect(page.getByLabel("密码", { exact: true })).toHaveAttribute("type", "password");
+    await page.getByRole("button", { name: "显示密码" }).click();
+    await expect(page.getByLabel("密码", { exact: true })).toHaveAttribute("type", "text");
+    await page.getByRole("button", { name: "隐藏密码" }).click();
+    await expect(page.getByLabel("密码", { exact: true })).toHaveAttribute("type", "password");
     await page.getByLabel("昵称").fill("博士😀");
     await page.getByRole("button", { name: "创建账号并发送验证码" }).click();
     await expect(accountPanel.getByText(/昵称只能使用中文、英文字母、数字/)).toBeVisible();
     await page.getByLabel("昵称").fill("测试用户");
+    await expect(accountPanel.getByRole("meter", { name: "密码强度" })).toHaveAttribute("aria-valuetext", "良好");
+    await page.getByRole("button", { name: "创建账号并发送验证码" }).click();
+    await expect(accountPanel.getByText(/密码强度不足：请满足全部强度规则/)).toBeVisible();
+    expect(signUpRequests).toBe(0);
+    await page.getByLabel("密码", { exact: true }).fill("secure-password-1");
+    await page.getByLabel("确认密码", { exact: true }).fill("different-password-1");
+    await expect(accountPanel.getByText(/密码强度不足：请满足全部强度规则/)).toHaveCount(0);
     await expect(accountPanel.getByRole("meter", { name: "密码强度" })).toHaveAttribute("aria-valuetext", "强");
     await page.getByRole("button", { name: "创建账号并发送验证码" }).click();
+    await expect(accountPanel.getByText("两次输入的密码不一致。", { exact: true })).toBeVisible();
+    expect(signUpRequests).toBe(0);
+    await page.getByLabel("确认密码", { exact: true }).fill("secure-password-1");
+    await expect(accountPanel.getByText("两次输入的密码不一致。", { exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: "创建账号并发送验证码" }).click();
+    expect(signUpRequests).toBe(1);
     await expect(accountPanel.locator("[data-wizard-steps]")).toHaveCount(0);
     for (const [index, digit] of [..."123456"].entries()) {
       await accountPanel.getByRole("textbox", { name: `邮箱验证码第 ${index + 1} 位，共 6 位` }).fill(digit);
