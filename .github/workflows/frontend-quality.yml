@@ -9,10 +9,10 @@ on:
         default: true
         type: boolean
   pull_request:
-    branches: [main, develop]
+    branches: [main]
     types: [opened, synchronize, reopened, labeled, unlabeled]
   push:
-    branches: [main, develop]
+    branches: [main]
   schedule:
     - cron: "23 18 * * *"
 
@@ -42,36 +42,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Checkout release ancestry
-        if: github.event_name == 'pull_request' && github.base_ref == 'main'
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Enforce the main release lane
+      - name: Validate the main contribution lane
         shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
           BASE_REF: ${{ github.base_ref }}
-          HEAD_REF: ${{ github.head_ref }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
-          EXPECTED_REPOSITORY: KnightCodeSquareMatrix/RIIC-Web
-          DIRECT_MAIN_RELEASE: ${{ contains(github.event.pull_request.labels.*.name, 'direct-main-release') && '1' || '0' }}
         run: |
           set -euo pipefail
-          if [[ "$EVENT_NAME" == "pull_request" && "$BASE_REF" == "main" ]]; then
-            test "$HEAD_REPOSITORY" = "$EXPECTED_REPOSITORY"
-            [[ "$HEAD_REF" == release/* ]]
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            test "$BASE_REF" = "main"
             [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]
-            [[ "$DIRECT_MAIN_RELEASE" =~ ^[01]$ ]]
-            if [[ "$DIRECT_MAIN_RELEASE" == "1" ]]; then
-              echo "Maintainer-authorized direct main release; develop ancestry is intentionally skipped."
-            else
-              git fetch --no-tags origin develop:refs/remotes/origin/develop
-              git merge-base --is-ancestor "$HEAD_SHA" refs/remotes/origin/develop
-            fi
           fi
 
   changes:
@@ -443,7 +424,7 @@ jobs:
     needs: [changes, quality]
     if: >-
       github.event_name == 'push' &&
-      (github.ref_name == 'main' || github.ref_name == 'develop') &&
+      github.ref_name == 'main' &&
       needs.quality.result == 'success' &&
       needs.changes.outputs.deploy_required == 'true' &&
       vars.DEPLOY_AUTOMATION_ENABLED == '1' &&

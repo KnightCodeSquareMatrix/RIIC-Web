@@ -10,18 +10,18 @@ jobs:
   deploy:
     if: >-
       github.event_name == 'push' &&
-      (github.ref_name == 'main' || github.ref_name == 'develop') &&
+      github.ref_name == 'main' &&
       vars.DEPLOY_AUTOMATION_ENABLED == '1' &&
       github.repository == 'KnightCodeSquareMatrix/RIIC-Web'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     environment:
-      name: ${{ github.ref_name == 'main' && 'production' || 'development' }}
+      name: production
     concurrency:
       group: deploy-${{ github.ref_name }}
       cancel-in-progress: false
     env:
-      DEPLOYMENT_ENV: ${{ github.ref_name == 'main' && 'production' || 'development' }}
+      DEPLOYMENT_ENV: production
       DEPLOY_SHA: ${{ github.sha }}
       DEPLOY_APP_ROOT: ${{ vars.DEPLOY_APP_ROOT }}
       DEPLOY_SERVICE: ${{ vars.DEPLOY_SERVICE }}

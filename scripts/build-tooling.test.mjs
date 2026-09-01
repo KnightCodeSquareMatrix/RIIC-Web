@@ -175,12 +175,15 @@ test("public deployment automation is repository-bound, opt-in, and secret-safe"
     preflightWorkflow.indexOf("    steps:"),
   );
 
-  assert.match(qualityWorkflow, /HEAD_REPOSITORY[\s\S]+EXPECTED_REPOSITORY: KnightCodeSquareMatrix\/RIIC-Web[\s\S]+"\$HEAD_REF" == release\/\*/);
+  assert.match(qualityWorkflow, /pull_request:\s*\n\s*branches: \[main\]/);
+  assert.match(qualityWorkflow, /push:\s*\n\s*branches: \[main\]/);
   assert.match(qualityWorkflow, /types: \[opened, synchronize, reopened, labeled, unlabeled\]/);
-  assert.match(qualityWorkflow, /DIRECT_MAIN_RELEASE: \$\{\{ contains\(github\.event\.pull_request\.labels\.\*\.name, 'direct-main-release'\)[\s\S]+"\$DIRECT_MAIN_RELEASE" == "1"[\s\S]+develop ancestry is intentionally skipped/);
-  assert.match(qualityWorkflow, /git merge-base --is-ancestor "\$HEAD_SHA" refs\/remotes\/origin\/develop/);
+  assert.match(qualityWorkflow, /Validate the main contribution lane[\s\S]+test "\$BASE_REF" = "main"[\s\S]+"\$HEAD_SHA" =~ \^\[0-9a-f\]\{40\}\$/);
+  assert.doesNotMatch(qualityWorkflow, /HEAD_REPOSITORY|EXPECTED_REPOSITORY|DIRECT_MAIN_RELEASE|release\/\*|refs\/remotes\/origin\/develop/);
   assert.match(qualityWorkflow, /github\.event_name == 'push'[\s\S]+needs\.quality\.result == 'success'[\s\S]+needs\.changes\.outputs\.deploy_required == 'true'[\s\S]+vars\.DEPLOY_AUTOMATION_ENABLED == '1'[\s\S]+github\.repository == 'KnightCodeSquareMatrix\/RIIC-Web'/);
   assert.match(deployWorkflow, /github\.event_name == 'push'[\s\S]+vars\.DEPLOY_AUTOMATION_ENABLED == '1'[\s\S]+github\.repository == 'KnightCodeSquareMatrix\/RIIC-Web'/);
+  assert.doesNotMatch(qualityWorkflow, /github\.ref_name == 'develop'/);
+  assert.doesNotMatch(deployWorkflow, /github\.ref_name == 'develop'/);
   assert.match(deployWorkflow, /DEPLOY_APPROVED_SOLVER_SHA256: \$\{\{ vars\.DEPLOY_APPROVED_SOLVER_SHA256 \}\}[\s\S]+DEPLOY_EXPECTED_REPOSITORY: KnightCodeSquareMatrix\/RIIC-Web[\s\S]+DEPLOY_RELEASE_HELPER_CONTRACT: "5"/);
   assert.doesNotMatch(deployWorkflow, /DEPLOY_PREPARE_HELPER_CONTRACT|arknights-infra-prepare-release/);
   assert.match(deployWorkflow, /DEPLOY_PUBLIC_HEALTH_URL: \$\{\{ secrets\.DEPLOY_PUBLIC_HEALTH_URL \}\}/);
@@ -204,7 +207,7 @@ test("public deployment automation is repository-bound, opt-in, and secret-safe"
   assert.doesNotMatch(deployWorkflow, /'\$DEPLOY_PUBLIC_HEALTH_URL'/);
   assert.match(deployWorkflow, /Remove SSH credentials from the runner[\s\S]+rm -f -- "\$HOME\/\.ssh\/id_ed25519" "\$HOME\/\.ssh\/known_hosts"/);
   assert.match(deployWorkflow, /Verify public response compression[\s\S]+DEPLOY_PUBLIC_HEALTH_URL: \$\{\{ secrets\.DEPLOY_PUBLIC_HEALTH_URL \}\}[\s\S]+node scripts\/verify-public-compression\.mjs/);
-  assert.match(assetWorkflow, /BASE_BRANCH: develop/);
+  assert.match(assetWorkflow, /BASE_BRANCH: main/);
   assert.match(assetWorkflow, /gh pr (?:list|create)[\s\S]+--base "\$BASE_BRANCH"/);
 
   for (const workflow of workflows) {

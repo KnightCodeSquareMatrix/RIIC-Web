@@ -4,7 +4,7 @@
 
 ## 验证
 
-- [ ] PR 的 base branch 是 `develop`；只有维护者的 `release/**` PR 可以指向 `main`，不经 `develop` 的特批发布还必须带有 `direct-main-release` 标签
+- [ ] PR 的 base branch 是 `main`
 - [ ] 已运行 `npm run check`
 - [ ] 已运行 `npm run build`
 - [ ] 交互改动已运行相关 Chromium / production-profile / WebKit 测试

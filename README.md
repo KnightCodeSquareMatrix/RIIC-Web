@@ -132,7 +132,7 @@ npm run db:generate
 npm run db:migrate
 ```
 
-所有普通功能和修复 PR 都应提交到 `develop`；`main` 只接收维护者从同仓库 `release/**` 分支发起的发布 PR。特批的直接发布还必须带有维护者设置的 `direct-main-release` 标签，并通过其余全部质量门禁。完整流程见 [CONTRIBUTING.md](./CONTRIBUTING.md)。不要把本地环境文件、求解器二进制、运行记录、用户数据或浏览器自动化产物加入提交。
+所有功能、修复、文档和资源同步 PR 都应提交到 `main`，包括来自 fork 的贡献。合并前必须通过完整质量门禁与代码审查；只有合并后的上游 `main` push 才可能触发部署。完整流程见 [CONTRIBUTING.md](./CONTRIBUTING.md)。不要把本地环境文件、求解器二进制、运行记录、用户数据或浏览器自动化产物加入提交。
 
 ## 第三方素材
 
