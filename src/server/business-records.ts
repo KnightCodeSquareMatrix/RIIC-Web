@@ -46,9 +46,14 @@ export type PlanRunSummaryInput = {
   rotation: string;
   fiammettaEnable: boolean;
   durationMs?: number | null;
+  executionSource?: "cache" | "solver" | null;
+  solverDurationMs?: number | null;
+  workerDurationMs?: number | null;
   errorCode?: AppErrorCode | null;
   solver?: SolverObservation | null;
   artifact?: PrivateArtifactDescriptor | null;
+  artifactStatus?: "pending" | "complete" | "failed" | "none" | null;
+  artifactFinalizedAt?: Date | null;
   calculationContext?: SavedPlanCalculationContext | null;
   publicResultSha256?: string | null;
   operboxContentHmac?: string | null;
@@ -72,6 +77,7 @@ function hasSavedPlanBinding(input: PlanRunSummaryInput): boolean {
 function planRunValues(input: PlanRunSummaryInput, allowSavedPlanBinding = true) {
   const createdAt = input.createdAt ?? new Date();
   const includeSavedPlanBinding = allowSavedPlanBinding && hasSavedPlanBinding(input);
+  const artifactStatus = input.artifactStatus ?? (input.artifact ? "complete" : "none");
   return {
     diagnosticId: input.diagnosticId,
     userId: input.userId ?? null,
@@ -84,6 +90,9 @@ function planRunValues(input: PlanRunSummaryInput, allowSavedPlanBinding = true)
     rotation: input.rotation.slice(0, 80),
     fiammettaEnable: input.fiammettaEnable,
     durationMs: input.durationMs == null ? null : Math.max(0, Math.round(input.durationMs)),
+    executionSource: input.executionSource ?? null,
+    solverDurationMs: input.solverDurationMs == null ? null : Math.max(0, Math.round(input.solverDurationMs)),
+    workerDurationMs: input.workerDurationMs == null ? null : Math.max(0, Math.round(input.workerDurationMs)),
     errorCode: input.errorCode ?? null,
     solverExecutableSha256: input.solver?.solver_executable_sha256 ?? null,
     protocolVersion: input.solver?.protocol_version ?? null,
@@ -91,6 +100,8 @@ function planRunValues(input: PlanRunSummaryInput, allowSavedPlanBinding = true)
     artifactKey: input.artifact?.key ?? null,
     artifactBytes: input.artifact?.bytes ?? null,
     artifactSha256: input.artifact?.sha256 ?? null,
+    artifactStatus,
+    artifactFinalizedAt: input.artifactFinalizedAt ?? (artifactStatus === "complete" ? createdAt : null),
     calculationContext: includeSavedPlanBinding ? input.calculationContext ?? null : null,
     publicResultSha256: includeSavedPlanBinding ? input.publicResultSha256 ?? null : null,
     operboxContentHmac: includeSavedPlanBinding ? input.operboxContentHmac ?? null : null,
@@ -145,6 +156,45 @@ export async function recordPlanRunBestEffort(input: PlanRunSummaryInput): Promi
       diagnosticId: input.diagnosticId,
     }));
     return false;
+  }
+}
+
+export async function updatePlanRunExecutionBestEffort(input: {
+  diagnosticId: string;
+  executionSource: "cache" | "solver" | "failed";
+  solverDurationMs?: number | null;
+  workerDurationMs: number;
+}): Promise<void> {
+  if (!isBusinessDatabaseEnabled()) return;
+  await getDatabase().update(planRun).set({
+    executionSource: input.executionSource === "failed" ? null : input.executionSource,
+    solverDurationMs: input.solverDurationMs == null ? null : Math.max(0, Math.round(input.solverDurationMs)),
+    workerDurationMs: Math.max(0, Math.round(input.workerDurationMs)),
+  }).where(eq(planRun.diagnosticId, input.diagnosticId)).catch(() => {
+    console.error(JSON.stringify({ level: "error", event: "plan_run_timing_update_failed", diagnosticId: input.diagnosticId }));
+  });
+}
+
+export async function updatePlanRunArtifactBestEffort(input: {
+  diagnosticId: string;
+  status: "complete" | "failed";
+  artifact?: PrivateArtifactDescriptor | null;
+  finalizedAt?: Date;
+}): Promise<"updated" | "missing" | "unavailable"> {
+  if (!isBusinessDatabaseEnabled()) return "updated";
+  try {
+    const updated = await getDatabase().update(planRun).set({
+      artifactKey: input.artifact?.key ?? null,
+      artifactBytes: input.artifact?.bytes ?? null,
+      artifactSha256: input.artifact?.sha256 ?? null,
+      artifactStatus: input.status,
+      artifactFinalizedAt: input.status === "complete" ? input.finalizedAt ?? new Date() : null,
+    }).where(eq(planRun.diagnosticId, input.diagnosticId))
+      .returning({ diagnosticId: planRun.diagnosticId });
+    return updated.length === 1 ? "updated" : "missing";
+  } catch {
+    console.error(JSON.stringify({ level: "error", event: "plan_run_artifact_update_failed", diagnosticId: input.diagnosticId }));
+    return "unavailable";
   }
 }
 
@@ -285,6 +335,11 @@ export async function queryAdminSolverMetrics(now = new Date()) {
       failureCount: sql<number>`count(*) filter (where ${planRun.status} = 'failed')::int`,
       averageDurationMs: sql<number | null>`round(avg(${planRun.durationMs}) filter (where ${planRun.status} = 'success' and ${planRun.durationMs} is not null))::int`,
       p95DurationMs: sql<number | null>`round(percentile_cont(0.95) within group (order by ${planRun.durationMs}) filter (where ${planRun.status} = 'success' and ${planRun.durationMs} is not null))::int`,
+      averageSolverDurationMs: sql<number | null>`round(avg(${planRun.solverDurationMs}) filter (where ${planRun.status} = 'success' and ${planRun.solverDurationMs} is not null))::int`,
+      p95SolverDurationMs: sql<number | null>`round(percentile_cont(0.95) within group (order by ${planRun.solverDurationMs}) filter (where ${planRun.status} = 'success' and ${planRun.solverDurationMs} is not null))::int`,
+      averageWorkerDurationMs: sql<number | null>`round(avg(${planRun.workerDurationMs}) filter (where ${planRun.status} = 'success' and ${planRun.workerDurationMs} is not null))::int`,
+      cacheHitCount: sql<number>`count(*) filter (where ${planRun.executionSource} = 'cache')::int`,
+      cacheMissCount: sql<number>`count(*) filter (where ${planRun.executionSource} = 'solver' and ${planRun.sourceType} <> 'skland')::int`,
       maaCount: sql<number>`count(*) filter (where ${planRun.sourceType} = 'maa')::int`,
       sklandCount: sql<number>`count(*) filter (where ${planRun.sourceType} = 'skland')::int`,
       sampleCount: sql<number>`count(*) filter (where ${planRun.sourceType} = 'sample')::int`,
@@ -304,7 +359,6 @@ export async function queryAdminSolverMetrics(now = new Date()) {
       and(gte(planTask.createdAt, windowStartedAt), lte(planTask.createdAt, now)),
     )),
     database.select({
-      hitCount: sql<number>`coalesce(sum(${planCache.hitCount}) filter (where ${planCache.publicResult} is not null), 0)::int`,
       readyEntryCount: sql<number>`count(*) filter (where ${planCache.publicResult} is not null)::int`,
       fillingEntryCount: sql<number>`count(*) filter (where ${planCache.publicResult} is null and ${planCache.leaseExpiresAt} > ${now})::int`,
     }).from(planCache).where(gt(planCache.expiresAt, now)),
@@ -317,6 +371,9 @@ export async function queryAdminSolverMetrics(now = new Date()) {
     failureCount: solverRows[0]?.failureCount ?? 0,
     averageDurationMs: solverRows[0]?.averageDurationMs ?? null,
     p95DurationMs: solverRows[0]?.p95DurationMs ?? null,
+    averageSolverDurationMs: solverRows[0]?.averageSolverDurationMs ?? null,
+    p95SolverDurationMs: solverRows[0]?.p95SolverDurationMs ?? null,
+    averageWorkerDurationMs: solverRows[0]?.averageWorkerDurationMs ?? null,
     maaCount: solverRows[0]?.maaCount ?? 0,
     sklandCount: solverRows[0]?.sklandCount ?? 0,
     sampleCount: solverRows[0]?.sampleCount ?? 0,
@@ -326,7 +383,8 @@ export async function queryAdminSolverMetrics(now = new Date()) {
     averageWaitMs: taskRows[0]?.averageWaitMs ?? null,
     p95WaitMs: taskRows[0]?.p95WaitMs ?? null,
     trend: trendRows,
-    cacheHitCount: cacheRows[0]?.hitCount ?? 0,
+    cacheHitCount: solverRows[0]?.cacheHitCount ?? 0,
+    cacheMissCount: solverRows[0]?.cacheMissCount ?? 0,
     readyCacheEntryCount: cacheRows[0]?.readyEntryCount ?? 0,
     fillingCacheEntryCount: cacheRows[0]?.fillingEntryCount ?? 0,
   });
