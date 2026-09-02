@@ -58,26 +58,26 @@ function duplicateValues(values: string[]) {
   return [...duplicates];
 }
 
-function contractIssues(layout: BaseBlueprint | null | undefined, operbox: OperBoxEntry[] | null | undefined) {
+function contractIssues(layout: BaseBlueprint | null | undefined, operbox: OperBoxEntry[] | null | undefined, en = false) {
   const issues: string[] = [];
   const rooms = layout?.rooms ?? [];
   const entries = operbox ?? [];
 
-  if (!rooms.length) issues.push("尚未配置基建设施");
-  if (!entries.length) issues.push("尚未导入干员数据");
-  if (rooms.length > 64) issues.push("基建设施不能超过 64 间房");
-  if (entries.length > 1000) issues.push("干员数据不能超过 1000 条");
-  if (rooms.some((room) => !room.id.trim())) issues.push("存在空房间 ID");
-  if (entries.some((entry) => !entry.id.trim() || !entry.name.trim())) issues.push("存在空干员 ID 或名称");
+  if (!rooms.length) issues.push(en ? "No base facilities configured" : "尚未配置基建设施");
+  if (!entries.length) issues.push(en ? "No operator data imported" : "尚未导入干员数据");
+  if (rooms.length > 64) issues.push(en ? "The base cannot contain more than 64 rooms" : "基建设施不能超过 64 间房");
+  if (entries.length > 1000) issues.push(en ? "Operator data cannot contain more than 1,000 entries" : "干员数据不能超过 1000 条");
+  if (rooms.some((room) => !room.id.trim())) issues.push(en ? "A room ID is empty" : "存在空房间 ID");
+  if (entries.some((entry) => !entry.id.trim() || !entry.name.trim())) issues.push(en ? "An operator ID or name is empty" : "存在空干员 ID 或名称");
 
   const duplicateRoomIds = duplicateValues(rooms.map((room) => room.id));
-  if (duplicateRoomIds.length) issues.push(`房间 ID 重复：${duplicateRoomIds.join("、")}`);
+  if (duplicateRoomIds.length) issues.push(en ? `Duplicate room IDs: ${duplicateRoomIds.join(", ")}` : `房间 ID 重复：${duplicateRoomIds.join("、")}`);
 
   const duplicateOperatorIds = duplicateValues(entries.map((entry) => entry.id));
-  if (duplicateOperatorIds.length) issues.push(`干员 ID 重复：${duplicateOperatorIds.join("、")}`);
+  if (duplicateOperatorIds.length) issues.push(en ? `Duplicate operator IDs: ${duplicateOperatorIds.join(", ")}` : `干员 ID 重复：${duplicateOperatorIds.join("、")}`);
 
   const duplicateOperatorNames = duplicateValues(entries.map((entry) => entry.name));
-  if (duplicateOperatorNames.length) issues.push(`干员名称重复：${duplicateOperatorNames.join("、")}`);
+  if (duplicateOperatorNames.length) issues.push(en ? `Duplicate operator names: ${duplicateOperatorNames.join(", ")}` : `干员名称重复：${duplicateOperatorNames.join("、")}`);
 
   return issues;
 }
@@ -146,7 +146,7 @@ export function TrainingAdvice({
   const entries = operbox ?? [];
   const ownedByName = new Map(entries.map((entry) => [entry.name, entry]));
   const roomCounts = countRooms(layout);
-  const issues = contractIssues(layout, operbox);
+  const issues = contractIssues(layout, operbox, en);
   const actions = profile?.actions ?? [];
   const ownedTotal = entries.filter((entry) => entry.own).length;
   const eliteTotal = entries.filter((entry) => entry.own && entry.elite >= 2).length;
@@ -358,7 +358,7 @@ export function TrainingAdvice({
         >
           {actions.length ? (
             <div className="grid min-w-0 gap-3" data-training-advice-list>
-              <Suspense fallback={<p className="py-4 text-sm text-white/62" role="status">正在加载培养建议…</p>}>
+              <Suspense fallback={<p className="py-4 text-sm text-white/62" role="status">{en ? "Loading training recommendations…" : "正在加载培养建议…"}</p>}>
                 {actions.map((action, index) => (
                   <RecommendationCard key={actionKey(action, index)} action={action} entry={ownedByName.get(action.operator)} index={index} showSkillTooltip={false} />
                 ))}

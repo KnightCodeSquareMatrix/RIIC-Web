@@ -6,17 +6,20 @@ import { usePathname } from "next/navigation";
 
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useLanguageDemo } from "@/language-demo";
 
 const ITEMS = [
-  { href: "/admin", label: "运行概览", icon: Gauge },
-  { href: "/admin/issues", label: "求解器问题", icon: Bug },
-  { href: "/admin/users", label: "用户管理", icon: UsersRound },
+  { href: "/admin", zh: "运行概览", en: "Overview", icon: Gauge },
+  { href: "/admin/issues", zh: "求解器问题", en: "Solver issues", icon: Bug },
+  { href: "/admin/users", zh: "用户管理", en: "Users", icon: UsersRound },
 ] as const;
 
 export function AdminNav() {
   const pathname = usePathname();
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
   return (
-    <nav aria-label="管理后台导航" className="flex min-w-0 items-center gap-1 overflow-x-auto">
+    <nav aria-label={en ? "Administration navigation" : "管理后台导航"} className="flex min-w-0 items-center gap-1 overflow-x-auto">
       {ITEMS.map((item) => {
         const active = item.href === "/admin"
           ? pathname === item.href
@@ -31,7 +34,7 @@ export function AdminNav() {
             className={cn(buttonVariants({ variant: active ? "secondary" : "ghost", size: "lg" }), "shrink-0")}
           >
             <Icon aria-hidden="true" />
-            {item.label}
+            {en ? item.en : item.zh}
           </Link>
         );
       })}
@@ -41,7 +44,7 @@ export function AdminNav() {
         className={cn(buttonVariants({ variant: "ghost", size: "lg" }), "shrink-0 text-muted-foreground")}
       >
         <House aria-hidden="true" />
-        返回排班助手
+        {en ? "Back to scheduler" : "返回排班助手"}
       </Link>
     </nav>
   );

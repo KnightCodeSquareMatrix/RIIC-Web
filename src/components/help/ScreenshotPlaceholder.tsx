@@ -1,4 +1,7 @@
+"use client";
+
 import Image from "next/image";
+import { useLanguageDemo } from "@/language-demo";
 
 type ScreenshotPlaceholderProps = {
   slot: string;
@@ -31,6 +34,8 @@ export function ScreenshotPlaceholder({
   imageHeight,
   highlights = [],
 }: ScreenshotPlaceholderProps) {
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
   if (src && alt) {
     const maskId = `help-screenshot-mask-${slot.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
     const aspectRatio = imageWidth && imageHeight ? `${imageWidth} / ${imageHeight}` : undefined;
@@ -41,7 +46,7 @@ export function ScreenshotPlaceholder({
         data-help-screenshot-slot={slot}
       >
         <a
-          aria-label={`打开高清原图：${title}`}
+          aria-label={en ? `Open full-resolution image: ${title}` : `打开高清原图：${title}`}
           className="group relative block overflow-hidden bg-muted/20 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
           href={src}
           rel="noreferrer"
@@ -111,11 +116,11 @@ export function ScreenshotPlaceholder({
             ) : null}
           </span>
           <span className="absolute bottom-2 right-2 z-10 inline-flex min-h-9 items-center bg-black/80 px-3 text-xs font-semibold text-white">
-            高清原图
+            {en ? "FULL SIZE" : "高清原图"}
           </span>
         </a>
         <figcaption className="flex flex-wrap items-center gap-2 border-t border-border/80 bg-background/95 px-4 py-3 text-xs leading-5 text-muted-foreground">
-          <span>图示：{title}</span>
+          <span>{en ? `Screenshot: ${title}` : `图示：${title}`}</span>
           {highlights.map((highlight, index) => (
             <span className="inline-flex items-center gap-1 rounded-[2px] bg-amber-100 px-2 py-0.5 font-medium text-amber-950" key={`${highlight.label}-${index}`}>
               <span className="font-number font-bold">{index + 1}</span>
@@ -131,17 +136,17 @@ export function ScreenshotPlaceholder({
     <figure
       className="overflow-hidden rounded-[4px] border border-dashed border-border bg-muted/25"
       data-help-screenshot-slot={slot}
-      aria-label={`截图占位：${title}`}
+      aria-label={en ? `Screenshot placeholder: ${title}` : `截图占位：${title}`}
     >
       <div className="grid aspect-video place-items-center p-5 text-center sm:p-7">
         <div className="max-w-lg">
-          <p className="text-xs font-semibold text-primary">截图位 {slot}</p>
+          <p className="text-xs font-semibold text-primary">{en ? `Screenshot ${slot}` : `截图位 ${slot}`}</p>
           <p className="mt-1 font-semibold text-foreground">{title}</p>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>
         </div>
       </div>
       <figcaption className="border-t border-dashed border-border bg-background px-4 py-3 text-xs leading-5 text-muted-foreground">
-        后续替换文件：<code className="break-all rounded bg-muted px-1.5 py-0.5 text-foreground">{fileName}</code>
+        {en ? "Replace later with: " : "后续替换文件："}<code className="break-all rounded bg-muted px-1.5 py-0.5 text-foreground">{fileName}</code>
       </figcaption>
     </figure>
   );

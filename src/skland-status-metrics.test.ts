@@ -117,3 +117,16 @@ test("preserves missing manufacture formula capacity", () => {
   const metrics = deriveSklandBuildingMetrics(value, value.infrastructure.currentTs);
   assert.equal(metrics.find((metric) => metric.id === "manufacture")?.total, "—");
 });
+
+test("renders Skland building metrics in English", () => {
+  const value = snapshot();
+  const metrics = deriveSklandBuildingMetrics(value, value.infrastructure.currentTs, true);
+  assert.deepEqual(metrics.map((metric) => metric.label), [
+    "Rest progress",
+    "Order progress",
+    "Manufacturing progress",
+    "Clue collection",
+  ]);
+  assert.equal(metrics.find((metric) => metric.id === "clue")?.value, "Sharing");
+  assert.match(metrics.find((metric) => metric.id === "clue")?.hint ?? "", /^Sharing ends in /);
+});

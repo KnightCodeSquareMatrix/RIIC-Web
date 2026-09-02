@@ -1,11 +1,15 @@
+"use client";
+
 import { Skeleton } from "@/components/ui/skeleton";
+import { useLanguageDemo } from "@/language-demo";
 
 export function PlanResultSummarySkeleton() {
+  const { locale } = useLanguageDemo();
   return (
     <section
       className="relative mb-5 overflow-hidden border border-[#313131]/18 bg-[#F3F1EA] text-[#313131] shadow-[0_12px_30px_rgba(35,38,39,0.10)]"
       role="status"
-      aria-label="正在恢复排班结果"
+      aria-label={locale === "en" ? "Restoring schedule result" : "正在恢复排班结果"}
       data-plan-result-summary-skeleton
     >
       <div className="grid min-h-[84px] grid-cols-[minmax(10rem,1.05fr)_minmax(0,5fr)] items-stretch max-[820px]:grid-cols-1">

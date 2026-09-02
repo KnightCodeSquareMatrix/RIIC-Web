@@ -7,6 +7,7 @@ import { RichTextHoverTerms } from "@/components/RichTextInteractive";
 import {
   BUILDING_SKILL_ENHANCED_WORD,
   buildingSkillUnlockLabel,
+  buildingSkillUnlockLabelEnglish,
   buildingSkillUnlockPrefix,
   operatorBuildingSkillList,
   type BuildingSkillPresentation,
@@ -31,14 +32,14 @@ export function OperatorSkillTooltip({ name, trigger }: { name: string; trigger:
         className="max-w-md flex-col items-start gap-2 whitespace-normal px-3 py-2.5 text-left leading-relaxed"
       >
         {skills.map((sourceSkill) => (
-          <SkillBlock key={sourceSkill.id} skill={demoBuildingSkill(sourceSkill.id, locale, sourceSkill) as BuildingSkillPresentation} />
+          <SkillBlock key={sourceSkill.id} locale={locale} skill={demoBuildingSkill(sourceSkill.id, locale, sourceSkill) as BuildingSkillPresentation} />
         ))}
       </TooltipContent>
     </Tooltip>
   );
 }
 
-function SkillBlock({ skill }: { skill: BuildingSkillPresentation }) {
+function SkillBlock({ skill, locale }: { skill: BuildingSkillPresentation; locale: "zh" | "en" }) {
   return (
     <div className="min-w-0">
       <span className="flex items-center gap-1.5 font-semibold">
@@ -46,7 +47,9 @@ function SkillBlock({ skill }: { skill: BuildingSkillPresentation }) {
         <span>{skill.name}</span>
       </span>
       <span className="mt-1 block text-background/72">
-        {skill.enhanced ? (
+        {locale === "en" ? (
+          <>{skill.enhanced ? <>{buildingSkillUnlockLabelEnglish(skill.elite, skill.level).replace(/unlock$/, "")}<span className="text-[#22BBFF]">upgrade</span></> : buildingSkillUnlockLabelEnglish(skill.elite, skill.level)}</>
+        ) : skill.enhanced ? (
           <>
             <span>{buildingSkillUnlockPrefix(skill.elite, skill.level)}</span>
             <span className="text-[#22BBFF]">{BUILDING_SKILL_ENHANCED_WORD}</span>

@@ -30,7 +30,7 @@ import { WorkbenchContext } from "@/workbench-context";
 import { WORKBENCH_PAGE_PATHS, workbenchHref, workbenchPageFromPathname, type AppPage } from "@/workbench-routes";
 import { useWebsiteSession } from "@/website-session";
 import { usePlanTask } from "@/hooks/use-plan-task";
-import { LanguageDemoProvider, LanguageDemoSwitch, useLanguageDemo } from "@/language-demo";
+import { LanguageDemoSwitch, useLanguageDemo } from "@/language-demo";
 
 import {
   computePlan,
@@ -169,15 +169,15 @@ function parseLayoutJson(value: unknown): BaseBlueprint | null {
   return { ...layout, drone_cap: Number(layout.drone_cap ?? 0), scenario: layout.scenario, rooms: rooms as BlueprintRoom[] } as BaseBlueprint;
 }
 
-function layoutValidationError(layout: BaseBlueprint): string | null {
-  if (!layout.rooms.some((room) => room.kind === "control_center")) return "布局必须包含控制中枢。";
+function layoutValidationError(layout: BaseBlueprint, en = false): string | null {
+  if (!layout.rooms.some((room) => room.kind === "control_center")) return en ? "The layout must include a Control Center." : "布局必须包含控制中枢。";
   const invalid = layout.rooms.find((room) => {
     const maxLevel = room.kind === "control_center" || room.kind === "dormitory" ? 5 : 3;
     return !Number.isInteger(room.level) || room.level < 1 || room.level > maxLevel;
   });
   if (!invalid) return null;
   const maxLevel = invalid.kind === "control_center" || invalid.kind === "dormitory" ? 5 : 3;
-  return `${invalid.id} 的设施等级必须在 1–${maxLevel} 之间。`;
+  return en ? `${invalid.id}'s facility level must be between 1 and ${maxLevel}.` : `${invalid.id} 的设施等级必须在 1–${maxLevel} 之间。`;
 }
 
 function restoreEditableProducts(baseLayout: BaseBlueprint, cachedLayout: BaseBlueprint | undefined): BaseBlueprint {
@@ -582,7 +582,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
         setLayout(restoredLayout);
         const restoreAsLocalImport = !CLIENT_SKLAND_ENABLED && restored.boxSource === "skland";
         const restoredBoxSource = restoreAsLocalImport ? "maa" : restored.boxSource;
-        const restoredSourceName = restoreAsLocalImport ? "已保存的干员数据" : restored.sourceName;
+        const restoredSourceName = restoreAsLocalImport ? (locale === "en" ? "Saved operator data" : "已保存的干员数据") : restored.sourceName;
         const restoredLayoutSource = CLIENT_SKLAND_ENABLED ? restored.layoutSource : "local";
         setOperbox(restoredOperbox);
         setFileName(restoredSourceName);
@@ -602,11 +602,11 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
         initialLocalLayoutBackup.current = CLIENT_SKLAND_ENABLED ? restored.localLayoutBackup : null;
       }
     } catch {
-      setStorageNotice(displayError("AIC-LOCAL-7001", "浏览器无法读取本地数据，但仍可继续生成排班。"));
+      setStorageNotice(displayError("AIC-LOCAL-7001", locale === "en" ? "The browser could not read local data, but schedules can still be generated." : "浏览器无法读取本地数据，但仍可继续生成排班。"));
     } finally {
       setHasRestoredSession(true);
     }
-  }, [setBoxSource, setOperbox]);
+  }, [locale, setBoxSource, setOperbox]);
 
   useEffect(() => {
     if (!hasRestoredSession || typeof window === "undefined") return;
@@ -631,9 +631,9 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       });
       setStorageNotice(null);
     } catch {
-      setStorageNotice(displayError("AIC-LOCAL-7001", "浏览器无法保存本地数据，但仍可继续生成排班。"));
+      setStorageNotice(displayError("AIC-LOCAL-7001", locale === "en" ? "The browser could not save local data, but schedules can still be generated." : "浏览器无法保存本地数据，但仍可继续生成排班。"));
     }
-  }, [hasRestoredSession, preset, layout, operbox, fileName, boxSource, layoutDirty, layoutSource, localLayoutBackup, rotationProfile, fiammettaEnabled, result, activeShift]);
+  }, [hasRestoredSession, preset, layout, operbox, fileName, boxSource, layoutDirty, layoutSource, localLayoutBackup, rotationProfile, fiammettaEnabled, result, activeShift, locale]);
 
   useEffect(() => {
     let cancelled = false;
@@ -649,18 +649,18 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
           setApiError(null);
         } else {
           setCliReady(false);
-          setApiError(displayError("AIC-PLAN-3001", "排班服务暂不可用，请稍后重试。", true));
+          setApiError(displayError("AIC-PLAN-3001", locale === "en" ? "The scheduling service is temporarily unavailable. Try again later." : "排班服务暂不可用，请稍后重试。", true));
         }
       })
       .catch((error) => {
         if (cancelled) return;
         setCliReady(false);
-        setApiError(toDisplayError(error, "排班服务暂不可用，请稍后重试。"));
+        setApiError(toDisplayError(error, locale === "en" ? "The scheduling service is temporarily unavailable. Try again later." : "排班服务暂不可用，请稍后重试。"));
       });
     return () => {
       cancelled = true;
     };
-  }, [hasRestoredSession]);
+  }, [hasRestoredSession, locale]);
 
   useEffect(() => {
     if (
@@ -790,7 +790,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       })
       .catch((error) => {
         if (cancelled || !sklandRestoreGuard.current.isCurrent(generation)) return;
-        setSklandError(toDisplayError(error, "森空岛会话恢复失败，请稍后刷新。"));
+        setSklandError(toDisplayError(error, locale === "en" ? "Could not restore the Skland session. Refresh and try again." : "森空岛会话恢复失败，请稍后刷新。"));
       })
       .finally(() => {
         if (sklandFullRestore.current === restore) sklandFullRestorePending.current = false;
@@ -799,7 +799,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [hasRestoredSession, page, setBoxSource, setOperbox, setupOpen, websiteAuthReloadKey, websiteSessionPending, websiteUserId]);
+  }, [hasRestoredSession, locale, page, setBoxSource, setOperbox, setupOpen, websiteAuthReloadKey, websiteSessionPending, websiteUserId]);
 
   useEffect(() => {
     if (
@@ -824,7 +824,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
         setSklandError(null);
       })
       .catch((error) => {
-        if (!cancelled) setSklandError(toDisplayError(error, "状态中心加载失败，请稍后重试。"));
+        if (!cancelled) setSklandError(toDisplayError(error, locale === "en" ? "Could not load the Status Center. Try again later." : "状态中心加载失败，请稍后重试。"));
       })
       .finally(() => {
         statusLoadingAccount.current = null;
@@ -833,7 +833,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [activeSklandAccount, page, sklandError, sklandSessionLoading, sklandStatusReloadKey, sklandStatusSnapshot]);
+  }, [activeSklandAccount, locale, page, sklandError, sklandSessionLoading, sklandStatusReloadKey, sklandStatusSnapshot]);
 
   async function handleFile(file: File): Promise<boolean> {
     setInputError(null);
@@ -923,12 +923,12 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     try {
       const session = await selectSklandRole(accountId, uid);
       if (!sklandRestoreGuard.current.isCurrent(generation)) return;
-      if (!session.authenticated || !session.scheduleSnapshot) throw new Error("角色切换失败。");
+      if (!session.authenticated || !session.scheduleSnapshot) throw new Error(locale === "en" ? "Could not switch character." : "角色切换失败。");
       sklandRestoreGuard.current.acceptFull(generation);
       applySklandSession(session, false);
     } catch (error) {
       if (!sklandRestoreGuard.current.isCurrent(generation)) return;
-      const normalized = toDisplayError(error, "角色切换失败，请稍后重试。");
+      const normalized = toDisplayError(error, locale === "en" ? "Could not switch character. Try again later." : "角色切换失败，请稍后重试。");
       setSklandError(normalized);
       try {
         const current = await getSklandAccounts();
@@ -956,7 +956,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       applySklandSession(session, false);
     } catch (error) {
       if (!sklandRestoreGuard.current.isCurrent(generation)) return;
-      const normalized = toDisplayError(error, "退出森空岛失败，请稍后重试。");
+      const normalized = toDisplayError(error, locale === "en" ? "Could not sign out of Skland. Try again later." : "退出森空岛失败，请稍后重试。");
       setSklandError(normalized);
     } finally {
       if (sklandRestoreGuard.current.isCurrent(generation)) setSklandBusy(false);
@@ -987,13 +987,13 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     if (planRetryCountdown > 0) return false;
     planClickAtRef.current = performance.now();
     trackTelemetry({ type: "interaction", name: "plan_click", page: "calculator" });
-    const layoutError = layoutValidationError(planLayout);
+    const layoutError = layoutValidationError(planLayout, locale === "en");
     if (layoutError) {
       setApiError(displayError("AIC-LAYOUT-1201", layoutError));
       return false;
     }
     if (!cliReady && !retryUnavailable) {
-      setApiError(displayError("AIC-PLAN-3001", "排班服务暂不可用，请稍后重试。", true));
+      setApiError(displayError("AIC-PLAN-3001", locale === "en" ? "The scheduling service is temporarily unavailable. Try again later." : "排班服务暂不可用，请稍后重试。", true));
       return false;
     }
     void import("@/product-assets").then(({ preloadProductIcons }) => preloadProductIcons());
@@ -1022,7 +1022,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       else planTask.begin(submitted);
       return true;
     } catch (error) {
-      const normalized = toDisplayError(error, "排班请求失败，请稍后重试。");
+      const normalized = toDisplayError(error, locale === "en" ? "The schedule request failed. Try again later." : "排班请求失败，请稍后重试。");
       setApiError(normalized);
       if (normalized.retryAfterSeconds) startPlanRetryCooldown(normalized.retryAfterSeconds);
       setLoading(false);
@@ -1059,8 +1059,8 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
         boxSource: "sample",
       });
     } catch (error) {
-      setInputError(error instanceof Error ? error.message : "样例数据读取失败。");
-      const normalized = toDisplayError(error, "示例数据读取失败，请稍后重试。");
+      setInputError(locale === "en" ? "Could not read sample data." : error instanceof Error ? error.message : "样例数据读取失败。");
+      const normalized = toDisplayError(error, locale === "en" ? "Could not read sample data. Try again later." : "示例数据读取失败，请稍后重试。");
       setInputErrorCode(normalized.code);
       setApiError(normalized);
       return false;
@@ -1098,7 +1098,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     if (!result?.diagnosticId) return;
     setIssueDraftKind("performance_issue");
     setIssueDraftRow(null);
-    setIssueDraftNote("本次求解耗时明显偏长。");
+    setIssueDraftNote(locale === "en" ? "This solve took noticeably longer than expected." : "本次求解耗时明显偏长。");
     setFeedbackResult(null);
     setIssueOpen(true);
   }
@@ -1106,17 +1106,22 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   async function handleSaveIssue() {
     if (!issueDraftNote.trim() || (issueDraftKind === "room_issue" && !issueDraftRow)) return;
     if (!result?.diagnosticId) {
-      setApiError(displayError("AIC-FEEDBACK-4001", "请先生成排班，再提交问题。"));
+      setApiError(displayError("AIC-FEEDBACK-4001", locale === "en" ? "Generate a schedule before submitting an issue." : "请先生成排班，再提交问题。"));
       return;
     }
 
-    const environment = [
+    const environment = locale === "en" ? [
+      `Solve time: ${Math.round(result.durationMs)} ms`,
+      `Shift: ${activeShift + 1}`,
+      `Rotation: ${rotationProfile}`,
+      `Layout: ${preset.label}`,
+    ].join("; ") : [
       `求解耗时：${Math.round(result.durationMs)} ms`,
       `班次：${activeShift + 1}`,
       `换班方式：${rotationProfile}`,
       `布局：${preset.label}`,
     ].join("；");
-    const note = `${issueDraftNote.trim()}\n\n[运行环境] ${environment}`;
+    const note = `${issueDraftNote.trim()}\n\n[${locale === "en" ? "Environment" : "运行环境"}] ${environment}`;
 
     setFeedbackSaving(true);
     setApiError(null);
@@ -1151,7 +1156,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       setIssueDraftRow(null);
       setIssueDraftNote("");
     } catch (error) {
-      const normalized = toDisplayError(error, "反馈保存失败，请稍后重试。");
+      const normalized = toDisplayError(error, locale === "en" ? "Could not save feedback. Try again later." : "反馈保存失败，请稍后重试。");
       setApiError(normalized);
     } finally {
       setFeedbackSaving(false);
@@ -1196,6 +1201,10 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   }
 
   function productChangeLabel(change: ProductChange) {
+    if (locale === "en") {
+      if (change.type === "factory") return ({ gold: "Precious Metals", battle_record: "Battle Records", originium: "Originium Shards" } as Partial<Record<FactoryRecipe, string>>)[change.recipe] ?? change.recipe;
+      return ({ gold: "LMD Orders", originium: "Orundum Orders" } as const)[change.order];
+    }
     if (change.type === "factory") {
       return FACTORY_RECIPE_OPTIONS.find((option) => option.value === change.recipe)?.label;
     }
@@ -1204,7 +1213,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
 
   function showResultClearNotice(label: string | undefined) {
     if (resultClearWarningDismissed || !result) return;
-    setResultClearNotice(label ? `已切换到：${label}` : "配置已切换");
+    setResultClearNotice(label ? (locale === "en" ? `Changed to: ${label}` : `已切换到：${label}`) : (locale === "en" ? "Settings changed" : "配置已切换"));
   }
 
   function requestProductChange(change: ProductChange) {
@@ -1254,7 +1263,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   }
 
   function handlePresetSelect(nextPreset: PresetDef) {
-    showResultClearNotice(`布局 ${nextPreset.label}`);
+    showResultClearNotice(locale === "en" ? `Layout ${nextPreset.label}` : `布局 ${nextPreset.label}`);
     setPreset(nextPreset);
     setLayout(buildBlueprint(nextPreset));
     setLayoutDirty(true);
@@ -1286,7 +1295,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   async function handleLayoutFile(file: File) {
     try {
       const parsed = parseLayoutJson(JSON.parse(await file.text()));
-      if (!parsed) throw new Error("布局文件格式无效，请检查房间名称、类型和设施等级。");
+      if (!parsed) throw new Error(locale === "en" ? "Invalid layout file. Check room names, types, and facility levels." : "布局文件格式无效，请检查房间名称、类型和设施等级。");
       setLayout(parsed);
       setLayoutDirty(true);
       setLayoutSource("local");
@@ -1294,7 +1303,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       clearPlanResult();
       setInputError(null);
     } catch (error) {
-      setInputError(error instanceof Error ? error.message : "布局 JSON 读取失败。");
+      setInputError(locale === "en" ? (error instanceof Error ? error.message : "Could not read the layout JSON.") : error instanceof Error ? error.message : "布局 JSON 读取失败。");
       setInputErrorCode("AIC-LAYOUT-1201");
     }
   }
@@ -1493,7 +1502,9 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
         clearLocalProductData(window.localStorage);
         setStorageNotice(displayError(
           "AIC-LOCAL-7001",
-          "浏览器无法保留独立导入数据，已改为清除整份本地会话以确保森空岛数据不再保留。"
+          locale === "en"
+            ? "The browser could not retain imported data separately. The local session was cleared to ensure Skland data is removed."
+            : "浏览器无法保留独立导入数据，已改为清除整份本地会话以确保森空岛数据不再保留。"
         ));
       }
       setSklandAccounts([]);
@@ -1520,7 +1531,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       clearIssueState();
     } catch (error) {
       if (!sklandRestoreGuard.current.isCurrent(generation)) return;
-      setSklandError(toDisplayError(error, "森空岛数据删除失败，请稍后重试。"));
+      setSklandError(toDisplayError(error, locale === "en" ? "Could not delete Skland data. Try again later." : "森空岛数据删除失败，请稍后重试。"));
       throw error;
     } finally {
       if (sklandRestoreGuard.current.isCurrent(generation)) setSklandBusy(false);
@@ -1547,7 +1558,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       setStorageNotice(null);
       clearIssueState();
     } catch {
-      setStorageNotice(displayError("AIC-LOCAL-7001", "浏览器无法清除本地数据，请检查站点存储权限。"));
+      setStorageNotice(displayError("AIC-LOCAL-7001", locale === "en" ? "The browser could not clear local data. Check site storage permissions." : "浏览器无法清除本地数据，请检查站点存储权限。"));
     }
   }
 
@@ -1568,10 +1579,10 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       setApiError(
         health.plannerReady
           ? null
-          : displayError("AIC-PLAN-3001", "排班服务暂不可用，请稍后重试。", true)
+          : displayError("AIC-PLAN-3001", locale === "en" ? "The scheduling service is temporarily unavailable. Try again later." : "排班服务暂不可用，请稍后重试。", true)
       );
     } catch (error) {
-      setApiError(toDisplayError(error, "排班服务暂不可用，请稍后重试。"));
+      setApiError(toDisplayError(error, locale === "en" ? "The scheduling service is temporarily unavailable. Try again later." : "排班服务暂不可用，请稍后重试。"));
     }
   }
 
@@ -1769,7 +1780,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
             const error = activity?.error;
             if (!error) return;
             void Promise.all([import("./download"), import("./solver-diagnostic")])
-              .then(([{ copyText }, { formatSolverDiagnostic }]) => copyText(formatSolverDiagnostic(error)));
+              .then(([{ copyText }, { formatSolverDiagnostic }]) => copyText(formatSolverDiagnostic(error, locale === "en")));
           }}
         />
 
@@ -1913,9 +1924,9 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       /></Suspense> : null}
       {productModalMounted ? <Suspense fallback={null}><ProductChangeConfirmModal
         open={Boolean(pendingProductChange)}
-        roomLabel={rows.find((row) => row.roomId === pendingProductChange?.roomId)?.title ?? pendingProductChange?.roomId ?? "当前设施"}
+        roomLabel={rows.find((row) => row.roomId === pendingProductChange?.roomId)?.title ?? pendingProductChange?.roomId ?? (locale === "en" ? "Current facility" : "当前设施")}
         changeKind={pendingProductChange?.type === "trade" ? "贸易策略" : "制造配方"}
-        nextValueLabel={pendingProductChange ? productChangeLabel(pendingProductChange) ?? "新配置" : "新配置"}
+        nextValueLabel={pendingProductChange ? productChangeLabel(pendingProductChange) ?? (locale === "en" ? "New setting" : "新配置") : (locale === "en" ? "New setting" : "新配置")}
         busy={loading && Boolean(pendingProductChange)}
         onConfirm={() => void confirmScheduleProductChange()}
         onCancel={() => setPendingProductChange(null)}
@@ -1929,7 +1940,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
 }
 
 function WorkbenchApp({ children }: { children: ReactNode }) {
-  return <LanguageDemoProvider><WorkbenchAppContent>{children}</WorkbenchAppContent></LanguageDemoProvider>;
+  return <WorkbenchAppContent>{children}</WorkbenchAppContent>;
 }
 
 export default WorkbenchApp;
