@@ -92,6 +92,13 @@
       "when": 1788262271814,
       "tag": "0012_public_cardiac",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1788357462995,
+      "tag": "0013_sudden_talon",
+      "breakpoints": true
     }
   ]
 }

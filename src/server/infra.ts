@@ -1,10 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
-import { chmod, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, open, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 
 import type {
+  AdminReproductionData,
   BaseBlueprint,
   CliCandidate,
   DebugBundle,
@@ -16,6 +17,7 @@ import type {
   RotationProfile,
   SolverObservation,
 } from "@/types";
+import { legacyAdminFeedbackStatus, toAdminReproductionData } from "./admin-record-dto";
 import { isSklandConfigured, sklandDisabledReason } from "@/server/skland/session";
 import { PublicApiError } from "./api-contract";
 import { feedbackDirectoryGroup, toStoredFeedbackIssue } from "./feedback-record";
@@ -322,6 +324,21 @@ async function readJsonIfExists(filePath: string) {
   }
 }
 
+async function readTextTail(filePath: string, maxBytes = 16 * 1024): Promise<string | null> {
+  const details = await stat(filePath).catch(() => null);
+  if (!details?.isFile() || details.size <= 0) return null;
+  const bytesToRead = Math.min(details.size, maxBytes);
+  const handle = await open(filePath, "r").catch(() => null);
+  if (!handle) return null;
+  try {
+    const buffer = Buffer.alloc(bytesToRead);
+    const { bytesRead } = await handle.read(buffer, 0, bytesToRead, details.size - bytesToRead);
+    return buffer.subarray(0, bytesRead).toString("utf-8").trim() || null;
+  } finally {
+    await handle.close();
+  }
+}
+
 async function artifactDescriptor(
   key: string,
   filePaths: string[],
@@ -412,6 +429,24 @@ async function runDirectories() {
 
 async function feedbackDirectories() {
   return privateDirectories(feedbackRoot);
+}
+
+export async function deleteFeedbackArtifacts(feedbackIds: string[]): Promise<number> {
+  const wanted = new Set(feedbackIds);
+  if (!wanted.size) return 0;
+  await ensurePrivateStorageBoundaries();
+  let deleted = 0;
+  for (const directory of await feedbackDirectories()) {
+    const meta = await readJsonIfExists(path.join(directory, "meta.json"));
+    const directoryId = path.basename(directory).match(/(?:^|_)([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i)?.[1];
+    const feedbackId = isObject(meta) && typeof meta.feedbackId === "string"
+      ? meta.feedbackId
+      : directoryId;
+    if (!feedbackId || !wanted.has(feedbackId)) continue;
+    await removePrivateDirectory(feedbackRoot, directory);
+    deleted += 1;
+  }
+  return deleted;
 }
 
 async function ownerMetadata(directory: string): Promise<{ ownerTag?: unknown; diagnosticId?: unknown; sourceName?: unknown } | null> {
@@ -517,6 +552,42 @@ async function privateRunForDiagnostic(
     result = isObject(envelope) ? envelope.result : null;
   }
   return isObject(result) && result.runId === diagnosticId ? { directory, result } : null;
+}
+
+export async function readPlanReproduction(
+  diagnosticId: string,
+  fallback: { rotation?: unknown; fiammettaEnabled?: unknown } = {},
+): Promise<AdminReproductionData> {
+  const linked = await privateRunForDiagnostic(diagnosticId);
+  if (!linked) {
+    return toAdminReproductionData({
+      diagnosticId,
+      layout: null,
+      operbox: null,
+      context: null,
+      result: null,
+      fallbackRotation: fallback.rotation,
+      fallbackFiammettaEnabled: fallback.fiammettaEnabled,
+    });
+  }
+  const [layout, operbox, context, stderrExcerpt, stdoutExcerpt] = await Promise.all([
+    readJsonIfExists(path.join(linked.directory, "layout.json")),
+    readJsonIfExists(path.join(linked.directory, "operbox.json")),
+    readJsonIfExists(path.join(linked.directory, "reproduction.json")),
+    readTextTail(path.join(linked.directory, "stderr.txt")),
+    readTextTail(path.join(linked.directory, "stdout.txt")),
+  ]);
+  return toAdminReproductionData({
+    diagnosticId,
+    layout,
+    operbox,
+    context,
+    result: linked.result,
+    stderrExcerpt,
+    stdoutExcerpt,
+    fallbackRotation: fallback.rotation,
+    fallbackFiammettaEnabled: fallback.fiammettaEnabled,
+  });
 }
 
 async function readShiftFiles(outputDir: string) {
@@ -1209,7 +1280,6 @@ export async function runPlan(
     assertPlanBody(body);
     runDataOwnerTag = body.dataOwnerTag ?? null;
 
-    const cliPath = resolveCliPath();
     runId = randomUUID();
     runDir = path.join(cliRunRoot, makeStampedDirName(startedAt, body.sourceName, runId));
     try {
@@ -1245,6 +1315,7 @@ export async function runPlan(
     const serveRequestPath = path.join(runDir, "serve-request.json");
     const serveRequestLinePath = path.join(runDir, "serve-request.jsonl");
     const serveResponsePath = path.join(runDir, "serve-response.json");
+    const reproductionPath = path.join(runDir, "reproduction.json");
     resultPath = path.join(runDir, "result.json");
     artifactEnvelopePath = path.join(runDir, "run-envelope.json");
 
@@ -1260,13 +1331,20 @@ export async function runPlan(
       });
     }
 
+    await writeJson(layoutPath, body.layout);
+    await writeJson(operboxPath, body.operbox);
+    await writeJson(reproductionPath, {
+      version: 1,
+      diagnosticId: runId,
+      sourceName: body.sourceName ?? null,
+      rotation: body.rotation,
+      fiammettaEnabled: body.fiammettaEnable ?? true,
+    });
+
+    const cliPath = resolveCliPath();
     const serveLane = options.serveLane ?? 0;
     const serveClient = getPlanServeClient(serveLane);
     const planCompute = await getPlanServeCapability(serveLane, serveClient);
-    if (!deferArtifacts || !planCompute.supported) {
-      await writeJson(layoutPath, body.layout);
-      await writeJson(operboxPath, body.operbox);
-    }
     solver = createSolverObservation(planCompute, new Date().toISOString());
     let serveResult: ServeResult;
     let profileJson: unknown;
@@ -1468,6 +1546,7 @@ export async function runPlan(
     const errorPayload: PlanApiResponse = {
       success: false,
       startedAt,
+      durationMs: Math.max(0, Math.round(performance.now() - start)),
       solverStartedAt,
       solverFinishedAt,
       solver,
@@ -1571,11 +1650,12 @@ async function getOpsStorageStats() {
 
 export async function updateFeedbackOps(id: string, status: string, note: string) {
   if (!/^[\w.-]+$/.test(id)) throw new Error("记录 ID 非法。");
-  if (!["pending", "working", "resolved"].includes(status)) throw new Error("状态非法。");
+  const normalizedStatus = legacyAdminFeedbackStatus(status);
+  if (!normalizedStatus) throw new Error("状态非法。");
   if (isBusinessDatabaseReadEnabled()) {
     const updated = await updateFeedbackRecord({
       feedbackId: id,
-      status: status as "pending" | "working" | "resolved",
+      status: normalizedStatus,
       note,
     });
     if (updated || !isBusinessFileFallbackEnabled()) {
@@ -1585,7 +1665,7 @@ export async function updateFeedbackOps(id: string, status: string, note: string
   }
   const dir = path.join(feedbackRoot, id);
   await stat(dir);
-  const value = { status, note: note.trim().slice(0, 2000), updatedAt: new Date().toISOString() };
+  const value = { status: normalizedStatus, note: note.trim().slice(0, 2000), updatedAt: new Date().toISOString() };
   await writeJson(path.join(dir, "ops.json"), value);
   return value;
 }

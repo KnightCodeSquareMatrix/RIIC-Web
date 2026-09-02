@@ -1,5 +1,12 @@
 import "server-only";
 
+import type { AdminFeedbackFacility, AdminFeedbackStatus } from "@/types";
+import {
+  isAdminFeedbackStatus,
+  legacyAdminFeedbackStatus,
+  toAdminFeedbackRecordData,
+  toAdminPlanRunRecordData,
+} from "./admin-record-dto";
 import {
   assertSameOrigin,
   createRequestId,
@@ -12,12 +19,20 @@ import {
 } from "./api-contract";
 import { requireWebsiteAdmin } from "./auth/authorization";
 import { isBusinessDatabaseReadEnabled } from "./business-config";
-import { queryBusinessRecords, updateFeedbackRecord } from "./business-records";
+import {
+  deleteFeedbackRecords,
+  findFeedbackRecord,
+  findPlanRunRecord,
+  queryBusinessRecords,
+  updateFeedbackRecord,
+} from "./business-records";
+import { deleteFeedbackArtifacts, readPlanReproduction } from "./infra";
 
 type AdminRecordKind = "runs" | "feedback";
 type AdminRecordRoute =
   | "/api/admin/records"
   | "/api/admin/plan-runs"
+  | "/api/admin/plan-runs/[id]"
   | "/api/admin/feedback"
   | "/api/admin/feedback/[id]";
 
@@ -34,29 +49,92 @@ function deprecated(response: Response, successor: string): Response {
   return response;
 }
 
+function noStore(response: Response): Response {
+  response.headers.set("Cache-Control", "private, no-store, max-age=0");
+  return response;
+}
+
+function requireRecordDatabase(): void {
+  if (!isBusinessDatabaseReadEnabled()) throw new PublicApiError("AIC-DATA-8002");
+}
+
+function recordId(value: string): string {
+  const hasControlCharacter = [...value].some((character) => {
+    const code = character.charCodeAt(0);
+    return code < 32 || code === 127;
+  });
+  if (!value || value.length > 100 || hasControlCharacter) {
+    throw new PublicApiError("AIC-REQ-1001");
+  }
+  return value;
+}
+
+function feedbackStatus(value: string | null, allowLegacy: boolean): AdminFeedbackStatus | undefined {
+  if (!value) return undefined;
+  const status = allowLegacy ? legacyAdminFeedbackStatus(value) : isAdminFeedbackStatus(value) ? value : null;
+  if (!status) throw new PublicApiError("AIC-REQ-1001");
+  return status;
+}
+
+const ADMIN_FEEDBACK_FACILITIES = new Set<AdminFeedbackFacility>([
+  "trading",
+  "manufacture",
+  "power",
+  "control",
+  "dormitory",
+  "meeting",
+  "hire",
+  "processing",
+  "training",
+  "solver",
+  "unknown",
+]);
+
+function feedbackFacility(value: string | null): AdminFeedbackFacility | undefined {
+  if (!value) return undefined;
+  if (!ADMIN_FEEDBACK_FACILITIES.has(value as AdminFeedbackFacility)) {
+    throw new PublicApiError("AIC-REQ-1001");
+  }
+  return value as AdminFeedbackFacility;
+}
+
 export async function handleListAdminRecords(
   request: Request,
   kind: AdminRecordKind,
   route: AdminRecordRoute,
+  options: { allowLegacyStatus?: boolean } = {},
 ) {
   const requestId = createRequestId();
   const startedAt = performance.now();
   try {
     await requireWebsiteAdmin(request);
-    if (!isBusinessDatabaseReadEnabled()) throw new PublicApiError("AIC-DATA-8002");
+    requireRecordDatabase();
     const params = new URL(request.url).searchParams;
-    return successResponse(await queryBusinessRecords({
+    const status = kind === "feedback"
+      ? feedbackStatus(params.get("status"), options.allowLegacyStatus === true)
+      : params.get("status") ?? undefined;
+    if (kind === "runs" && status && status !== "success" && status !== "failed") {
+      throw new PublicApiError("AIC-REQ-1001");
+    }
+    const records = await queryBusinessRecords({
       kind,
       limit: Number(params.get("limit") ?? 50),
       offset: Number(params.get("offset") ?? 0),
       from: date(params.get("from")),
       to: date(params.get("to")),
-      status: params.get("status") ?? undefined,
+      status,
+      facility: kind === "feedback" ? feedbackFacility(params.get("facility")) : undefined,
       errorCode: params.get("errorCode") ?? undefined,
       solverExecutableSha256: params.get("solver") ?? undefined,
-    }), requestId);
+    });
+    return noStore(successResponse({
+      ...records,
+      items: kind === "feedback"
+        ? records.items.map((item) => toAdminFeedbackRecordData(item as unknown as Record<string, unknown>))
+        : records.items.map((item) => toAdminPlanRunRecordData(item as unknown as Record<string, unknown>)),
+    }, requestId));
   } catch (error) {
-    return failureResponse(error, requestId, route, startedAt);
+    return noStore(failureResponse(error, requestId, route, startedAt));
   }
 }
 
@@ -64,22 +142,24 @@ async function updateAdminFeedback(
   request: Request,
   feedbackId: string,
   body: { status?: unknown; note?: unknown } | null,
+  allowLegacyStatus = false,
 ) {
   assertSameOrigin(request);
   enforceRateLimit("admin-record-update", requestClientIp(request), 60, 10 * 60_000);
   const admin = await requireWebsiteAdmin(request);
-  if (!isBusinessDatabaseReadEnabled()) throw new PublicApiError("AIC-DATA-8002");
+  requireRecordDatabase();
+  const status = allowLegacyStatus
+    ? legacyAdminFeedbackStatus(body?.status)
+    : isAdminFeedbackStatus(body?.status) ? body.status : null;
   if (
-    !feedbackId
-    || feedbackId.length > 100
-    || !["pending", "working", "resolved"].includes(String(body?.status))
-    || typeof body?.note !== "string"
-    || body.note.length > 2000
+    !status
+    || (body?.note !== undefined && typeof body.note !== "string")
+    || (typeof body?.note === "string" && body.note.length > 2000)
   ) throw new PublicApiError("AIC-REQ-1001");
   const updated = await updateFeedbackRecord({
-    feedbackId,
-    status: body.status as "pending" | "working" | "resolved",
-    note: body.note,
+    feedbackId: recordId(feedbackId),
+    status,
+    note: typeof body?.note === "string" ? body.note : "",
     actorUserId: admin.session.user.id,
   });
   if (!updated) throw new PublicApiError("AIC-DATA-8004");
@@ -94,11 +174,80 @@ export async function handleUpdateAdminFeedback(
   const requestId = createRequestId();
   const startedAt = performance.now();
   try {
-    assertSameOrigin(request);
     const body = await readJsonBody(request, 16 * 1024) as { status?: unknown; note?: unknown } | null;
-    return successResponse(await updateAdminFeedback(request, feedbackId, body), requestId);
+    return noStore(successResponse(await updateAdminFeedback(request, feedbackId, body), requestId));
   } catch (error) {
-    return failureResponse(error, requestId, route, startedAt);
+    return noStore(failureResponse(error, requestId, route, startedAt));
+  }
+}
+
+export async function handleGetAdminFeedbackDetail(request: Request, feedbackId: string) {
+  const requestId = createRequestId();
+  const startedAt = performance.now();
+  try {
+    await requireWebsiteAdmin(request);
+    requireRecordDatabase();
+    const item = await findFeedbackRecord(recordId(feedbackId));
+    if (!item) throw new PublicApiError("AIC-DATA-8004");
+    const run = await findPlanRunRecord(item.diagnosticId);
+    const reproduction = await readPlanReproduction(item.diagnosticId, {
+      rotation: run?.rotation,
+      fiammettaEnabled: run?.fiammettaEnable,
+    });
+    return noStore(successResponse({
+      feedback: toAdminFeedbackRecordData(item as unknown as Record<string, unknown>),
+      reproduction,
+    }, requestId));
+  } catch (error) {
+    return noStore(failureResponse(error, requestId, "/api/admin/feedback/[id]", startedAt));
+  }
+}
+
+export async function handleGetAdminPlanRunDetail(request: Request, diagnosticId: string) {
+  const requestId = createRequestId();
+  const startedAt = performance.now();
+  try {
+    await requireWebsiteAdmin(request);
+    requireRecordDatabase();
+    const item = await findPlanRunRecord(recordId(diagnosticId));
+    if (!item || item.status !== "failed") throw new PublicApiError("AIC-DATA-8004");
+    const reproduction = await readPlanReproduction(item.diagnosticId, {
+      rotation: item.rotation,
+      fiammettaEnabled: item.fiammettaEnable,
+    });
+    return noStore(successResponse({
+      run: toAdminPlanRunRecordData(item as unknown as Record<string, unknown>),
+      reproduction,
+    }, requestId));
+  } catch (error) {
+    return noStore(failureResponse(error, requestId, "/api/admin/plan-runs/[id]", startedAt));
+  }
+}
+
+export async function handleDeleteAdminFeedback(request: Request) {
+  const requestId = createRequestId();
+  const startedAt = performance.now();
+  try {
+    assertSameOrigin(request);
+    enforceRateLimit("admin-feedback-delete", requestClientIp(request), 20, 10 * 60_000);
+    await requireWebsiteAdmin(request);
+    requireRecordDatabase();
+    const body = await readJsonBody(request, 24 * 1024) as { ids?: unknown } | null;
+    if (!Array.isArray(body?.ids) || body.ids.length < 1 || body.ids.length > 100) {
+      throw new PublicApiError("AIC-REQ-1001");
+    }
+    const ids = [...new Set(body.ids.map((id) => recordId(typeof id === "string" ? id : "")))];
+    // Remove private attachments first so a filesystem failure leaves the database
+    // rows available for a safe retry instead of creating unreachable Box data.
+    const privateArtifactsDeleted = await deleteFeedbackArtifacts(ids);
+    const deletedIds = await deleteFeedbackRecords(ids);
+    return noStore(successResponse({
+      deletedIds,
+      deletedCount: deletedIds.length,
+      privateArtifactsDeleted,
+    }, requestId));
+  } catch (error) {
+    return noStore(failureResponse(error, requestId, "/api/admin/feedback", startedAt));
   }
 }
 
@@ -108,12 +257,12 @@ export async function handleLegacyAdminRecordsGet(request: Request) {
   if (!kind) {
     const requestId = createRequestId();
     return deprecated(
-      failureResponse(new PublicApiError("AIC-REQ-1001"), requestId, "/api/admin/records", performance.now()),
+      noStore(failureResponse(new PublicApiError("AIC-REQ-1001"), requestId, "/api/admin/records", performance.now())),
       "/api/admin/plan-runs",
     );
   }
   const successor = kind === "runs" ? "/api/admin/plan-runs" : "/api/admin/feedback";
-  return deprecated(await handleListAdminRecords(request, kind, "/api/admin/records"), successor);
+  return deprecated(await handleListAdminRecords(request, kind, "/api/admin/records", { allowLegacyStatus: true }), successor);
 }
 
 export async function handleLegacyAdminRecordsPatch(request: Request) {
@@ -121,7 +270,6 @@ export async function handleLegacyAdminRecordsPatch(request: Request) {
   const startedAt = performance.now();
   let successor = "/api/admin/feedback";
   try {
-    assertSameOrigin(request);
     const body = await readJsonBody(request, 16 * 1024) as {
       feedbackId?: unknown;
       status?: unknown;
@@ -129,11 +277,11 @@ export async function handleLegacyAdminRecordsPatch(request: Request) {
     } | null;
     const feedbackId = typeof body?.feedbackId === "string" ? body.feedbackId : "";
     successor = `/api/admin/feedback/${encodeURIComponent(feedbackId)}`;
-    return deprecated(successResponse(
-      await updateAdminFeedback(request, feedbackId, body),
+    return deprecated(noStore(successResponse(
+      await updateAdminFeedback(request, feedbackId, body, true),
       requestId,
-    ), successor);
+    )), successor);
   } catch (error) {
-    return deprecated(failureResponse(error, requestId, "/api/admin/records", startedAt), successor);
+    return deprecated(noStore(failureResponse(error, requestId, "/api/admin/records", startedAt)), successor);
   }
 }

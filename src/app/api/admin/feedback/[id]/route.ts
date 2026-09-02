@@ -1,7 +1,12 @@
-import { handleUpdateAdminFeedback } from "@/server/admin-records-api";
+import { handleGetAdminFeedbackDetail, handleUpdateAdminFeedback } from "@/server/admin-records-api";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+export async function GET(request: Request, context: RouteContext<"/api/admin/feedback/[id]">) {
+  const { id } = await context.params;
+  return handleGetAdminFeedbackDetail(request, id);
+}
 
 export async function PATCH(request: Request, context: RouteContext<"/api/admin/feedback/[id]">) {
   const { id } = await context.params;
