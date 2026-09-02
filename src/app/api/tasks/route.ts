@@ -26,13 +26,11 @@ import {
 } from "@/server/business-config";
 import { recordPlanRunBestEffort } from "@/server/business-records";
 import { accountDataConsent } from "@/server/data-consent";
-import { getPlanCacheSolverIdentity, getSampleOperbox } from "@/server/infra";
+import { getCachedPlanCacheSolverIdentity, getSampleOperbox } from "@/server/infra";
 import {
   evictPlanCacheKeys,
+  lookupPlanCache,
   recordPlanCacheReferenceBestEffort,
-  releasePlanCacheLease,
-  resolvePlanCache,
-  type PlanCacheResolution,
 } from "@/server/plan-cache";
 import { planAccessMode } from "@/server/plan-access";
 import { publicPlanSha256, resolveSavedPlanCalculationContext } from "@/server/plan-result-binding";
@@ -41,9 +39,9 @@ import { activeSklandAccount, readSklandAccountStore } from "@/server/skland/htt
 import { sklandDataOwnerTag } from "@/server/skland/session";
 import {
   createPlanTask,
+  currentPlanTaskEtaSeconds,
   planQueuePosition,
   planSelectionPoolSize,
-  planTaskEtaSeconds,
   planTaskIpHmac,
 } from "@/server/plan-task";
 import { planOperboxContentHmac } from "@/server/workspace-crypto";
@@ -71,7 +69,6 @@ function isUniqueViolation(error: unknown): boolean {
 export async function POST(request: Request) {
   const requestId = createRequestId();
   const startedAt = performance.now();
-  let cacheLease: Extract<PlanCacheResolution, { kind: "lease" }> | undefined;
   try {
     assertSameOrigin(request);
     const ip = requestClientIp(request);
@@ -172,9 +169,9 @@ export async function POST(request: Request) {
       }
     }
 
-    const cacheSolver = await getPlanCacheSolverIdentity();
+    const cacheSolver = getCachedPlanCacheSolverIdentity();
     if (cacheSolver) {
-      const cache = await resolvePlanCache({
+      const cache = await lookupPlanCache({
         layout: body.layout,
         operbox,
         sourceType,
@@ -201,6 +198,7 @@ export async function POST(request: Request) {
           rotation,
           fiammettaEnable,
           durationMs: cache.result.durationMs,
+          executionSource: "cache",
           solver: cacheSolver,
           artifact: null,
           calculationContext: savedPlanContext,
@@ -215,11 +213,6 @@ export async function POST(request: Request) {
         });
         if (!referenceStored) await evictPlanCacheKeys([cache.keyHmac]).catch(() => undefined);
         return successResponse({ status: "done", result: cache.result }, requestId);
-      }
-      if (cache.kind === "lease") {
-        cacheLease = cache;
-        await releasePlanCacheLease(cache);
-        cacheLease = undefined;
       }
     }
 
@@ -270,10 +263,9 @@ export async function POST(request: Request) {
       taskId: task.id,
       status: "pending",
       queuePosition,
-      etaSeconds: planTaskEtaSeconds(queuePosition),
+      etaSeconds: await currentPlanTaskEtaSeconds(queuePosition),
     }, requestId);
   } catch (error) {
-    if (cacheLease) await releasePlanCacheLease(cacheLease);
     return failureResponse(error, requestId, "/api/tasks", startedAt);
   }
 }

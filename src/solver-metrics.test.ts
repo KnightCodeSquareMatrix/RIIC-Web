@@ -12,6 +12,9 @@ function metricInput(overrides: Partial<Parameters<typeof buildAdminSolverMetric
     failureCount: 2,
     averageDurationMs: 1_240,
     p95DurationMs: 2_890,
+    averageSolverDurationMs: 900,
+    p95SolverDurationMs: 1_800,
+    averageWorkerDurationMs: 1_100,
     maaCount: 12,
     sklandCount: 5,
     sampleCount: 3,
@@ -25,6 +28,7 @@ function metricInput(overrides: Partial<Parameters<typeof buildAdminSolverMetric
       { bucketStartedAt: new Date("2026-09-01T08:00:00.000Z"), successCount: 2, failureCount: 0, averageDurationMs: 900 },
     ],
     cacheHitCount: 8,
+    cacheMissCount: 2,
     readyCacheEntryCount: 2,
     fillingCacheEntryCount: 1,
     ...overrides,
@@ -43,6 +47,9 @@ test("admin solver metrics calculate errors, latency, throughput, queue, and act
   assert.equal(metrics.solver.throughputPerMinute, 1.33);
   assert.equal(metrics.solver.averageDurationMs, 1_240);
   assert.equal(metrics.solver.p95DurationMs, 2_890);
+  assert.equal(metrics.solver.averageSolverDurationMs, 900);
+  assert.equal(metrics.solver.p95SolverDurationMs, 1_800);
+  assert.equal(metrics.solver.averageWorkerDurationMs, 1_100);
   assert.deepEqual(metrics.queue, {
     bufferedCount: 3,
     pendingCount: 2,
@@ -88,6 +95,7 @@ test("admin solver metrics report unavailable rates and durations without sample
     p95WaitMs: null,
     trend: [],
     cacheHitCount: 0,
+    cacheMissCount: 0,
     readyCacheEntryCount: 0,
     fillingCacheEntryCount: 0,
   }));
@@ -112,6 +120,7 @@ test("admin solver metrics normalize invalid database values before exposing the
     averageWaitMs: -20,
     trend: [{ bucketStartedAt: new Date("invalid"), successCount: 4, failureCount: 1, averageDurationMs: 10 }],
     cacheHitCount: 1.9,
+    cacheMissCount: 0,
     readyCacheEntryCount: -2,
     fillingCacheEntryCount: Number.POSITIVE_INFINITY,
   }));

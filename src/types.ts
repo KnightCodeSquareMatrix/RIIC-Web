@@ -895,6 +895,9 @@ export interface DebugBundle {
   version: string;
   startedAt: string;
   durationMs: number;
+  solverDurationMs?: number;
+  solverStartedAt?: string;
+  solverFinishedAt?: string;
   cliPath: string;
   command: string;
   exitCode: number | null;
@@ -978,6 +981,10 @@ export interface PlanApiResponse {
   success: boolean;
   startedAt?: string;
   durationMs?: number;
+  /** Time reported by the solver process itself, excluding transport and artifact I/O. */
+  solverDurationMs?: number;
+  solverStartedAt?: string;
+  solverFinishedAt?: string;
   cliPath?: string;
   command?: string;
   exitCode?: number | null;
@@ -996,6 +1003,8 @@ export interface PlanApiResponse {
   relativeRunPath?: string;
   resultPath?: string;
   relativeResultPath?: string;
+  artifactEnvelopePath?: string;
+  relativeArtifactEnvelopePath?: string;
   error?: string;
 }
 
@@ -1260,6 +1269,9 @@ export interface AdminSolverMetricsData {
     throughputPerMinute: number;
     averageDurationMs: number | null;
     p95DurationMs: number | null;
+    averageSolverDurationMs: number | null;
+    p95SolverDurationMs: number | null;
+    averageWorkerDurationMs: number | null;
     sourceCounts: {
       maa: number;
       skland: number;

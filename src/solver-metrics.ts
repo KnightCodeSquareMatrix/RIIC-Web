@@ -19,6 +19,9 @@ type AdminSolverMetricCounts = {
   failureCount: number;
   averageDurationMs: number | null;
   p95DurationMs: number | null;
+  averageSolverDurationMs: number | null;
+  p95SolverDurationMs: number | null;
+  averageWorkerDurationMs: number | null;
   maaCount: number;
   sklandCount: number;
   sampleCount: number;
@@ -29,6 +32,7 @@ type AdminSolverMetricCounts = {
   p95WaitMs: number | null;
   trend: AdminSolverMetricTrendInput[];
   cacheHitCount: number;
+  cacheMissCount: number;
   readyCacheEntryCount: number;
   fillingCacheEntryCount: number;
 };
@@ -88,7 +92,7 @@ export function buildAdminSolverMetricsData(input: AdminSolverMetricCounts): Adm
   const hitCount = count(input.cacheHitCount);
   const readyEntryCount = count(input.readyCacheEntryCount);
   const fillingEntryCount = count(input.fillingCacheEntryCount);
-  const missCount = readyEntryCount;
+  const missCount = count(input.cacheMissCount);
   const lookupCount = hitCount + missCount;
 
   return {
@@ -102,6 +106,9 @@ export function buildAdminSolverMetricsData(input: AdminSolverMetricCounts): Adm
       throughputPerMinute: Math.round((completedCount / ADMIN_SOLVER_ERROR_WINDOW_MINUTES) * 100) / 100,
       averageDurationMs: duration(input.averageDurationMs),
       p95DurationMs: duration(input.p95DurationMs),
+      averageSolverDurationMs: duration(input.averageSolverDurationMs),
+      p95SolverDurationMs: duration(input.p95SolverDurationMs),
+      averageWorkerDurationMs: duration(input.averageWorkerDurationMs),
       trendWindowMinutes: ADMIN_SOLVER_TREND_WINDOW_MINUTES,
       trendBucketMinutes: ADMIN_SOLVER_TREND_BUCKET_MINUTES,
       sourceCounts: {

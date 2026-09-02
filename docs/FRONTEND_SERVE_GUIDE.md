@@ -1,6 +1,6 @@
 # Frontend Serve Guide
 
-The plan task worker keeps three isolated `infra-cli serve` processes alive, one per solver lane, instead of spawning a CLI process for every layout. Health checks use a separate client. Each lane still owns at most one active request, so logs and protocol responses retain an unambiguous owner.
+The plan task worker keeps four isolated `infra-cli serve` processes alive, one per solver lane, instead of spawning a CLI process for every layout. The worker reuses the warmed first lane's verified capability for cache identity, while website health checks use a separate client in the web process. Each lane still owns at most one active request, so logs and protocol responses retain an unambiguous owner.
 
 ## Transport
 
@@ -132,10 +132,10 @@ All paths are selected by the frontend. After a successful response, the fronten
 
 ## Lifecycle
 
-1. Start and ping one Worker per solver lane before publishing the task worker's first heartbeat. The production task queue currently runs three lanes, and deployment readiness fails if any configured lane cannot start.
-2. Ping it before a solve, record the version and diagnostic fingerprints, and select `plan.compute` or legacy `plan` from the version fields only.
+1. Start and ping one Worker per solver lane before publishing the task worker's first heartbeat. The production task queue currently runs four lanes, and deployment readiness fails if any configured lane cannot start.
+2. Cache that capability observation for the child-process generation, record its version and diagnostic fingerprints, and select `plan.compute` or legacy `plan` from the version fields only. A restarted child is pinged once before its next solve; healthy lanes are not pinged per task.
 3. Write one request line and accept only a JSON object with the matching `id` and a boolean `ok`; retain the stdout/stderr text in that request's capped private capture.
-4. Persist the request, response, per-request stdout, per-request stderr, profile, MAA, rotation, and debug bundle.
+4. Atomically persist one compact `run-envelope.json`. After the public result, cache ownership, business record, and task terminal state are durable, a two-slot background finalizer expands the request, response, per-request stdout/stderr, profile, MAA, result, and debug bundle once, then writes `artifact-expanded.json`. Database confirmation retries do not rewrite those files and continue at a slow interval after the initial retry budget. Malformed envelopes are quarantined immediately; an envelope whose run row is still missing after a ten-minute insertion grace period is quarantined as an orphan, and all retries stop at the private-record retention boundary. Startup resumes envelopes without a terminal `artifact-finalized.json` or `artifact-failed.json`; shutdown gives finalizers 30 seconds before leaving remaining envelopes for the next start.
 5. If one lane's process exits while a request is active, restart that lane and retry the active request once.
 
 ## Public API boundary
@@ -144,7 +144,7 @@ The CLI response is an internal transport object. It must never be returned dire
 
 `src/server/infra.ts` may retain CLI paths, commands, stdout, stderr, serve requests/responses, the ping observation and run-directory metadata for local diagnostics. Feedback looks up that exact private run by diagnostic ID and copies its solver observation into private `meta.json`; old or missing runs use `solver: null`. `src/server/public-plan.ts` is the required boundary before `/api/plan`: it constructs a new allowlisted DTO containing profile, MAA, rotation, duration, an opaque diagnostic ID and, when supplied by the current Worker, optional `trainingRoom` and `trainingAdvice` values parsed through their own strict public contracts. Training-room operators remain outside `maa.plans[*].rooms`, so MAA downloads never contain a training room or its occupants. Rotation is rebuilt through `src/rotation-result.ts`; only the selected profile, daily summary, normalized shifts, team state, weighted efficiency and normalized room efficiency are public. Raw `efficiencies`, assignments, solver identities and future unknown Worker or training fields are not forwarded in production.
 
-The persisted `stdout.txt`, `stderr.txt`, `result.json` and `debug-bundle.json` are private diagnostic artifacts. Ordinary API responses, plan history and browser persistence must not contain these logs. Log wording is not a stable protocol: frontend code must not infer Worker capability, progress or solver stage from log text.
+The persisted `run-envelope.json`, `stdout.txt`, `stderr.txt`, `result.json` and `debug-bundle.json` are private diagnostic artifacts. Feedback links to the durable envelope while expansion is pending. Ordinary API responses, plan history and browser persistence must not contain these logs. Log wording is not a stable protocol: frontend code must not infer Worker capability, progress or solver stage from log text.
 
 The server appends diagnostic values under `data.debug` only when `BETA_DEBUG_TOOLS_ENABLED=1` and that `/api/plan` request explicitly carries `?beta=1`. The query parameter cannot override a disabled server switch or the production deployment policy, while an ordinary development request remains limited to the core allowlist plus the two optional training fields even when the server switch is enabled. Public contract tests recursively reject internal field names in production responses, and the v5 browser persistence layer strips `data.debug` even in a debug session.
 
@@ -160,7 +160,7 @@ return successResponse(toPublicPlanData(internalResult, labels, requestId), requ
 
 ### Persistent task admission
 
-Authenticated `POST /api/tasks` requests persist an encrypted task payload before returning. An admitted task returns a deterministic queue position and an ETA derived from the three solver lanes:
+Authenticated `POST /api/tasks` requests persist an encrypted task payload before returning. Cache lookup is one immediate read and never waits for another request's fill lease. An admitted task returns a deterministic queue position and an ETA derived from the four solver lanes plus the Worker's recent service-time EWMA:
 
 ```json
 {"success":true,"data":{"taskId":"<opaque-id>","status":"pending","queuePosition":12,"etaSeconds":9}}
@@ -172,7 +172,7 @@ When the 1,000-task global activity limit or the 600-new-account activity limit 
 {"success":true,"data":{"taskId":"<opaque-id>","status":"buffered","selectionPoolSize":37}}
 ```
 
-`GET /api/tasks/<taskId>` returns the same `pending` or `buffered` state until the task is running or terminal. `selectionPoolSize` is the current candidate-ring size, not a queue position: capacity releases promote one eligible candidate at random. Clients should keep polling the returned task ID and must not resubmit while that task is reserved.
+`GET /api/tasks/<taskId>` returns the same `pending` or `buffered` state until the task is running or terminal. Its hot query projects only public status/result columns and never reads the encrypted request envelope. `selectionPoolSize` is the current candidate-ring size, not a queue position: capacity releases promote one eligible candidate at random. Clients use jittered status-aware polling (1 s running, 2–15 s pending, 30 s buffered) and must not resubmit while that task is reserved.
 
 Admission failures use both the standard `Retry-After` response header and `error.retryAfterSeconds` in the JSON envelope:
 
@@ -181,4 +181,4 @@ Admission failures use both the standard `Retry-After` response header and `erro
 - `AIC-PLAN-3007`: the network reached either 100 active accounts or 200 starts in 10 minutes.
 - `AIC-PLAN-3008`: the 2,000-task candidate ring is full.
 
-The browser backs off from 2 to 32 seconds, then continues polling once per minute for long waits. Retry buttons remain disabled for the server-provided countdown.
+Network failures back off from 2 to 32 seconds, then pause with a manual “query progress” action; healthy long waits continue using the status-aware intervals above. Retry buttons remain disabled for the server-provided countdown.
