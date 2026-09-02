@@ -21,6 +21,7 @@
     "test:shift-comparison": "node --test --experimental-strip-types src/skland.test.ts src/solver-diagnostic.test.ts src/schedule-portrait-preload.test.ts",
     "test:e2e": "playwright test --project=chromium",
     "test:e2e:production-profile": "playwright test --config=playwright.production.config.ts --project=chromium",
+    "test:e2e:webkit:skland-qr": "playwright test e2e/production-readiness-skland.spec.ts --project=webkit --grep \"Skland login exposes both methods\"",
     "test:e2e:webkit": "playwright test --project=webkit",
     "audit:security": "npm audit --audit-level=high",
     "assets:room-emblems": "node scripts/extract-room-emblems.mjs",
