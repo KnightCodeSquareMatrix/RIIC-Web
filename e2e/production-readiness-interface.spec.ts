@@ -49,7 +49,7 @@ test("skill query reveals results ten at a time only after manual expansion", as
 
   await expect(skillQuery).toBeVisible();
   await expect(results).toHaveCount(10);
-  await loadMore.scrollIntoViewIfNeeded();
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
   await page.waitForTimeout(300);
   await expect(results).toHaveCount(10);
   await expect(expandButton).toBeVisible();
