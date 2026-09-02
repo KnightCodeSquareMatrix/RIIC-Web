@@ -39,6 +39,7 @@ import type {
   AdminPlanRunListData,
   AdminPlanRunRecordData,
   AdminReproductionData,
+  AdminReproductionUnavailableReason,
   ApiResponse,
 } from "@/types";
 
@@ -65,6 +66,17 @@ const FACILITY_LABELS: Record<AdminFeedbackFacility, string> = {
 };
 
 const FACILITY_FILTERS = Object.keys(FACILITY_LABELS) as AdminFeedbackFacility[];
+
+const REPRODUCTION_UNAVAILABLE_MESSAGES: Record<AdminReproductionUnavailableReason, string> = {
+  expired: "私有运行资料已达到 30 天保留期限；下方只显示仍可用的摘要。",
+  cache_hit: "该记录使用了排班缓存，没有生成新的私有求解制品；下方只显示仍可用的摘要。",
+  finalizing: "私有求解制品仍在整理中，请稍后刷新后重试。",
+  finalization_failed: "私有求解制品整理失败；运行摘要仍在，请检查 Worker 日志和持久化目录。",
+  not_recorded: "该记录没有保存对应的私有求解制品；下方只显示仍可用的摘要。",
+  missing: "数据库摘要仍在，但服务器未找到对应制品；它可能已被旧保留策略清理，或持久化存储需要检查。",
+  invalid: "私有制品目录存在，但结果索引损坏或与诊断编号不匹配。",
+  incomplete: "私有制品仍在，但缺少或无法读取布局、Box、轮换或菲亚梅塔状态。",
+};
 
 type DetailState = {
   loading: boolean;
@@ -128,7 +140,7 @@ function ReproductionPanel({ state }: { state: DetailState }) {
       {!reproduction.available ? (
         <p role="status" className="flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-2.5 text-sm text-amber-900 dark:bg-amber-950/35 dark:text-amber-200">
           <AlertTriangle className="mt-0.5 shrink-0" aria-hidden="true" />
-          私有运行资料已过期或该记录没有对应制品；下方只显示仍可用的摘要。
+          {REPRODUCTION_UNAVAILABLE_MESSAGES[reproduction.unavailableReason ?? "incomplete"]}
         </p>
       ) : null}
 

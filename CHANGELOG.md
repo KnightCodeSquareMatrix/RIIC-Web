@@ -2,6 +2,18 @@
 
 All notable changes to RIIC-Web are documented in this file.
 
+## [0.4.1] - 2026-09-03
+
+### Fixed
+
+- Administrator reproduction details recover compatible legacy layout, Box, and output-tail fields through the existing response whitelist.
+- Private solver artifacts now follow the same 30-day retention window as their database summaries, and unavailable details report a specific reason.
+- Website account deletion removes the account's referenced private feedback and solver-run artifacts before deleting the database account.
+
+### Changed
+
+- The privacy policy discloses the 30-day solver-reproduction retention window and uses a new consent version.
+
 ## [0.4.0] - 2026-09-02
 
 ### Added

@@ -82,6 +82,7 @@ test("admin reproduction DTO requires every solver input and limits itself to th
   });
 
   assert.equal(result.available, true);
+  assert.equal(result.unavailableReason, null);
   assert.equal(result.rotation, "fiammetta_8_8_4_4");
   assert.equal(result.rotationCount, 4);
   assert.equal(result.fiammettaEnabled, true);
@@ -106,4 +107,39 @@ test("admin reproduction DTO redacts absolute server paths from diagnostic text"
   assert.equal(result.error, "CLI missing at [已隐藏服务器路径], retry failed");
   assert.equal(result.stderrExcerpt, "worker loaded [已隐藏服务器路径]; trace follows");
   assert.equal(result.stdoutExcerpt, "read [已隐藏服务器路径], done");
+  assert.equal(result.unavailableReason, "incomplete");
+});
+
+test("admin reproduction DTO redacts credentials from legacy solver output", () => {
+  const result = toAdminReproductionData({
+    diagnosticId: "diagnostic-secret",
+    layout: null,
+    operbox: null,
+    context: null,
+    result: { error: "AUTH_SECRET=s3cr3t\nAuthorization: Bearer bearer-value" },
+    stderrExcerpt: '{"access_token":"json-value"} DATABASE_URL=database-value',
+    stdoutExcerpt: "Cookie: session=cookie-value; csrf=csrf-value\nread \\\\private-server\\solver-share\\trace.log",
+  });
+
+  const serialized = JSON.stringify(result);
+  for (const secret of ["s3cr3t", "bearer-value", "json-value", "database-value", "cookie-value", "csrf-value", "private-server", "solver-share"]) {
+    assert.equal(serialized.includes(secret), false);
+  }
+  assert.match(result.error ?? "", /已隐藏敏感值/);
+  assert.match(result.stderrExcerpt ?? "", /已隐藏敏感值/);
+  assert.match(result.stdoutExcerpt ?? "", /已隐藏服务器路径/);
+});
+
+test("admin reproduction DTO preserves a specific unavailable reason", () => {
+  const result = toAdminReproductionData({
+    diagnosticId: "diagnostic-4",
+    layout: null,
+    operbox: null,
+    context: null,
+    result: null,
+    unavailableReason: "cache_hit",
+  });
+
+  assert.equal(result.available, false);
+  assert.equal(result.unavailableReason, "cache_hit");
 });

@@ -1451,7 +1451,12 @@ for (const viewport of [
     await page.route("**/api/account/data-consent", async (route) => {
       if (route.request().method() === "POST") {
         const body = route.request().postDataJSON() as Record<string, unknown>;
-        expect(body).toMatchObject({ termsAccepted: true, privacyAccepted: true });
+        expect(body).toMatchObject({
+          termsAccepted: true,
+          privacyAccepted: true,
+          termsVersion: "2026-08-21-cloud-workspace",
+          privacyVersion: "2026-09-03-solver-reproduction-retention",
+        });
         consentCurrent = true;
       } else if (route.request().method() === "DELETE") {
         consentCurrent = false;
@@ -1461,7 +1466,7 @@ for (const viewport of [
       return fulfill(route, {
         current: consentCurrent,
         termsVersion: "2026-08-21-cloud-workspace",
-        privacyVersion: "2026-08-27-detailed-telemetry",
+        privacyVersion: "2026-09-03-solver-reproduction-retention",
         acceptedAt: consentCurrent ? timestamp : null,
         revokedAt: null,
         cloudSyncEnabled: true,

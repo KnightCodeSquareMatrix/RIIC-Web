@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { register } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -37,9 +37,12 @@ test("pending plan envelopes resume into finalized private artifacts", async (co
 
   const {
     finalizePlanArtifactEnvelope,
+    PRIVATE_RECORD_TTL_MS,
     resumePendingPlanArtifactFinalizations,
     waitForPlanArtifactFinalizers,
   } = await import("./infra.ts");
+
+  assert.equal(PRIVATE_RECORD_TTL_MS, 30 * 24 * 60 * 60 * 1000);
 
   assert.equal(await resumePendingPlanArtifactFinalizations(), 1);
   assert.equal(await waitForPlanArtifactFinalizers(5_000), true);
@@ -96,16 +99,19 @@ test("pending plan envelopes resume into finalized private artifacts", async (co
 
   const recoveringRunRoot = path.join(runsRoot, "recovering-run");
   await mkdir(recoveringRunRoot, { recursive: true });
+  const retainedAt = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
   await writeFile(path.join(recoveringRunRoot, "run-envelope.json"), JSON.stringify({
     version: "plan-run-envelope-v1",
     diagnosticId: "33333333-3333-4333-8333-333333333333",
     dataOwnerTag: null,
     result: {
       success: true,
-      startedAt: "2026-09-02T00:00:00.000Z",
+      startedAt: retainedAt.toISOString(),
       runId: "33333333-3333-4333-8333-333333333333",
     },
   }), "utf-8");
+  const recoveringEnvelopePath = path.join(recoveringRunRoot, "run-envelope.json");
+  await utimes(recoveringEnvelopePath, retainedAt, retainedAt);
   const updateStatuses: string[] = [];
   assert.equal(await resumePendingPlanArtifactFinalizations({
     updateArtifact: async ({ status }) => {
@@ -125,4 +131,30 @@ test("pending plan envelopes resume into finalized private artifacts", async (co
     readFile(path.join(recoveringRunRoot, "artifact-failed.json"), "utf-8"),
     (error: NodeJS.ErrnoException) => error.code === "ENOENT",
   );
+
+  const expiredRunRoot = path.join(runsRoot, "retention-expired-run");
+  await mkdir(expiredRunRoot, { recursive: true });
+  const expiredEnvelopePath = path.join(expiredRunRoot, "run-envelope.json");
+  const expiredDiagnosticId = "44444444-4444-4444-8444-444444444444";
+  await writeFile(expiredEnvelopePath, JSON.stringify({
+    version: "plan-run-envelope-v1",
+    diagnosticId: expiredDiagnosticId,
+    dataOwnerTag: null,
+    result: {
+      success: false,
+      startedAt: new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString(),
+      runId: expiredDiagnosticId,
+      error: "retention fixture",
+    },
+  }), "utf-8");
+  const expiredAt = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000);
+  await utimes(expiredEnvelopePath, expiredAt, expiredAt);
+  assert.equal(await resumePendingPlanArtifactFinalizations({
+    updateArtifact: async () => "unavailable",
+    retryMs: [],
+    slowRetryMs: 0,
+  }), 1);
+  assert.equal(await waitForPlanArtifactFinalizers(5_000), true);
+  const retentionFailure = JSON.parse(await readFile(path.join(expiredRunRoot, "artifact-failed.json"), "utf-8"));
+  assert.equal(retentionFailure.reason, "retention-exceeded");
 });

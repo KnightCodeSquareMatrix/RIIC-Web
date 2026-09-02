@@ -4,6 +4,7 @@ import type {
   AdminFeedbackStatus,
   AdminPlanRunRecordData,
   AdminReproductionData,
+  AdminReproductionUnavailableReason,
   AppErrorCode,
   BaseBlueprint,
   BlueprintRoom,
@@ -55,6 +56,10 @@ function diagnosticText(value: unknown): string | null {
   const text = boundedString(value, 16 * 1024);
   if (!text) return null;
   return text
+    .replace(/(\b(?:authorization|proxy-authorization|cookie|set-cookie)\s*:\s*)[^\r\n]+/gi, "$1[已隐藏敏感值]")
+    .replace(/(["']?[A-Za-z0-9_.-]*(?:token|secret|password|passwd|cookie|authorization|database[_-]?url|api[_-]?key|master[_-]?keys?|hmac[_-]?key)[A-Za-z0-9_.-]*["']?\s*[:=]\s*)(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s,;]+)/gi, "$1[已隐藏敏感值]")
+    .replace(/(https?:\/\/)[^\s/@:]+:[^\s/@]+@/gi, "$1[已隐藏敏感值]@")
+    .replace(/\\\\[^\\\s,;]+\\[^\r\n,;]+/g, "[已隐藏服务器路径]")
     .replace(/\b[A-Za-z]:[\\/][^\r\n,，;；]+/g, "[已隐藏服务器路径]")
     .replace(/file:\/\/[^\r\n,，;；]+/gi, "[已隐藏服务器路径]")
     .replace(/(^|[\s(=:])\/(?:[^\r\n,，;；]+\/?)+/gm, "$1[已隐藏服务器路径]");
@@ -197,6 +202,7 @@ export function toAdminReproductionData(input: {
   stdoutExcerpt?: string | null;
   fallbackRotation?: unknown;
   fallbackFiammettaEnabled?: unknown;
+  unavailableReason?: AdminReproductionUnavailableReason;
 }): AdminReproductionData {
   const layout = record(input.layout);
   const context = record(input.context);
@@ -207,17 +213,33 @@ export function toAdminReproductionData(input: {
   const fiammettaEnabled = typeof rawFiammetta === "boolean" ? rawFiammetta : null;
   const safeLayout = reproductionLayout(layout);
   const safeOperbox = reproductionOperbox(input.operbox);
-  return {
-    available: Boolean(safeLayout && safeOperbox && rotation && fiammettaEnabled !== null),
+  const common = {
     diagnosticId: input.diagnosticId,
     sourceName: boundedString(context?.sourceName, 80),
+    error: diagnosticText(result?.error),
+    stderrExcerpt: diagnosticText(input.stderrExcerpt),
+    stdoutExcerpt: diagnosticText(input.stdoutExcerpt),
+  };
+  if (safeLayout && safeOperbox && rotation && fiammettaEnabled !== null) {
+    return {
+      ...common,
+      available: true,
+      unavailableReason: null,
+      layout: safeLayout,
+      operbox: safeOperbox,
+      rotation,
+      rotationCount: rotationShiftCount(rotation),
+      fiammettaEnabled,
+    };
+  }
+  return {
+    ...common,
+    available: false,
+    unavailableReason: input.unavailableReason ?? "incomplete",
     layout: safeLayout,
     operbox: safeOperbox,
     rotation,
     rotationCount: rotation ? rotationShiftCount(rotation) : null,
     fiammettaEnabled,
-    error: diagnosticText(result?.error),
-    stderrExcerpt: diagnosticText(input.stderrExcerpt),
-    stdoutExcerpt: diagnosticText(input.stdoutExcerpt),
   };
 }
