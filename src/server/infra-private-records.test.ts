@@ -72,6 +72,14 @@ test("Skland owned-data deletion removes only matching runs and feedback without
   const unrelatedRun = path.join(runsRoot, "expired-unrelated-run");
   const reproductionDiagnosticId = "22222222-2222-4222-8222-222222222222";
   const reproductionRun = path.join(runsRoot, `2026-09-02_MAA_${reproductionDiagnosticId}`);
+  const legacyDiagnosticId = "44444444-4444-4444-8444-444444444444";
+  const legacyRun = path.join(runsRoot, `2026-09-02_MAA_${legacyDiagnosticId}`);
+  const invalidDiagnosticId = "55555555-5555-4555-8555-555555555555";
+  const invalidRun = path.join(runsRoot, `2026-09-02_MAA_${invalidDiagnosticId}`);
+  const embeddedDiagnosticId = "99999999-9999-4999-8999-999999999999";
+  const embeddedRun = path.join(runsRoot, `2026-09-02_MAA_${embeddedDiagnosticId}`);
+  const accountDiagnosticId = "aaaaaaaa-1111-4111-8111-111111111111";
+  const accountRun = path.join(runsRoot, "account-owned-run");
   const linkedFeedback = path.join(feedbackRoot, "linked-feedback");
   const ownedFeedback = path.join(feedbackRoot, "owned-feedback");
   const unrelatedFeedback = path.join(feedbackRoot, "unrelated-feedback");
@@ -82,6 +90,10 @@ test("Skland owned-data deletion removes only matching runs and feedback without
     mkdir(targetRun),
     mkdir(unrelatedRun),
     mkdir(reproductionRun),
+    mkdir(legacyRun),
+    mkdir(invalidRun),
+    mkdir(embeddedRun),
+    mkdir(accountRun),
     mkdir(linkedFeedback),
     mkdir(ownedFeedback),
     mkdir(unrelatedFeedback),
@@ -120,6 +132,77 @@ test("Skland owned-data deletion removes only matching runs and feedback without
       error: "solver exited",
     })),
     writeFile(path.join(reproductionRun, "stderr.txt"), "debug tail"),
+    writeFile(path.join(legacyRun, "result.json"), JSON.stringify({
+      runId: legacyDiagnosticId,
+      success: false,
+      error: "legacy solver exited",
+    })),
+    writeFile(path.join(legacyRun, "debug-bundle.json"), JSON.stringify({
+      inputSummary: { sourceName: "旧版 MAA 导入" },
+      layout: {
+        template: "243",
+        drone_cap: 200,
+        scenario: {},
+        rooms: [
+          { id: "control", kind: "control_center", level: 5 },
+          { id: "power", kind: "power_plant", level: 3 },
+        ],
+      },
+      operbox: [{
+        id: "char_002_amiya",
+        name: "阿米娅",
+        own: true,
+        level: 80,
+        elite: 2,
+        potential: 6,
+        rarity: 5,
+      }],
+      stdout: "legacy stdout tail",
+      stderr: "legacy stderr tail",
+      command: "must-not-leak",
+      serveRequest: {
+        id: 1,
+        method: "plan.compute",
+        params: { options: { rotation: "abc_12_6_6", fiammetta_enable: false } },
+      },
+    })),
+    writeFile(path.join(invalidRun, "result.json"), JSON.stringify({
+      runId: "66666666-6666-4666-8666-666666666666",
+      success: false,
+    })),
+    writeFile(path.join(embeddedRun, "result.json"), JSON.stringify({
+      runId: embeddedDiagnosticId,
+      success: false,
+      debugBundle: {
+        inputSummary: { sourceName: "内嵌旧版制品" },
+        layout: {
+          template: "243",
+          drone_cap: 200,
+          scenario: {},
+          rooms: [
+            { id: "control", kind: "control_center", level: 5 },
+            { id: "power", kind: "power_plant", level: 3 },
+          ],
+        },
+        operbox: [{
+          id: "char_002_amiya",
+          name: "阿米娅",
+          own: true,
+          level: 80,
+          elite: 2,
+          potential: 6,
+          rarity: 5,
+        }],
+        serveRequest: {
+          id: 2,
+          method: "plan.compute",
+          params: { options: { rotation: "abc_12_12_12", fiammetta_enable: true } },
+        },
+        stdout: "embedded stdout",
+        stderr: "embedded stderr",
+      },
+    })),
+    writeFile(path.join(accountRun, "owner.json"), JSON.stringify({ diagnosticId: accountDiagnosticId })),
     writeFile(path.join(linkedFeedback, "meta.json"), JSON.stringify({ diagnosticId })),
     writeFile(path.join(ownedFeedback, "meta.json"), JSON.stringify({ dataOwnerTag: targetOwnerTag })),
     writeFile(path.join(unrelatedFeedback, "meta.json"), JSON.stringify({ dataOwnerTag: unrelatedOwnerTag })),
@@ -134,6 +217,8 @@ test("Skland owned-data deletion removes only matching runs and feedback without
   process.env.BETA_CLI_RUN_DIR = runsRoot;
   process.env.BETA_FEEDBACK_DIR = feedbackRoot;
   process.env.INFRA_CLI_EXPECTED_SHA256 = "0".repeat(64);
+  const legacyPurgeMarker = path.join(storageRoot, ".skland-legacy-purge-v1.json");
+  await writeFile(legacyPurgeMarker, JSON.stringify({ version: 1 }), "utf-8");
   context.after(() => {
     if (previousStorageDir === undefined) delete process.env.BETA_STORAGE_DIR;
     else process.env.BETA_STORAGE_DIR = previousStorageDir;
@@ -145,7 +230,7 @@ test("Skland owned-data deletion removes only matching runs and feedback without
     else process.env.INFRA_CLI_EXPECTED_SHA256 = previousExpectedCliSha256;
   });
 
-  const { deleteFeedbackArtifacts, deleteSklandOwnedData, readPlanReproduction, runPlan } = await import("./infra.ts");
+  const { deleteFeedbackArtifacts, deletePlanRunArtifacts, deleteSklandOwnedData, maintainPrivateRecords, readPlanReproduction, runPlan } = await import("./infra.ts");
 
   const planInput = {
     layout: {
@@ -192,8 +277,6 @@ test("Skland owned-data deletion removes only matching runs and feedback without
     const storedOperbox = JSON.parse(await readFile(path.join(runsRoot, runName!, "operbox.json"), "utf8"));
     assert.equal(storedOperbox[0].name, "阿米娅");
   }
-  await rm(path.join(storageRoot, ".skland-legacy-purge-v1.json"), { force: true });
-
   const reproduction = await readPlanReproduction(reproductionDiagnosticId);
   assert.equal(reproduction.available, true);
   assert.equal(reproduction.rotation, "abc_12_6_6");
@@ -202,19 +285,111 @@ test("Skland owned-data deletion removes only matching runs and feedback without
   assert.equal(reproduction.error, "solver exited");
   assert.equal(reproduction.stderrExcerpt, "debug tail");
 
+  const legacyReproduction = await readPlanReproduction(legacyDiagnosticId, {
+    rotation: "abc_12_6_6",
+    fiammettaEnabled: true,
+    artifactKey: "legacy",
+    executionSource: null,
+  });
+  assert.equal(legacyReproduction.available, true);
+  assert.equal(legacyReproduction.unavailableReason, null);
+  assert.equal(legacyReproduction.sourceName, "旧版 MAA 导入");
+  assert.equal(legacyReproduction.layout?.template, "243");
+  assert.equal(legacyReproduction.operbox?.[0]?.name, "阿米娅");
+  assert.equal(legacyReproduction.fiammettaEnabled, false);
+  assert.equal(legacyReproduction.stderrExcerpt, "legacy stderr tail");
+  assert.equal(legacyReproduction.stdoutExcerpt, "legacy stdout tail");
+  assert.equal("command" in legacyReproduction, false);
+
+  const embeddedReproduction = await readPlanReproduction(embeddedDiagnosticId, {
+    rotation: "abc_12_6_6",
+    fiammettaEnabled: false,
+    artifactKey: "embedded",
+    executionSource: null,
+  });
+  assert.equal(embeddedReproduction.available, true);
+  assert.equal(embeddedReproduction.sourceName, "内嵌旧版制品");
+  assert.equal(embeddedReproduction.rotation, "abc_12_12_12");
+  assert.equal(embeddedReproduction.fiammettaEnabled, true);
+  assert.equal(embeddedReproduction.stderrExcerpt, "embedded stderr");
+
+  const cacheWithoutArtifact = await readPlanReproduction("77777777-7777-4777-8777-777777777777", {
+    rotation: "abc_12_6_6",
+    fiammettaEnabled: false,
+    executionSource: "cache",
+  });
+  assert.equal(cacheWithoutArtifact.available, false);
+  assert.equal(cacheWithoutArtifact.unavailableReason, "cache_hit");
+
+  const unavailableCases = [
+    {
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      fallback: { artifactKey: null },
+      reason: "not_recorded",
+    },
+    {
+      id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      fallback: { artifactKey: "missing" },
+      reason: "missing",
+    },
+    {
+      id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      fallback: { artifactKey: "expired", expiresAt: new Date(Date.now() - 1_000) },
+      reason: "expired",
+    },
+    {
+      id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      fallback: { artifactKey: null, artifactStatus: "pending" },
+      reason: "finalizing",
+    },
+    {
+      id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+      fallback: { artifactKey: null, artifactStatus: "failed" },
+      reason: "finalization_failed",
+    },
+  ] as const;
+  for (const item of unavailableCases) {
+    const unavailable = await readPlanReproduction(item.id, item.fallback);
+    assert.equal(unavailable.available, false);
+    assert.equal(unavailable.unavailableReason, item.reason);
+  }
+
+  const invalidReproduction = await readPlanReproduction(invalidDiagnosticId, {
+    rotation: "abc_12_6_6",
+    fiammettaEnabled: false,
+    artifactKey: "invalid",
+  });
+  assert.equal(invalidReproduction.available, false);
+  assert.equal(invalidReproduction.unavailableReason, "invalid");
+
   assert.equal(await deleteFeedbackArtifacts(["feedback-delete"]), 1);
   await assert.rejects(stat(deletableFeedback), { code: "ENOENT" });
   await assert.doesNotReject(stat(unrelatedFeedback));
   assert.equal(await deleteFeedbackArtifacts([corruptFeedbackId]), 1);
   await assert.rejects(stat(corruptFeedback), { code: "ENOENT" });
+  assert.equal(await deletePlanRunArtifacts([accountDiagnosticId]), 1);
+  await assert.rejects(stat(accountRun), { code: "ENOENT" });
+  assert.equal(await deletePlanRunArtifacts(["ffffffff-ffff-4fff-8fff-ffffffffffff"]), 0);
 
-  const expiredAt = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
-  await utimes(unrelatedRun, expiredAt, expiredAt);
+  const retainedAt = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
+  await utimes(unrelatedRun, retainedAt, retainedAt);
+  await maintainPrivateRecords();
+  await rm(legacyPurgeMarker, { force: true });
   assert.deepEqual(await deleteSklandOwnedData([targetOwnerTag]), { runs: 1, feedback: 2 });
   await assert.rejects(stat(targetRun), { code: "ENOENT" });
   await assert.rejects(stat(linkedFeedback), { code: "ENOENT" });
   await assert.rejects(stat(ownedFeedback), { code: "ENOENT" });
   await assert.doesNotReject(stat(unrelatedRun));
   await assert.doesNotReject(stat(unrelatedFeedback));
-  await assert.rejects(stat(path.join(storageRoot, ".skland-legacy-purge-v1.json")), { code: "ENOENT" });
+  await assert.rejects(stat(legacyPurgeMarker), { code: "ENOENT" });
+
+  const expiredDiagnosticId = "88888888-8888-4888-8888-888888888888";
+  const expiredRun = path.join(runsRoot, `2026-08-01_MAA_${expiredDiagnosticId}`);
+  await mkdir(expiredRun);
+  await writeFile(path.join(expiredRun, "result.json"), JSON.stringify({ runId: expiredDiagnosticId }));
+  const expiredAt = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000);
+  await utimes(expiredRun, expiredAt, expiredAt);
+  await maintainPrivateRecords();
+  await assert.doesNotReject(stat(unrelatedRun));
+  await assert.rejects(stat(expiredRun), { code: "ENOENT" });
 });

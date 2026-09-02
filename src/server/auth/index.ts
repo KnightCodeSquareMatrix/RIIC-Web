@@ -4,6 +4,7 @@ import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { betterAuth } from "better-auth";
 import { admin, emailOTP } from "better-auth/plugins";
 import { getDatabase } from "@/server/db";
+import { deleteWebsiteAccountPrivateArtifacts } from "./account-deletion";
 import { websiteAccountNameDatabaseHooks } from "./account-name-hooks";
 import { sendAuthEmail } from "./email";
 import { configuredAdminIds, requireAuthBaseUrl, requireAuthSecret } from "./config";
@@ -32,7 +33,12 @@ function createAuth() {
       expiresIn: 10 * 60,
     },
     rateLimit: { enabled: true, storage: "database" },
-    user: { deleteUser: { enabled: true } },
+    user: {
+      deleteUser: {
+        enabled: true,
+        beforeDelete: async (user) => deleteWebsiteAccountPrivateArtifacts(user.id),
+      },
+    },
     plugins: [
       emailOTP({
         otpLength: 6,

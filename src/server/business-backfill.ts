@@ -6,6 +6,25 @@ function record(value: unknown): RecordValue | null {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value as RecordValue : null;
 }
 
+export function legacyPlanReproductionContext(debugBundle: unknown): {
+  sourceName: unknown;
+  rotation: unknown;
+  fiammettaEnabled: unknown;
+} | null {
+  const debug = record(debugBundle);
+  if (!debug) return null;
+  const inputSummary = record(debug.inputSummary);
+  const serveRequest = record(debug.serveRequest);
+  const serveParams = record(serveRequest?.params);
+  const serveOptions = record(serveParams?.options);
+  const rotationResult = record(debug.rotationJson);
+  return {
+    sourceName: inputSummary?.sourceName,
+    rotation: serveOptions?.rotation ?? rotationResult?.profile,
+    fiammettaEnabled: serveOptions?.fiammetta_enable,
+  };
+}
+
 function finiteInteger(value: unknown, fallback = 0): number {
   const number = Number(value);
   return Number.isFinite(number) ? Math.max(0, Math.round(number)) : fallback;
@@ -25,6 +44,7 @@ export function legacyPlanRunSummary(input: {
   const solver = record(result?.solver);
   const debugBundle = record(result?.debugBundle);
   const inputSummary = record(debugBundle?.inputSummary);
+  const reproduction = legacyPlanReproductionContext(debugBundle);
   const diagnosticId = typeof result?.runId === "string" ? result.runId : typeof owner?.diagnosticId === "string" ? owner.diagnosticId : null;
   if (!diagnosticId || diagnosticId.length > 80 || !layout || !Array.isArray(layout.rooms)) return null;
   const startedAt = typeof result?.startedAt === "string" ? new Date(result.startedAt) : input.directoryCreatedAt;
@@ -42,7 +62,7 @@ export function legacyPlanRunSummary(input: {
     rotation: typeof debugBundle?.rotationJson === "object" && record(debugBundle.rotationJson)?.profile
       ? String(record(debugBundle.rotationJson)?.profile).slice(0, 80)
       : "legacy",
-    fiammettaEnable: true,
+    fiammettaEnable: typeof reproduction?.fiammettaEnabled === "boolean" ? reproduction.fiammettaEnabled : true,
     durationMs: finiteInteger(result?.durationMs),
     solver: solver ? {
       protocol_version: Number.isInteger(solver.protocol_version) ? solver.protocol_version as number : null,
