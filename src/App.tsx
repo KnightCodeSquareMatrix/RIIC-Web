@@ -65,6 +65,7 @@ import {
   type OnboardingPreference,
 } from "./onboarding";
 import { normalizeOperboxEntries } from "./operbox-normalization";
+import type { UpgradeSimulationSelection } from "./components/UpgradeSimulationDialog";
 import { effectiveFiammettaSetting, resolvePlanPresentationLayout } from "./plan-presentation";
 import {
   applyLocalLayoutPatch,
@@ -1040,6 +1041,30 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     await runPlanForLayout(layout);
   }
 
+  async function handleSimulateUpgrades(operators: UpgradeSimulationSelection[]): Promise<PublicPlanData> {
+    if (!operbox) throw new Error("请先导入干员数据。");
+    const selected = new Map(operators.map((operator) => [operator.id, operator]));
+    if (selected.size === 0) throw new Error("请至少选择一名干员进行试算。");
+    const trialOperbox = operbox.map((entry) => selected.has(entry.id)
+      ? { ...entry, own: true, elite: 2, level: 1 }
+      : entry);
+    const knownIds = new Set(operbox.map((entry) => entry.id));
+    for (const operator of selected.values()) {
+      if (!knownIds.has(operator.id)) trialOperbox.push({ ...operator, own: true, elite: 2, level: 1, potential: 1 });
+    }
+    trackTelemetry({ type: "interaction", name: "upgrade_simulation_submit", page: "calculator" });
+    const response = await computePlan({
+      layout,
+      operbox: normalizeOperboxEntries(trialOperbox),
+      sourceName: fileName,
+      boxSource,
+      rotation: rotationProfile,
+      fiammetta_enable: effectiveFiammettaSetting(trialOperbox, rotationProfile, fiammettaEnabled),
+    });
+    trackTelemetry({ type: "interaction", name: "upgrade_simulation_response", page: "calculator" });
+    return response;
+  }
+
   async function handleRunSampleTrial(): Promise<boolean> {
     if (sampleTrialInFlightRef.current) return false;
     sampleTrialInFlightRef.current = true;
@@ -1622,6 +1647,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       closestComparison,
       resultClearNotice,
       feedbackResult,
+      operbox,
       sampleLoading,
       loading,
       canRun,
@@ -1669,6 +1695,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       onDismissOnboarding: dismissOnboarding,
       onOpenSetup: handleProtectedSetup,
       onRun: handleProtectedRun,
+      onSimulateUpgrades: handleSimulateUpgrades,
       onCancelRun: handleCancelRun,
       onSetActiveShift: setActiveShift,
       onMarkIssue: handleMarkIssue,

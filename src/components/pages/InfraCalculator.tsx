@@ -4,6 +4,7 @@ import { Download, Ellipsis, FlaskConical, HeartPulse, Keyboard, Loader2, Play, 
 import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { ScheduleBoard, ShiftTabs } from "@/components";
+import { UpgradeSimulationDialog, type UpgradeSimulationSelection } from "@/components/UpgradeSimulationDialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -27,6 +28,7 @@ import type {
   BaseBlueprint,
   FeedbackData,
   MaaPlan,
+  OperBoxEntry,
   PublicPlanData,
   ShiftComparison,
 } from "@/types";
@@ -325,6 +327,7 @@ export interface InfraCalculatorProps {
   closestComparison: ShiftComparison | null;
   resultClearNotice: string | null;
   feedbackResult: FeedbackData | null;
+  operbox: OperBoxEntry[] | null;
   sampleLoading: boolean;
   loading: boolean;
   canRun: boolean;
@@ -354,6 +357,7 @@ export interface InfraCalculatorProps {
   onDismissOnboarding: () => void;
   onOpenSetup: () => void;
   onRun: () => void;
+  onSimulateUpgrades: (operators: UpgradeSimulationSelection[]) => Promise<PublicPlanData>;
   onCancelRun: () => void;
   onSetActiveShift: (shift: number) => void;
   onMarkIssue: (row: RoomRow) => void;
@@ -372,8 +376,9 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     activePlan, closestComparison,
     resultClearNotice,
     feedbackResult,
+    operbox,
     sampleLoading, loading, canRun, runCooldownSeconds, hasBox, hasPersonalBox, feedbackDisabledForSampleBox, plannerReady, websiteAuthenticated, showOnboarding, taskQueue, animatePlanEntrance, animateEmptyScheduleEntrance, onPlanEntranceConsumed, requiresAccount = false, accountControl,
-    onRunSampleTrial, onStartPersonalFlow, onDismissOnboarding, onOpenSetup, onRun, onCancelRun,
+    onRunSampleTrial, onStartPersonalFlow, onDismissOnboarding, onOpenSetup, onRun, onSimulateUpgrades, onCancelRun,
     onSetActiveShift, onMarkIssue, onPerformanceIssue,
     onFactoryRecipeChange, onTradeOrderChange,
     onDownloadMaa,
@@ -556,6 +561,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
           >
             {scheduleResult ? (
               <>
+                {operbox ? <div className="mb-3 flex justify-end"><UpgradeSimulationDialog operbox={operbox} baseline={scheduleResult} disabled={loading} onSimulate={onSimulateUpgrades} /></div> : null}
                 <Suspense fallback={<DeferredResultLoading />}>
                   <PlanResultSummary
                     profile={scheduleResult.profile}
