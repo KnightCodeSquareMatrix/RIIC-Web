@@ -85,25 +85,79 @@ test("shows the thinking activity and indeterminate progress only while a plan r
   await expect(progress).toBeVisible();
   await expect(progress).toHaveCSS("width", /.+/);
 
+  const successStateAttribute = "data-live-activity-success-state";
+  await page.evaluate((attribute) => {
+    const root = document.documentElement;
+    root.removeAttribute(attribute);
+
+    const capture = () => {
+      const statusElement = document.querySelector<HTMLElement>('[data-slot="live-activity"][data-activity-phase="success"]');
+      const sweepElement = statusElement?.querySelector<HTMLElement>('[data-slot="activity-success-sweep"]');
+      if (!statusElement || !sweepElement) return false;
+      const statusBox = statusElement.getBoundingClientRect();
+      const sweepBox = sweepElement.getBoundingClientRect();
+      if (sweepBox.left < statusBox.right) return false;
+
+      const statusStyle = getComputedStyle(statusElement);
+      const sweepStyle = getComputedStyle(sweepElement);
+      root.setAttribute(attribute, JSON.stringify({
+        text: statusElement.textContent,
+        backgroundColor: statusStyle.backgroundColor,
+        solvingOrbCount: statusElement.querySelectorAll('[data-slot="solving-orb"]').length,
+        liveActivityIconCount: statusElement.querySelectorAll("[data-live-activity-icon]").length,
+        svgCount: statusElement.querySelectorAll("svg").length,
+        sweepBackgroundImage: sweepStyle.backgroundImage,
+        sweepBackgroundColor: sweepStyle.backgroundColor,
+        sweepWidth: sweepStyle.width,
+        successEmblemCount: statusElement.querySelectorAll('[data-slot="activity-success-emblem"]').length,
+        progressClass: statusElement.querySelector('[data-slot="activity-progress-indicator"]')?.getAttribute("class") ?? "",
+        statusRight: statusBox.right,
+        sweepLeft: sweepBox.left,
+      }));
+      return true;
+    };
+
+    const observer = new MutationObserver(() => {
+      if (capture()) observer.disconnect();
+    });
+    observer.observe(document.body, {
+      attributeFilter: ["data-activity-phase", "style"],
+      attributes: true,
+      childList: true,
+      subtree: true,
+    });
+    if (capture()) observer.disconnect();
+  }, successStateAttribute);
+
   releasePlan();
-  await expect(status).toContainText("排班已生成");
-  await expect(solvingOrb).toHaveCount(0);
-  await expect(status.locator("[data-live-activity-icon]")).toHaveCount(0);
-  await expect(status.locator("svg")).toHaveCount(0);
-  const successSweep = status.locator('[data-slot="activity-success-sweep"]');
-  await expect(successSweep).toHaveCount(1);
-  await expect(successSweep).toHaveCSS("background-image", "none");
-  await expect(successSweep).toHaveCSS("background-color", "rgb(184, 240, 58)");
-  await expect(successSweep).toHaveCSS("width", "360px");
-  await expect(status.locator('[data-slot="activity-success-emblem"]')).toHaveCount(0);
-  await expect(status.locator('[data-slot="activity-progress-indicator"]')).toHaveClass(/bg-emerald-500/);
-  await page.waitForTimeout(1_700);
-  const [statusBox, sweepBox] = await Promise.all([
-    status.boundingBox(),
-    successSweep.boundingBox(),
-  ]);
-  expect(sweepBox?.x).toBeGreaterThanOrEqual((statusBox?.x ?? 0) + (statusBox?.width ?? 0));
-  await expect(status).toHaveCSS("background-color", "rgb(250, 250, 248)");
+  await expect.poll(() => page.locator("html").getAttribute(successStateAttribute)).not.toBeNull();
+  const successState = JSON.parse(
+    (await page.locator("html").getAttribute(successStateAttribute)) ?? "null",
+  ) as {
+    text: string;
+    backgroundColor: string;
+    solvingOrbCount: number;
+    liveActivityIconCount: number;
+    svgCount: number;
+    sweepBackgroundImage: string;
+    sweepBackgroundColor: string;
+    sweepWidth: string;
+    successEmblemCount: number;
+    progressClass: string;
+    statusRight: number;
+    sweepLeft: number;
+  };
+  expect(successState.text).toContain("排班已生成");
+  expect(successState.backgroundColor).toBe("rgb(250, 250, 248)");
+  expect(successState.solvingOrbCount).toBe(0);
+  expect(successState.liveActivityIconCount).toBe(0);
+  expect(successState.svgCount).toBe(0);
+  expect(successState.sweepBackgroundImage).toBe("none");
+  expect(successState.sweepBackgroundColor).toBe("rgb(184, 240, 58)");
+  expect(successState.sweepWidth).toBe("360px");
+  expect(successState.successEmblemCount).toBe(0);
+  expect(successState.progressClass).toContain("bg-emerald-500");
+  expect(successState.sweepLeft).toBeGreaterThanOrEqual(successState.statusRight);
 });
 
 test("buffered plans show a quiet candidate-ring state and can be dismissed without resubmitting", async ({ page }) => {
