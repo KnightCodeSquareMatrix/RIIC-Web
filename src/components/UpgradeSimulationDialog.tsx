@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import type { MaaRoom, OperBoxEntry, PublicPlanData } from "@/types";
+import { hasOperboxEliteStateChange } from "@/upgrade-simulation";
 
 type Metric = "trade" | "manufacture" | "power";
 const METRICS: Array<{ key: Metric; label: string }> = [{ key: "trade", label: "贸易" }, { key: "manufacture", label: "制造" }, { key: "power", label: "发电" }];
@@ -19,14 +20,7 @@ export function UpgradeSimulationDialog({ operbox, baseline, disabled = false, o
   const [open, setOpen] = useState(false); const [trial, setTrial] = useState<PublicPlanData | null>(null); const [pending, setPending] = useState(false); const [error, setError] = useState<string | null>(null);
   const scheduledOperatorNames = baseline.maa.plans.flatMap((plan) => (Object.values(plan.rooms) as Array<MaaRoom[] | undefined>).flatMap((rooms) => (rooms ?? []).flatMap((room) => room.operators.flatMap((operator) => typeof operator === "string" ? [operator] : operator?.name ? [operator.name] : []))));
   const apply = async (nextBox: OperBoxEntry[]) => {
-    const before = new Map(operbox.map((entry) => [entry.id, entry]));
-    const hasEliteStateChange = nextBox.some((entry) => {
-      const current = before.get(entry.id);
-      const nextStage = entry.own ? entry.elite : -1;
-      const currentStage = current?.own ? current.elite : -1;
-      return nextStage !== currentStage;
-    });
-    if (!hasEliteStateChange) { setError("请至少调整一名干员的精英化状态后再运行试算。"); return; }
+    if (!hasOperboxEliteStateChange(operbox, nextBox)) { setError("请至少调整一名干员的精英化状态后再运行试算。"); return; }
     setPending(true); setError(null); setTrial(null);
     try {
       const nextTrial = await onSimulate(nextBox);
