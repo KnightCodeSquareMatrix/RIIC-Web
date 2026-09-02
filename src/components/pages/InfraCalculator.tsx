@@ -4,7 +4,6 @@ import { Download, Ellipsis, FlaskConical, HeartPulse, Keyboard, Loader2, Play, 
 import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { ScheduleBoard, ShiftTabs } from "@/components";
-import { UpgradeSimulationDialog } from "@/components/UpgradeSimulationDialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -35,6 +34,7 @@ import type {
 
 const PlanResultSummary = lazy(() => loadClientFeature("planResultSummary").then((module) => ({ default: module.PlanResultSummary })));
 const ShortcutGuideDialog = lazy(() => loadClientFeature("sharedComponents").then((module) => ({ default: module.ShortcutGuideDialog })));
+const UpgradeSimulationDialog = lazy(() => import("@/components/UpgradeSimulationDialog").then((module) => ({ default: module.UpgradeSimulationDialog })));
 
 function DeferredResultLoading() {
   return <PlanResultSummarySkeleton />;
@@ -572,7 +572,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                       <Button type="button" size="sm" variant={scheduleVariant === "trial" ? "default" : "ghost"} aria-pressed={scheduleVariant === "trial"} onClick={() => onScheduleVariantChange("trial")}><Sparkles />升级试算方案</Button>
                     </section>
                   ) : <span />}
-                  {operbox ? <UpgradeSimulationDialog operbox={operbox} baseline={result ?? scheduleResult} disabled={loading} onSimulate={onSimulateUpgrades} onTrialReady={onUpgradeTrialReady} /> : null}
+                  {operbox ? <Suspense fallback={<Button type="button" variant="outline" size="sm" className="min-h-11" disabled><FlaskConical />升级试算</Button>}><UpgradeSimulationDialog operbox={operbox} baseline={result ?? scheduleResult} disabled={loading} onSimulate={onSimulateUpgrades} onTrialReady={onUpgradeTrialReady} /></Suspense> : null}
                 </div>
                 {upgradeComparison ? <p className="mb-4 text-sm text-muted-foreground" role="status">正在查看{scheduleVariant === "trial" ? "升级试算方案" : "当前方案"}。两份班表可随时切换，不会改动你的 BOX。</p> : null}
                 <Suspense fallback={<DeferredResultLoading />}>
