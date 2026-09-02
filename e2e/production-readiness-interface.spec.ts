@@ -40,6 +40,7 @@ test("an empty generated profile explains that no training action is needed", as
   await mockApis(page);
   await seedV4Session(page);
   await page.goto("/");
+  await expect(page.locator('[data-workbench-hydrated="true"]')).toBeVisible();
   await page.getByRole("button", { name: "练卡建议" }).click();
 
   await expect(page.getByRole("heading", { name: "本次排班暂无培养建议" })).toBeVisible();
