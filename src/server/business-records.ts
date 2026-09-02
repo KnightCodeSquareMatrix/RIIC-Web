@@ -475,10 +475,32 @@ export async function findPlanRunRecord(diagnosticId: string) {
     protocolVersion: planRun.protocolVersion,
     planSchemaVersion: planRun.planSchemaVersion,
     artifactKey: planRun.artifactKey,
+    artifactStatus: planRun.artifactStatus,
+    executionSource: planRun.executionSource,
     createdAt: planRun.createdAt,
     expiresAt: planRun.expiresAt,
   }).from(planRun).where(eq(planRun.diagnosticId, diagnosticId)).limit(1);
   return item ?? null;
+}
+
+export async function accountPrivateArtifactReferences(userId: string): Promise<{
+  diagnosticIds: string[];
+  feedbackIds: string[];
+}> {
+  const runs = await getDatabase().select({ diagnosticId: planRun.diagnosticId })
+    .from(planRun)
+    .where(eq(planRun.userId, userId));
+  const diagnosticIds = runs.map((item) => item.diagnosticId);
+  const feedbackCondition = diagnosticIds.length
+    ? or(eq(feedback.userId, userId), inArray(feedback.planRunDiagnosticId, diagnosticIds))
+    : eq(feedback.userId, userId);
+  const feedbackItems = await getDatabase().select({ id: feedback.id })
+    .from(feedback)
+    .where(feedbackCondition);
+  return {
+    diagnosticIds,
+    feedbackIds: feedbackItems.map((item) => item.id),
+  };
 }
 
 export async function deleteFeedbackRecords(feedbackIds: string[]): Promise<string[]> {

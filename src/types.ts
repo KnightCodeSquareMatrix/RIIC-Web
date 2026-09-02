@@ -1315,19 +1315,41 @@ export interface AdminRecordListData<T> {
 export type AdminFeedbackListData = AdminRecordListData<AdminFeedbackRecordData>;
 export type AdminPlanRunListData = AdminRecordListData<AdminPlanRunRecordData>;
 
-export interface AdminReproductionData {
-  available: boolean;
+export type AdminReproductionUnavailableReason =
+  | "expired"
+  | "cache_hit"
+  | "finalizing"
+  | "finalization_failed"
+  | "not_recorded"
+  | "missing"
+  | "invalid"
+  | "incomplete";
+
+interface AdminReproductionDataBase {
   diagnosticId: string;
   sourceName: string | null;
+  error: string | null;
+  stderrExcerpt: string | null;
+  stdoutExcerpt: string | null;
+}
+
+export type AdminReproductionData = AdminReproductionDataBase & ({
+  available: true;
+  unavailableReason: null;
+  layout: BaseBlueprint;
+  operbox: OperBoxEntry[];
+  rotation: RotationProfile;
+  rotationCount: number;
+  fiammettaEnabled: boolean;
+} | {
+  available: false;
+  unavailableReason: AdminReproductionUnavailableReason;
   layout: BaseBlueprint | null;
   operbox: OperBoxEntry[] | null;
   rotation: RotationProfile | null;
   rotationCount: number | null;
   fiammettaEnabled: boolean | null;
-  error: string | null;
-  stderrExcerpt: string | null;
-  stdoutExcerpt: string | null;
-}
+});
 
 export interface AdminFeedbackDetailData {
   feedback: AdminFeedbackRecordData;

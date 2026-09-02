@@ -270,7 +270,7 @@ test("artifact finalization stays pending across a transient missing run and ret
     dataOwnerTag: null,
     result: {
       success: false,
-      startedAt: "2026-09-02T00:00:00.000Z",
+      startedAt: new Date().toISOString(),
       runId: diagnosticId,
       error: "fixture",
     },

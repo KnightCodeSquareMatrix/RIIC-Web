@@ -39,6 +39,7 @@ import type {
   AdminPlanRunListData,
   AdminPlanRunRecordData,
   AdminReproductionData,
+  AdminReproductionUnavailableReason,
   ApiResponse,
 } from "@/types";
 import { demoOperatorName, useLanguageDemo } from "@/language-demo";
@@ -71,6 +72,28 @@ const FACILITY_LABELS_EN: Record<AdminFeedbackFacility, string> = {
 };
 
 const FACILITY_FILTERS = Object.keys(FACILITY_LABELS) as AdminFeedbackFacility[];
+
+const REPRODUCTION_UNAVAILABLE_MESSAGES: Record<AdminReproductionUnavailableReason, string> = {
+  expired: "私有运行资料已达到 30 天保留期限；下方只显示仍可用的摘要。",
+  cache_hit: "该记录使用了排班缓存，没有生成新的私有求解制品；下方只显示仍可用的摘要。",
+  finalizing: "私有求解制品仍在整理中，请稍后刷新后重试。",
+  finalization_failed: "私有求解制品整理失败；运行摘要仍在，请检查 Worker 日志和持久化目录。",
+  not_recorded: "该记录没有保存对应的私有求解制品；下方只显示仍可用的摘要。",
+  missing: "数据库摘要仍在，但服务器未找到对应制品；它可能已被旧保留策略清理，或持久化存储需要检查。",
+  invalid: "私有制品目录存在，但结果索引损坏或与诊断编号不匹配。",
+  incomplete: "私有制品仍在，但缺少或无法读取布局、Box、轮换或菲亚梅塔状态。",
+};
+
+const REPRODUCTION_UNAVAILABLE_MESSAGES_EN: Record<AdminReproductionUnavailableReason, string> = {
+  expired: "Private run data has reached its 30-day retention limit. Only the remaining summary is shown below.",
+  cache_hit: "This run used the scheduling cache, so no new private solver artifact was created. Only the remaining summary is shown below.",
+  finalizing: "The private solver artifact is still being finalized. Refresh and try again shortly.",
+  finalization_failed: "The private solver artifact could not be finalized. The run summary remains available; check the worker logs and persistence directory.",
+  not_recorded: "No private solver artifact was saved for this run. Only the remaining summary is shown below.",
+  missing: "The database summary remains available, but the server could not find the artifact. It may have been removed by an older retention policy, or persistent storage may need attention.",
+  invalid: "The private artifact directory exists, but its result index is corrupt or does not match the diagnostic ID.",
+  incomplete: "The private artifact remains available, but its layout, Operator Box, rotation, or Fiammetta state is missing or unreadable.",
+};
 
 type DetailState = {
   loading: boolean;
@@ -136,7 +159,7 @@ function ReproductionPanel({ state }: { state: DetailState }) {
       {!reproduction.available ? (
         <p role="status" className="flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-2.5 text-sm text-amber-900 dark:bg-amber-950/35 dark:text-amber-200">
           <AlertTriangle className="mt-0.5 shrink-0" aria-hidden="true" />
-          {en ? "Private run data has expired or no artifact exists for this record. Only the remaining summary is shown." : "私有运行资料已过期或该记录没有对应制品；下方只显示仍可用的摘要。"}
+          {(en ? REPRODUCTION_UNAVAILABLE_MESSAGES_EN : REPRODUCTION_UNAVAILABLE_MESSAGES)[reproduction.unavailableReason ?? "incomplete"]}
         </p>
       ) : null}
 
