@@ -422,9 +422,11 @@ test("calculator owns scheduling controls and training advice uses a single tech
         {
           priority: "高",
           kind: "promote",
-          operator: "阿米娅",
+          operator: "清流",
           domain_id: "manufacture",
           message: "优先完成精英化与技能等级，补齐制造站轮换深度。",
+          current_elite: 0,
+          tier_up_requirement: "精1",
         },
         {
           priority: "中",
@@ -441,6 +443,7 @@ test("calculator owns scheduling controls and training advice uses a single tech
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
   await expect(page.locator('[data-workbench-hydrated="true"]')).toBeVisible();
+  await page.getByRole("button", { name: "中文", exact: true }).click();
 
   const calculatorControls = page.locator("[data-calculator-controls]");
   await expect(calculatorControls).toBeVisible();
@@ -469,6 +472,16 @@ test("calculator owns scheduling controls and training advice uses a single tech
   await expect(advicePortrait).toHaveAttribute("height", "80");
   await expect(advicePortrait).toHaveAttribute("loading", "lazy");
   await expect(advicePortrait).toHaveAttribute("decoding", "async");
+  await advicePortrait.hover();
+  const adviceSkillTooltip = page.locator('[data-slot="tooltip-content"]').filter({ hasText: "再生能源" });
+  await expect(adviceSkillTooltip).toBeVisible();
+  await expect(adviceSkillTooltip).toContainText("干员基建技能 · 已标出本次目标");
+  await expect(adviceSkillTooltip).toContainText("本次目标");
+  await page.keyboard.press("Escape");
+  await expect(adviceSkillTooltip).toBeHidden();
+  const adviceSkillTrigger = adviceCards.first().locator('[tabindex="0"]').first();
+  await adviceSkillTrigger.click();
+  await expect(adviceSkillTooltip).toBeVisible();
   const cardBoxes = await adviceCards.evaluateAll((elements) => elements.map((element) => {
     const box = element.getBoundingClientRect();
     return { left: box.left, top: box.top, width: box.width };

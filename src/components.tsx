@@ -1137,6 +1137,7 @@ function OperatorSlotShell({
   compactView,
   frameClassName,
   frameContent,
+  frameFocusable = false,
   frameWrapper = (frame) => frame,
   label,
   labelClassName,
@@ -1149,6 +1150,7 @@ function OperatorSlotShell({
   compactView: boolean;
   frameClassName: string;
   frameContent?: ReactNode;
+  frameFocusable?: boolean;
   /** 可选：包装头像框元素（例如包上技能 tooltip 的 trigger）。默认原样返回。 */
   frameWrapper?: (frame: ReactElement) => ReactElement;
   label: ReactNode;
@@ -1161,9 +1163,12 @@ function OperatorSlotShell({
       className={cn(
         "relative aspect-square h-[var(--operator-slot-size)] min-w-0 shrink-0 overflow-hidden border-2 max-sm:border",
         frameClassName,
+        frameFocusable && "cursor-help outline-none transition-[border-color,box-shadow] hover:border-white/90 focus-visible:border-[#FFD501] focus-visible:ring-2 focus-visible:ring-[#FFD501]/70",
         centerFrameInList && "max-sm:h-auto max-sm:w-full sm:absolute sm:left-0 sm:top-1/2 sm:-translate-y-1/2",
       )}
       aria-label={ariaLabel}
+      role={frameFocusable ? "button" : undefined}
+      tabIndex={frameFocusable ? 0 : undefined}
     >
       {frameContent}
     </div>
@@ -1253,6 +1258,9 @@ export function OperatorSlot({
   portraitSize = 180,
   positionLabel,
   showSkillTooltip = false,
+  skillTooltipFocusable = false,
+  skillTooltipHighlightIds = [],
+  skillTooltipContextLabel,
   searchQuery = "",
 }: {
   slot: RoomRow["operatorSlots"][number] | undefined;
@@ -1267,6 +1275,11 @@ export function OperatorSlot({
   positionLabel?: string;
   /** 悬停卡片时展示干员全部基建技能 tooltip，并关闭卡片自身的原生 title hover。 */
   showSkillTooltip?: boolean;
+  /** 让头像进入键盘焦点顺序；仅用于需要主动查看技能的界面，避免排班图产生过多 Tab 停靠点。 */
+  skillTooltipFocusable?: boolean;
+  /** 练卡建议等场景中，需要在技能 tooltip 内强调的技能。 */
+  skillTooltipHighlightIds?: readonly string[];
+  skillTooltipContextLabel?: string;
   searchQuery?: string;
 }) {
   const shouldReduceMotion = useReducedMotion();
@@ -1279,9 +1292,12 @@ export function OperatorSlot({
   const enterX = shouldReduceMotion ? 0 : shiftDirection * 6;
   const exitX = shouldReduceMotion ? 0 : shiftDirection * -4;
   const occupantLabel = displayName ?? (autofill ? (locale === "en" ? "Auto-fill" : "自动补位") : (locale === "en" ? "Empty" : "空置"));
-  const ariaLabel = displayPositionLabel
+  const occupantAriaLabel = displayPositionLabel
     ? `${displayPositionLabel}${locale === "en" ? ": " : "："}${occupantLabel}`
     : occupantLabel;
+  const ariaLabel = showSkillTooltip && skillTooltipFocusable && slot
+    ? `${occupantAriaLabel}${locale === "en" ? ". Focus to view infrastructure skills" : "，聚焦可查看基建技能"}`
+    : occupantAriaLabel;
   const searchMatched = Boolean(slot && searchQuery && slot.name.toLocaleLowerCase("zh-CN").includes(searchQuery));
   const frameClassName = slot
     ? "border-[#7F7F7F] bg-[#3C3C3C] shadow-[inset_0_0_18px_rgba(255,255,255,0.16)]"
@@ -1379,9 +1395,15 @@ export function OperatorSlot({
           </motion.div>
         </AnimatePresence>
       }
+      frameFocusable={showSkillTooltip && skillTooltipFocusable && Boolean(slot)}
       frameWrapper={showSkillTooltip && slot ? (frame) => (
         <Suspense fallback={frame}>
-          <OperatorSkillTooltip name={slot.name} trigger={frame} />
+          <OperatorSkillTooltip
+            name={slot.name}
+            trigger={frame}
+            highlightedSkillIds={skillTooltipHighlightIds}
+            contextLabel={skillTooltipContextLabel}
+          />
         </Suspense>
       ) : undefined}
       label={slot ? <AnimatedText value={displayName ?? slot.name} trend={shiftDirection} /> : autofill ? (locale === "en" ? "Auto-fill" : "自动补位") : (locale === "en" ? "Slot" : "占")}
