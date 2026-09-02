@@ -1141,17 +1141,26 @@ export async function resumePendingPlanArtifactFinalizations(
   await mkdir(cliRunRoot, { recursive: true });
   const entries = await readdir(cliRunRoot, { withFileTypes: true });
   let resumed = 0;
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const runDir = path.join(cliRunRoot, entry.name);
-    const envelopePath = path.join(runDir, "run-envelope.json");
-    if (
-      !existsSync(envelopePath)
-      || existsSync(path.join(runDir, "artifact-finalized.json"))
-      || existsSync(path.join(runDir, "artifact-failed.json"))
-    ) continue;
-    enqueuePlanArtifactEnvelope(envelopePath, dependencies);
-    resumed += 1;
+  const directories = entries.filter((entry) => entry.isDirectory());
+  const batchSize = 64;
+  for (let offset = 0; offset < directories.length; offset += batchSize) {
+    const envelopePaths = await Promise.all(
+      directories.slice(offset, offset + batchSize).map(async (entry) => {
+        const runDir = path.join(cliRunRoot, entry.name);
+        const files = new Set(await readdir(runDir).catch(() => []));
+        if (
+          !files.has("run-envelope.json")
+          || files.has("artifact-finalized.json")
+          || files.has("artifact-failed.json")
+        ) return null;
+        return path.join(runDir, "run-envelope.json");
+      }),
+    );
+    for (const envelopePath of envelopePaths) {
+      if (!envelopePath) continue;
+      enqueuePlanArtifactEnvelope(envelopePath, dependencies);
+      resumed += 1;
+    }
   }
   return resumed;
 }
