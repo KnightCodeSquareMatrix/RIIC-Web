@@ -29,6 +29,12 @@ import {
   successResponse,
   validateFeedbackRequest,
 } from "./api-contract.ts";
+import {
+  enforceSklandPollRateLimit,
+  MAX_SKLAND_POLLS_PER_ACCOUNT,
+  MAX_SKLAND_POLLS_PER_IP,
+  SKLAND_POLL_RATE_WINDOW_MS,
+} from "./skland/poll-rate-limit.ts";
 
 test("error catalog keeps the required HTTP status mapping", () => {
   assert.equal(ERROR_DEFINITIONS["AIC-REQ-1001"].status, 400);
@@ -284,6 +290,41 @@ test("rate limiting returns retryable 429 errors", () => {
       (error: unknown) => error instanceof PublicApiError
         && error.code === "AIC-RATE-6001"
         && Boolean(error.retryAfter)
+    );
+  } finally {
+    if (previous === undefined) delete process.env.BETA_RATE_LIMIT_ENABLED;
+    else process.env.BETA_RATE_LIMIT_ENABLED = previous;
+    __resetRequestGuardsForTests();
+  }
+});
+
+test("Skland polling uses account-primary limits with shared-IP headroom", () => {
+  const previous = process.env.BETA_RATE_LIMIT_ENABLED;
+  process.env.BETA_RATE_LIMIT_ENABLED = "1";
+  __resetRequestGuardsForTests();
+  try {
+    assert.equal(SKLAND_POLL_RATE_WINDOW_MS, 10 * 60_000);
+    assert.equal(MAX_SKLAND_POLLS_PER_ACCOUNT, 360);
+    assert.equal(MAX_SKLAND_POLLS_PER_IP, 3_600);
+
+    for (let index = 0; index < MAX_SKLAND_POLLS_PER_ACCOUNT; index += 1) {
+      enforceSklandPollRateLimit("account-a", "shared-ip");
+    }
+    assert.throws(
+      () => enforceSklandPollRateLimit("account-a", "shared-ip"),
+      (error: unknown) => error instanceof PublicApiError
+        && error.code === "AIC-RATE-6001"
+        && Boolean(error.retryAfter),
+    );
+    assert.doesNotThrow(() => enforceSklandPollRateLimit("account-b", "shared-ip"));
+
+    __resetRequestGuardsForTests();
+    for (let index = 0; index < MAX_SKLAND_POLLS_PER_IP; index += 1) {
+      enforceSklandPollRateLimit(`account-${index}`, "shared-ip");
+    }
+    assert.throws(
+      () => enforceSklandPollRateLimit("account-overflow", "shared-ip"),
+      (error: unknown) => error instanceof PublicApiError && error.code === "AIC-RATE-6001",
     );
   } finally {
     if (previous === undefined) delete process.env.BETA_RATE_LIMIT_ENABLED;
