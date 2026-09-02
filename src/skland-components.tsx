@@ -18,13 +18,13 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { buildSklandAppOpenUrl } from "@/skland-auth-url";
+import { nextSklandQrPollDelay } from "@/skland-qr-polling";
 import {
   currentSklandPolicyConsent,
   SklandPolicyConsent,
 } from "@/skland-policy-consent";
 import type { SklandSessionData } from "@/types";
 
-const SKLAND_QR_POLL_INTERVAL_MS = 6_000;
 const SklandCredentialPanel = dynamic(
   () => import("@/skland-credential-panel").then((module) => module.SklandCredentialPanel),
   {
@@ -131,13 +131,42 @@ export function SklandLoginPanel({
   }, [scanExpiresAt, scanId]);
 
   useEffect(() => {
-    if (!scanId || authMethod !== "qr") return;
+    if (!scanId || !scanExpiresAt || authMethod !== "qr") return;
     let cancelled = false;
     let timer: number | null = null;
+    let pollInFlight = false;
+    let failedAttempts = 0;
+
+    const clearTimer = () => {
+      if (timer === null) return;
+      window.clearTimeout(timer);
+      timer = null;
+    };
+
+    const canPoll = () => !document.hidden && navigator.onLine && Date.now() < scanExpiresAt;
+
+    const scheduleNext = (retryAfterSeconds?: number) => {
+      clearTimer();
+      if (cancelled || !canPoll()) return;
+      const delay = nextSklandQrPollDelay({
+        failedAttempts,
+        expiresAt: scanExpiresAt,
+        retryAfterSeconds,
+      });
+      if (delay === null) return;
+      timer = window.setTimeout(() => void poll(), delay);
+    };
+
     const poll = async () => {
+      clearTimer();
+      if (cancelled || pollInFlight || !canPoll()) return;
+      pollInFlight = true;
+      let shouldContinue = true;
+      let retryAfterSeconds: number | undefined;
       try {
         const result = await pollSklandQr(scanId);
         if (cancelled) return;
+        failedAttempts = 0;
         if (
           result.status === "authenticated"
           && result.scheduleSnapshot
@@ -160,12 +189,14 @@ export function SklandLoginPanel({
           setScanExpiresAt(null);
           setScanState("idle");
           setScanError(null);
+          shouldContinue = false;
           return;
         }
         if (result.status === "expired") {
           setScanId(null);
           setScanState("expired");
           setScanError(null);
+          shouldContinue = false;
           return;
         }
         setScanState(result.status === "scanned" ? "scanned" : "waiting");
@@ -174,15 +205,43 @@ export function SklandLoginPanel({
         if (cancelled) return;
         const detail = toDisplayError(error, "登录状态查询失败，将继续重试。");
         setScanError(`${detail.message}（${detail.code}${detail.requestId ? ` · ${detail.requestId}` : ""}）`);
+        failedAttempts += 1;
+        retryAfterSeconds = detail.retryAfterSeconds;
+        shouldContinue = detail.retryable;
+      } finally {
+        pollInFlight = false;
+        if (!cancelled && shouldContinue) scheduleNext(retryAfterSeconds);
       }
-      if (!cancelled) timer = window.setTimeout(() => void poll(), SKLAND_QR_POLL_INTERVAL_MS);
     };
-    timer = window.setTimeout(() => void poll(), SKLAND_QR_POLL_INTERVAL_MS);
+
+    const resumePolling = () => {
+      clearTimer();
+      if (cancelled || pollInFlight || document.hidden || !navigator.onLine) return;
+      if (Date.now() >= scanExpiresAt) {
+        setScanId(null);
+        setScanState("expired");
+        return;
+      }
+      void poll();
+    };
+    const handleVisibilityChange = () => {
+      if (document.hidden) clearTimer();
+      else resumePolling();
+    };
+    const handleOffline = () => clearTimer();
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("online", resumePolling);
+    window.addEventListener("offline", handleOffline);
+    scheduleNext();
     return () => {
       cancelled = true;
-      if (timer !== null) window.clearTimeout(timer);
+      clearTimer();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("online", resumePolling);
+      window.removeEventListener("offline", handleOffline);
     };
-  }, [authMethod, onAuthenticated, scanId]);
+  }, [authMethod, onAuthenticated, scanExpiresAt, scanId]);
 
   useEffect(() => {
     if (
