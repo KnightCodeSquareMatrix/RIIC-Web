@@ -8,6 +8,7 @@ import {
   LIST_OPERATOR_FRAME_SIZE_PX,
   LIST_OPERATOR_ORIGIN_PX,
   buildListScheduleGroups,
+  buildMobileListScheduleGroups,
   listFunctionalFacilityGridClass,
   listFunctionalOperatorPosition,
   listFunctionalOperatorPlacementClass,
@@ -71,6 +72,36 @@ test("keeps auxiliary rooms paired on separate rows in two-power layouts", () =>
     groups.find((group) => group.label === "功能设施")?.rows.map((row) => row.group),
     ["power", "power", "training", "meeting", "hire", "processing"],
   );
+});
+
+test("orders mobile list groups like the in-game assignment overview without dropping secondary rooms", () => {
+  const groups = buildMobileListScheduleGroups([
+    roomRow("trading", "贸易站"),
+    roomRow("dormitory", "宿舍"),
+    roomRow("power", "发电站"),
+    roomRow("training", "训练室"),
+    roomRow("control", "控制中枢"),
+    roomRow("processing", "加工站"),
+    roomRow("hire", "办公室"),
+    roomRow("manufacture", "制造站"),
+    roomRow("meeting", "会客室"),
+  ]);
+
+  assert.deepEqual(
+    groups.map((group) => group.rows[0]?.group),
+    ["control", "meeting", "manufacture", "trading", "power", "hire", "dormitory", "training", "processing"],
+  );
+  assert.deepEqual(groups.map((group) => group.label), [
+    "控制中枢",
+    "会客室",
+    "制造站",
+    "贸易站",
+    "发电站",
+    "办公室",
+    "宿舍",
+    "训练室",
+    "加工站",
+  ]);
 });
 
 test("aligns production operator origins with the control center", () => {

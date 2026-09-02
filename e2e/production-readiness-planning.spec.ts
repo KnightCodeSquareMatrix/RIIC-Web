@@ -65,18 +65,157 @@ test("shows the thinking activity and indeterminate progress only while a plan r
 
   const status = page.locator('[data-slot="live-activity"]');
   const solvingOrb = status.locator('[data-slot="solving-orb"]');
+  const orbRail = status.locator('[data-slot="solving-orb-rail"]');
+  const body = status.locator('[data-slot="live-activity-body"]');
   const progress = status.locator('[data-slot="activity-progress-indicator"]');
   await expect(status).toContainText("正在生成排班");
   await expect(status).toHaveCSS("background-color", "rgb(250, 250, 248)");
   await expect(solvingOrb).toBeVisible();
+  await expect(status.locator("[data-live-activity-icon]")).toHaveCount(1);
+  await expect(status.locator("svg")).toHaveCount(0);
+  await expect(orbRail).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  const [bodyBox, railBox, runningLabelBox] = await Promise.all([
+    body.boundingBox(),
+    orbRail.boundingBox(),
+    status.locator("strong").first().boundingBox(),
+  ]);
+  expect(railBox?.height).toBeCloseTo(bodyBox?.height ?? 0, 0);
+  expect((runningLabelBox?.x ?? 0) - ((railBox?.x ?? 0) + (railBox?.width ?? 0))).toBeGreaterThanOrEqual(18);
   await expect(status.locator(".live-activity-shimmer")).toBeVisible();
   await expect(progress).toBeVisible();
   await expect(progress).toHaveCSS("width", /.+/);
 
+  const successStateAttribute = "data-live-activity-success-state";
+  await page.evaluate((attribute) => {
+    const root = document.documentElement;
+    root.removeAttribute(attribute);
+
+    const capture = () => {
+      const statusElement = document.querySelector<HTMLElement>('[data-slot="live-activity"][data-activity-phase="success"]');
+      const sweepElement = statusElement?.querySelector<HTMLElement>('[data-slot="activity-success-sweep"]');
+      if (!statusElement || !sweepElement) return false;
+      const statusBox = statusElement.getBoundingClientRect();
+      const sweepBox = sweepElement.getBoundingClientRect();
+      if (sweepBox.left < statusBox.right) return false;
+
+      const statusStyle = getComputedStyle(statusElement);
+      const sweepStyle = getComputedStyle(sweepElement);
+      root.setAttribute(attribute, JSON.stringify({
+        text: statusElement.textContent,
+        backgroundColor: statusStyle.backgroundColor,
+        solvingOrbCount: statusElement.querySelectorAll('[data-slot="solving-orb"]').length,
+        liveActivityIconCount: statusElement.querySelectorAll("[data-live-activity-icon]").length,
+        svgCount: statusElement.querySelectorAll("svg").length,
+        sweepBackgroundImage: sweepStyle.backgroundImage,
+        sweepBackgroundColor: sweepStyle.backgroundColor,
+        sweepWidth: sweepStyle.width,
+        successEmblemCount: statusElement.querySelectorAll('[data-slot="activity-success-emblem"]').length,
+        progressClass: statusElement.querySelector('[data-slot="activity-progress-indicator"]')?.getAttribute("class") ?? "",
+        statusRight: statusBox.right,
+        sweepLeft: sweepBox.left,
+      }));
+      return true;
+    };
+
+    const observer = new MutationObserver(() => {
+      if (capture()) observer.disconnect();
+    });
+    observer.observe(document.body, {
+      attributeFilter: ["data-activity-phase", "style"],
+      attributes: true,
+      childList: true,
+      subtree: true,
+    });
+    if (capture()) observer.disconnect();
+  }, successStateAttribute);
+
   releasePlan();
-  await expect(status).toContainText("排班已生成");
-  await expect(solvingOrb).toHaveCount(0);
-  await expect(status.locator('[data-slot="activity-progress-indicator"]')).toHaveCSS("width", /.+/);
+  await expect.poll(() => page.locator("html").getAttribute(successStateAttribute)).not.toBeNull();
+  const successState = JSON.parse(
+    (await page.locator("html").getAttribute(successStateAttribute)) ?? "null",
+  ) as {
+    text: string;
+    backgroundColor: string;
+    solvingOrbCount: number;
+    liveActivityIconCount: number;
+    svgCount: number;
+    sweepBackgroundImage: string;
+    sweepBackgroundColor: string;
+    sweepWidth: string;
+    successEmblemCount: number;
+    progressClass: string;
+    statusRight: number;
+    sweepLeft: number;
+  };
+  expect(successState.text).toContain("排班已生成");
+  expect(successState.backgroundColor).toBe("rgb(250, 250, 248)");
+  expect(successState.solvingOrbCount).toBe(0);
+  expect(successState.liveActivityIconCount).toBe(0);
+  expect(successState.svgCount).toBe(0);
+  expect(successState.sweepBackgroundImage).toBe("none");
+  expect(successState.sweepBackgroundColor).toBe("rgb(184, 240, 58)");
+  expect(successState.sweepWidth).toBe("360px");
+  expect(successState.successEmblemCount).toBe(0);
+  expect(successState.progressClass).toContain("bg-emerald-500");
+  expect(successState.sweepLeft).toBeGreaterThanOrEqual(successState.statusRight);
+});
+
+test("buffered plans show a quiet candidate-ring state and can be dismissed without resubmitting", async ({ page }) => {
+  await mockApis(page, { taskQueueEnabled: true });
+  let taskSubmissions = 0;
+  await page.route(/\/api\/tasks(?:\/[^/?]+)?$/, (route) => {
+    if (route.request().method() === "POST") taskSubmissions += 1;
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        data: {
+          taskId: "11111111-1111-4111-8111-111111111112",
+          status: "buffered",
+          selectionPoolSize: 37,
+        },
+        requestId,
+      }),
+    });
+  });
+  await seedV4Session(page, null, { boxSource: "maa" });
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "生成排班" }).click();
+  const activity = page.locator('[data-slot="live-activity"]');
+  await expect(activity).toHaveAttribute("data-activity-phase", "queued");
+  await expect(activity).toContainText("当前进入候选环，名额释放后随机抽取。");
+  await expect(activity.locator("[data-live-activity-icon], svg")).toHaveCount(0);
+  await expect.poll(() => taskSubmissions).toBe(1);
+
+  await activity.getByRole("button", { name: "关闭提示" }).click();
+  await expect(activity).toHaveCount(0);
+  expect(taskSubmissions).toBe(1);
+});
+
+test("operator skill terms reveal square hover cards on pointer and keyboard focus", async ({ page }) => {
+  await mockApis(page);
+  const termPlanData = structuredClone(scheduleVisualPlanData);
+  termPlanData.maa.plans[0].rooms.trading[0].operators = [{ name: "陈", skill: 1 }];
+  await seedV4Session(page, termPlanData, { boxSource: "maa" });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+
+  const operatorPortrait = page.getByRole("img", { name: "陈" }).first();
+  const portraitBox = await operatorPortrait.boundingBox();
+  await operatorPortrait.hover({ position: { x: 8, y: Math.max(8, (portraitBox?.height ?? 80) / 2) } });
+  const skillTooltip = page.locator('[data-slot="tooltip-content"][data-open]');
+  await expect(skillTooltip).toBeVisible({ timeout: 10_000 });
+  const termTrigger = skillTooltip.locator(".riic-term-hover > .riic-term").first();
+  const termCard = skillTooltip.locator(".riic-term-hover-card").first();
+
+  await termTrigger.hover();
+  await expect(termCard).toBeVisible();
+  await expect(termCard).toContainText("龙门近卫局");
+  await expect(termCard).toHaveCSS("border-radius", "0px");
+  await termTrigger.focus();
+  await expect(termCard).toBeVisible();
 });
 
 test("Skland calculator keeps the schedule visible before and after sidebar navigation", async ({ page }) => {
@@ -260,6 +399,21 @@ test("empty returning calculator shows the empty compact schedule", async ({ pag
   await expect(page.locator("[data-calculator-regenerate-panel]")).toHaveCount(0);
   await expect(page.locator('[data-schedule-view="compact"]')).toBeVisible();
   await expect(page.locator('[data-operator-identity="empty"]').first()).toBeVisible();
+});
+
+test("mobile list follows the in-game assignment overview without rendering the compact view", async ({ page }) => {
+  await mockApis(page);
+  await seedV4Session(page, motionPlanData);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+
+  const board = page.locator("[data-plan-board]");
+  const mobileListView = board.locator('[data-schedule-view="list"]');
+  await expect(mobileListView).toBeVisible();
+  await expect(board.locator('[data-schedule-view="compact"]')).toHaveCount(0);
+  await expect.poll(() => mobileListView.locator(":scope > section").evaluateAll((sections) => (
+    sections.slice(0, 6).map((section) => section.getAttribute("data-list-room-group"))
+  ))).toEqual(["control", "meeting", "manufacture", "trading", "power", "hire"]);
 });
 
 test("plan completion reveals status, metrics, and schedule once without resetting board state", async ({ page, browserName }) => {
@@ -620,6 +774,7 @@ test("failed plan remains expanded with retry and diagnostic actions", async ({ 
   const activity = page.locator('[data-slot="live-activity"]');
   await expect(activity).toHaveAttribute("data-activity-phase", "error");
   await expect(activity).toHaveAttribute("data-activity-view", "expanded");
+  await expect(activity.locator("svg")).toHaveCount(0);
   await page.waitForTimeout(2_800);
   await expect(activity).toHaveAttribute("data-activity-view", "expanded");
   await activity.hover();
@@ -976,9 +1131,9 @@ test("responsive navigation and the two locked areas keep their current behavior
     (window as Window & { __scheduleViewHistory?: string[] }).__scheduleViewHistory ?? []
   ));
   expect(mobileViewHistory).toEqual(["list"]);
-  await expect(page.getByText("加工站")).toBeVisible();
+  await expect(page.locator('[data-schedule-view="list"] [data-room-group="processing"]').getByText("加工站", { exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: /功能设施/ }).click();
+  await page.getByRole("button", { name: /加工站/ }).first().click();
   const keepHiddenButton = page.getByRole("button", { name: "暂不显示" });
   await expect(keepHiddenButton).toBeVisible();
   await keepHiddenButton.click();

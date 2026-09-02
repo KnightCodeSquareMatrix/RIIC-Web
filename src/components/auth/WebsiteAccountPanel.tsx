@@ -46,6 +46,7 @@ import { clearLocalProductData } from "@/persistence";
 import { CloudDataPanel } from "@/components/cloud/CloudDataPanel";
 import type { CloudWorkspaceData, SavedPlanData } from "@/types";
 import { useWebsiteSession } from "@/website-session";
+import { useLanguageDemo } from "@/language-demo";
 
 type AuthMode = "signin" | "signup" | "forgot";
 type AuthStep = "details" | "verify" | "complete";
@@ -68,15 +69,29 @@ interface WebsiteAccountPanelProps {
   onCloudDataChanged?: () => void;
 }
 
-function errorMessage(value: unknown): string {
-  return value instanceof Error ? value.message : "操作失败，请稍后重试。";
+const PASSWORD_STRENGTH_ERROR_EN = "Use at least 10 characters with letters, numbers, and mixed case or a symbol. Avoid common or repeated patterns.";
+const WEBSITE_ACCOUNT_NAME_HINT_EN = "2–20 characters using Chinese characters, letters, numbers, spaces, underscores, or hyphens.";
+
+function errorMessage(value: unknown, en: boolean): string {
+  return value instanceof Error ? value.message : en ? "Something went wrong. Try again later." : "操作失败，请稍后重试。";
 }
 
-function formatSessionExpiry(value: unknown): string | null {
+function localizedWebsiteAccountName(value: unknown, en: boolean) {
+  const result = validateWebsiteAccountName(value);
+  return en && result.error ? { ...result, error: WEBSITE_ACCOUNT_NAME_HINT_EN } : result;
+}
+
+function localizedPasswordConfirmationError(password: string, confirmation: string, en: boolean): string | null {
+  const error = passwordConfirmationError(password, confirmation);
+  if (!error || !en) return error;
+  return confirmation ? "Passwords do not match." : "Enter your password again.";
+}
+
+function formatSessionExpiry(value: unknown, locale: "zh" | "en"): string | null {
   if (!(value instanceof Date) && typeof value !== "string") return null;
   const date = value instanceof Date ? value : new Date(value);
   if (!Number.isFinite(date.getTime())) return null;
-  return new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(date);
+  return new Intl.DateTimeFormat(locale === "en" ? "en-US" : "zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(date);
 }
 
 export function WebsiteAccountPanel({
@@ -86,6 +101,13 @@ export function WebsiteAccountPanel({
   onRestoreSavedPlan,
   onCloudDataChanged,
 }: WebsiteAccountPanelProps) {
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
+  const modeCopy = en ? {
+    signin: { title: "Sign in", description: "Continue with protected data import and scheduling." },
+    signup: { title: "Create account", description: "Enter your details and we will email a 6-digit code." },
+    forgot: { title: "Reset password", description: "Enter your email to receive a reset link valid for one hour." },
+  } : MODE_COPY;
   const { data: session, isPending, refetch } = useWebsiteSession();
   const [mode, setMode] = useState<AuthMode>("signin");
   const [step, setStep] = useState<AuthStep>("details");
@@ -135,7 +157,7 @@ export function WebsiteAccountPanel({
 
   async function sendVerificationCode() {
     if (!email.trim()) {
-      setError("请先输入要验证的邮箱。");
+      setError(en ? "Enter the email address you want to verify." : "请先输入要验证的邮箱。");
       return;
     }
     setBusy(true);
@@ -152,9 +174,9 @@ export function WebsiteAccountPanel({
       setOtpStatus("idle");
       otpRef.current?.clear();
       setResendSeconds(60);
-      setMessage("验证码已发送，请在 10 分钟内完成验证。");
+      setMessage(en ? "Verification code sent. Complete verification within 10 minutes." : "验证码已发送，请在 10 分钟内完成验证。");
     } catch (caught) {
-      setError(errorMessage(caught));
+      setError(errorMessage(caught, en));
     } finally {
       setBusy(false);
     }
@@ -162,18 +184,18 @@ export function WebsiteAccountPanel({
 
   async function submitDetails(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const validatedName = mode === "signup" ? validateWebsiteAccountName(name) : null;
+    const validatedName = mode === "signup" ? localizedWebsiteAccountName(name, en) : null;
     if (validatedName?.error) {
       setNameError(validatedName.error);
       return;
     }
     if (mode === "signup") {
       if (!isStrongPassword(password)) {
-        setPasswordStrengthError(PASSWORD_STRENGTH_ERROR);
+        setPasswordStrengthError(en ? PASSWORD_STRENGTH_ERROR_EN : PASSWORD_STRENGTH_ERROR);
         return;
       }
       setPasswordStrengthError(null);
-      const confirmationError = passwordConfirmationError(password, confirmPassword);
+      const confirmationError = localizedPasswordConfirmationError(password, confirmPassword, en);
       if (confirmationError) {
         setConfirmPasswordError(confirmationError);
         return;
@@ -191,7 +213,7 @@ export function WebsiteAccountPanel({
         });
         if (result.error) throw new Error(result.error.message);
         setStep("complete");
-        setMessage("如果这个邮箱已注册，重置邮件会很快送达。");
+        setMessage(en ? "If this email is registered, a reset message will arrive shortly." : "如果这个邮箱已注册，重置邮件会很快送达。");
       } else if (mode === "signup") {
         const result = await authClient.signUp.email({
           name: validatedName?.name ?? name.trim(),
@@ -202,7 +224,7 @@ export function WebsiteAccountPanel({
         if (result.error) throw new Error(result.error.message);
         setStep("verify");
         setResendSeconds(60);
-        setMessage("验证码已发送，请在 10 分钟内完成验证。");
+        setMessage(en ? "Verification code sent. Complete verification within 10 minutes." : "验证码已发送，请在 10 分钟内完成验证。");
       } else {
         const result = await authClient.signIn.email({
           email: email.trim(),
@@ -213,7 +235,7 @@ export function WebsiteAccountPanel({
         await notifySessionChanged(true);
       }
     } catch (caught) {
-      setError(errorMessage(caught));
+      setError(errorMessage(caught, en));
     } finally {
       setBusy(false);
     }
@@ -231,10 +253,10 @@ export function WebsiteAccountPanel({
       if (result.error) throw new Error(result.error.message);
       setOtpStatus("success");
       setStep("complete");
-      setMessage("邮箱验证完成，现在可以登录网站账号。");
+      setMessage(en ? "Email verified. You can now sign in." : "邮箱验证完成，现在可以登录网站账号。");
     } catch (caught) {
       setOtpStatus("error");
-      setError(errorMessage(caught));
+      setError(errorMessage(caught, en));
     } finally {
       setBusy(false);
     }
@@ -264,7 +286,7 @@ export function WebsiteAccountPanel({
       setDeletePassword("");
       await notifySessionChanged(false);
     } catch (caught) {
-      setError(errorMessage(caught));
+      setError(errorMessage(caught, en));
     } finally {
       setBusyAction(null);
     }
@@ -273,11 +295,11 @@ export function WebsiteAccountPanel({
   if (isPending && !busy && !message && !error) {
     return loadingMode === "dialog"
       ? <WebsiteAccountLoadingStatus />
-      : <StatusCenterLoading label="正在恢复网站账号" />;
+      : <StatusCenterLoading label={en ? "Restoring website account" : "正在恢复网站账号"} />;
   }
 
   if (session) {
-    const expiresAt = formatSessionExpiry(session.session.expiresAt);
+    const expiresAt = formatSessionExpiry(session.session.expiresAt, locale);
     const orbColor = accountOrbColor(session.user.id);
     return (
       <div className="grid gap-6" data-website-account-panel data-authenticated="true">
@@ -294,7 +316,7 @@ export function WebsiteAccountPanel({
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="truncate text-2xl font-semibold tracking-tight">{session.user.name}</h2>
-                  <Badge variant="secondary"><ShieldCheck />邮箱已验证</Badge>
+                  <Badge variant="secondary"><ShieldCheck />{en ? "Email verified" : "邮箱已验证"}</Badge>
                 </div>
                 <p className="mt-1 break-all text-sm text-muted-foreground">{session.user.email}</p>
               </div>
@@ -309,7 +331,7 @@ export function WebsiteAccountPanel({
               onClick={() => void runAccountAction("signout")}
               data-account-logout
             >
-              <LogOut />{busyAction === "signout" ? "正在退出…" : "退出当前设备"}
+              <LogOut />{busyAction === "signout" ? (en ? "Signing out…" : "正在退出…") : (en ? "Sign out on this device" : "退出当前设备")}
             </Button>
           )}
         />
@@ -324,10 +346,12 @@ export function WebsiteAccountPanel({
                 icon={<MonitorSmartphone className="size-4" aria-hidden="true" />}
                 titleId={`${fieldId}-devices`}
               >
-                登录设备
+                {en ? "Signed-in devices" : "登录设备"}
               </AccountTechnicalHeading>
               <p className="mt-4 max-w-xl text-sm leading-6 text-white/64">
-                当前会话{expiresAt ? `将在 ${expiresAt} 到期` : "处于有效状态"}。退出全部设备会撤销数据库 Session，并清除当前浏览器保存的第三方账号凭据。
+                {en
+                  ? `This session ${expiresAt ? `expires ${expiresAt}` : "is active"}. Signing out everywhere revokes database sessions and clears third-party account credentials saved in this browser.`
+                  : `当前会话${expiresAt ? `将在 ${expiresAt} 到期` : "处于有效状态"}。退出全部设备会撤销数据库 Session，并清除当前浏览器保存的第三方账号凭据。`}
               </p>
               <div className="mt-auto flex justify-end pt-5">
                 <Button
@@ -337,7 +361,7 @@ export function WebsiteAccountPanel({
                   disabled={busyAction !== null}
                   onClick={() => void runAccountAction("sessions")}
                 >
-                  {busyAction === "sessions" ? "正在撤销 Session…" : "退出全部设备"}
+                  {busyAction === "sessions" ? (en ? "Revoking sessions…" : "正在撤销 Session…") : (en ? "Sign out everywhere" : "退出全部设备")}
                 </Button>
               </div>
             </section>
@@ -349,13 +373,13 @@ export function WebsiteAccountPanel({
                 icon={<Trash2 className="size-4" aria-hidden="true" />}
                 titleId={`${fieldId}-delete`}
               >
-                永久注销账号
+                {en ? "Delete account permanently" : "永久注销账号"}
               </AccountTechnicalHeading>
               <p className="mt-4 text-sm leading-6 text-white/64">
-                账号与全部 Session 会立即删除。请输入当前密码确认，此操作不可撤销。
+                {en ? "Your account and all sessions will be deleted immediately. Enter your current password to confirm. This cannot be undone." : "账号与全部 Session 会立即删除。请输入当前密码确认，此操作不可撤销。"}
               </p>
               <div className="mt-4 grid gap-1.5">
-                <Label className="text-white/72" htmlFor={`${fieldId}-delete-password`}>当前密码</Label>
+                <Label className="text-white/72" htmlFor={`${fieldId}-delete-password`}>{en ? "Current password" : "当前密码"}</Label>
                 <PasswordInput
                   id={`${fieldId}-delete-password`}
                   className="border-white/22 bg-white text-[#242424] shadow-none placeholder:text-[#737373]"
@@ -364,7 +388,7 @@ export function WebsiteAccountPanel({
                   minLength={10}
                   maxLength={128}
                   autoComplete="current-password"
-                  revealLabel="显示当前密码"
+                  revealLabel={en ? "Show current password" : "显示当前密码"}
                   toggleClassName={AUTH_PASSWORD_TOGGLE_CLASS}
                 />
               </div>
@@ -375,7 +399,7 @@ export function WebsiteAccountPanel({
                   onChange={(event) => setDeleteLocalData(event.target.checked)}
                   className="size-4 shrink-0 accent-white"
                 />
-                注销成功后同时清除当前浏览器的本地工作区
+                {en ? "Also clear this browser's local workspace after deletion" : "注销成功后同时清除当前浏览器的本地工作区"}
               </label>
               <div className="mt-auto flex justify-end pt-5">
                 <Button
@@ -385,7 +409,7 @@ export function WebsiteAccountPanel({
                   disabled={deletePassword.length < 10 || busyAction !== null}
                   onClick={() => void runAccountAction("delete")}
                 >
-                  {busyAction === "delete" ? "正在注销…" : "永久注销账号"}
+                  {busyAction === "delete" ? (en ? "Deleting…" : "正在注销…") : (en ? "Delete account permanently" : "永久注销账号")}
                 </Button>
               </div>
             </section>
@@ -402,8 +426,8 @@ export function WebsiteAccountPanel({
   }
 
   const recoverySteps = [
-    { id: "details", label: "确认邮箱" },
-    { id: "complete", label: "查收邮件" },
+    { id: "details", label: en ? "Confirm email" : "确认邮箱" },
+    { id: "complete", label: en ? "Check inbox" : "查收邮件" },
   ];
 
   return (
@@ -413,9 +437,9 @@ export function WebsiteAccountPanel({
           <div className="mb-6 grid size-10 place-items-center rounded-lg bg-primary text-primary-foreground">
             <UserRound className="size-5" aria-hidden="true" />
           </div>
-          <p className="text-xs font-medium tracking-wide text-primary">账号管理</p>
-          <h3 className="mt-2 text-2xl font-semibold tracking-tight">{MODE_COPY[mode].title}</h3>
-          <p className="mt-3 max-w-sm text-sm leading-6 text-muted-foreground">{MODE_COPY[mode].description}</p>
+          <p className="text-xs font-medium tracking-wide text-primary">{en ? "Account" : "账号管理"}</p>
+          <h3 className="mt-2 text-2xl font-semibold tracking-tight">{modeCopy[mode].title}</h3>
+          <p className="mt-3 max-w-sm text-sm leading-6 text-muted-foreground">{modeCopy[mode].description}</p>
         </div>
 
         <CardContent className={mode === "forgot" ? "grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] p-0" : "p-0"}>
@@ -428,7 +452,7 @@ export function WebsiteAccountPanel({
                 onValueChange={(value) => {
                   if (value === "details") setStep("details");
                 }}
-                label="找回密码步骤"
+                label={en ? "Password recovery steps" : "找回密码步骤"}
               />
             </div>
           ) : null}
@@ -437,35 +461,35 @@ export function WebsiteAccountPanel({
               <div className="grid content-start gap-4 px-5 py-6 sm:px-8 sm:py-8">
                 {mode === "signup" ? (
                   <div className="grid gap-1.5">
-                    <Label htmlFor={`${fieldId}-name`}>昵称</Label>
+                    <Label htmlFor={`${fieldId}-name`}>{en ? "Display name" : "昵称"}</Label>
                     <Input
                       id={`${fieldId}-name`}
                       className={AUTH_INPUT_CLASS}
                       value={name}
                       onChange={(event) => {
                         setName(event.target.value);
-                        if (nameError) setNameError(validateWebsiteAccountName(event.target.value).error);
+                        if (nameError) setNameError(localizedWebsiteAccountName(event.target.value, en).error);
                       }}
                       required
                       minLength={WEBSITE_ACCOUNT_NAME_MIN_LENGTH}
                       maxLength={WEBSITE_ACCOUNT_NAME_MAX_LENGTH}
-                      placeholder="用于网站内显示"
+                      placeholder={en ? "Shown on this website" : "用于网站内显示"}
                       autoComplete="name"
                       aria-invalid={Boolean(nameError)}
                       aria-describedby={`${fieldId}-name-hint`}
                     />
                     <p id={`${fieldId}-name-hint`} role={nameError ? "alert" : undefined} className={`text-xs leading-5 ${nameError ? "text-destructive" : "text-muted-foreground"}`}>
-                      {nameError ?? WEBSITE_ACCOUNT_NAME_HINT}
+                      {nameError ?? (en ? WEBSITE_ACCOUNT_NAME_HINT_EN : WEBSITE_ACCOUNT_NAME_HINT)}
                     </p>
                   </div>
                 ) : null}
                 <div className="grid gap-1.5">
-                  <Label htmlFor={`${fieldId}-email`}>邮箱</Label>
+                  <Label htmlFor={`${fieldId}-email`}>{en ? "Email" : "邮箱"}</Label>
                   <Input className={AUTH_INPUT_CLASS} id={`${fieldId}-email`} value={email} onChange={(event) => setEmail(event.target.value)} required type="email" placeholder="name@example.com" autoComplete="email" />
                 </div>
                 {mode !== "forgot" ? (
                   <div className="grid gap-1.5">
-                    <Label htmlFor={`${fieldId}-password`}>密码</Label>
+                    <Label htmlFor={`${fieldId}-password`}>{en ? "Password" : "密码"}</Label>
                     <PasswordInput
                       className={AUTH_INPUT_CLASS}
                       id={`${fieldId}-password`}
@@ -474,22 +498,23 @@ export function WebsiteAccountPanel({
                         const nextPassword = event.target.value;
                         setPassword(nextPassword);
                         if (passwordStrengthError) {
-                          setPasswordStrengthError(isStrongPassword(nextPassword) ? null : PASSWORD_STRENGTH_ERROR);
+                          setPasswordStrengthError(isStrongPassword(nextPassword) ? null : en ? PASSWORD_STRENGTH_ERROR_EN : PASSWORD_STRENGTH_ERROR);
                         }
                         if (confirmPasswordError && mode === "signup") {
-                          setConfirmPasswordError(passwordConfirmationError(nextPassword, confirmPassword));
+                          setConfirmPasswordError(localizedPasswordConfirmationError(nextPassword, confirmPassword, en));
                         }
                       }}
                       onBlur={() => {
                         if (mode === "signup" && password && !isStrongPassword(password)) {
-                          setPasswordStrengthError(PASSWORD_STRENGTH_ERROR);
+                          setPasswordStrengthError(en ? PASSWORD_STRENGTH_ERROR_EN : PASSWORD_STRENGTH_ERROR);
                         }
                       }}
                       required
                       minLength={10}
                       maxLength={128}
-                      placeholder="10–128 位"
+                      placeholder={en ? "10–128 characters" : "10–128 位"}
                       autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                      revealLabel={en ? "Show password" : "显示密码"}
                       toggleClassName={AUTH_PASSWORD_TOGGLE_CLASS}
                       aria-invalid={mode === "signup" && Boolean(passwordStrengthError)}
                       aria-describedby={mode === "signup" ? `${fieldId}-password-strength` : undefined}
@@ -506,7 +531,7 @@ export function WebsiteAccountPanel({
                 ) : null}
                 {mode === "signup" ? (
                   <div className="grid gap-1.5">
-                    <Label htmlFor={`${fieldId}-confirm-password`}>确认密码</Label>
+                    <Label htmlFor={`${fieldId}-confirm-password`}>{en ? "Confirm password" : "确认密码"}</Label>
                     <PasswordInput
                       className={AUTH_INPUT_CLASS}
                       id={`${fieldId}-confirm-password`}
@@ -515,16 +540,16 @@ export function WebsiteAccountPanel({
                         const nextConfirmation = event.target.value;
                         setConfirmPassword(nextConfirmation);
                         if (confirmPasswordError) {
-                          setConfirmPasswordError(passwordConfirmationError(password, nextConfirmation));
+                          setConfirmPasswordError(localizedPasswordConfirmationError(password, nextConfirmation, en));
                         }
                       }}
-                      onBlur={() => setConfirmPasswordError(passwordConfirmationError(password, confirmPassword))}
+                      onBlur={() => setConfirmPasswordError(localizedPasswordConfirmationError(password, confirmPassword, en))}
                       required
                       minLength={10}
                       maxLength={128}
-                      placeholder="再次输入密码"
+                      placeholder={en ? "Enter the password again" : "再次输入密码"}
                       autoComplete="new-password"
-                      revealLabel="显示确认密码"
+                      revealLabel={en ? "Show password confirmation" : "显示确认密码"}
                       toggleClassName={AUTH_PASSWORD_TOGGLE_CLASS}
                       aria-invalid={Boolean(confirmPasswordError)}
                       aria-describedby={`${fieldId}-confirm-password-hint`}
@@ -534,13 +559,13 @@ export function WebsiteAccountPanel({
                       role={confirmPasswordError ? "alert" : undefined}
                       className={`text-xs leading-5 ${confirmPasswordError ? "text-destructive" : "text-muted-foreground"}`}
                     >
-                      {confirmPasswordError ?? "请再次输入上面的密码。"}
+                      {confirmPasswordError ?? (en ? "Enter the same password again." : "请再次输入上面的密码。")}
                     </p>
                   </div>
                 ) : null}
                 {mode === "signup" ? (
                   <p className="text-xs leading-5 text-muted-foreground">
-                    注册即表示你已阅读并同意<Link className="underline underline-offset-2" href="/terms">服务条款</Link>和<Link className="underline underline-offset-2" href="/privacy">隐私政策</Link>。
+                    {en ? <>By registering, you agree to the <Link className="underline underline-offset-2" href="/terms">Terms</Link> and <Link className="underline underline-offset-2" href="/privacy">Privacy Policy</Link>.</> : <>注册即表示你已阅读并同意<Link className="underline underline-offset-2" href="/terms">服务条款</Link>和<Link className="underline underline-offset-2" href="/privacy">隐私政策</Link>。</>}
                   </p>
                 ) : null}
                 {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
@@ -548,16 +573,16 @@ export function WebsiteAccountPanel({
               </div>
               <div className="grid gap-3 border-t px-5 py-4 sm:px-8 sm:py-5">
                 <Button type="submit" size="dialog" className="w-full" disabled={busy}>
-                  {busy ? "正在处理…" : mode === "signup" ? "创建账号并发送验证码" : mode === "forgot" ? "发送重置邮件" : "登录"}
+                  {busy ? en ? "Processing…" : "正在处理…" : mode === "signup" ? en ? "Create account and send code" : "创建账号并发送验证码" : mode === "forgot" ? en ? "Send reset email" : "发送重置邮件" : en ? "Sign in" : "登录"}
                 </Button>
                 <div className="flex min-h-11 flex-wrap items-center justify-center gap-x-1 text-xs">
-                  <Button type="button" size="sm" variant="ghost" onClick={() => chooseMode(mode === "signup" ? "signin" : "signup")}>{mode === "signup" ? "已有账号" : "创建账号"}</Button>
+                  <Button type="button" size="sm" variant="ghost" onClick={() => chooseMode(mode === "signup" ? "signin" : "signup")}>{mode === "signup" ? en ? "I have an account" : "已有账号" : en ? "Create account" : "创建账号"}</Button>
                   {mode === "forgot" ? (
-                    <Button type="button" size="sm" variant="ghost" onClick={() => chooseMode("signin")}><ArrowLeft />返回登录</Button>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => chooseMode("signin")}><ArrowLeft />{en ? "Back to sign in" : "返回登录"}</Button>
                   ) : (
-                    <Button type="button" size="sm" variant="ghost" onClick={() => chooseMode("forgot")}>忘记密码</Button>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => chooseMode("forgot")}>{en ? "Forgot password" : "忘记密码"}</Button>
                   )}
-                  {mode === "signin" ? <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => void sendVerificationCode()}>验证邮箱</Button> : null}
+                  {mode === "signin" ? <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => void sendVerificationCode()}>{en ? "Verify email" : "验证邮箱"}</Button> : null}
                 </div>
               </div>
             </form>
@@ -566,8 +591,8 @@ export function WebsiteAccountPanel({
               <div className="grid content-center gap-5 px-4 py-8 sm:px-8">
                 <div className="text-center">
                   <MailCheck className="mx-auto size-8 text-primary" aria-hidden="true" />
-                  <h3 className="mt-3 font-semibold">输入邮箱验证码</h3>
-                  <p className="mt-1 break-all text-sm text-muted-foreground">已发送至 {email}</p>
+                  <h3 className="mt-3 font-semibold">{en ? "Enter email verification code" : "输入邮箱验证码"}</h3>
+                  <p className="mt-1 break-all text-sm text-muted-foreground">{en ? "Sent to" : "已发送至"} {email}</p>
                 </div>
                 <OtpInput
                   ref={otpRef}
@@ -581,19 +606,19 @@ export function WebsiteAccountPanel({
                       setError(null);
                     }
                   }}
-                  hint="输入邮件中的 6 位数字"
-                  errorMessage={error ?? "验证码不正确或已失效，请重试。"}
-                  successMessage="验证成功"
+                  hint={en ? "Enter the 6-digit code from the email" : "输入邮件中的 6 位数字"}
+                  errorMessage={error ?? (en ? "The code is incorrect or expired. Try again." : "验证码不正确或已失效，请重试。")}
+                  successMessage={en ? "Verified" : "验证成功"}
                 />
                 {message ? <p role="status" className="text-center text-sm text-muted-foreground">{message}</p> : null}
                 {error ? <p role="alert" className="sr-only">{error}</p> : null}
               </div>
               <div className="grid gap-2 border-t px-5 py-4 sm:px-8 sm:py-5">
-                <Button type="submit" size="dialog" className="w-full" disabled={busy || otp.length !== 6}>{busy ? "正在验证…" : "验证邮箱"}</Button>
+                <Button type="submit" size="dialog" className="w-full" disabled={busy || otp.length !== 6}>{busy ? (en ? "Verifying…" : "正在验证…") : (en ? "Verify email" : "验证邮箱")}</Button>
                 <div className="flex min-h-11 items-center justify-center gap-2 text-xs">
-                  <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => { setStep("details"); setOtpStatus("idle"); setError(null); }}><ArrowLeft />修改邮箱</Button>
+                  <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => { setStep("details"); setOtpStatus("idle"); setError(null); }}><ArrowLeft />{en ? "Change email" : "修改邮箱"}</Button>
                   <Button type="button" size="sm" variant="ghost" className="font-number" disabled={busy || resendSeconds > 0} onClick={() => void sendVerificationCode()}>
-                    {resendSeconds > 0 ? `${resendSeconds} 秒后重发` : "重新发送验证码"}
+                    {resendSeconds > 0 ? (en ? `Resend in ${resendSeconds}s` : `${resendSeconds} 秒后重发`) : (en ? "Resend code" : "重新发送验证码")}
                   </Button>
                 </div>
               </div>
@@ -602,11 +627,11 @@ export function WebsiteAccountPanel({
             <div className="grid min-h-80 grid-rows-[1fr_auto]">
               <div className="grid content-center justify-items-center gap-3 px-5 py-10 text-center sm:px-8">
                 <CheckCircle2 className="size-10 text-emerald-600" aria-hidden="true" />
-                <h3 className="font-semibold">{mode === "forgot" ? "重置邮件已发送" : "邮箱验证完成"}</h3>
+                <h3 className="font-semibold">{mode === "forgot" ? (en ? "Reset email sent" : "重置邮件已发送") : (en ? "Email verified" : "邮箱验证完成")}</h3>
                 {message ? <p role="status" className="max-w-sm text-sm leading-6 text-muted-foreground">{message}</p> : null}
               </div>
               <div className="border-t px-5 py-4 sm:px-8 sm:py-5">
-                <Button type="button" size="dialog" className="w-full" onClick={() => chooseMode("signin")}>返回登录</Button>
+                <Button type="button" size="dialog" className="w-full" onClick={() => chooseMode("signin")}>{en ? "Back to sign in" : "返回登录"}</Button>
               </div>
             </div>
           )}

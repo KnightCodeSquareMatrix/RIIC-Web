@@ -31,6 +31,7 @@ export function validateLayoutJson(value: unknown): string[] {
   const ids = new Set<string>();
   let controls = 0;
   let powerPlants = 0;
+  const factoryRecipesUnlocked = value.rooms.some((room) => object(room) && room.kind === "factory" && Number(room.level) >= 3);
   value.rooms.forEach((room, index) => {
     const label = `rooms[${index}]`;
     if (!object(room)) return errors.push(`${label} 必须是对象。`);
@@ -58,7 +59,9 @@ export function validateLayoutJson(value: unknown): string[] {
     if (room.kind === "factory") {
       const factory = object(room.product) && object(room.product.factory) ? room.product.factory : null;
       if (!factory || !["all", "gold", "battle_record", "originium"].includes(String(factory.recipe))) errors.push(`${label} 缺少有效制造配方。`);
-      if (factory?.recipe === "originium" && Number(room.level) < 3) errors.push(`${label} 仅 3 级制造站可生产源石碎片。`);
+      if (factory?.recipe === "originium" && !factoryRecipesUnlocked) {
+        errors.push(`${label} 需至少一个 3 级制造站解锁源石碎片配方。`);
+      }
     }
     if (room.kind === "dormitory" && room.dorm_beds !== undefined && (!Number.isInteger(room.dorm_beds) || (room.dorm_beds as number) < 1 || (room.dorm_beds as number) > 5)) {
       errors.push(`${label}.dorm_beds 必须是 1–5 的整数。`);

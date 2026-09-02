@@ -7,13 +7,16 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 type PasswordInputProps = Omit<ComponentProps<typeof Input>, "type"> & {
+  hideLabel?: string;
   revealLabel?: string;
   toggleClassName?: string;
 };
 
-export function PasswordInput({ className, disabled, id, revealLabel = "显示密码", toggleClassName, ...props }: PasswordInputProps) {
+export function PasswordInput({ className, disabled, hideLabel, id, revealLabel = "显示密码", toggleClassName, ...props }: PasswordInputProps) {
   const [revealed, setRevealed] = useState(false);
-  const toggleLabel = revealed ? revealLabel.replace(/^显示/, "隐藏") : revealLabel;
+  const toggleLabel = revealed
+    ? hideLabel ?? (revealLabel.startsWith("Show ") ? revealLabel.replace(/^Show /, "Hide ") : revealLabel.replace(/^显示/, "隐藏"))
+    : revealLabel;
 
   return (
     <div className="relative">

@@ -6,6 +6,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
+import { useLanguageDemo } from "@/language-demo";
 
 import { evaluatePasswordStrength } from "@/password-strength";
 
@@ -13,17 +14,29 @@ const CELL = { type: "spring", stiffness: 520, damping: 34, mass: 0.45 } as cons
 const CROSSFADE = { type: "spring", stiffness: 260, damping: 34, mass: 0.8 } as const;
 const INSTANT = { duration: 0 } as const;
 const DEFAULT_LABELS = ["尚未输入", "较弱", "一般", "良好", "强"] as const;
+const EN_LABELS = ["Not entered", "Weak", "Fair", "Good", "Strong"] as const;
 
 export function PasswordStrength({ value, className = "", id }: { value: string; className?: string; id?: string }) {
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
   const reduced = useReducedMotion();
+  const labels = en ? EN_LABELS : DEFAULT_LABELS;
   const state = useMemo(() => {
     const strength = evaluatePasswordStrength(value);
-    const unmet = strength.rules.filter((rule) => !rule.met);
+    const rules = strength.rules.map((rule) => ({
+      ...rule,
+      label: en
+        ? ({ length: "At least 10 characters", letter: "Contains a letter", digit: "Contains a number", variety: "Mixed case or a symbol" }[rule.id] ?? rule.label)
+        : rule.label,
+    }));
+    const unmet = rules.filter((rule) => !rule.met);
     const announcement = value.length === 0
       ? ""
-      : `密码强度${DEFAULT_LABELS[strength.score]}。${strength.guessable ? "这个密码模式容易被猜到。" : ""}${unmet.length ? `还需要：${unmet.map((rule) => rule.label).join("、")}。` : "全部规则均已满足。"}`;
-    return { ...strength, announcement };
-  }, [value]);
+      : en
+        ? `Password strength: ${EN_LABELS[strength.score]}. ${strength.guessable ? "This password pattern is easy to guess. " : ""}${unmet.length ? `Still needed: ${unmet.map((rule) => rule.label).join(", ")}.` : "All recommendations are met."}`
+        : `密码强度${DEFAULT_LABELS[strength.score]}。${strength.guessable ? "这个密码模式容易被猜到。" : ""}${unmet.length ? `还需要：${unmet.map((rule) => rule.label).join("、")}。` : "全部规则均已满足。"}`;
+    return { ...strength, rules, announcement };
+  }, [en, value]);
   const [announcement, setAnnouncement] = useState("");
 
   useEffect(() => {
@@ -47,11 +60,11 @@ export function PasswordStrength({ value, className = "", id }: { value: string;
     <div id={id} className={`w-full ${className}`} data-password-strength>
       <div
         role="meter"
-        aria-label="密码强度"
+        aria-label={en ? "Password strength" : "密码强度"}
         aria-valuemin={0}
         aria-valuemax={4}
         aria-valuenow={state.score}
-        aria-valuetext={DEFAULT_LABELS[state.score]}
+        aria-valuetext={labels[state.score]}
         className="grid grid-cols-4 gap-1.5"
       >
         {state.rules.map((rule, index) => (
@@ -66,7 +79,7 @@ export function PasswordStrength({ value, className = "", id }: { value: string;
         ))}
       </div>
       <div className="mt-2 flex min-h-5 items-center justify-between gap-3 text-xs">
-        <span className={`font-medium ${tone.text}`}>密码强度：{DEFAULT_LABELS[state.score]}</span>
+        <span className={`font-medium ${tone.text}`}>{en ? `Password strength: ${labels[state.score]}` : `密码强度：${labels[state.score]}`}</span>
         <motion.span
           aria-hidden="true"
           className="text-amber-700"
@@ -74,7 +87,7 @@ export function PasswordStrength({ value, className = "", id }: { value: string;
           animate={{ opacity: state.guessable ? 1 : 0 }}
           transition={reduced ? INSTANT : CROSSFADE}
         >
-          容易被猜到
+          {en ? "Easy to guess" : "容易被猜到"}
         </motion.span>
       </div>
       <ul className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
@@ -84,7 +97,7 @@ export function PasswordStrength({ value, className = "", id }: { value: string;
               {rule.met ? "✓" : null}
             </span>
             {rule.label}
-            <span className="sr-only">{rule.met ? "已满足" : "未满足"}</span>
+            <span className="sr-only">{rule.met ? (en ? "Met" : "已满足") : (en ? "Not met" : "未满足")}</span>
           </li>
         ))}
       </ul>

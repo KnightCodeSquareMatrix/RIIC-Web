@@ -21,6 +21,7 @@ export function LoadMore({
   rootMargin = "500px 0px",
   maxAutoLoads = 3,
   className,
+  labels,
 }: {
   onLoad: () => boolean | Promise<boolean>;
   hasMore: boolean;
@@ -28,6 +29,7 @@ export function LoadMore({
   rootMargin?: string;
   maxAutoLoads?: number;
   className?: string;
+  labels?: Partial<Record<LoadMoreStatus, string>>;
 }) {
   const [phase, setPhase] = useState<Exclude<LoadMoreStatus, "end">>("idle");
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -73,11 +75,17 @@ export function LoadMore({
     return () => observer.disconnect();
   }, [auto, hasMore, load, rootMargin]);
 
+  const defaultLabels: Record<LoadMoreStatus, string> = {
+    idle: "加载更多",
+    loading: "正在加载",
+    error: "加载失败，点击重试",
+    end: "已显示全部结果",
+  };
   const presentation = {
-    idle: { label: "加载更多", icon: ChevronDown },
-    loading: { label: "正在加载", icon: LoaderCircle },
-    error: { label: "加载失败，点击重试", icon: AlertCircle },
-    end: { label: "已显示全部结果", icon: Check },
+    idle: { label: labels?.idle ?? defaultLabels.idle, icon: ChevronDown },
+    loading: { label: labels?.loading ?? defaultLabels.loading, icon: LoaderCircle },
+    error: { label: labels?.error ?? defaultLabels.error, icon: AlertCircle },
+    end: { label: labels?.end ?? defaultLabels.end, icon: Check },
   }[status];
   const inert = status === "loading" || status === "end";
 
@@ -105,7 +113,7 @@ export function LoadMore({
             aria-hidden={item !== status}
           >
             <IconForStatus status={item} spinning={item === "loading" && status === "loading" && !reducedMotion} />
-            {{ idle: "加载更多", loading: "正在加载", error: "加载失败，点击重试", end: "已显示全部结果" }[item]}
+            {labels?.[item] ?? defaultLabels[item]}
           </motion.span>
         ))}
         <span className="sr-only">{presentation.label}</span>

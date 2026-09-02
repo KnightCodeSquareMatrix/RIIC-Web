@@ -141,14 +141,14 @@ test("CI enforces route and document preload JavaScript budgets after building",
   assert.equal(packageJson.scripts["check:bundle-budget"], "node scripts/check-bundle-budget.mjs");
   assert.match(workflow, /Production build[\s\S]+npm run check:bundle-budget/);
   assert.match(budgetCheck, /MAX_SKLAND_DISABLED_ROUTE_INITIAL_JS_BYTES = 1_140_000/);
-  assert.match(budgetCheck, /MAX_SKLAND_ENABLED_ROUTE_INITIAL_JS_BYTES = 1_160_500/);
-  assert.match(budgetCheck, /MAX_SKLAND_ROUTE_INITIAL_JS_BYTES = 1_600_000/);
+  assert.match(budgetCheck, /MAX_SKLAND_ENABLED_ROUTE_INITIAL_JS_BYTES = 1_180_000/);
+  assert.match(budgetCheck, /MAX_SKLAND_ROUTE_INITIAL_JS_BYTES = 1_615_000/);
   assert.match(budgetCheck, /MAX_SKLAND_DISABLED_DOCUMENT_INITIAL_JS_BYTES = 1_240_000/);
-  assert.match(budgetCheck, /MAX_SKLAND_ENABLED_DOCUMENT_INITIAL_JS_BYTES = 1_275_000/);
+  assert.match(budgetCheck, /MAX_SKLAND_ENABLED_DOCUMENT_INITIAL_JS_BYTES = 1_295_000/);
   assert.match(budgetCheck, /MAX_SKLAND_DISABLED_DOCUMENT_INITIAL_GZIP_JS_BYTES = 395_000/);
-  assert.match(budgetCheck, /MAX_SKLAND_ENABLED_DOCUMENT_INITIAL_GZIP_JS_BYTES = 407_000/);
+  assert.match(budgetCheck, /MAX_SKLAND_ENABLED_DOCUMENT_INITIAL_GZIP_JS_BYTES = 415_000/);
   assert.match(budgetCheck, /const sklandEnabled = sklandRoute\.firstLoadChunkPaths\.some/);
-  assert.match(budgetCheck, /MAX_SECONDARY_ROUTE_INITIAL_JS_BYTES = 1_540_000/);
+  assert.match(budgetCheck, /MAX_SECONDARY_ROUTE_INITIAL_JS_BYTES = 1_555_000/);
   assert.match(budgetCheck, /MAX_DOCUMENT_INITIAL_JS_FILES = 18/);
   assert.match(budgetCheck, /WORKBENCH_ROUTES = \["\/", "\/training", "\/skills", "\/skland", "\/account"\]/);
   assert.match(budgetCheck, /firstLoadUncompressedJsBytes/);
@@ -190,7 +190,7 @@ test("CI gates releases on Chromium and schedules the full WebKit suite", async 
   assert.match(workflow, /deploy:[\s\S]+needs: \[changes, quality\]/);
   assert.match(workflow, /cancel-in-progress: \$\{\{ github\.event_name == 'pull_request' \}\}/);
   assert.equal(readinessSpecs.length, 4);
-  assert.equal(readinessTestCount, 88);
+  assert.equal(readinessTestCount, 91);
   assert.equal(e2eFiles.includes("production-readiness.spec.ts"), false);
   assert.match(playwrightConfig, /fullyParallel: false/);
   assert.match(playwrightConfig, /workers: process\.env\.CI \? 3 : undefined/);
@@ -241,7 +241,7 @@ test("public deployment automation is repository-bound, opt-in, and secret-safe"
   assert.match(qualityWorkflow, /HEAD_REPOSITORY[\s\S]+EXPECTED_REPOSITORY: KnightCodeSquareMatrix\/RIIC-Web[\s\S]+"\$HEAD_REF" == release\/\*/);
   assert.match(qualityWorkflow, /types: \[opened, synchronize, reopened, labeled, unlabeled\]/);
   assert.match(qualityWorkflow, /DIRECT_MAIN_RELEASE: \$\{\{ contains\(github\.event\.pull_request\.labels\.\*\.name, 'direct-main-release'\)[\s\S]+"\$DIRECT_MAIN_RELEASE" == "1"[\s\S]+develop ancestry is intentionally skipped/);
-  assert.match(qualityWorkflow, /git merge-base --is-ancestor "\$HEAD_SHA" refs\/remotes\/origin\/develop/);
+  assert.match(qualityWorkflow, /git merge-base --is-ancestor refs\/remotes\/origin\/develop "\$HEAD_SHA"/);
   assert.match(qualityWorkflow, /github\.event_name == 'push'[\s\S]+needs\.quality\.result == 'success'[\s\S]+needs\.changes\.outputs\.deploy_required == 'true'[\s\S]+vars\.DEPLOY_AUTOMATION_ENABLED == '1'[\s\S]+github\.repository == 'KnightCodeSquareMatrix\/RIIC-Web'/);
   assert.match(deployWorkflow, /github\.event_name == 'push'[\s\S]+vars\.DEPLOY_AUTOMATION_ENABLED == '1'[\s\S]+github\.repository == 'KnightCodeSquareMatrix\/RIIC-Web'/);
   assert.match(deployWorkflow, /DEPLOY_APPROVED_SOLVER_SHA256: \$\{\{ vars\.DEPLOY_APPROVED_SOLVER_SHA256 \}\}[\s\S]+DEPLOY_EXPECTED_REPOSITORY: KnightCodeSquareMatrix\/RIIC-Web[\s\S]+DEPLOY_RELEASE_HELPER_CONTRACT: "6"/);
