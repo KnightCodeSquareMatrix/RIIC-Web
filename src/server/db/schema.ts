@@ -191,7 +191,7 @@ export const feedback = appSchema.table("feedback", {
   room: jsonb("room"),
   note: text("note").notNull(),
   consentAt: timestamp("consent_at", { withTimezone: true }).notNull(),
-  status: text("status").default("pending").notNull(),
+  status: text("status").default("unreviewed").notNull(),
   adminNote: text("admin_note"),
   artifactKey: text("artifact_key"),
   artifactBytes: bigint("artifact_bytes", { mode: "number" }),

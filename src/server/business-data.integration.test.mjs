@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import process from "node:process";
 import test from "node:test";
+import { URL } from "node:url";
 
 import { Pool } from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -66,7 +67,11 @@ const {
   planQueuePosition,
 } = await import("./plan-task.ts");
 const {
+  deleteFeedbackRecords,
   queryAdminSolverMetrics,
+  queryBusinessRecords,
+  recordFeedbackStrict,
+  updateFeedbackRecord,
   updatePlanRunArtifactBestEffort,
 } = await import("./business-records.ts");
 const { getDatabase } = await import("./db/index.ts");
@@ -78,6 +83,123 @@ const {
 test.after(async () => {
   await getDatabase().$client.end().catch(() => undefined);
   await rm(artifactWorkspace, { recursive: true, force: true });
+});
+
+test("admin feedback workflow defaults, filters, transitions, and cascades without deleting its run", async () => {
+  const pool = new Pool({ connectionString: databaseUrl, max: 2 });
+  const diagnosticId = randomUUID();
+  const roomFeedbackId = randomUUID();
+  const solverFeedbackId = randomUUID();
+  const savedAt = new Date();
+  try {
+    await pool.query(
+      `INSERT INTO app.plan_run
+       (diagnostic_id,source_type,status,layout_template,room_count,operator_count,rotation,fiammetta_enable,created_at,expires_at)
+       VALUES ($1,'maa','failed','243',1,1,'abc_12_6_6',true,$2,now()+interval '30 days')`,
+      [diagnosticId, savedAt],
+    );
+    assert.equal(await recordFeedbackStrict({
+      feedbackId: roomFeedbackId,
+      savedAt,
+      body: {
+        diagnosticId,
+        note: "制造站排班异常",
+        consent: true,
+        room: { id: "manu_1", title: "制造站 1", group: "manufacture", operators: ["阿米娅"] },
+      },
+    }), true);
+    assert.equal(await recordFeedbackStrict({
+      feedbackId: solverFeedbackId,
+      savedAt,
+      body: { diagnosticId, note: "求解失败", consent: true, kind: "performance_issue" },
+    }), true);
+
+    const initial = await pool.query(
+      `SELECT f.status, e.status event_status
+       FROM app.feedback f JOIN app.feedback_event e ON e.feedback_id=f.id
+       WHERE f.id=$1`,
+      [roomFeedbackId],
+    );
+    assert.deepEqual(initial.rows[0], { status: "unreviewed", event_status: "unreviewed" });
+
+    await updateFeedbackRecord({ feedbackId: roomFeedbackId, status: "reproduced", note: "本地已复现" });
+    await updateFeedbackRecord({ feedbackId: roomFeedbackId, status: "fixed", note: "已随新版本修复" });
+    const events = await pool.query(
+      "SELECT status,note FROM app.feedback_event WHERE feedback_id=$1 ORDER BY created_at,id",
+      [roomFeedbackId],
+    );
+    assert.deepEqual(events.rows.map((row) => row.status), ["unreviewed", "reproduced", "fixed"]);
+    assert.equal(events.rows.at(-1)?.note, "已随新版本修复");
+
+    const manufacture = await queryBusinessRecords({ kind: "feedback", status: "fixed", facility: "manufacture", limit: 100 });
+    assert.equal(manufacture.items.some((item) => item.id === roomFeedbackId), true);
+    assert.equal(manufacture.items.some((item) => item.id === solverFeedbackId), false);
+    const solver = await queryBusinessRecords({ kind: "feedback", facility: "solver", limit: 100 });
+    assert.equal(solver.items.some((item) => item.id === solverFeedbackId), true);
+    const failures = await queryBusinessRecords({ kind: "runs", status: "failed", limit: 100 });
+    assert.equal(failures.items.some((item) => item.diagnosticId === diagnosticId), true);
+
+    assert.deepEqual(await deleteFeedbackRecords([roomFeedbackId]), [roomFeedbackId]);
+    const retained = await pool.query(
+      `SELECT
+         (SELECT count(*)::int FROM app.feedback_event WHERE feedback_id=$1) event_count,
+         (SELECT count(*)::int FROM app.feedback WHERE id=$2) other_feedback_count,
+         (SELECT count(*)::int FROM app.plan_run WHERE diagnostic_id=$3) run_count`,
+      [roomFeedbackId, solverFeedbackId, diagnosticId],
+    );
+    assert.deepEqual(retained.rows[0], { event_count: 0, other_feedback_count: 1, run_count: 1 });
+  } finally {
+    await pool.query("DELETE FROM app.feedback WHERE id = ANY($1::text[])", [[roomFeedbackId, solverFeedbackId]]).catch(() => undefined);
+    await pool.query("DELETE FROM app.plan_run WHERE diagnostic_id=$1", [diagnosticId]).catch(() => undefined);
+    await pool.end();
+  }
+});
+
+test("feedback status migration converts existing rows and installs the new default", async () => {
+  const pool = new Pool({ connectionString: databaseUrl, max: 1 });
+  const feedbackIds = [randomUUID(), randomUUID(), randomUUID()];
+  const eventIds = [randomUUID(), randomUUID(), randomUUID()];
+  const legacyStatuses = ["pending", "working", "resolved"];
+  const expectedStatuses = ["unreviewed", "reproduced", "fixed"];
+  const migration = await readFile(new URL("../../drizzle/0013_sudden_talon.sql", import.meta.url), "utf8");
+  const statements = migration.split("--> statement-breakpoint").map((statement) => statement.trim()).filter(Boolean);
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SET LOCAL lock_timeout = '5s'");
+    for (let index = 0; index < legacyStatuses.length; index += 1) {
+      await client.query(
+        `INSERT INTO app.feedback (id,diagnostic_id,kind,note,consent_at,status,expires_at)
+         VALUES ($1,$1,'performance_issue','migration fixture',now(),$2,now()+interval '1 day')`,
+        [feedbackIds[index], legacyStatuses[index]],
+      );
+      await client.query(
+        "INSERT INTO app.feedback_event (id,feedback_id,status) VALUES ($1,$2,$3)",
+        [eventIds[index], feedbackIds[index], legacyStatuses[index]],
+      );
+    }
+    for (const statement of statements) await client.query(statement);
+    const migrated = await client.query(
+      `SELECT f.status, e.status event_status
+       FROM app.feedback f JOIN app.feedback_event e ON e.feedback_id=f.id
+       WHERE f.id = ANY($1::text[]) ORDER BY array_position($1::text[], f.id)`,
+      [feedbackIds],
+    );
+    assert.deepEqual(migrated.rows.map((row) => row.status), expectedStatuses);
+    assert.deepEqual(migrated.rows.map((row) => row.event_status), expectedStatuses);
+    const columnDefault = await client.query(
+      `SELECT column_default FROM information_schema.columns
+       WHERE table_schema='app' AND table_name='feedback' AND column_name='status'`,
+    );
+    assert.equal(columnDefault.rows[0]?.column_default, "'unreviewed'::text");
+    await client.query("ROLLBACK");
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+    await pool.end();
+  }
 });
 
 test("online queue indexes are valid and artifact finalization requires an existing run row", async () => {

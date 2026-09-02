@@ -95,7 +95,7 @@ try {
           (id, diagnostic_id, plan_run_diagnostic_id, user_id, kind, room, note, consent_at, status,
            artifact_key, artifact_bytes, artifact_sha256, created_at, updated_at, expires_at)
          VALUES ($1,$2,CASE WHEN EXISTS (SELECT 1 FROM app.plan_run WHERE diagnostic_id=$2) THEN $2 ELSE NULL END,
-          $3,$4,$5,$6,$7,'pending',$8,$9,$10,$7,$7,$11)
+          $3,$4,$5,$6,$7,'unreviewed',$8,$9,$10,$7,$7,$11)
          ON CONFLICT (id) DO NOTHING RETURNING id`,
         [summary.feedbackId, summary.diagnosticId, linked.rows[0]?.user_id ?? null, summary.kind,
           summary.room ? JSON.stringify(summary.room) : null, summary.note, summary.savedAt,
@@ -103,7 +103,7 @@ try {
           new Date(summary.savedAt.getTime() + 30 * 24 * 60 * 60 * 1000)],
       );
       await pool.query(
-        "INSERT INTO app.feedback_event (id, feedback_id, status, note, created_at) VALUES ($1,$2,'pending',NULL,$3) ON CONFLICT (id) DO NOTHING",
+        "INSERT INTO app.feedback_event (id, feedback_id, status, note, created_at) VALUES ($1,$2,'unreviewed',NULL,$3) ON CONFLICT (id) DO NOTHING",
         [`${summary.feedbackId}:backfill`, summary.feedbackId, summary.savedAt],
       );
       if (inserted.rowCount) report.feedback.inserted += 1; else report.feedback.existing += 1;
