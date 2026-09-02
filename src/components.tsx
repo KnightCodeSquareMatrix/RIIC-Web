@@ -91,6 +91,7 @@ import {
 } from "./schedule-view-presentation";
 import {
   buildListScheduleGroups,
+  buildMobileListScheduleGroups,
   isListFunctionalFacilityRoom,
   listFunctionalFacilityGridClass,
   listFunctionalOperatorPosition,
@@ -1278,7 +1279,9 @@ export function OperatorSlot({
   const enterX = shouldReduceMotion ? 0 : shiftDirection * 6;
   const exitX = shouldReduceMotion ? 0 : shiftDirection * -4;
   const occupantLabel = displayName ?? (autofill ? (locale === "en" ? "Auto-fill" : "自动补位") : (locale === "en" ? "Empty" : "空置"));
-  const ariaLabel = displayPositionLabel ? `${displayPositionLabel}: ${occupantLabel}` : occupantLabel;
+  const ariaLabel = displayPositionLabel
+    ? `${displayPositionLabel}${locale === "en" ? ": " : "："}${occupantLabel}`
+    : occupantLabel;
   const searchMatched = Boolean(slot && searchQuery && slot.name.toLocaleLowerCase("zh-CN").includes(searchQuery));
   const frameClassName = slot
     ? "border-[#7F7F7F] bg-[#3C3C3C] shadow-[inset_0_0_18px_rgba(255,255,255,0.16)]"
@@ -1487,7 +1490,9 @@ export function ScheduleBoard({
   const visibleRows = normalizedQuery
     ? rows.filter((row) => row.title.toLocaleLowerCase("zh-CN").includes(normalizedQuery) || row.operators.some((name) => name.toLocaleLowerCase("zh-CN").includes(normalizedQuery)))
     : rows;
-  const rowGroups = buildListScheduleGroups(visibleRows);
+  const rowGroups = supportsCompactLayout === false
+    ? buildMobileListScheduleGroups(visibleRows)
+    : buildListScheduleGroups(visibleRows);
   const auxiliaryGroups = rowGroups.filter((group) => AUXILIARY_ROOM_GROUPS.has(group.rows[0]?.group ?? ""));
   const hiddenAuxiliaryCount = auxiliaryGroups.filter((group) => hiddenGroups[group.label]).length;
   const allAuxiliaryCollapsed =
@@ -1620,7 +1625,13 @@ export function ScheduleBoard({
         if (hiddenGroups[group.label]) return null;
 
         return (
-          <section key={group.label} className="min-w-0" aria-label={displayGroupLabel} style={groupStyle}>
+          <section
+            key={group.label}
+            className="min-w-0"
+            aria-label={displayGroupLabel}
+            style={groupStyle}
+            data-list-room-group={firstGroup}
+          >
             <div className="mb-2 flex min-w-0 items-center justify-between gap-3">
               <button
                 type="button"
@@ -1824,6 +1835,7 @@ export function ScheduleBoard({
               activePlan={activePlan}
               shiftDirection={shiftDirection}
               onIssue={onIssue}
+              feedbackDisabled={feedbackDisabled}
             />
           ) : compactScheduleLoadFailed ? (
             <div className="grid min-h-[420px] place-items-center border-y border-destructive/35 text-sm text-destructive" role="alert">

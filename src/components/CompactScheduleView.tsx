@@ -115,7 +115,7 @@ function CompactRoomCard({
           const accent = compactTradeAccent(order);
           const label = order === "gold" ? en ? "LMD Order" : "龙门商法" : order === "originium" ? en ? "Originium Order" : "开采协力" : order;
           return (
-            <div className={`ml-auto flex h-7 items-center justify-center rounded border px-2 text-xs ${en ? "w-[118px]" : "w-[90px]"} ${accent}`}>
+            <div data-compact-product-badge style={{ marginRight: "2.25rem" }} className={`ml-auto flex h-7 items-center justify-center rounded border px-2 text-xs ${en ? "w-[118px]" : "w-[90px]"} ${accent}`}>
               {label}
             </div>
           );
@@ -124,7 +124,7 @@ function CompactRoomCard({
           const accent = compactFactoryAccent(recipe);
           const label = recipe === "all" ? en ? "Auto" : "自动选择" : recipe === "gold" ? en ? "Pure Gold" : "贵金属" : recipe === "battle_record" ? en ? "Battle Record" : "作战记录" : recipe === "originium" ? en ? "Originium Shard" : "源石碎片" : recipe;
           return (
-            <div className={`ml-auto flex h-7 items-center justify-center rounded border px-2 text-xs ${en ? "w-[118px]" : "w-[90px]"} ${accent}`}>
+            <div data-compact-product-badge style={{ marginRight: "2.25rem" }} className={`ml-auto flex h-7 items-center justify-center rounded border px-2 text-xs ${en ? "w-[118px]" : "w-[90px]"} ${accent}`}>
               {label}
             </div>
           );

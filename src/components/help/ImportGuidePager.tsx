@@ -94,19 +94,19 @@ export function ImportGuidePager({ pages }: ImportGuidePagerProps) {
   }
 
   return (
-    <div className="px-5 sm:px-8 lg:px-10" data-help-import-step={pageIndex + 1}>
-      <section aria-label="教程进度" className="-mx-5 border-b border-border/80 bg-muted/20 px-5 py-6 sm:-mx-8 sm:px-8 sm:py-7 lg:-mx-10 lg:px-10">
+    <div className="rounded-[4px] border border-border bg-background" data-help-import-step={pageIndex + 1}>
+      <section aria-label="教程进度" className="border-b border-border bg-muted/20 px-4 py-5 sm:px-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex min-w-0 items-start gap-3 sm:gap-4">
-            <span className="font-number grid size-10 shrink-0 place-items-center rounded-xl bg-foreground text-sm font-semibold text-background shadow-sm sm:size-11">
+            <span className="font-number grid size-10 shrink-0 place-items-center bg-foreground text-sm font-semibold text-background sm:size-11">
               {String(pageIndex + 1).padStart(2, "0")}
             </span>
             <div className="min-w-0">
               <p className="font-number text-xs font-semibold tracking-[0.12em] text-muted-foreground">
-                STEP {pageIndex + 1} · 共 {pages.length} 步
+                第 {pageIndex + 1} 步 · 共 {pages.length} 步
               </p>
               <h2
-                className="mt-1 text-2xl font-semibold tracking-tight outline-none focus-visible:ring-2 focus-visible:ring-ring sm:text-[1.7rem]"
+                className="mt-1 text-lg font-semibold tracking-tight outline-none focus-visible:ring-2 focus-visible:ring-ring sm:text-xl"
                 ref={pageTitleRef}
                 tabIndex={-1}
               >
@@ -115,7 +115,7 @@ export function ImportGuidePager({ pages }: ImportGuidePagerProps) {
               <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base sm:leading-7">{currentPage.summary}</p>
             </div>
           </div>
-          <span className="font-number inline-flex min-h-8 items-center rounded-full border border-border bg-background px-3 text-xs font-semibold text-muted-foreground shadow-sm">
+          <span className="font-number inline-flex min-h-8 items-center text-xs font-semibold text-muted-foreground">
             {Math.round(progress)}% 完成
           </span>
         </div>
@@ -125,10 +125,10 @@ export function ImportGuidePager({ pages }: ImportGuidePagerProps) {
           aria-valuemax={pages.length}
           aria-valuemin={1}
           aria-valuenow={pageIndex + 1}
-          className="mt-5 h-1.5 overflow-hidden rounded-full bg-border/70"
+          className="mt-5 h-1.5 overflow-hidden bg-border/70"
           role="progressbar"
         >
-          <div className="h-full rounded-full bg-amber-400 transition-[width] duration-200 motion-reduce:transition-none" style={{ width: `${progress}%` }} />
+          <div className="h-full bg-[#FFD800] transition-[width] duration-200 motion-reduce:transition-none" style={{ width: `${progress}%` }} />
         </div>
 
         <nav aria-label="教程步骤导航" className="mt-5" data-help-step-navigation>
@@ -150,10 +150,10 @@ export function ImportGuidePager({ pages }: ImportGuidePagerProps) {
                       aria-label={`第 ${index + 1} 步：${page.title}。${page.summary}`}
                       aria-current={isCurrent ? "step" : undefined}
                       className={cn(
-                        "group relative flex min-h-20 w-full cursor-pointer items-start gap-3 overflow-hidden rounded-xl border p-3 text-left outline-none transition-[background-color,border-color,box-shadow,transform] duration-200 focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transform-none motion-reduce:transition-none",
+                        "group relative flex min-h-20 w-full cursor-pointer items-start gap-3 overflow-hidden rounded-[4px] border p-3 text-left outline-none transition-[background-color,border-color,transform] duration-200 focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transform-none motion-reduce:transition-none",
                         isCurrent
-                          ? "border-foreground bg-foreground text-background shadow-lg shadow-foreground/10"
-                          : "border-border/80 bg-background/85 hover:-translate-y-0.5 hover:border-foreground/30 hover:bg-muted/60 hover:shadow-sm",
+                          ? "border-foreground bg-foreground text-background"
+                          : "border-border bg-background hover:-translate-y-0.5 hover:border-foreground/30 hover:bg-muted/60",
                       )}
                       data-help-step-target={index + 1}
                       onClick={() => goToPage(index)}
@@ -164,7 +164,7 @@ export function ImportGuidePager({ pages }: ImportGuidePagerProps) {
                     >
                       <span
                         className={cn(
-                          "font-number mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                          "font-number mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-[2px] text-xs font-semibold",
                           isCurrent
                             ? "bg-background/15 text-background"
                             : isComplete
@@ -188,11 +188,11 @@ export function ImportGuidePager({ pages }: ImportGuidePagerProps) {
         </nav>
       </section>
 
-      <div className="py-7 sm:py-9" data-help-import-page={currentPage.id}>
+      <div className="px-4 py-6 sm:px-5 sm:py-7" data-help-import-page={currentPage.id}>
         {currentPage.content}
       </div>
 
-      <nav aria-label="教程翻页" className="-mx-5 flex items-center justify-between gap-3 border-t border-border/80 bg-muted/20 px-5 py-5 sm:-mx-8 sm:px-8 lg:-mx-10 lg:px-10">
+      <nav aria-label="教程翻页" className="flex items-center justify-between gap-3 border-t border-border bg-muted/20 px-4 py-4 sm:px-5">
         <Button type="button" variant="outline" size="lg" disabled={pageIndex === 0} onClick={() => goToPage(pageIndex - 1)}>
           <ArrowLeft className="size-4" aria-hidden="true" />
           上一页

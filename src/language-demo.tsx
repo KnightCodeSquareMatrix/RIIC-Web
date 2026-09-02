@@ -94,12 +94,12 @@ export function demoBuildingSkill<T extends { name: string; description: string;
 export function LanguageDemoSwitch() {
   const { locale, setLocale } = useLanguageDemo();
   return (
-    <div className="inline-flex h-9 items-center rounded-lg border border-border bg-background p-0.5 text-xs font-medium shadow-xs" aria-label="Language / 语言">
+    <div className="inline-flex h-7 items-center rounded-[4px] border border-border bg-background p-0.5 text-[11px] font-medium" aria-label="Language / 语言">
       {(["zh", "en"] as const).map((value) => (
         <button
           key={value}
           type="button"
-          className={`min-h-8 min-w-11 rounded-md px-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${locale === value ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+          className={`h-6 min-w-9 rounded-[3px] px-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${locale === value ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
           aria-pressed={locale === value}
           onClick={() => setLocale(value)}
         >

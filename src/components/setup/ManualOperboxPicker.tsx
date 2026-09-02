@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useCallback, useDeferredValue, useMemo, useState } from "react";
-import { Check, RotateCcw, Search, UsersRound } from "lucide-react";
+import { Check, RotateCcw, Search } from "lucide-react";
 
 import fullOperboxJson from "../../../fixtures/operbox_full_e2.json" with { type: "json" };
 import operatorCatalogJson from "../../generated/arkntools/operator-catalog.json" with { type: "json" };
@@ -19,6 +19,8 @@ import {
 import type { OperBoxEntry } from "@/types";
 
 const PAGE_SIZE = 48;
+const APPLY_BUTTON_CLASS = "h-9 min-w-[152px] px-4 text-xs font-semibold max-sm:min-h-9 max-sm:min-w-[152px] sm:h-9 sm:min-w-[152px] sm:px-4";
+const APPLY_BUTTON_STYLE = { borderRadius: 18 } as const;
 
 type CatalogOperator = {
   id: string;
@@ -45,6 +47,13 @@ const MANUAL_ROSTER: ManualRosterOperator[] = (fullOperboxJson as OperBoxEntry[]
 
 const STAGES: ManualOperboxStage[] = ["none", "e0", "e1", "e2"];
 
+const STAGE_COLOR: Record<ManualOperboxStage, string> = {
+  none: "#71717A",
+  e0: "#22BBFF",
+  e1: "#B8F03A",
+  e2: "#FFD800",
+};
+
 function initialStages(operbox: OperBoxEntry[] | null): Record<string, ManualOperboxStage> {
   const byId = new Map(operbox?.map((entry) => [entry.id, entry]) ?? []);
   const byName = new Map(operbox?.map((entry) => [entry.name, entry]) ?? []);
@@ -59,6 +68,13 @@ function stageLabel(stage: ManualOperboxStage, locale: DemoLocale): string {
   if (stage === "e0") return en ? "E0" : "精0";
   if (stage === "e1") return en ? "E1" : "精1";
   return en ? "E2" : "精2";
+}
+
+function maximumStageForRarity(rarity: number): ManualOperboxStage {
+  const maximum = maxEliteForRarity(rarity);
+  if (maximum === 2) return "e2";
+  if (maximum === 1) return "e1";
+  return "e0";
 }
 
 const ManualOperatorCard = memo(function ManualOperatorCard({
@@ -108,9 +124,11 @@ const ManualOperatorCard = memo(function ManualOperatorCard({
           const disabled = option !== "none" && requestedElite > maxElite;
           const selected = stage === option;
           return (
-            <button
+            <Button
               key={option}
               type="button"
+              size="sm"
+              variant="outline"
               role="radio"
               aria-checked={selected}
               aria-label={disabled
@@ -119,19 +137,23 @@ const ManualOperatorCard = memo(function ManualOperatorCard({
               title={disabled ? (en ? `Unavailable for ${operator.rarity}-star operators` : `${operator.rarity} 星干员无法达到此阶段`) : undefined}
               disabled={disabled}
               onClick={() => onStageChange(operator.id, option)}
+              style={selected ? { backgroundColor: STAGE_COLOR[option], borderColor: STAGE_COLOR[option] } : undefined}
               className={cn(
-                "relative min-h-11 rounded-[4px] border px-1 text-xs font-medium outline-none transition-[background-color,border-color,color,box-shadow] focus-visible:ring-2 focus-visible:ring-[#FFD501] focus-visible:ring-offset-2",
-                selected && option === "none" && "border-foreground bg-foreground text-background",
-                selected && option !== "none" && "border-[#d2b000] bg-[#FFD501] text-black shadow-sm",
+                "relative w-full rounded-[4px] px-1 focus-visible:ring-[#FFD501] focus-visible:ring-offset-2",
+                selected && (option === "none" ? "text-white" : "text-[#202020]"),
                 !selected && !disabled && "border-border bg-background text-muted-foreground hover:border-foreground/45 hover:bg-muted/60 hover:text-foreground",
                 disabled && "cursor-not-allowed border-border/50 bg-muted/30 text-muted-foreground/40",
               )}
             >
               <span className="inline-flex items-center justify-center gap-1">
-                {selected ? <Check className="size-3" aria-hidden="true" /> : null}
+                <span
+                  className={cn("size-2 shrink-0 rounded-[2px]", disabled && "opacity-30")}
+                  style={{ backgroundColor: STAGE_COLOR[option] }}
+                  aria-hidden="true"
+                />
                 {stageLabel(option, locale)}
               </span>
-            </button>
+            </Button>
           );
         })}
       </div>
@@ -188,14 +210,22 @@ export function ManualOperboxPicker({
     <div className="grid gap-4" data-manual-operbox-picker>
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border/70 pb-4">
         <div className="min-w-0">
-          <h4 className="flex items-center gap-2 text-sm font-semibold"><UsersRound className="size-4" />{en ? "Build your operator Box" : "手动选择干员 Box"}</h4>
+          <h4 className="text-sm font-semibold">{en ? "Build your operator Box" : "手动选择干员 Box"}</h4>
           <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">
             {en
               ? "Choose ownership and elite stage. Levels use each stage cap so level-gated infrastructure skills remain available."
               : "选择持有状态与精英阶段；等级按该阶段上限估算，避免漏掉有等级要求的基建技能。"}
           </p>
         </div>
-        <Button type="button" className="min-h-11 shrink-0" disabled={!ownedCount} onClick={applySelection}>
+        <Button
+          type="button"
+          size="dialog"
+          className={APPLY_BUTTON_CLASS}
+          style={APPLY_BUTTON_STYLE}
+          data-manual-operbox-apply
+          disabled={!ownedCount}
+          onClick={applySelection}
+        >
           <Check />{en ? "Use this Box" : "使用这份 Box"}
         </Button>
       </div>
@@ -206,7 +236,7 @@ export function ManualOperboxPicker({
         <span className="font-number text-muted-foreground">{en ? `${summary.none} unowned` : `未拥有 ${summary.none} 名`}</span>
       </div>
 
-      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
         <label className="relative min-w-0">
           <Search className="pointer-events-none absolute left-3 top-3.5 size-4 text-muted-foreground" aria-hidden="true" />
           <Input
@@ -220,31 +250,47 @@ export function ManualOperboxPicker({
             aria-label={en ? "Search operator" : "搜索干员"}
           />
         </label>
-        <Button
-          type="button"
-          variant={onlyOwned ? "default" : "outline"}
-          className="min-h-11"
-          aria-pressed={onlyOwned}
-          onClick={() => {
-            setOnlyOwned((current) => !current);
-            resetListView();
-          }}
-        >
-          {en ? "Owned only" : "只看已拥有"}
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          className="min-h-11"
-          disabled={!ownedCount}
-          onClick={() => {
-            setStages(Object.fromEntries(MANUAL_ROSTER.map((operator) => [operator.id, "none"])));
-            setOnlyOwned(false);
-            resetListView();
-          }}
-        >
-          <RotateCcw />{en ? "Clear" : "清空选择"}
-        </Button>
+        <div className="grid grid-cols-3 gap-2" data-manual-operbox-actions>
+          <Button
+            type="button"
+            variant={onlyOwned ? "default" : "outline"}
+            className="min-h-11 min-w-0 overflow-hidden px-2 text-ellipsis text-xs sm:px-3 sm:text-sm"
+            aria-pressed={onlyOwned}
+            onClick={() => {
+              setOnlyOwned((current) => !current);
+              resetListView();
+            }}
+          >
+            {en ? "Owned only" : "只看已拥有"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11 min-w-0 overflow-hidden px-2 text-ellipsis text-xs sm:px-3 sm:text-sm"
+            onClick={() => {
+              setStages(Object.fromEntries(
+                MANUAL_ROSTER.map((operator) => [operator.id, maximumStageForRarity(operator.rarity)]),
+              ));
+              setOnlyOwned(false);
+              resetListView();
+            }}
+          >
+            {en ? "Select all at max elite" : "全选最高精英"}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            className="min-h-11 min-w-0 overflow-hidden px-2 text-ellipsis text-xs sm:px-3 sm:text-sm"
+            disabled={!ownedCount}
+            onClick={() => {
+              setStages(Object.fromEntries(MANUAL_ROSTER.map((operator) => [operator.id, "none"])));
+              setOnlyOwned(false);
+              resetListView();
+            }}
+          >
+            <RotateCcw />{en ? "Clear" : "清空选择"}
+          </Button>
+        </div>
       </div>
 
       {filteredOperators.length ? (
@@ -279,9 +325,19 @@ export function ManualOperboxPicker({
               end: "已显示全部符合条件的干员",
             }}
           />
-          <Button type="button" className="min-h-11 w-full" disabled={!ownedCount} onClick={applySelection}>
-            <Check />{en ? `Use this Box (${ownedCount})` : `使用这份 Box（${ownedCount} 名）`}
-          </Button>
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              size="dialog"
+              className={APPLY_BUTTON_CLASS}
+              style={APPLY_BUTTON_STYLE}
+              data-manual-operbox-apply
+              disabled={!ownedCount}
+              onClick={applySelection}
+            >
+              <Check />{en ? `Use this Box (${ownedCount})` : `使用这份 Box（${ownedCount} 名）`}
+            </Button>
+          </div>
         </>
       ) : (
         <div className="grid min-h-32 place-items-center border border-dashed border-border text-center text-sm text-muted-foreground">

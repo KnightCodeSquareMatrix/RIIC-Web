@@ -2,7 +2,7 @@
 
 import { Popover as PopoverPrimitive } from "@base-ui/react/popover";
 import { motion, type HTMLMotionProps, useReducedMotion } from "motion/react";
-import { BookOpenText, Check, CircleHelp, Import, UsersRound, X } from "lucide-react";
+import { Check, CircleHelp, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
@@ -12,9 +12,9 @@ import { cn } from "@/lib/utils";
 import { MOTION_DURATION, MOTION_EASE_OUT } from "@/motion";
 
 const helpLinks = [
-  { href: "/help", label: "帮助首页", description: "常见问题快速自检", icon: BookOpenText },
-  { href: "/help/import-operators", label: "导入干员数据", description: "森空岛与 MAA 详细步骤", icon: Import },
-  { href: "/help/owned-operators", label: "切换已有干员", description: "换回自己的 Box", icon: UsersRound },
+  { href: "/help", label: "帮助首页", description: "常见问题快速自检" },
+  { href: "/help/import-operators", label: "导入干员数据", description: "森空岛与 MAA 详细步骤" },
+  { href: "/help/owned-operators", label: "切换已有干员", description: "换回自己的 Box" },
 ];
 
 export function HelpFloatingNav() {
@@ -69,12 +69,11 @@ export function HelpFloatingNav() {
                 style={{ ...(renderProps.style ?? {}), transformOrigin: "var(--transform-origin)" }}
               />
             )}
-            className="max-h-[min(28rem,calc(100dvh-6rem))] w-[min(21rem,calc(100vw-2rem))] overflow-y-auto rounded-2xl border border-border/80 bg-popover/95 p-3 text-popover-foreground shadow-2xl outline-none backdrop-blur-xl"
+            className="max-h-[min(28rem,calc(100dvh-6rem))] w-[min(21rem,calc(100vw-2rem))] overflow-y-auto rounded-[4px] border border-border bg-popover p-3 text-popover-foreground shadow-lg outline-none"
           >
             <div className="flex items-start justify-between gap-3 px-3 pb-2 pt-1">
               <div>
-                <p className="text-[10px] font-semibold tracking-[0.16em] text-muted-foreground">HELP CENTER</p>
-                <PopoverPrimitive.Title className="mt-1 text-base font-semibold">使用文档</PopoverPrimitive.Title>
+                <PopoverPrimitive.Title className="text-base font-semibold">使用帮助</PopoverPrimitive.Title>
                 <PopoverPrimitive.Description className="mt-1 text-xs leading-5 text-muted-foreground">
                   选择需要查看的帮助页面
                 </PopoverPrimitive.Description>
@@ -88,23 +87,20 @@ export function HelpFloatingNav() {
 
             <nav aria-label="帮助文档导航">
               <ul className="grid gap-1">
-                {helpLinks.map(({ href, label, description, icon: Icon }) => {
+                {helpLinks.map(({ href, label, description }) => {
                   const active = pathname === href;
                   return (
                     <li key={href}>
                       <Link
                         aria-current={active ? "page" : undefined}
                         className={cn(
-                          "group relative flex min-h-16 items-start gap-3 overflow-hidden rounded-xl px-3 py-3 outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring",
+                          "group relative flex min-h-16 items-start overflow-hidden rounded-[4px] px-3 py-3 outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring",
                           active && "bg-muted text-foreground ring-1 ring-border",
                         )}
                         href={href}
                         onClick={() => setOpenPath(null)}
                       >
                         {active ? <span aria-hidden="true" className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-amber-400" /> : null}
-                        <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-border bg-background text-primary shadow-sm">
-                          <Icon className="size-4" aria-hidden="true" />
-                        </span>
                         <span className="min-w-0 flex-1">
                           <span className="flex items-center justify-between gap-2">
                             <strong className="block text-sm font-medium group-hover:text-primary">{label}</strong>

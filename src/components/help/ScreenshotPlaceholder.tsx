@@ -1,5 +1,4 @@
 import Image from "next/image";
-import { Image as ImageIcon, Maximize2 } from "lucide-react";
 
 type ScreenshotPlaceholderProps = {
   slot: string;
@@ -38,7 +37,7 @@ export function ScreenshotPlaceholder({
 
     return (
       <figure
-        className="overflow-hidden rounded-2xl border border-border/80 bg-muted/20 shadow-sm"
+        className="overflow-hidden rounded-[4px] border border-border bg-muted/20"
         data-help-screenshot-slot={slot}
       >
         <a
@@ -77,7 +76,7 @@ export function ScreenshotPlaceholder({
                           fill="black"
                           height={highlight.height}
                           key={`${highlight.label}-${index}`}
-                          rx="1.2"
+                          rx="0.4"
                           width={highlight.width}
                           x={highlight.x}
                           y={highlight.y}
@@ -90,7 +89,7 @@ export function ScreenshotPlaceholder({
                 {highlights.map((highlight, index) => (
                   <span
                     aria-hidden="true"
-                    className="pointer-events-none absolute rounded-sm border-2 border-amber-300 bg-amber-200/10 shadow-[0_0_0_2px_rgba(0,0,0,0.65),0_0_22px_rgba(251,191,36,0.9)] sm:border-[3px]"
+                    className="pointer-events-none absolute rounded-[2px] border-2 border-amber-300 bg-amber-200/10 shadow-[0_0_0_2px_rgba(0,0,0,0.65),0_0_22px_rgba(251,191,36,0.9)] sm:border-[3px]"
                     data-help-screenshot-highlight={index + 1}
                     data-help-screenshot-highlight-label={highlight.label}
                     data-help-screenshot-highlight-x={highlight.x}
@@ -103,7 +102,7 @@ export function ScreenshotPlaceholder({
                       width: `${highlight.width}%`,
                     }}
                   >
-                    <span className="absolute -left-2 -top-2 grid size-6 place-items-center rounded-full border-2 border-black/70 bg-amber-300 text-[11px] font-bold text-black shadow-md">
+                    <span className="absolute -left-2 -top-2 grid size-6 place-items-center border-2 border-black/70 bg-amber-300 text-[11px] font-bold text-black">
                       {index + 1}
                     </span>
                   </span>
@@ -111,14 +110,14 @@ export function ScreenshotPlaceholder({
               </>
             ) : null}
           </span>
-          <span className="absolute bottom-2 right-2 z-10 inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-white/15 bg-black/80 px-3 text-xs font-semibold text-white shadow-lg backdrop-blur-sm">
-            <Maximize2 className="size-3.5" aria-hidden="true" />高清原图
+          <span className="absolute bottom-2 right-2 z-10 inline-flex min-h-9 items-center bg-black/80 px-3 text-xs font-semibold text-white">
+            高清原图
           </span>
         </a>
         <figcaption className="flex flex-wrap items-center gap-2 border-t border-border/80 bg-background/95 px-4 py-3 text-xs leading-5 text-muted-foreground">
           <span>图示：{title}</span>
           {highlights.map((highlight, index) => (
-            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 font-medium text-amber-950" key={`${highlight.label}-${index}`}>
+            <span className="inline-flex items-center gap-1 rounded-[2px] bg-amber-100 px-2 py-0.5 font-medium text-amber-950" key={`${highlight.label}-${index}`}>
               <span className="font-number font-bold">{index + 1}</span>
               {highlight.label}
             </span>
@@ -130,16 +129,13 @@ export function ScreenshotPlaceholder({
 
   return (
     <figure
-      className="overflow-hidden rounded-2xl border border-dashed border-border bg-muted/25 shadow-sm"
+      className="overflow-hidden rounded-[4px] border border-dashed border-border bg-muted/25"
       data-help-screenshot-slot={slot}
       aria-label={`截图占位：${title}`}
     >
       <div className="grid aspect-video place-items-center p-5 text-center sm:p-7">
         <div className="max-w-lg">
-          <span className="mx-auto grid size-12 place-items-center rounded-full border border-border bg-background text-muted-foreground">
-            <ImageIcon className="size-5" aria-hidden="true" />
-          </span>
-          <p className="mt-4 text-xs font-semibold tracking-[0.12em] text-primary">截图位 {slot}</p>
+          <p className="text-xs font-semibold text-primary">截图位 {slot}</p>
           <p className="mt-1 font-semibold text-foreground">{title}</p>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>
         </div>

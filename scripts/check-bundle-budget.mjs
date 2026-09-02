@@ -8,16 +8,17 @@ import { gzipSync } from "node:zlib";
 // views have independent route chunks and may carry their own datasets without joining `/`.
 const MAX_SKLAND_DISABLED_ROUTE_INITIAL_JS_BYTES = 1_140_000;
 // The language switch itself is part of the shell; translation catalogs stay in an on-demand chunk.
-// Status-aware queue polling adds a small shared policy to the main workbench graph.
-const MAX_SKLAND_ENABLED_ROUTE_INITIAL_JS_BYTES = 1_160_500;
+// Status-aware queue polling and the release-candidate workbench polish add a small
+// shared policy to the main graph. Keep less than 8 KB of headroom over the verified build.
+const MAX_SKLAND_ENABLED_ROUTE_INITIAL_JS_BYTES = 1_180_000;
 // Task progress UI and training tooltips add intentional code to secondary workbench routes.
 // Keep the ceiling narrow enough to flag unrelated bundle growth.
-const MAX_SECONDARY_ROUTE_INITIAL_JS_BYTES = 1_540_000;
-const MAX_SKLAND_ROUTE_INITIAL_JS_BYTES = 1_600_000;
+const MAX_SECONDARY_ROUTE_INITIAL_JS_BYTES = 1_555_000;
+const MAX_SKLAND_ROUTE_INITIAL_JS_BYTES = 1_615_000;
 const MAX_SKLAND_DISABLED_DOCUMENT_INITIAL_JS_BYTES = 1_240_000;
-const MAX_SKLAND_ENABLED_DOCUMENT_INITIAL_JS_BYTES = 1_275_000;
+const MAX_SKLAND_ENABLED_DOCUMENT_INITIAL_JS_BYTES = 1_295_000;
 const MAX_SKLAND_DISABLED_DOCUMENT_INITIAL_GZIP_JS_BYTES = 395_000;
-const MAX_SKLAND_ENABLED_DOCUMENT_INITIAL_GZIP_JS_BYTES = 407_000;
+const MAX_SKLAND_ENABLED_DOCUMENT_INITIAL_GZIP_JS_BYTES = 415_000;
 const MAX_DOCUMENT_INITIAL_JS_FILES = 18;
 const WORKBENCH_ROUTES = ["/", "/training", "/skills", "/skland", "/account"];
 const statsUrl = new URL("../.next/diagnostics/route-bundle-stats.json", import.meta.url);

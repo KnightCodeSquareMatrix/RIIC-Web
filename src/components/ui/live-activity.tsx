@@ -1,6 +1,5 @@
 "use client";
 
-import { AlertTriangle, Check, Clock, Copy, RotateCcw, X } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { ThinkingOrb } from "thinking-orbs";
@@ -8,8 +7,11 @@ import { ThinkingOrb } from "thinking-orbs";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { MOTION_DURATION, MOTION_EASE_OUT } from "@/motion";
+import { roomVisualFor } from "@/room-visuals";
 import type { DisplayError } from "@/types";
 import { solverDiagnosticFor } from "@/solver-diagnostic";
+
+const SUCCESS_SWEEP_COLOR = roomVisualFor("power").accent;
 
 export type ActivityPhase = "running" | "queued" | "success" | "error";
 
@@ -96,12 +98,12 @@ export function LiveActivity({ activity, onRetry, onCopyDiagnostic, retryCountdo
     );
   }, [activity]);
 
-  // 仅 success 自动消失（2s）；queued / error 保持显示，靠关闭按钮收起。
+  // 仅 success 自动消失；为扫带完成后保留 1.2s 白底确认时间。
   useEffect(() => {
     if (!activity || activity.phase !== "success") return;
     const id = activity.id;
     const phase = activity.phase;
-    const timer = window.setTimeout(() => setDismissed({ id, phase }), 2_000);
+    const timer = window.setTimeout(() => setDismissed({ id, phase }), 2_800);
     return () => window.clearTimeout(timer);
   }, [activity]);
 
@@ -142,19 +144,42 @@ export function LiveActivity({ activity, onRetry, onCopyDiagnostic, retryCountdo
           exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -6, scale: 0.98 }}
           transition={{ duration: reduceMotion ? 0 : MOTION_DURATION.state, ease: MOTION_EASE_OUT }}
         >
-          <div className="flex min-h-11 flex-wrap items-center gap-3 px-3 py-3 max-sm:gap-y-1.5">
-            <span className="grid size-7 shrink-0 place-items-center bg-black/5 max-sm:order-1" aria-hidden="true">
-              {activity.phase === "running" ? (
-                <ThinkingOrb state="solving" size={20} theme="light" className="shrink-0" data-slot="solving-orb" />
-              ) : activity.phase === "queued" ? (
-                <Clock className="size-4 text-[#313131]/60" />
-              ) : activity.phase === "success" ? (
-                <Check className="size-4 text-emerald-600" />
-              ) : (
-                <AlertTriangle className="size-4 text-red-300" />
-              )}
-            </span>
-            <div className="min-w-0 flex-1 max-sm:order-3 max-sm:basis-full">
+          <div className="relative flex min-h-[4.5rem] items-stretch overflow-hidden" data-slot="live-activity-body">
+            {activity.phase === "success" && !reduceMotion ? (
+              <motion.span
+                className="pointer-events-none absolute inset-y-0 left-0 overflow-hidden"
+                initial={{ x: -360 }}
+                animate={{ x: 640 }}
+                transition={{ duration: 1.6, ease: MOTION_EASE_OUT }}
+                style={{
+                  width: 360,
+                  zIndex: 0,
+                  backgroundColor: SUCCESS_SWEEP_COLOR,
+                }}
+                aria-hidden="true"
+                data-slot="activity-success-sweep"
+              />
+            ) : null}
+            {activity.phase === "running" ? (
+              <span
+                className="relative z-10 grid w-[4.5rem] shrink-0 self-stretch place-items-center bg-transparent"
+                aria-hidden="true"
+                data-slot="solving-orb-rail"
+              >
+                <ThinkingOrb
+                  state="solving"
+                  size={64}
+                  theme="light"
+                  className="shrink-0"
+                  data-live-activity-icon
+                  data-slot="solving-orb"
+                />
+              </span>
+            ) : null}
+            <div className={cn(
+              "relative z-10 flex min-w-0 flex-1 flex-wrap items-center gap-3 py-3 pr-3 pl-5 max-sm:gap-y-1.5",
+            )}>
+              <div className="min-w-0 flex-1 max-sm:basis-full">
               <strong className={cn("block truncate font-medium", activity.phase === "running" && "live-activity-shimmer")} data-text={activity.phase === "running" ? label : undefined}>{label}</strong>
               <span className="mt-0.5 block">
                 {activity.phase === "queued" ? (
@@ -186,12 +211,12 @@ export function LiveActivity({ activity, onRetry, onCopyDiagnostic, retryCountdo
                 </span>
               ) : null}
               {diagnostic ? <span className="mt-1 block text-xs text-red-900">{diagnostic.suggestion}</span> : null}
-            </div>
-            {activity.phase === "error" ? (
-              <span className="flex shrink-0 items-center gap-1 max-sm:order-4 max-sm:basis-full max-sm:justify-end">
+              </div>
+              {activity.phase === "error" ? (
+                <span className="flex shrink-0 items-center gap-1 max-sm:basis-full max-sm:justify-end">
                 {activity.error?.retryable ? (
                   <Button type="button" size="sm" variant="ghost" className="h-9 text-red-900 hover:bg-red-100 hover:text-red-950" onClick={onRetry} disabled={retryCountdownSeconds > 0}>
-                    <RotateCcw />{retryCountdownSeconds > 0 ? `${retryCountdownSeconds} 秒后重试` : "重试"}
+                    {retryCountdownSeconds > 0 ? `${retryCountdownSeconds} 秒后重试` : "重试"}
                   </Button>
                 ) : null}
                 <Button
@@ -204,18 +229,19 @@ export function LiveActivity({ activity, onRetry, onCopyDiagnostic, retryCountdo
                     setCopied(true);
                   }}
                 >
-                  <Copy />{copied ? "已复制" : "复制诊断"}
+                  {copied ? "已复制" : "复制诊断"}
                 </Button>
-              </span>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => setDismissed({ id: activity.id, phase: activity.phase })}
-              aria-label="关闭提示"
-              className="grid size-8 shrink-0 place-items-center rounded-md text-[#313131]/45 outline-none transition-colors hover:bg-black/5 hover:text-[#313131] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#FFD800] max-sm:order-2 max-sm:ml-auto"
-            >
-              <X className="size-4" aria-hidden="true" />
-            </button>
+                </span>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => setDismissed({ id: activity.id, phase: activity.phase })}
+                aria-label="关闭提示"
+                className="h-8 shrink-0 px-2 text-xs text-[#313131]/48 outline-none transition-colors hover:bg-black/5 hover:text-[#313131] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#FFD800] max-sm:ml-auto"
+              >
+                关闭
+              </button>
+            </div>
           </div>
           <div className="h-1 overflow-hidden bg-black/8" aria-hidden="true" data-slot="activity-progress-track">
             {activity.phase === "running" ? (
@@ -229,7 +255,7 @@ export function LiveActivity({ activity, onRetry, onCopyDiagnostic, retryCountdo
               <span className="block h-full w-full bg-[#FFD800]/55" aria-hidden="true" />
             ) : (
               <motion.span
-                className={cn("block h-full w-full", activity.phase === "success" ? "bg-[#FFD800]" : "bg-red-400")}
+                className={cn("block h-full w-full", activity.phase === "success" ? "bg-emerald-500" : "bg-red-400")}
                 initial={reduceMotion ? false : { scaleX: 0.72 }}
                 animate={{ scaleX: 1 }}
                 transition={{ duration: reduceMotion ? 0 : MOTION_DURATION.state, ease: MOTION_EASE_OUT }}

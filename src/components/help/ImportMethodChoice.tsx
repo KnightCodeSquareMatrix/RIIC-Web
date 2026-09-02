@@ -1,6 +1,5 @@
 "use client";
 
-import { Check, FileJson, ScanLine } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
@@ -17,19 +16,16 @@ const methods = [
     id: "skland",
     label: "森空岛",
     description: "用森空岛 App 扫码并同步当前角色。",
-    icon: ScanLine,
   },
   {
     id: "maa",
     label: "MAA",
     description: "从 MAA 导出干员 Box 文件后上传。",
-    icon: FileJson,
   },
 ] satisfies Array<{
   id: ImportMethod;
   label: string;
   description: string;
-  icon: typeof ScanLine;
 }>;
 
 function parseMethod(value: string | null): ImportMethod | null {
@@ -70,19 +66,18 @@ export function ImportMethodChoice({ sklandContent, maaContent }: ImportMethodCh
 
   return (
     <section className="grid gap-6" aria-labelledby="import-method-choice-title" data-help-import-method-picker>
-      <fieldset className="grid gap-4 rounded-3xl border border-border/80 bg-card p-4 shadow-sm sm:p-6">
+      <fieldset className="grid gap-4 rounded-[4px] border border-border bg-card p-4 sm:p-5">
         <legend className="px-1 text-xl font-semibold" id="import-method-choice-title">选择导入方式</legend>
         <p className="text-sm leading-6 text-muted-foreground">选择你实际使用的一种方式，下方只显示对应教程；选错时可直接改选。</p>
         <div className="grid gap-3 sm:grid-cols-2">
           {methods.map((method) => {
-            const Icon = method.icon;
             const isSelected = method.id === selectedMethod;
 
             return (
               <label
                 className={cn(
-                  "relative flex min-h-28 cursor-pointer items-start gap-3 rounded-2xl border border-border/80 bg-background p-4 outline-none transition-[background-color,border-color,box-shadow] duration-200 hover:border-foreground/35 hover:bg-muted/50 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring motion-reduce:transition-none",
-                  isSelected && "border-foreground bg-foreground text-background shadow-sm",
+                  "relative flex min-h-24 cursor-pointer items-start rounded-[4px] border border-border bg-background p-4 outline-none transition-[background-color,border-color] hover:border-foreground/35 hover:bg-muted/50 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring",
+                  isSelected && "border-foreground bg-foreground text-background",
                 )}
                 data-help-import-method-option={method.id}
                 key={method.id}
@@ -95,9 +90,6 @@ export function ImportMethodChoice({ sklandContent, maaContent }: ImportMethodCh
                   type="radio"
                   value={method.id}
                 />
-                <span className={cn("grid size-10 shrink-0 place-items-center rounded-xl bg-muted text-foreground", isSelected && "bg-background/15 text-background")}>
-                  <Icon className="size-5" aria-hidden="true" />
-                </span>
                 <span className="min-w-0">
                   <strong className="block text-lg leading-6">{method.label}</strong>
                   <span className={cn("mt-1 block text-sm leading-5 text-muted-foreground", isSelected && "text-background/75")}>{method.description}</span>
@@ -106,9 +98,8 @@ export function ImportMethodChoice({ sklandContent, maaContent }: ImportMethodCh
                   </span>
                 </span>
                 {isSelected ? (
-                  <span className="absolute right-3 top-3 grid size-6 place-items-center rounded-full bg-amber-300 text-black">
-                    <Check className="size-4" aria-hidden="true" />
-                    <span className="sr-only">已选择</span>
+                  <span className="absolute right-3 top-3 bg-[#FFD800] px-1.5 py-0.5 text-[10px] font-semibold text-black">
+                    已选
                   </span>
                 ) : null}
               </label>
@@ -126,7 +117,7 @@ export function ImportMethodChoice({ sklandContent, maaContent }: ImportMethodCh
           {selectedMethod === "skland" ? sklandContent : maaContent}
         </div>
       ) : (
-        <div className="rounded-3xl border border-dashed border-border/80 bg-muted/25 px-5 py-10 text-center" data-help-import-choice-empty>
+        <div className="rounded-[4px] border border-dashed border-border bg-muted/25 px-5 py-10 text-center" data-help-import-choice-empty>
           <p className="font-semibold text-foreground">请先选择 MAA 或森空岛</p>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">选择后，这里会显示对应截图与操作步骤。</p>
         </div>

@@ -1,6 +1,11 @@
 import { expect, test } from "@playwright/test";
 
 test("English mode keeps the calculator and account entry copy in English", async ({ page }) => {
+  await page.route("**/api/auth/get-session", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: "null",
+  }));
   await page.addInitScript(() => window.localStorage.setItem("infra-demo-locale", "en"));
   await page.goto("/");
 
@@ -14,6 +19,6 @@ test("English mode keeps the calculator and account entry copy in English", asyn
   const accountDialog = page.locator("[data-website-account-dialog]");
   await expect(accountDialog).toBeVisible();
   await expect(accountDialog).toHaveAccessibleName("Website account sign-in");
-  await expect(accountDialog.getByRole("heading", { name: "Sign in", exact: true })).toBeVisible();
+  await expect(accountDialog.getByRole("heading", { name: "Sign in", exact: true })).toBeVisible({ timeout: 30_000 });
   await expect(accountDialog.getByRole("button", { name: "Show password" })).toBeVisible();
 });

@@ -58,7 +58,7 @@ export default function AboutPage() {
             </div>
           </section>
         </section>
-        <footer className="flex flex-wrap items-center justify-center gap-x-5 py-5 text-xs text-neutral-500"><span>非官方、小范围测试中的排班辅助工具</span><Link className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-neutral-800" href="/terms">服务条款</Link><Link className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-neutral-800" href="/privacy">隐私政策</Link></footer>
+        <footer className="flex flex-wrap items-center justify-center gap-x-5 py-5 text-xs text-neutral-500"><Link className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-neutral-800" href="/terms">服务条款</Link><Link className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-neutral-800" href="/privacy">隐私政策</Link></footer>
       </div>
     </main>
   );

@@ -9,7 +9,7 @@ test("import guide uses page-by-page navigation", async ({ page }) => {
   await expect(guideRoot).toHaveAttribute("data-help-import-step", "1");
   await expect(page.getByRole("heading", { name: "打开「配置 Box 与布局」" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "选择导入方式" })).toHaveCount(0);
-  await expect(page.getByLabel("教程进度", { exact: true }).getByText("STEP 1 · 共 5 步")).toBeVisible();
+  await expect(page.getByLabel("教程进度", { exact: true }).getByText("第 1 步 · 共 5 步")).toBeVisible();
   expect(new URL(page.url()).searchParams.has("source")).toBe(false);
 
   const firstFigure = page.locator('[data-help-screenshot-slot="01"]');
@@ -162,6 +162,7 @@ test("help content fills the desktop container", async ({ page }) => {
 test("quick checks open the matching detailed help", async ({ page }) => {
   await page.goto("/help");
 
+  await expect(page.locator("#help-content").getByRole("heading", { level: 1 })).toHaveCount(0);
   const quickCheckLinks = page.locator("[data-quick-check-link]");
   await expect(quickCheckLinks).toHaveCount(4);
   await expect(quickCheckLinks.nth(0)).toHaveAttribute("href", "/help/owned-operators?issue=unexpected-operators");

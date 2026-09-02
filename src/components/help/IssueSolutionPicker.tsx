@@ -37,12 +37,12 @@ export function IssueSolutionPicker({ children }: { children: ReactNode }) {
   const issue = issues.find((item) => item.id === selected);
 
   return (
-    <section className="grid gap-8" data-help-issue-picker>
-      <fieldset className="grid gap-4 rounded-2xl border border-border bg-card p-5 shadow-sm">
-        <legend className="px-1 text-2xl font-semibold">你遇到什么问题？</legend>
-        <div className="grid gap-3 sm:grid-cols-2">
+    <section className="grid gap-5" data-help-issue-picker>
+      <fieldset className="grid gap-4 rounded-[4px] border border-border bg-card p-4 sm:p-5">
+        <legend className="px-1 text-lg font-semibold">你遇到什么问题？</legend>
+        <div className="grid gap-2 sm:grid-cols-2">
           {issues.map((item) => (
-            <label className={cn("cursor-pointer rounded-xl border border-border p-4 text-lg font-semibold transition-colors hover:bg-muted has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring", selected === item.id && "border-foreground bg-foreground text-background")} key={item.id}>
+            <label className={cn("cursor-pointer rounded-[4px] border border-border p-3 text-sm font-semibold transition-colors hover:bg-muted has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring", selected === item.id && "border-foreground bg-foreground text-background")} key={item.id}>
               <input checked={selected === item.id} className="sr-only" name="help-issue" onChange={() => selectIssue(item.id)} type="radio" value={item.id} />
               {item.label}
             </label>
@@ -51,8 +51,8 @@ export function IssueSolutionPicker({ children }: { children: ReactNode }) {
       </fieldset>
 
       {selected === "unexpected-operators" ? children : null}
-      {issue && selected !== "unexpected-operators" ? <section className="rounded-2xl border border-border bg-card p-6 text-xl leading-8 shadow-sm" data-help-issue-solution>{issue.solution}</section> : null}
-      {!selected ? <p className="rounded-xl border border-dashed border-border px-5 py-10 text-center text-lg text-muted-foreground">选择一个问题，查看对应解决方案。</p> : null}
+      {issue && selected !== "unexpected-operators" ? <section className="rounded-[4px] border border-border bg-card p-5 text-sm leading-6" data-help-issue-solution>{issue.solution}</section> : null}
+      {!selected ? <p className="rounded-[4px] border border-dashed border-border px-5 py-10 text-center text-sm text-muted-foreground">选择一个问题，查看对应解决方案。</p> : null}
     </section>
   );
 }

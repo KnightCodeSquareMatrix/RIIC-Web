@@ -1,16 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import {
-  ArrowLeft,
-  BadgeCheck,
-  BookOpenCheck,
-  FileJson,
-  MousePointerClick,
-  Play,
-  ScanLine,
-  Settings2,
-} from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 
 import { ImportGuidePager, type ImportGuidePage } from "@/components/help/ImportGuidePager";
 import { ImportMethodChoice } from "@/components/help/ImportMethodChoice";
@@ -23,10 +14,8 @@ export const metadata: Metadata = {
 
 function ResultHint({ children }: { children: ReactNode }) {
   return (
-    <div className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50/75 p-4 text-sm leading-6 text-emerald-950 dark:border-emerald-900 dark:bg-emerald-950/25 dark:text-emerald-100">
-      <span className="grid size-7 shrink-0 place-items-center rounded-full bg-emerald-600 text-white">
-        <BadgeCheck className="size-4" aria-hidden="true" />
-      </span>
+    <div className="flex items-start gap-3 rounded-[4px] border border-emerald-200 bg-emerald-50/75 p-4 text-sm leading-6 text-emerald-950 dark:border-emerald-900 dark:bg-emerald-950/25 dark:text-emerald-100">
+      <span className="mt-2 size-2 shrink-0 bg-emerald-600" aria-hidden="true" />
       <span><strong className="font-semibold">完成标志：</strong>{children}</span>
     </div>
   );
@@ -121,15 +110,10 @@ const importMethodsPage: ImportGuidePage = {
   content: (
     <ImportMethodChoice
       sklandContent={(
-      <section className="grid gap-4 rounded-3xl border border-border/80 bg-card p-4 shadow-sm sm:p-6" data-help-import-method="skland" aria-labelledby="skland-method-title">
-        <header className="flex items-start gap-3 border-b border-border pb-4">
-          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-foreground text-background shadow-sm">
-            <ScanLine className="size-5" aria-hidden="true" />
-          </span>
-          <div>
-            <p className="text-xs font-semibold tracking-[0.12em] text-primary">使用森空岛时</p>
-            <h3 className="mt-1 text-xl font-semibold" id="skland-method-title">森空岛同步</h3>
-          </div>
+      <section className="grid gap-4 rounded-[4px] border border-border bg-card p-4 sm:p-5" data-help-import-method="skland" aria-labelledby="skland-method-title">
+        <header className="border-b border-border pb-4">
+          <p className="text-xs font-medium text-muted-foreground">使用森空岛时</p>
+          <h3 className="mt-1 text-xl font-semibold" id="skland-method-title">森空岛同步</h3>
         </header>
         <div className="grid gap-2 text-sm leading-6 text-muted-foreground">
           <p><strong className="text-foreground">1.</strong> 点「前往森空岛同步」。</p>
@@ -172,15 +156,10 @@ const importMethodsPage: ImportGuidePage = {
       </section>
       )}
       maaContent={(
-      <section className="grid gap-4 rounded-3xl border border-border/80 bg-card p-4 shadow-sm sm:p-6" data-help-import-method="maa" aria-labelledby="maa-method-title">
-        <header className="flex items-start gap-3 border-b border-border pb-4">
-          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-foreground text-background shadow-sm">
-            <FileJson className="size-5" aria-hidden="true" />
-          </span>
-          <div>
-            <p className="text-xs font-semibold tracking-[0.12em] text-primary">使用 MAA 时</p>
-            <h3 className="mt-1 text-xl font-semibold" id="maa-method-title">MAA 文件导入</h3>
-          </div>
+      <section className="grid gap-4 rounded-[4px] border border-border bg-card p-4 sm:p-5" data-help-import-method="maa" aria-labelledby="maa-method-title">
+        <header className="border-b border-border pb-4">
+          <p className="text-xs font-medium text-muted-foreground">使用 MAA 时</p>
+          <h3 className="mt-1 text-xl font-semibold" id="maa-method-title">MAA 文件导入</h3>
         </header>
         <p className="text-sm leading-6 text-muted-foreground">
           先在 MAA 导出 <code className="break-all rounded bg-muted px-1 py-0.5 text-foreground">Arknights_OperBox_Export.json</code>。不要选排班文件，也不要上传本站导出的 MAA 排班 JSON。
@@ -231,10 +210,10 @@ const sharedPages: ImportGuidePage[] = [
     summary: "保存配置并重新生成排班。",
     content: (
       <section className="grid gap-4" aria-label="完成设置并重新生成">
-        <ol className="grid gap-3 text-sm leading-6 text-muted-foreground sm:grid-cols-3">
-          <li className="rounded-2xl border border-border/80 bg-card p-4 shadow-sm"><span className="grid size-9 place-items-center rounded-xl bg-muted text-primary"><MousePointerClick className="size-4.5" aria-hidden="true" /></span><strong className="mt-3 block text-foreground">1. 继续</strong><p className="mt-1">进入布局与设施检查。</p></li>
-          <li className="rounded-2xl border border-border/80 bg-card p-4 shadow-sm"><span className="grid size-9 place-items-center rounded-xl bg-muted text-primary"><Settings2 className="size-4.5" aria-hidden="true" /></span><strong className="mt-3 block text-foreground">2. 完成</strong><p className="mt-1">保存这次 Box 和布局。</p></li>
-          <li className="rounded-2xl border border-border/80 bg-card p-4 shadow-sm"><span className="grid size-9 place-items-center rounded-xl bg-muted text-primary"><Play className="size-4.5" aria-hidden="true" /></span><strong className="mt-3 block text-foreground">3. 重新生成</strong><p className="mt-1">旧排班不会自动套用新 Box。</p></li>
+        <ol className="grid divide-y divide-border border-y border-border text-sm leading-6 text-muted-foreground sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+          <li className="p-4"><strong className="block text-foreground">1. 继续</strong><p className="mt-1">进入布局与设施检查。</p></li>
+          <li className="p-4"><strong className="block text-foreground">2. 完成</strong><p className="mt-1">保存这次 Box 和布局。</p></li>
+          <li className="p-4"><strong className="block text-foreground">3. 重新生成</strong><p className="mt-1">旧排班不会自动套用新 Box。</p></li>
         </ol>
       </section>
     ),
@@ -245,24 +224,14 @@ const pages = [...commonPages, importMethodsPage, ...sharedPages];
 
 export default function ImportOperatorsHelpPage() {
   return (
-    <article className="overflow-hidden rounded-3xl border border-border/80 bg-background/95 shadow-[0_26px_80px_-48px_rgba(0,0,0,0.45)]">
-      <header className="relative overflow-hidden border-b border-border/80 bg-gradient-to-br from-background via-background to-muted/60 px-5 py-6 sm:px-8 sm:py-8 lg:px-10 lg:py-9">
-        <div aria-hidden="true" className="absolute -right-24 -top-32 size-80 rounded-full border-[52px] border-amber-300/20" />
-        <div aria-hidden="true" className="absolute bottom-0 right-14 h-24 w-px bg-gradient-to-b from-transparent to-amber-400/70" />
-        <div className="relative">
-          <Link className="inline-flex min-h-11 items-center gap-2 rounded-lg text-sm font-medium text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring" href="/help">
-            <ArrowLeft className="size-4" aria-hidden="true" />返回帮助首页
-          </Link>
-
-          <div className="mt-4 flex items-start gap-4 sm:mt-5">
-            <span className="mt-1 hidden size-12 shrink-0 place-items-center rounded-2xl bg-foreground text-background shadow-lg sm:grid">
-              <BookOpenCheck className="size-6" aria-hidden="true" />
-            </span>
-            <div className="min-w-0">
-              <p className="text-xs font-semibold tracking-[0.18em] text-muted-foreground">IMPORT GUIDE · 图文教程</p>
-              <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl lg:text-[2.75rem]">导入自己的干员 Box</h1>
-            </div>
-          </div>
+    <article className="flex w-full flex-col gap-5 pt-5">
+      <header>
+        <Link className="inline-flex min-h-10 items-center gap-2 text-xs text-muted-foreground underline-offset-4 outline-none hover:underline hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring" href="/help">
+          <ArrowLeft className="size-3.5" aria-hidden="true" />返回帮助首页
+        </Link>
+        <div className="mt-2 flex min-w-0 items-center gap-2.5">
+          <span className="h-7 w-1.5 shrink-0 bg-[#FFD501]" aria-hidden="true" />
+          <h1 className="truncate text-[21px] font-medium leading-none text-[#313131]">导入自己的干员 Box</h1>
         </div>
       </header>
 
