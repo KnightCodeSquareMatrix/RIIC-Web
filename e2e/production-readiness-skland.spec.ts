@@ -22,7 +22,7 @@ test("Skland login exposes both methods and starts QR only after explicit consen
         termsAccepted: true,
         privacyAccepted: true,
         termsVersion: "2026-08-21-cloud-workspace",
-        privacyVersion: "2026-08-27-detailed-telemetry",
+        privacyVersion: "2026-09-03-solver-reproduction-retention",
       },
     });
     return route.fulfill({
@@ -195,7 +195,7 @@ test("credential import explains the risk, gates consent, recovers from errors, 
         termsAccepted: true,
         privacyAccepted: true,
         termsVersion: "2026-08-21-cloud-workspace",
-        privacyVersion: "2026-08-27-detailed-telemetry",
+        privacyVersion: "2026-09-03-solver-reproduction-retention",
       },
     },
     {
@@ -204,7 +204,7 @@ test("credential import explains the risk, gates consent, recovers from errors, 
         termsAccepted: true,
         privacyAccepted: true,
         termsVersion: "2026-08-21-cloud-workspace",
-        privacyVersion: "2026-08-27-detailed-telemetry",
+        privacyVersion: "2026-09-03-solver-reproduction-retention",
       },
     },
   ]);
@@ -312,7 +312,7 @@ test("credential import can add a second Skland account from the account dialog"
       termsAccepted: true,
       privacyAccepted: true,
       termsVersion: "2026-08-21-cloud-workspace",
-      privacyVersion: "2026-08-27-detailed-telemetry",
+      privacyVersion: "2026-09-03-solver-reproduction-retention",
     },
   });
   await expect(page.locator("body")).not.toContainText(submittedCredential);

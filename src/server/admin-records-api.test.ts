@@ -23,4 +23,23 @@ test("admin issue details and deletion retain their privacy boundaries", async (
   assert.equal(deleteArtifacts > 0, true);
   assert.equal(deleteRows > deleteArtifacts, true);
   assert.equal(source.includes('feedbackFacility(params.get("facility"))'), true);
+  for (const field of ["artifactKey", "artifactStatus", "executionSource", "expiresAt"]) {
+    assert.equal(source.includes(field), true);
+  }
+});
+
+test("admin issue UI explains every reproduction availability state", async () => {
+  const source = await readFile(new URL("../app/admin/issues/issues-client.tsx", import.meta.url), "utf8");
+  for (const reason of [
+    "expired",
+    "cache_hit",
+    "finalizing",
+    "finalization_failed",
+    "not_recorded",
+    "missing",
+    "invalid",
+    "incomplete",
+  ]) {
+    assert.equal(source.includes(`${reason}:`), true);
+  }
 });

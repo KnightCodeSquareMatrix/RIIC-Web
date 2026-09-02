@@ -6,6 +6,7 @@ import path from "node:path";
 
 import type {
   AdminReproductionData,
+  AdminReproductionUnavailableReason,
   BaseBlueprint,
   CliCandidate,
   DebugBundle,
@@ -50,7 +51,7 @@ import {
   updateFeedbackRecord,
   type PrivateArtifactDescriptor,
 } from "./business-records";
-import { isBusinessDatabaseReadEnabled, isBusinessFileFallbackEnabled } from "./business-config";
+import { BUSINESS_DATA_TTL_MS, isBusinessDatabaseReadEnabled, isBusinessFileFallbackEnabled } from "./business-config";
 import {
   InfraCliServeClient,
   type JsonRecord,
@@ -58,6 +59,7 @@ import {
 } from "./serve-client";
 import { registerProcessCleanup } from "./process-cleanup";
 import { normalizeSolverOperbox } from "./plan-solver-input";
+import { legacyPlanReproductionContext } from "./business-backfill";
 
 type PlanRequestBody = {
   layout: BaseBlueprint;
@@ -79,7 +81,7 @@ const cliRunRoot = path.resolve(/* turbopackIgnore: true */ process.env.BETA_CLI
 const cliReleaseRoot = path.resolve(/* turbopackIgnore: true */ process.env.BETA_CLI_RELEASE_DIR || path.join(storageRoot, "cli-releases"));
 const activeCliPath = path.join(storageRoot, "active-cli.json");
 const timeoutMs = Number(process.env.BETA_CLI_TIMEOUT_MS || 180_000);
-const PRIVATE_RECORD_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+export const PRIVATE_RECORD_TTL_MS = BUSINESS_DATA_TTL_MS;
 const PRIVATE_MAINTENANCE_INTERVAL_MS = 60 * 60 * 1000;
 const PLAN_CACHE_SOLVER_IDENTITY_TTL_MS = 60_000;
 const PLAN_CACHE_SOLVER_IDENTITY_RETRY_MS = 5_000;
@@ -449,7 +451,41 @@ export async function deleteFeedbackArtifacts(feedbackIds: string[]): Promise<nu
   return deleted;
 }
 
-async function ownerMetadata(directory: string): Promise<{ ownerTag?: unknown; diagnosticId?: unknown; sourceName?: unknown } | null> {
+export async function deletePlanRunArtifacts(diagnosticIds: string[]): Promise<number> {
+  const wanted = new Set(diagnosticIds.filter((value) => /^[a-f0-9-]{36}$/i.test(value)));
+  if (!wanted.size) return 0;
+  await ensurePrivateStorageBoundaries();
+  let deleted = 0;
+  for (const directory of await runDirectories()) {
+    const directoryId = path.basename(directory).match(/(?:^|_)([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i)?.[1];
+    const metadata = directoryId && wanted.has(directoryId) ? null : await ownerMetadata(directory);
+    const diagnosticId = directoryId ?? (typeof metadata?.diagnosticId === "string" ? metadata.diagnosticId : null);
+    if (!diagnosticId || !wanted.has(diagnosticId)) continue;
+    await removePrivateDirectory(cliRunRoot, directory);
+    deleted += 1;
+  }
+  return deleted;
+}
+
+type PrivateRunMetadata = {
+  ownerTag?: unknown;
+  diagnosticId?: unknown;
+  sourceName?: unknown;
+  createdAt?: unknown;
+};
+
+function timestampMs(value: unknown): number | null {
+  const parsed = value instanceof Date
+    ? value.getTime()
+    : typeof value === "string" || typeof value === "number" ? new Date(value).getTime() : Number.NaN;
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function filesystemCreatedAtMs(details: { birthtimeMs: number; mtimeMs: number }): number {
+  return details.birthtimeMs > 0 ? Math.min(details.birthtimeMs, details.mtimeMs) : details.mtimeMs;
+}
+
+async function ownerMetadata(directory: string): Promise<PrivateRunMetadata | null> {
   const value = await readJsonIfExists(path.join(directory, "owner.json"));
   if (isObject(value)) return value;
   const envelope = await readJsonIfExists(path.join(directory, "run-envelope.json"));
@@ -461,7 +497,20 @@ async function ownerMetadata(directory: string): Promise<{ ownerTag?: unknown; d
     ownerTag: envelope.dataOwnerTag,
     diagnosticId: envelope.diagnosticId,
     sourceName: inputSummary?.sourceName,
+    createdAt: result?.startedAt,
   };
+}
+
+async function privateRunCreatedAtMs(
+  directory: string,
+  metadata: PrivateRunMetadata | null,
+  details: { birthtimeMs: number; mtimeMs: number },
+): Promise<number> {
+  const metadataCreatedAt = timestampMs(metadata?.createdAt);
+  if (metadataCreatedAt !== null) return metadataCreatedAt;
+  const result = await readJsonIfExists(path.join(directory, "result.json"));
+  const resultCreatedAt = isObject(result) ? timestampMs(result.startedAt) : null;
+  return resultCreatedAt ?? filesystemCreatedAtMs(details);
 }
 
 export async function maintainPrivateRecords(now = Date.now()): Promise<void> {
@@ -471,7 +520,8 @@ export async function maintainPrivateRecords(now = Date.now()): Promise<void> {
   for (const directory of await runDirectories()) {
     const metadata = await ownerMetadata(directory);
     const details = await stat(directory).catch(() => null);
-    const expired = Boolean(details && now - details.mtimeMs >= PRIVATE_RECORD_TTL_MS);
+    const createdAt = details ? await privateRunCreatedAtMs(directory, metadata, details) : null;
+    const expired = createdAt !== null && now - createdAt >= PRIVATE_RECORD_TTL_MS;
     const legacySkland = !legacyPurgeCompleted
       && !metadata?.ownerTag
       && isLegacySklandRunDirectoryName(path.basename(directory));
@@ -538,28 +588,78 @@ export async function deleteSklandOwnedData(ownerTags: string[]): Promise<{ runs
   return { runs, feedback };
 }
 
-async function privateRunForDiagnostic(
-  diagnosticId: string
-): Promise<{ directory: string; result: JsonRecord } | null> {
-  if (!/^[a-f0-9-]{36}$/i.test(diagnosticId)) return null;
+type PrivateRunLookup =
+  | { status: "missing" }
+  | { status: "invalid"; directory: string }
+  | { status: "found"; directory: string; result: JsonRecord };
+
+async function lookupPrivateRun(diagnosticId: string): Promise<PrivateRunLookup> {
+  if (!/^[a-f0-9-]{36}$/i.test(diagnosticId)) return { status: "missing" };
   const suffix = `_${diagnosticId}`;
   const directory = (await runDirectories())
     .find((candidate) => path.basename(candidate).endsWith(suffix));
-  if (!directory) return null;
+  if (!directory) return { status: "missing" };
   let result = await readJsonIfExists(path.join(directory, "result.json"));
   if (!isObject(result)) {
     const envelope = await readJsonIfExists(path.join(directory, "run-envelope.json"));
     result = isObject(envelope) ? envelope.result : null;
   }
-  return isObject(result) && result.runId === diagnosticId ? { directory, result } : null;
+  return isObject(result) && result.runId === diagnosticId
+    ? { status: "found", directory, result }
+    : { status: "invalid", directory };
+}
+
+async function privateRunForDiagnostic(
+  diagnosticId: string
+): Promise<{ directory: string; result: JsonRecord } | null> {
+  const lookup = await lookupPrivateRun(diagnosticId);
+  return lookup.status === "found" ? lookup : null;
+}
+
+function textTail(value: unknown, maxBytes = 16 * 1024): string | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const bytes = Buffer.from(value, "utf-8");
+  return bytes.subarray(Math.max(0, bytes.byteLength - maxBytes)).toString("utf-8").trim() || null;
+}
+
+function missingReproductionReason(fallback: {
+  artifactKey?: unknown;
+  artifactStatus?: unknown;
+  executionSource?: unknown;
+  expiresAt?: unknown;
+}): AdminReproductionUnavailableReason {
+  const expiresAt = fallback.expiresAt instanceof Date
+    ? fallback.expiresAt.getTime()
+    : typeof fallback.expiresAt === "string" ? new Date(fallback.expiresAt).getTime() : Number.NaN;
+  if (Number.isFinite(expiresAt) && expiresAt <= Date.now()) return "expired";
+  if (fallback.executionSource === "cache") return "cache_hit";
+  if (fallback.artifactStatus === "pending") return "finalizing";
+  if (fallback.artifactStatus === "failed") return "finalization_failed";
+  if (fallback.artifactStatus === "none" || typeof fallback.artifactKey !== "string" || !fallback.artifactKey) {
+    return "not_recorded";
+  }
+  return "missing";
+}
+
+function reproductionExpired(expiresAt: unknown): boolean {
+  const value = expiresAt instanceof Date
+    ? expiresAt.getTime()
+    : typeof expiresAt === "string" ? new Date(expiresAt).getTime() : Number.NaN;
+  return Number.isFinite(value) && value <= Date.now();
 }
 
 export async function readPlanReproduction(
   diagnosticId: string,
-  fallback: { rotation?: unknown; fiammettaEnabled?: unknown } = {},
+  fallback: {
+    rotation?: unknown;
+    fiammettaEnabled?: unknown;
+    artifactKey?: unknown;
+    artifactStatus?: unknown;
+    executionSource?: unknown;
+    expiresAt?: unknown;
+  } = {},
 ): Promise<AdminReproductionData> {
-  const linked = await privateRunForDiagnostic(diagnosticId);
-  if (!linked) {
+  if (reproductionExpired(fallback.expiresAt)) {
     return toAdminReproductionData({
       diagnosticId,
       layout: null,
@@ -568,25 +668,49 @@ export async function readPlanReproduction(
       result: null,
       fallbackRotation: fallback.rotation,
       fallbackFiammettaEnabled: fallback.fiammettaEnabled,
+      unavailableReason: "expired",
+    });
+  }
+  const lookup = await lookupPrivateRun(diagnosticId);
+  if (lookup.status !== "found") {
+    return toAdminReproductionData({
+      diagnosticId,
+      layout: null,
+      operbox: null,
+      context: null,
+      result: null,
+      fallbackRotation: fallback.rotation,
+      fallbackFiammettaEnabled: fallback.fiammettaEnabled,
+      unavailableReason: lookup.status === "invalid" ? "invalid" : missingReproductionReason(fallback),
     });
   }
   const [layout, operbox, context, stderrExcerpt, stdoutExcerpt] = await Promise.all([
-    readJsonIfExists(path.join(linked.directory, "layout.json")),
-    readJsonIfExists(path.join(linked.directory, "operbox.json")),
-    readJsonIfExists(path.join(linked.directory, "reproduction.json")),
-    readTextTail(path.join(linked.directory, "stderr.txt")),
-    readTextTail(path.join(linked.directory, "stdout.txt")),
+    readJsonIfExists(path.join(lookup.directory, "layout.json")),
+    readJsonIfExists(path.join(lookup.directory, "operbox.json")),
+    readJsonIfExists(path.join(lookup.directory, "reproduction.json")),
+    readTextTail(path.join(lookup.directory, "stderr.txt")),
+    readTextTail(path.join(lookup.directory, "stdout.txt")),
   ]);
+  let debug = isObject(lookup.result.debugBundle) ? lookup.result.debugBundle : null;
+  if (!debug && (!layout || !operbox || !context || !stderrExcerpt || !stdoutExcerpt)) {
+    const storedDebug = await readJsonIfExists(path.join(lookup.directory, "debug-bundle.json"));
+    debug = isObject(storedDebug) ? storedDebug : null;
+  }
+  const legacyContext = legacyPlanReproductionContext(debug);
+  const legacyBackfillWithoutExactFiammetta = !context
+    && Boolean(debug)
+    && fallback.executionSource == null
+    && typeof legacyContext?.fiammettaEnabled !== "boolean";
   return toAdminReproductionData({
     diagnosticId,
-    layout,
-    operbox,
-    context,
-    result: linked.result,
-    stderrExcerpt,
-    stdoutExcerpt,
+    layout: layout ?? debug?.layout,
+    operbox: operbox ?? debug?.operbox,
+    context: context ?? legacyContext,
+    result: lookup.result,
+    stderrExcerpt: stderrExcerpt ?? textTail(debug?.stderr),
+    stdoutExcerpt: stdoutExcerpt ?? textTail(debug?.stdout),
     fallbackRotation: fallback.rotation,
-    fallbackFiammettaEnabled: fallback.fiammettaEnabled,
+    fallbackFiammettaEnabled: legacyBackfillWithoutExactFiammetta ? undefined : fallback.fiammettaEnabled,
   });
 }
 
@@ -1117,7 +1241,9 @@ function pumpArtifactFinalizers() {
         }
         let envelopeAgeMs: number;
         try {
-          envelopeAgeMs = Math.max(0, dependencies.now() - (await stat(envelopePath)).mtimeMs);
+          const details = await stat(envelopePath);
+          const createdAt = timestampMs(envelope.result.startedAt) ?? filesystemCreatedAtMs(details);
+          envelopeAgeMs = Math.max(0, dependencies.now() - createdAt);
         } catch {
           retryScheduled = false;
           return;

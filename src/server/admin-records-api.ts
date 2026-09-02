@@ -193,6 +193,10 @@ export async function handleGetAdminFeedbackDetail(request: Request, feedbackId:
     const reproduction = await readPlanReproduction(item.diagnosticId, {
       rotation: run?.rotation,
       fiammettaEnabled: run?.fiammettaEnable,
+      artifactKey: run?.artifactKey,
+      artifactStatus: run?.artifactStatus,
+      executionSource: run?.executionSource,
+      expiresAt: run?.expiresAt,
     });
     return noStore(successResponse({
       feedback: toAdminFeedbackRecordData(item as unknown as Record<string, unknown>),
@@ -214,6 +218,10 @@ export async function handleGetAdminPlanRunDetail(request: Request, diagnosticId
     const reproduction = await readPlanReproduction(item.diagnosticId, {
       rotation: item.rotation,
       fiammettaEnabled: item.fiammettaEnable,
+      artifactKey: item.artifactKey,
+      artifactStatus: item.artifactStatus,
+      executionSource: item.executionSource,
+      expiresAt: item.expiresAt,
     });
     return noStore(successResponse({
       run: toAdminPlanRunRecordData(item as unknown as Record<string, unknown>),

@@ -26,6 +26,15 @@ test("PostgreSQL integration tests register the TypeScript path alias loader", a
   assert.match(packageJson.scripts["test:auth-integration"], /--import \.\/scripts\/register-hooks\.mjs/);
 });
 
+test("business backfill shares the 30-day retention constant for scanning and expiry", async () => {
+  const source = await readRepoFile("scripts/backfill-business-data.mts");
+
+  assert.match(source, /import \{ BUSINESS_DATA_TTL_MS \}/);
+  assert.match(source, /const cutoff = Date\.now\(\) - BUSINESS_DATA_TTL_MS/);
+  assert.equal((source.match(/\+ BUSINESS_DATA_TTL_MS/g) ?? []).length, 2);
+  assert.doesNotMatch(source, /30 \* 24 \* 60 \* 60 \* 1000/);
+});
+
 test("production builds prepare a solver-free standalone runtime with static assets", async () => {
   const packageJson = JSON.parse(await readRepoFile("package.json"));
   const nextConfig = await readRepoFile("next.config.ts");
