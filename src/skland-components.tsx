@@ -303,11 +303,24 @@ export function SklandLoginPanel({
                 </div>
 
                 <div className="order-1 grid place-items-center gap-3 md:order-2">
-                  <div className="grid size-52 place-items-center rounded-xl bg-white p-3 ring-1 ring-black/10 sm:size-56 md:size-52" data-skland-qr-visual>
+                  <div
+                    className="grid size-52 place-items-center rounded-xl bg-white p-3 text-black ring-1 ring-black/10 dark:bg-white dark:text-black sm:size-56 md:size-52"
+                    style={{ colorScheme: "only light", forcedColorAdjust: "none" }}
+                    data-skland-qr-visual
+                  >
                     {scanState === "scanned" ? (
                       <LoaderCircle className="size-9 animate-spin text-muted-foreground motion-reduce:animate-none" aria-hidden="true" data-skland-login-progress />
                     ) : scanUrl ? (
-                      <QRCodeSVG value={scanUrl} size={196} className="size-full" title="森空岛登录二维码" role="img" aria-label="森空岛登录二维码" />
+                      <QRCodeSVG
+                        value={scanUrl}
+                        size={196}
+                        bgColor="#FFFFFF"
+                        fgColor="#000000"
+                        className="size-full"
+                        title="森空岛登录二维码"
+                        role="img"
+                        aria-label="森空岛登录二维码"
+                      />
                     ) : scanState === "loading" ? (
                       <LoaderCircle className="size-8 animate-spin text-muted-foreground motion-reduce:animate-none" aria-hidden="true" />
                     ) : (
