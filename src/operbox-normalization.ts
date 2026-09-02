@@ -40,10 +40,13 @@ export function normalizeOperboxEntries(entries: readonly OperBoxEntry[]): OperB
   const indexByName = new Map<string, number>();
 
   for (const entry of entries) {
-    const name = entry.name.trim();
-    if (!name || UNSUPPORTED_OPERATOR_VARIANT_NAMES.has(name)) continue;
+    const importedName = entry.name.trim();
+    if (!importedName || UNSUPPORTED_OPERATOR_VARIANT_NAMES.has(importedName)) continue;
 
-    const candidate = name === entry.name ? entry : { ...entry, name };
+    const id = entry.id.trim();
+    const name = importedName;
+
+    const candidate = id === entry.id && name === entry.name ? entry : { ...entry, id, name };
     const existingIndex = indexByName.get(name);
     if (existingIndex === undefined) {
       indexByName.set(name, normalized.length);

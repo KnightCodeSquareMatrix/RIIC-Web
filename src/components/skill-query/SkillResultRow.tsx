@@ -16,6 +16,7 @@ import {
   type OperatorAssetRecord,
   type OperatorBuildingSkillRef,
 } from "@/operatorPortraits";
+import { demoBuildingSkill, demoOperatorName, useLanguageDemo } from "@/language-demo";
 
 /** 按「最后一个下划线之前」的前缀分组：同一族（基础 + 提升）分到同一组，行内按 index 升序。 */
 function groupSkillsByPrefix(skills: OperatorBuildingSkillRef[]): OperatorBuildingSkillRef[][] {
@@ -38,6 +39,8 @@ function groupSkillsByPrefix(skills: OperatorBuildingSkillRef[]): OperatorBuildi
 
 /** 强化技能的尾词用一图流同款蓝色。 */
 function BuildingSkillUnlockText({ elite, level, enhanced }: { elite: number; level: number; enhanced: boolean }) {
+  const { locale } = useLanguageDemo();
+  if (locale === "en") return <>{`Elite ${elite}${level > 1 ? ` Lv.${level}` : ""}${enhanced ? " · Upgrade" : ""}`}</>;
   if (!enhanced) return <>{buildingSkillUnlockLabel(elite, level)}</>;
   return (
     <>
@@ -53,12 +56,14 @@ interface SkillResultRowProps {
 
 export function SkillResultRow({ operator }: SkillResultRowProps) {
   const isMobile = useIsMobile();
+  const { locale } = useLanguageDemo();
+  const displayName = demoOperatorName(operator.name, locale);
   const skills = [...operator.buildingSkills].sort((left, right) => left.index - right.index);
 
   return (
     <article
       className="infra-room-surface min-w-0 overflow-hidden px-4 py-4"
-      aria-label={`${operator.name} 的基建技能`}
+      aria-label={locale === "en" ? `${displayName}'s infrastructure skills` : `${operator.name} 的基建技能`}
     >
       {/* 左右布局：左侧干员卡片（不展示心情），右侧技能（PC 每技能一列，移动端按钮列表+弹窗） */}
       <div className="relative z-10 grid grid-cols-[auto_minmax(0,1fr)] items-center gap-4">
@@ -115,7 +120,9 @@ function SkillColumn({
   level: number;
   enhanced: boolean;
 }) {
-  const skill = BUILDING_SKILL_CATALOG[id];
+  const { locale } = useLanguageDemo();
+  const sourceSkill = BUILDING_SKILL_CATALOG[id];
+  const skill = sourceSkill ? demoBuildingSkill(id, locale, sourceSkill) : undefined;
 
   if (!skill) {
     return (
@@ -150,19 +157,22 @@ function SkillColumn({
 
 function MobileSkillList({ skills }: { skills: OperatorBuildingSkillRef[] }) {
   const [selected, setSelected] = useState<OperatorBuildingSkillRef | null>(null);
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
 
   return (
     <div className="flex min-w-0 flex-col gap-2">
       {skills.length ? (
         skills.map((ref) => {
-          const skill = BUILDING_SKILL_CATALOG[ref.id];
+          const sourceSkill = BUILDING_SKILL_CATALOG[ref.id];
+          const skill = sourceSkill ? demoBuildingSkill(ref.id, locale, sourceSkill) : undefined;
           return (
             <button
               key={ref.id}
               type="button"
               onClick={() => setSelected(ref)}
               className="flex min-h-11 items-center gap-2 rounded-lg border border-white/10 bg-black/24 px-2.5 py-2 text-left text-sm font-medium text-white outline-none transition-colors hover:bg-black/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#FFD800]"
-              aria-label={`查看${skill ? `技能 S${ref.index}：${skill.name}` : "技能详情"}`}
+              aria-label={en ? (skill ? `View skill S${ref.index}: ${skill.name}` : "View skill details") : `查看${skill ? `技能 S${ref.index}：${skill.name}` : "技能详情"}`}
             >
               {skill ? (
                 <>
@@ -173,14 +183,14 @@ function MobileSkillList({ skills }: { skills: OperatorBuildingSkillRef[] }) {
                 </>
               ) : (
                 <span className="text-white/55">
-                  S<span className="font-number">{ref.index}</span> 暂无技能资料
+                  S<span className="font-number">{ref.index}</span> {en ? "No skill data" : "暂无技能资料"}
                 </span>
               )}
             </button>
           );
         })
       ) : (
-        <span className="text-sm text-white/55">暂无技能资料</span>
+        <span className="text-sm text-white/55">{en ? "No skill data" : "暂无技能资料"}</span>
       )}
       <SkillDetailDialog
         selected={selected}
@@ -200,7 +210,10 @@ function SkillDetailDialog({
   enhanced: boolean;
   onClose: () => void;
 }) {
-  const skill = selected ? BUILDING_SKILL_CATALOG[selected.id] : undefined;
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
+  const sourceSkill = selected ? BUILDING_SKILL_CATALOG[selected.id] : undefined;
+  const skill = selected && sourceSkill ? demoBuildingSkill(selected.id, locale, sourceSkill) : undefined;
   const unlockLabel = selected ? buildingSkillUnlockLabel(selected.elite, selected.level, enhanced) : "";
 
   return (
@@ -222,7 +235,7 @@ function SkillDetailDialog({
               </span>
             ) : (
               <span>
-                S<span className="font-number">{selected?.index}</span> 暂无技能资料
+                S<span className="font-number">{selected?.index}</span> {en ? "No skill data" : "暂无技能资料"}
               </span>
             )}
           </DialogTitle>

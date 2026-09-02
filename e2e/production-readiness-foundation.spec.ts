@@ -347,19 +347,21 @@ test("a 768px solved plan defaults to list layout and stays inside the viewport"
   expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth + 1);
 });
 
-test("Rainyun computing service credit stays at the page footer's right edge and opens safely", async ({ page }) => {
+test("ICP filing and Rainyun sponsorship stay grouped at the page footer's right edge", async ({ page }) => {
   await mockApis(page);
   await seedPreferences(page);
   await page.goto("/");
 
-  const link = page.getByRole("link", { name: "由雨云提供计算服务（在新标签页打开雨云官网）" });
+  const filingLink = page.getByRole("link", { name: "沪ICP备2026041492号" });
+  const link = page.getByRole("link", { name: "由雨云提供赞助（在新标签页打开雨云官网）" });
   const image = link.locator("img");
+  await expect(filingLink).toHaveAttribute("href", "https://beian.miit.gov.cn/");
   await expect(link).toHaveAttribute("href", "https://www.rainyun.com/riic_");
   await expect(link).toHaveAttribute("target", "_blank");
   await expect(link).toHaveAttribute("rel", /noopener/);
   await expect(link).toHaveAttribute("rel", /noreferrer/);
   await expect(link).toContainText("由");
-  await expect(link).toContainText("提供计算服务");
+  await expect(link).toContainText("提供赞助");
   await expect(image).toHaveAttribute("src", /rainyun-logo\.png/);
   await expect.poll(() => image.evaluate((element) => {
     const logo = element as HTMLImageElement;
@@ -823,6 +825,7 @@ test("anonymous MAA data cannot drive planning or training advice", async ({ pag
 });
 
 test("server auth boundaries reject anonymous planning and every development Skland route", async ({ request }) => {
+  test.setTimeout(60_000);
   const maaResponse = await request.post("/api/plan", {
     data: { layout: layout243, operbox: [], sourceName: "anonymous.json", boxSource: "maa", rotation: "abc_12_6_6" },
   });

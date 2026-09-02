@@ -13,10 +13,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { LoadMore } from "@/components/ui/load-more";
 import { BUILDING_SKILL_CATALOG, OPERATOR_CATALOG } from "@/operatorPortraits";
+import { useLanguageDemo } from "@/language-demo";
 
 export const SKILL_QUERY_PAGE_SIZE = 10;
 
 export function SkillQuery() {
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
   const [selectedRoom, setSelectedRoom] = useState<BuildingRoomPrefix | null>(null);
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -74,11 +77,11 @@ export function SkillQuery() {
   }
 
   return (
-    <section className="min-w-0 pt-5" aria-label="技能查询" data-skill-query-page>
+    <section className="min-w-0 pt-5" aria-label={en ? "Skill Search" : "技能查询"} data-skill-query-page>
       <div className="mb-2 flex min-w-0 items-center gap-2.5">
         <span className="h-7 w-1.5 shrink-0 bg-[#FFD501]" aria-hidden="true" />
-        <h1 className="truncate text-[21px] font-medium leading-none">技能查询</h1>
-        <span className="font-number text-xs text-muted-foreground">{filtered.length} 名干员</span>
+        <h1 className="truncate text-[21px] font-medium leading-none">{en ? "Skill Search" : "技能查询"}</h1>
+        <span className="font-number text-xs text-muted-foreground">{filtered.length} {en ? "operators" : "名干员"}</span>
       </div>
 
       <div className="mt-3">
@@ -96,10 +99,10 @@ export function SkillQuery() {
           size="sm"
           disabled={!selectedRoom && !selectedTag}
           onClick={handleClearFilters}
-          aria-label="清除选择"
+          aria-label={en ? "Clear filters" : "清除选择"}
         >
           <X aria-hidden="true" />
-          清除选择
+          {en ? "Clear filters" : "清除选择"}
         </Button>
       </div>
 
@@ -113,16 +116,16 @@ export function SkillQuery() {
           value={query}
           onChange={(event) => handleQueryChange(event.target.value)}
           className="h-11 pr-10 pl-9 max-sm:pr-12"
-          placeholder="搜索干员名称/技能名称/技能效果"
-          aria-label="搜索干员名称/技能名称/技能效果"
+          placeholder={en ? "Search operator, skill name, or effect" : "搜索干员名称/技能名称/技能效果"}
+          aria-label={en ? "Search operator, skill name, or effect" : "搜索干员名称/技能名称/技能效果"}
         />
         {query ? (
           <button
             type="button"
             onClick={handleClearQuery}
             className="absolute top-1/2 right-1 grid size-9 -translate-y-1/2 place-items-center rounded-md text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#FFD800] max-sm:size-11"
-            aria-label="清空搜索"
-            title="清空搜索"
+            aria-label={en ? "Clear search" : "清空搜索"}
+            title={en ? "Clear search" : "清空搜索"}
           >
             <X className="size-4" aria-hidden="true" />
           </button>
@@ -131,7 +134,7 @@ export function SkillQuery() {
 
       <div className="mt-4">
         {filtered.length === 0 ? (
-          <p className="py-12 text-center text-sm text-muted-foreground">没有符合筛选条件的干员。</p>
+          <p className="py-12 text-center text-sm text-muted-foreground">{en ? "No operators match these filters." : "没有符合筛选条件的干员。"}</p>
         ) : (
           <>
             <div className="grid gap-3">
@@ -141,7 +144,13 @@ export function SkillQuery() {
                 </motion.div>
               ))}
             </div>
-            <LoadMore key={`${query}:${selectedRoom ?? ""}:${selectedTag ?? ""}`} hasMore={hasMore} onLoad={loadMore} className="mt-4 border-t border-border/60 pt-2" />
+            <LoadMore
+              key={`${query}:${selectedRoom ?? ""}:${selectedTag ?? ""}`}
+              hasMore={hasMore}
+              onLoad={loadMore}
+              className="mt-4 border-t border-border/60 pt-2"
+              labels={en ? { idle: "Load more", loading: "Loading", error: "Load failed — retry", end: "All results shown" } : undefined}
+            />
           </>
         )}
       </div>

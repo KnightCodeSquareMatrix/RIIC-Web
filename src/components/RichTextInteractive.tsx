@@ -2,6 +2,7 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 
+import { RichTextStatic } from "@/components/RichTextStatic";
 import { parseRichText, type RichTextNode } from "@/components/skill-query/rich-text";
 import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import termCatalogJson from "@/generated/arkntools/term-catalog.json" with { type: "json" };
@@ -36,6 +37,74 @@ function renderNodes(nodes: readonly RichTextNode[], onTermOpen: (id: string) =>
   });
 }
 
+function renderHoverNodes(nodes: readonly RichTextNode[]): ReactNode {
+  return nodes.map((node, index) => {
+    if (node.type === "text") return node.text;
+    if (node.type === "style") {
+      return (
+        <span key={index} className={`riic-rt ${node.className}`}>
+          {renderHoverNodes(node.children)}
+        </span>
+      );
+    }
+    const term = TERM_CATALOG[node.id];
+    if (!term) {
+      return <span key={index}>{renderHoverNodes(node.children)}</span>;
+    }
+    return (
+      <span key={index} className="riic-term-hover">
+        <span className="riic-term" tabIndex={0}>
+          {renderHoverNodes(node.children)}
+        </span>
+        <span className="riic-term-hover-card" role="tooltip">
+          <strong className="block font-semibold">{term.name}</strong>
+          <span className="mt-1 block font-normal">
+            <RichTextStatic text={term.desc} />
+          </span>
+        </span>
+      </span>
+    );
+  });
+}
+
+/** 仅用于紧凑 tooltip：悬停或聚焦彩色词条时就地显示详情。 */
+export function RichTextHoverTerms({ text }: { text: string }) {
+  const nodes = useMemo(() => parseRichText(text), [text]);
+  return <span className="whitespace-pre-line">{renderHoverNodes(nodes)}</span>;
+}
+
+function BuildingTermDialog({
+  termStack,
+  onTermOpen,
+  onClose,
+}: {
+  termStack: readonly string[];
+  onTermOpen: (id: string) => void;
+  onClose: () => void;
+}) {
+  return (
+    <Dialog open={termStack.length > 0} onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent>
+        <DialogHeader className="pb-0 sm:pb-0">
+          <DialogTitle>基建词条</DialogTitle>
+        </DialogHeader>
+        <DialogBody className="gap-3">
+          {termStack.map((id) => {
+            const term = TERM_CATALOG[id];
+            if (!term) return null;
+            return (
+              <div key={id} className="min-w-0">
+                <h4 className="font-semibold">{term.name}</h4>
+                <RichTextInteractive text={term.desc} onTermOpen={onTermOpen} />
+              </div>
+            );
+          })}
+        </DialogBody>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /** 交互式富文本：包含词条目录、点击处理和词条详情弹窗。 */
 export function RichTextInteractive({
   text,
@@ -55,30 +124,15 @@ export function RichTextInteractive({
     setTermStack((current) => (current.includes(id) ? current : [...current, id]));
   };
 
-  const dialogOpen = termStack.length > 0;
   return (
     <>
       <span className="whitespace-pre-line">{renderNodes(nodes, openTerm)}</span>
       {!onTermOpen ? (
-        <Dialog open={dialogOpen} onOpenChange={(next) => { if (!next) setTermStack([]); }}>
-          <DialogContent>
-            <DialogHeader className="pb-0 sm:pb-0">
-              <DialogTitle>基建词条</DialogTitle>
-            </DialogHeader>
-            <DialogBody className="gap-3">
-              {termStack.map((id) => {
-                const term = TERM_CATALOG[id];
-                if (!term) return null;
-                return (
-                  <div key={id} className="min-w-0">
-                    <h4 className="font-semibold">{term.name}</h4>
-                    <RichTextInteractive text={term.desc} onTermOpen={openTerm} />
-                  </div>
-                );
-              })}
-            </DialogBody>
-          </DialogContent>
-        </Dialog>
+        <BuildingTermDialog
+          termStack={termStack}
+          onTermOpen={openTerm}
+          onClose={() => setTermStack([])}
+        />
       ) : null}
     </>
   );

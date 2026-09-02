@@ -28,6 +28,15 @@ const LIST_FUNCTIONAL_FACILITY_ORDER: Partial<Record<RoomGroup, number>> = {
   processing: 4,
 };
 
+const MOBILE_LIST_GROUP_ORDER: Partial<Record<RoomGroup, number>> = {
+  control: 0,
+  meeting: 1,
+  manufacture: 2,
+  trading: 3,
+  power: 4,
+  hire: 5,
+};
+
 export const LIST_OPERATOR_ORIGIN_PX = 248;
 export const LIST_OPERATOR_FRAME_SIZE_PX = 80;
 export const LIST_OPERATOR_GAP_MAX_PX = 20;
@@ -126,4 +135,31 @@ export function buildListScheduleGroups(rows: RoomRow[]): ListScheduleGroup[] {
   );
 
   return groups;
+}
+
+/** Mobile follows the in-game assignment overview while desktop keeps its denser functional grouping. */
+export function buildMobileListScheduleGroups(rows: RoomRow[]): ListScheduleGroup[] {
+  const groups = rows.reduce<ListScheduleGroup[]>((currentGroups, row) => {
+    const group = currentGroups.find((item) => item.rows[0]?.group === row.group);
+
+    if (group) {
+      group.rows.push(row);
+    } else {
+      currentGroups.push({ label: row.groupLabel, rows: [row] });
+    }
+
+    return currentGroups;
+  }, []);
+
+  return groups
+    .map((group, originalIndex) => ({ group, originalIndex }))
+    .sort((left, right) => {
+      const leftOrder = MOBILE_LIST_GROUP_ORDER[left.group.rows[0]?.group ?? "default"];
+      const rightOrder = MOBILE_LIST_GROUP_ORDER[right.group.rows[0]?.group ?? "default"];
+      if (leftOrder !== undefined || rightOrder !== undefined) {
+        return (leftOrder ?? Number.MAX_SAFE_INTEGER) - (rightOrder ?? Number.MAX_SAFE_INTEGER);
+      }
+      return left.originalIndex - right.originalIndex;
+    })
+    .map(({ group }) => group);
 }
