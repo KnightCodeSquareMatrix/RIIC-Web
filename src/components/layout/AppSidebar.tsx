@@ -1,11 +1,20 @@
 "use client";
 
-import { Calculator, Cloud, GraduationCap, Search, UserRound, type LucideIcon } from "lucide-react";
+import {
+  Calculator,
+  CircleHelp,
+  Cloud,
+  GraduationCap,
+  Search,
+  UserRound,
+  type LucideIcon,
+} from "lucide-react";
 import Link from "next/link";
 
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarHeader,
   SidebarMenu,
@@ -15,6 +24,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { workbenchHref, type AppPage } from "@/workbench-routes";
+import { useLanguageDemo } from "@/language-demo";
 
 const CLIENT_SKLAND_ENABLED = process.env.APP_CLIENT_SKLAND_ENABLED === "1";
 
@@ -65,6 +75,22 @@ function AppNavigationItem({
 }
 
 export function AppSidebar({ page, onPageChange }: AppSidebarProps) {
+  const { locale } = useLanguageDemo();
+  const labels = locale === "en" ? {
+    calculator: "Infrastructure Calculator",
+    training: "Training Advice",
+    skills: "Skill Search",
+    skland: "Skland Status",
+    account: "Account",
+    help: "Help",
+  } : {
+    calculator: "基建计算器",
+    training: "练卡建议",
+    skills: "技能查询",
+    skland: "森空岛状态中心",
+    account: "账号管理",
+    help: "使用帮助",
+  };
   return (
     <Sidebar collapsible="icon" data-primary-navigation-prefetch="eager">
       <SidebarHeader className="h-[65px] flex-row items-center justify-end border-b border-sidebar-border px-2 group-data-[collapsible=icon]:justify-center">
@@ -73,16 +99,29 @@ export function AppSidebar({ page, onPageChange }: AppSidebarProps) {
       <SidebarContent>
         <SidebarGroup>
           <SidebarMenu>
-            <AppNavigationItem page={page} target="calculator" label="基建计算器" icon={Calculator} onPageChange={onPageChange} />
-            <AppNavigationItem page={page} target="training" label="练卡建议" icon={GraduationCap} onPageChange={onPageChange} />
-            <AppNavigationItem page={page} target="skill-query" label="技能查询" icon={Search} onPageChange={onPageChange} />
+            <AppNavigationItem page={page} target="calculator" label={labels.calculator} icon={Calculator} onPageChange={onPageChange} />
+            <AppNavigationItem page={page} target="training" label={labels.training} icon={GraduationCap} onPageChange={onPageChange} />
+            <AppNavigationItem page={page} target="skill-query" label={labels.skills} icon={Search} onPageChange={onPageChange} />
             {CLIENT_SKLAND_ENABLED ? (
-              <AppNavigationItem page={page} target="skland" label="森空岛状态中心" icon={Cloud} onPageChange={onPageChange} />
+              <AppNavigationItem page={page} target="skland" label={labels.skland} icon={Cloud} onPageChange={onPageChange} />
             ) : null}
-            <AppNavigationItem page={page} target="account" label="账号管理" icon={UserRound} onPageChange={onPageChange} />
+            <AppNavigationItem page={page} target="account" label={labels.account} icon={UserRound} onPageChange={onPageChange} />
           </SidebarMenu>
         </SidebarGroup>
       </SidebarContent>
+      <SidebarFooter className="border-t border-sidebar-border p-2">
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              render={<Link href="/help" data-help-link />}
+              tooltip={labels.help}
+            >
+              <CircleHelp className="size-5" />
+              <span>{labels.help}</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
     </Sidebar>
   );
 }

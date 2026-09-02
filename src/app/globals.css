@@ -682,6 +682,43 @@
   filter: brightness(1.15);
 }
 
+.riic-term-hover {
+  position: relative;
+  display: inline-block;
+}
+
+.riic-term-hover-card {
+  pointer-events: none;
+  position: absolute;
+  z-index: 60;
+  bottom: calc(100% + 0.5rem);
+  left: 50%;
+  width: max-content;
+  max-width: min(20rem, calc(100vw - 2rem));
+  padding: 0.625rem 0.75rem;
+  border: 1px solid rgb(255 255 255 / 0.2);
+  border-radius: 0;
+  background: #18181b;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.38);
+  color: #f4f4f5;
+  line-height: 1.5;
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-50%, 0.25rem);
+  transition:
+    opacity 140ms ease-out,
+    transform 140ms ease-out,
+    visibility 140ms;
+  white-space: normal;
+}
+
+.riic-term-hover:hover > .riic-term-hover-card,
+.riic-term-hover:focus-within > .riic-term-hover-card {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+}
+
 .infra-room-control {
   border-color: rgb(255 255 255 / 0.2);
   background-color: rgb(60 60 60 / 0.7);

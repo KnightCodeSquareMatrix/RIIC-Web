@@ -60,7 +60,12 @@ export function assertOperbox(value: unknown): OperBoxEntry[] {
   return normalizeOperboxEntries(entries);
 }
 
-export function readOperboxText(text: string): OperBoxEntry[] {
+async function normalizeImportedEntries(entries: readonly OperBoxEntry[]): Promise<OperBoxEntry[]> {
+  const { normalizeImportedOperboxEntries } = await import("./operator-name-normalization.ts");
+  return normalizeImportedOperboxEntries(entries);
+}
+
+export async function readOperboxText(text: string): Promise<OperBoxEntry[]> {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
@@ -69,7 +74,7 @@ export function readOperboxText(text: string): OperBoxEntry[] {
       "MAA JSON 无法解析，请确认粘贴了完整的 Arknights_OperBox_Export.json 内容。",
     );
   }
-  return assertOperbox(parsed);
+  return normalizeImportedEntries(assertOperbox(parsed));
 }
 
 type XlsxModule = typeof import("xlsx");
@@ -86,7 +91,7 @@ export async function readOperboxFile(
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
 
-    return assertOperbox(
+    return normalizeImportedEntries(assertOperbox(
       rows
         .filter((row) => pickValue(row, ["name", "id", "干员", "干员名称"]))
         .map((row) => {
@@ -117,7 +122,7 @@ export async function readOperboxFile(
             ),
           };
         }),
-    );
+    ));
   }
 
   return readOperboxText(await file.text());

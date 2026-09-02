@@ -43,6 +43,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
 import { loadClientFeature } from "@/client-lazy-loader";
+import { demoBuildingSkill, demoOperatorName, demoRoomTitle, useLanguageDemo } from "@/language-demo";
 import {
   BUILDING_SKILL_ENHANCED_WORD,
   buildingSkillUnlockLabel,
@@ -65,6 +66,7 @@ import {
   TRADE_ORDER_OPTIONS,
   TradeOrder,
   factoryRecipeFor,
+  hasUnlockedFactoryRecipes,
   maxRoomLevel,
   productLabel,
   roomKindLabel,
@@ -89,6 +91,7 @@ import {
 } from "./schedule-view-presentation";
 import {
   buildListScheduleGroups,
+  buildMobileListScheduleGroups,
   isListFunctionalFacilityRoom,
   listFunctionalFacilityGridClass,
   listFunctionalOperatorPosition,
@@ -114,13 +117,14 @@ const OperatorSkillTooltip = lazy(() => loadClientFeature("operatorSkillTooltip"
 })));
 
 function CompactScheduleLoading() {
+  const { locale } = useLanguageDemo();
   return (
     <div
       className="grid min-h-[560px] place-items-center border-y border-dashed border-border/70 text-sm text-muted-foreground"
       data-compact-schedule-loading
       role="status"
     >
-      正在准备一图流布局
+      {locale === "en" ? "Preparing overview" : "正在准备一图流布局"}
     </div>
   );
 }
@@ -154,6 +158,7 @@ export function ProductToggleGroup<T extends string>({
   ariaLabel: string;
   disabledValue?: T;
 }) {
+  const { locale } = useLanguageDemo();
   const roomProductControls = surface === "room" && (tone === "trade" || tone === "factory");
   const compactRoomProductControls = roomProductControls && layout === "compact";
   const fillRoomProductControls = roomProductControls && layout === "fill";
@@ -185,6 +190,7 @@ export function ProductToggleGroup<T extends string>({
         const isOriginiumTrade = tone === "trade" && option.value === "originium";
         const isOriginiumRecipe = tone === "factory" && option.value === "originium";
         const isBattleRecordRecipe = tone === "factory" && option.value === "battle_record";
+        const englishProduct = option.value === "gold" ? (tone === "trade" ? "LMD Order" : "Pure Gold") : option.value === "originium" ? (tone === "trade" ? "Originium Order" : "Originium Shards") : option.value === "battle_record" ? "Battle Records" : option.value === "all" ? "Auto" : undefined;
 
         return (
           <ToggleGroupItem
@@ -206,7 +212,7 @@ export function ProductToggleGroup<T extends string>({
               isBattleRecordRecipe && "product-toggle-battle-record"
             )}
           >
-            {option.label}
+            {locale === "en" && englishProduct ? englishProduct : option.label}
           </ToggleGroupItem>
         );
       })}
@@ -259,6 +265,8 @@ export function FileDrop({
   fileName: string | null;
   onFile: (file: File) => void;
 }) {
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
   const [dragActive, setDragActive] = useState(false);
 
   function importFirstFile(files: FileList | null) {
@@ -294,7 +302,7 @@ export function FileDrop({
         "flex min-h-32 cursor-pointer flex-col items-center justify-center gap-2 rounded-[4px] border border-dashed bg-background px-4 py-5 text-center transition-[color,background-color,border-color] duration-[var(--motion-duration-state)] ease-[var(--motion-ease-out)] hover:border-primary/40 hover:bg-muted/40",
         dragActive && "border-primary bg-primary/10 text-primary ring-2 ring-primary/25 ring-offset-2",
       )}
-      aria-label="拖放或选择干员数据文件"
+      aria-label={en ? "Drop or select an operator data file" : "拖放或选择干员数据文件"}
       data-slot="file-drop"
       data-dragging={dragActive || undefined}
       onDragEnter={handleDragEnter}
@@ -303,9 +311,20 @@ export function FileDrop({
       onDrop={handleDrop}
     >
       <Upload className="size-5 text-primary" />
-      <span className="font-medium text-foreground">{dragActive ? "松开即可导入" : fileName ?? "上传练度 JSON / XLSX"}</span>
-      <span className="text-xs text-muted-foreground">
-        可直接拖入文件；支持 MAA 导出的干员数据 JSON，也支持一图流 XLSX
+      <span className="font-medium text-foreground">
+        {dragActive ? (en ? "Drop to import" : "松开即可导入") : fileName ?? (en ? "Upload roster JSON / XLSX" : "上传练度 JSON / XLSX")}
+      </span>
+      <span className="flex flex-wrap items-center justify-center gap-1.5 text-xs" role="list" aria-label={en ? "Supported MAA JSON languages" : "支持的 MAA JSON 语言"}>
+        {(en ? ["Simplified Chinese", "Traditional Chinese", "Japanese", "English"] : ["简中", "繁中", "日文", "英文"]).map((language) => (
+          <span key={language} role="listitem" className="rounded-full border border-border bg-muted/70 px-2 py-0.5 font-medium text-foreground">
+            {language}
+          </span>
+        ))}
+      </span>
+      <span className="text-xs leading-relaxed text-muted-foreground">
+        {en
+          ? "Drop a file or choose one. Names are converted locally to Simplified Chinese before scheduling · XLSX imports are also supported"
+          : "可直接拖入文件；MAA JSON 会在本地统一转换为简中后提交排班，也支持一图流 XLSX"}
       </span>
       <input className="sr-only" type="file" accept=".json,.xlsx,.xls" onChange={handleChange} />
     </Label>
@@ -321,9 +340,11 @@ export function PresetSelector({
   selected: PresetDef;
   onSelect: (preset: PresetDef) => void;
 }) {
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
   return (
     <ToggleGroup
-      aria-label="布局预设"
+      aria-label={en ? "Layout presets" : "布局预设"}
       value={[selected.label]}
       onValueChange={(nextValue) => {
         const next = presets.find((preset) => preset.label === nextValue[0]);
@@ -352,7 +373,7 @@ export function PresetSelector({
           <span className="relative z-10 flex min-w-0 flex-col items-start gap-1">
             <span className="text-lg font-semibold leading-none tabular-nums">{preset.label}</span>
             <span className="text-xs font-normal text-white/58">
-              <span className="font-number">{preset.trading}</span> 贸 / <span className="font-number">{preset.manufacture}</span> 制 / <span className="font-number">{preset.power}</span> 电
+              <span className="font-number">{preset.trading}</span> {en ? "trade" : "贸"} / <span className="font-number">{preset.manufacture}</span> {en ? "factory" : "制"} / <span className="font-number">{preset.power}</span> {en ? "power" : "电"}
             </span>
           </span>
           {selected.label === preset.label ? <Check className="relative z-10 size-4 shrink-0 text-[#FFD800]" aria-hidden="true" /> : null}
@@ -375,6 +396,8 @@ function RoomLevelControl({
   onChange: (level: number) => void;
   surface?: "default" | "room";
 }) {
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
   const [draft, setDraft] = useState<string | null>(null);
   const display = draft ?? String(level);
 
@@ -398,7 +421,7 @@ function RoomLevelControl({
           type="button"
           variant="ghost"
           size="icon-sm"
-          aria-label={`${roomId} 等级减一`}
+          aria-label={en ? `${roomId} decrease level` : `${roomId} 等级减一`}
           className={cn(
             "h-full w-7 rounded-none",
             surface === "room" ? "text-white/62 hover:bg-white/10 hover:text-white disabled:text-white/28" : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -414,7 +437,7 @@ function RoomLevelControl({
         <Input
           type="text"
           inputMode="numeric"
-          aria-label={`${roomId} 等级`}
+          aria-label={en ? `${roomId} level` : `${roomId} 等级`}
           value={display}
           onFocus={() => setDraft(String(level))}
           onChange={(event) => setDraft(event.target.value)}
@@ -434,7 +457,7 @@ function RoomLevelControl({
           type="button"
           variant="ghost"
           size="icon-sm"
-          aria-label={`${roomId} 等级加一`}
+          aria-label={en ? `${roomId} increase level` : `${roomId} 等级加一`}
           className={cn(
             "h-full w-7 rounded-none",
             surface === "room" ? "text-white/62 hover:bg-white/10 hover:text-white disabled:text-white/28" : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -461,7 +484,7 @@ function RoomLevelControl({
           itemToStringValue={(item) => item}
         >
           <ComboboxInput
-            aria-label={`${roomId} 等级`}
+            aria-label={en ? `${roomId} level` : `${roomId} 等级`}
             className={cn(
               "w-20 rounded-[4px] [&_[data-slot=input-group-control]]:text-center",
               surface === "room" && "border-white/20 bg-[#3C3C3C]/78 text-white shadow-none [&_[data-slot=input-group-button]]:text-white/62 [&_[data-slot=input-group-control]]:text-white"
@@ -516,16 +539,19 @@ export function LayoutEditor({
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
   onRoomLevelChange: (roomId: string, level: number) => void;
 }) {
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
+  const factoryRecipesUnlocked = hasUnlockedFactoryRecipes(layout);
   const roomGroups = [
-    { key: "trade", label: "贸易站", rooms: layout.rooms.filter((room) => room.kind === "trade_post") },
-    { key: "factory", label: "制造站", rooms: layout.rooms.filter((room) => room.kind === "factory") },
-    { key: "power", label: "发电站", rooms: layout.rooms.filter((room) => room.kind === "power_plant") },
-    { key: "function", label: "控制与功能区", rooms: layout.rooms.filter((room) => !["trade_post", "factory", "power_plant", "dormitory"].includes(room.kind)) },
-    { key: "dormitory", label: "宿舍", rooms: layout.rooms.filter((room) => room.kind === "dormitory") },
+    { key: "trade", label: en ? "Trading Posts" : "贸易站", rooms: layout.rooms.filter((room) => room.kind === "trade_post") },
+    { key: "factory", label: en ? "Factories" : "制造站", rooms: layout.rooms.filter((room) => room.kind === "factory") },
+    { key: "power", label: en ? "Power Plants" : "发电站", rooms: layout.rooms.filter((room) => room.kind === "power_plant") },
+    { key: "function", label: en ? "Control & Functional" : "控制与功能区", rooms: layout.rooms.filter((room) => !["trade_post", "factory", "power_plant", "dormitory"].includes(room.kind)) },
+    { key: "dormitory", label: en ? "Dormitories" : "宿舍", rooms: layout.rooms.filter((room) => room.kind === "dormitory") },
   ].filter((group) => group.rooms.length > 0);
 
   return (
-    <Accordion multiple defaultValue={["trade", "factory"]} aria-label="设施设置" className="gap-2.5">
+    <Accordion multiple defaultValue={["trade", "factory"]} aria-label={en ? "Facility settings" : "设施设置"} className="gap-2.5">
       {roomGroups.map((group) => (
         <AccordionItem key={group.key} value={group.key} data-facility-group={group.key}>
           <AccordionTrigger>
@@ -542,8 +568,11 @@ export function LayoutEditor({
               const activeOrder = isTrade ? tradeOrderFor(room) : null;
               const activeRecipe = isFactory ? factoryRecipeFor(room) : null;
               const activeProduct = activeOrder ?? activeRecipe;
-              const hasRestrictedProduct = room.level < 3;
-              const restrictionHint = isTrade ? "开采协力仅限 3 级贸易站" : "源石碎片仅限 3 级制造站";
+              const hasRestrictedProduct = isTrade ? room.level < 3 : isFactory && !factoryRecipesUnlocked;
+              const showRestrictionHint = hasRestrictedProduct && (!isFactory || roomIndex === 0);
+              const restrictionHint = isTrade
+                ? en ? "Originium Orders require a level 3 Trading Post" : "开采协力仅限 3 级贸易站"
+                : en ? "Unlock Originium Shards by owning at least one level 3 Factory" : "需先拥有至少一个 3 级制造站解锁源石碎片配方";
               const availableProductOptions: Option<TradeOrder | FactoryRecipe>[] = isTrade
                 ? TRADE_ORDER_OPTIONS
                 : isFactory
@@ -552,9 +581,8 @@ export function LayoutEditor({
               const product = productLabel(room);
               const levelMax = maxRoomLevel(room.kind);
               const visualGroup = roomVisualGroupForKind(room.kind);
-              const displayName = group.rooms.length > 1
-                ? `${roomKindLabel(room.kind)} ${roomIndex + 1}`
-                : roomKindLabel(room.kind);
+              const originalName = group.rooms.length > 1 ? `${roomKindLabel(room.kind)} ${roomIndex + 1}` : roomKindLabel(room.kind);
+              const displayName = demoRoomTitle(originalName, visualGroup, locale);
 
               return (
                 <div
@@ -585,7 +613,7 @@ export function LayoutEditor({
                   {activeProduct ? (
                     <div className="col-span-2 sm:col-span-1">
                       <ProductToggleGroup<TradeOrder | FactoryRecipe>
-                        ariaLabel={`${room.id} ${isTrade ? "订单" : "配方"}${hasRestrictedProduct ? `，${restrictionHint}` : ""}`}
+                        ariaLabel={`${displayName} ${isTrade ? (en ? "orders" : "订单") : (en ? "recipe" : "配方")}${hasRestrictedProduct ? `, ${restrictionHint}` : ""}`}
                         value={activeProduct}
                         options={availableProductOptions}
                         columns={isTrade ? 2 : 3}
@@ -597,7 +625,7 @@ export function LayoutEditor({
                           else onFactoryRecipeChange(room.id, nextProduct as FactoryRecipe);
                         }}
                       />
-                      {hasRestrictedProduct ? <p className="mt-1.5 text-xs text-muted-foreground">{restrictionHint}。</p> : null}
+                      {showRestrictionHint ? <p className="mt-1.5 text-xs text-muted-foreground">{restrictionHint}。</p> : null}
                     </div>
                   ) : null}
                 </div>
@@ -622,18 +650,20 @@ export function RunButton({
   plannerReady: boolean;
   onRun: () => void;
 }) {
-  const unavailableLabel = plannerReady ? "请先导入干员数据" : "排班服务暂不可用";
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
+  const unavailableLabel = plannerReady ? (en ? "Import operator data first" : "请先导入干员数据") : (en ? "Planner unavailable" : "排班服务暂不可用");
   return (
     <Button
       size="sm"
       className="h-9 min-w-0 max-sm:h-11 max-sm:px-3 max-sm:text-xs"
-      aria-label={loading ? "计算中" : canRun ? "生成排班" : unavailableLabel}
-      title={!canRun ? (plannerReady ? "请先导入干员数据。" : "排班服务暂不可用，请稍后重试。") : undefined}
+      aria-label={loading ? (en ? "Calculating" : "计算中") : canRun ? (en ? "Generate schedule" : "生成排班") : unavailableLabel}
+      title={!canRun ? (plannerReady ? (en ? "Import operator data first." : "请先导入干员数据。") : (en ? "Planner unavailable. Try again later." : "排班服务暂不可用，请稍后重试。")) : undefined}
       onClick={onRun}
       disabled={!canRun || loading}
     >
       {loading ? <Loader2 className="animate-spin" /> : <Play />}
-      <span>{loading ? "计算中" : canRun ? "生成排班" : "导入后生成"}</span>
+      <span>{loading ? (en ? "Calculating" : "计算中") : canRun ? (en ? "Generate" : "生成排班") : (en ? "Import to generate" : "导入后生成")}</span>
     </Button>
   );
 }
@@ -651,12 +681,14 @@ export function ShiftTabs({
   closest?: number;
   onChange: (index: number) => void;
 }) {
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
   const plans = maaJson?.plans ?? [];
 
   if (plans.length === 0) {
     return (
       <Button type="button" variant="outline" disabled size="sm">
-        等待结果
+        {locale === "en" ? "Awaiting result" : "等待结果"}
       </Button>
     );
   }
@@ -670,8 +702,9 @@ export function ShiftTabs({
       >
         {plans.map((plan, index) => {
           const shift = rotation?.shifts[index];
-          const label = shiftTabLabel(shift, index);
-          const teamSummary = shiftTeamSummary(shift, rotation?.profile ?? DEFAULT_ROTATION_PROFILE);
+          const label = en ? `Shift ${index + 1}${shift ? ` · ${compactNumber(shift.duration_hours)}h` : ""}` : shiftTabLabel(shift, index);
+          const originalTeamSummary = shiftTeamSummary(shift, rotation?.profile ?? DEFAULT_ROTATION_PROFILE);
+          const teamSummary = en && originalTeamSummary ? originalTeamSummary.replaceAll("主力", "Main").replaceAll("替补", "Backup").replaceAll("上班", "working").replaceAll("休息", "resting") : originalTeamSummary;
           return (
             <TabsTrigger
               key={`${plan.name}-${index}`}
@@ -950,13 +983,14 @@ export function LevelDiamonds({
   maxLevel?: number;
   variant?: LevelDiamondVariant;
 }) {
+  const { locale } = useLanguageDemo();
   const count = levelDiamondCount(level);
   if (!count || !level) return null;
 
   return (
     <span
       className="flex shrink-0 items-center gap-1.5"
-      aria-label={`${level} 级，最高 ${maxLevel ?? level} 级`}
+      aria-label={locale === "en" ? `Level ${level}, maximum ${maxLevel ?? level}` : `${level} 级，最高 ${maxLevel ?? level} 级`}
       title={variant === "compact" ? `Lv.${level}/${maxLevel ?? level}` : undefined}
     >
       <span className="level-diamonds" data-variant={variant} aria-hidden="true">
@@ -982,8 +1016,10 @@ export function RoomEfficiencyReadout({
   details?: boolean;
   trend?: ShiftDirection;
 }) {
+  const { locale } = useLanguageDemo();
+  const efficiencyLabel = (label?: string) => locale === "en" && label ? ({ "纯技能": "Skill", "技能效率": "Skill efficiency", "跨设施": "Cross-facility", "综合加成": "Combined bonus", "仓储上限": "Capacity", "订单机制": "Order mechanic", "总充能": "Total charge" }[label] ?? label) : label;
   return (
-    <div className="min-w-0" title={value.details.map((detail) => detail.label ? `${detail.label} ${detail.value}` : detail.value).join(" · ")}>
+    <div className="min-w-0" title={value.details.map((detail) => detail.label ? `${efficiencyLabel(detail.label)} ${detail.value}` : detail.value).join(" · ")}>
       <div className="flex min-w-0 items-center gap-1.5">
         <strong
           className="infra-room-value font-technical shrink-0 text-base font-semibold tabular-nums tracking-[0.01em] text-[var(--room-accent)] max-sm:text-xs"
@@ -993,7 +1029,7 @@ export function RoomEfficiencyReadout({
         </strong>
         {value.primaryLabel ? (
           <span className="truncate text-xs font-medium text-white/68">
-            <AnimatedText value={value.primaryLabel} trend={trend} />
+            <AnimatedText value={efficiencyLabel(value.primaryLabel) ?? value.primaryLabel} trend={trend} />
           </span>
         ) : null}
       </div>
@@ -1001,7 +1037,7 @@ export function RoomEfficiencyReadout({
         <div className="font-technical mt-1 flex max-h-9 flex-wrap gap-x-2 gap-y-0.5 overflow-hidden text-xs leading-4 tracking-[0.01em] text-white/60 max-sm:max-h-none">
           {value.details.map((detail, index) => (
             <span key={`${detail.kind ?? ""}-${detail.label ?? ""}-${index}`} className={detail.kind === "cross-station" ? "font-semibold text-[#C8F75A]" : undefined}>
-              {value.formula ? <>{detail.operator ? `${detail.operator} ` : ""}<span className="font-number"><AnimatedText value={detail.value} trend={trend} /></span>{detail.label ? ` ${detail.label}` : ""}</> : <>{detail.label} <span className="font-number"><AnimatedText value={detail.value} trend={trend} /></span></>}
+              {value.formula ? <>{detail.operator ? `${detail.operator} ` : ""}<span className="font-number"><AnimatedText value={detail.value} trend={trend} /></span>{detail.label ? ` ${efficiencyLabel(detail.label)}` : ""}</> : <>{efficiencyLabel(detail.label)} <span className="font-number"><AnimatedText value={detail.value} trend={trend} /></span></>}
             </span>
           ))}
         </div>
@@ -1019,6 +1055,8 @@ function RoomEfficiencyDetails({
   compactFactory?: boolean;
   trend?: ShiftDirection;
 }) {
+  const { locale } = useLanguageDemo();
+  const efficiencyLabel = (label?: string) => locale === "en" && label ? ({ "纯技能": "Skill", "技能效率": "Skill efficiency", "跨设施": "Cross-facility", "综合加成": "Combined bonus", "仓储上限": "Capacity", "订单机制": "Order mechanic", "总充能": "Total charge" }[label] ?? label) : label;
   if (!value?.details.length) return null;
 
   return (
@@ -1028,7 +1066,7 @@ function RoomEfficiencyDetails({
         compactFactory && "min-[1800px]:z-10 min-[1800px]:col-start-1 min-[1800px]:row-start-2 min-[1800px]:ml-0 min-[1800px]:flex min-[1800px]:min-w-0 min-[1800px]:max-w-none min-[1800px]:gap-3 min-[1800px]:text-xs",
         value.formula && "flex max-w-[340px] flex-wrap items-baseline gap-x-1.5 gap-y-1 max-[819px]:grid max-[819px]:grid-cols-3"
       )}
-      title={value.details.map((detail) => detail.label ? `${detail.label} ${detail.value}` : detail.value).join(" · ")}
+      title={value.details.map((detail) => detail.label ? `${efficiencyLabel(detail.label)} ${detail.value}` : detail.value).join(" · ")}
     >
       {value.details.map((detail, index) => (
         <span
@@ -1038,7 +1076,7 @@ function RoomEfficiencyDetails({
             detail.kind === "cross-station" && "font-semibold text-[#C8F75A]"
           )}
         >
-          {value.formula ? <>{detail.operator ? `${detail.operator} ` : ""}<span className="font-number"><AnimatedText value={detail.value} trend={trend} /></span>{detail.label ? ` ${detail.label}` : ""}</> : <>{detail.label} <span className="font-number"><AnimatedText value={detail.value} trend={trend} /></span></>}
+          {value.formula ? <>{detail.operator ? `${detail.operator} ` : ""}<span className="font-number"><AnimatedText value={detail.value} trend={trend} /></span>{detail.label ? ` ${efficiencyLabel(detail.label)}` : ""}</> : <>{efficiencyLabel(detail.label)} <span className="font-number"><AnimatedText value={detail.value} trend={trend} /></span></>}
         </span>
       ))}
     </div>
@@ -1056,6 +1094,8 @@ export function RoomProductControls({
   onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
 }) {
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
   if (row.group === "training") {
     return null;
   }
@@ -1070,7 +1110,7 @@ export function RoomProductControls({
     return (
       <div className={cn("w-full", isTrade ? "max-sm:w-fit" : "max-w-[220px]")}>
         <ProductToggleGroup<TradeOrder | FactoryRecipe>
-          ariaLabel={`${row.title} ${isTrade ? "订单" : "配方"}`}
+          ariaLabel={`${demoRoomTitle(row.title, row.group, locale)} ${isTrade ? (en ? "orders" : "订单") : (en ? "recipe" : "配方")}`}
           value={activeProduct}
           options={isTrade ? TRADE_ORDER_OPTIONS : FACTORY_RECIPE_OPTIONS}
           columns={isTrade ? 2 : 4}
@@ -1159,6 +1199,8 @@ function OperatorSlotShell({
 
 function BuildingSkillBadge({ skill }: { skill: NonNullable<RoomRow["operatorSlots"][number]["buildingSkill"]> }) {
   const [open, setOpen] = useState(false);
+  const { locale } = useLanguageDemo();
+  const displaySkill = demoBuildingSkill(skill.id, locale, skill);
   const unlockLabel = buildingSkillUnlockLabel(skill.elite, skill.level, skill.enhanced);
   return (
     <Tooltip open={open} onOpenChange={setOpen}>
@@ -1168,7 +1210,7 @@ function BuildingSkillBadge({ skill }: { skill: NonNullable<RoomRow["operatorSlo
           <button
             type="button"
             className="absolute right-0 top-0 z-10 flex size-10 items-center justify-center border-b border-l border-white/22 bg-black/76 text-white outline-none transition-colors hover:bg-black/88 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#FFD800] max-sm:size-11"
-            aria-label={`基建技能 S${skill.index}：${skill.name}，${unlockLabel}`}
+            aria-label={locale === "en" ? `Infrastructure skill S${skill.index}: ${displaySkill.name}, ${unlockLabel}` : `基建技能 S${skill.index}：${skill.name}，${unlockLabel}`}
             onFocus={() => setOpen(true)}
             onBlur={() => setOpen(false)}
             onClick={() => setOpen(true)}
@@ -1182,7 +1224,7 @@ function BuildingSkillBadge({ skill }: { skill: NonNullable<RoomRow["operatorSlo
         align="end"
         className="max-w-80 flex-col items-start gap-1.5 whitespace-normal px-3 py-2 text-left leading-relaxed"
       >
-        <span className="font-semibold">S<span className="font-number">{skill.index}</span> · {skill.name}</span>
+        <span className="font-semibold">S<span className="font-number">{skill.index}</span> · {displaySkill.name}</span>
         <span className="text-background/72">
           {skill.enhanced ? (
             <>
@@ -1193,7 +1235,7 @@ function BuildingSkillBadge({ skill }: { skill: NonNullable<RoomRow["operatorSlo
             unlockLabel
           )}
         </span>
-        <span>{skill.description}</span>
+        <span>{displaySkill.description}</span>
       </TooltipContent>
     </Tooltip>
   );
@@ -1228,13 +1270,18 @@ export function OperatorSlot({
   searchQuery?: string;
 }) {
   const shouldReduceMotion = useReducedMotion();
+  const { locale } = useLanguageDemo();
+  const displayName = slot ? demoOperatorName(slot.name, locale) : undefined;
+  const displayPositionLabel = locale === "en" ? (positionLabel === "训练位" ? "Trainee" : positionLabel === "协助位" ? "Trainer" : positionLabel) : positionLabel;
   const identity = slot?.name ?? (autofill ? "autofill" : "empty");
   const suppressNativeTitles = showSkillTooltip && slot !== undefined;
   const profession = slot ? operatorProfessionPresentationForCode(slot.profession) : undefined;
   const enterX = shouldReduceMotion ? 0 : shiftDirection * 6;
   const exitX = shouldReduceMotion ? 0 : shiftDirection * -4;
-  const occupantLabel = slot?.name ?? (autofill ? "自动补位" : "空置");
-  const ariaLabel = positionLabel ? `${positionLabel}：${occupantLabel}` : occupantLabel;
+  const occupantLabel = displayName ?? (autofill ? (locale === "en" ? "Auto-fill" : "自动补位") : (locale === "en" ? "Empty" : "空置"));
+  const ariaLabel = displayPositionLabel
+    ? `${displayPositionLabel}${locale === "en" ? ": " : "："}${occupantLabel}`
+    : occupantLabel;
   const searchMatched = Boolean(slot && searchQuery && slot.name.toLocaleLowerCase("zh-CN").includes(searchQuery));
   const frameClassName = slot
     ? "border-[#7F7F7F] bg-[#3C3C3C] shadow-[inset_0_0_18px_rgba(255,255,255,0.16)]"
@@ -1278,7 +1325,7 @@ export function OperatorSlot({
                   <>
                     <img
                       src={slot.portrait}
-                      alt={slot.name}
+                      alt={displayName ?? slot.name}
                       width={portraitSize}
                       height={portraitSize}
                       loading="lazy"
@@ -1297,7 +1344,7 @@ export function OperatorSlot({
                   </>
                 ) : (
                   <div className="flex h-full items-center justify-center bg-[#4B4B4B] px-2 text-center text-xs font-semibold text-white">
-                    <AnimatedText value={slot.name} trend={shiftDirection} />
+                    <AnimatedText value={displayName ?? slot.name} trend={shiftDirection} />
                   </div>
                 )}
                 {slot.buildingSkill ? (
@@ -1337,14 +1384,14 @@ export function OperatorSlot({
           <OperatorSkillTooltip name={slot.name} trigger={frame} />
         </Suspense>
       ) : undefined}
-      label={slot ? <AnimatedText value={slot.name} trend={shiftDirection} /> : autofill ? "自动补位" : "占"}
+      label={slot ? <AnimatedText value={displayName ?? slot.name} trend={shiftDirection} /> : autofill ? (locale === "en" ? "Auto-fill" : "自动补位") : (locale === "en" ? "Slot" : "占")}
       labelClassName={slot
         ? (searchMatched ? "bg-[#FFD501] px-1 text-[#202020]" : "text-white")
         : autofill
           ? "text-white/55"
           : "text-transparent select-none"}
-      positionLabel={positionLabel}
-      title={suppressNativeTitles ? undefined : slot?.label}
+      positionLabel={displayPositionLabel}
+      title={suppressNativeTitles ? undefined : displayName ?? slot?.label}
     />
   );
 
@@ -1388,6 +1435,8 @@ export function ScheduleBoard({
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
   onViewModeChange?: (viewMode: "list" | "compact") => void;
 }) {
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [hiddenGroups, setHiddenGroups] = useState<Record<string, boolean>>({});
   const [viewMode, setViewMode] = useState<ScheduleViewMode | null>(null);
@@ -1432,7 +1481,7 @@ export function ScheduleBoard({
   if (rows.length === 0) {
     return (
       <div className="flex min-h-[420px] items-center justify-center border-y border-dashed border-border/70 py-6 text-center text-sm text-muted-foreground">
-        没有可展示的布局房间。
+        {en ? "No rooms to display." : "没有可展示的布局房间。"}
       </div>
     );
   }
@@ -1441,7 +1490,9 @@ export function ScheduleBoard({
   const visibleRows = normalizedQuery
     ? rows.filter((row) => row.title.toLocaleLowerCase("zh-CN").includes(normalizedQuery) || row.operators.some((name) => name.toLocaleLowerCase("zh-CN").includes(normalizedQuery)))
     : rows;
-  const rowGroups = buildListScheduleGroups(visibleRows);
+  const rowGroups = supportsCompactLayout === false
+    ? buildMobileListScheduleGroups(visibleRows)
+    : buildListScheduleGroups(visibleRows);
   const auxiliaryGroups = rowGroups.filter((group) => AUXILIARY_ROOM_GROUPS.has(group.rows[0]?.group ?? ""));
   const hiddenAuxiliaryCount = auxiliaryGroups.filter((group) => hiddenGroups[group.label]).length;
   const allAuxiliaryCollapsed =
@@ -1502,15 +1553,15 @@ export function ScheduleBoard({
               }}
             >
               <TabsList>
-                <TabsTrigger value="compact">一图流布局</TabsTrigger>
-                <TabsTrigger value="list">列表式布局</TabsTrigger>
+                <TabsTrigger value="compact">{en ? "Overview" : "一图流布局"}</TabsTrigger>
+                <TabsTrigger value="list">{en ? "List" : "列表式布局"}</TabsTrigger>
               </TabsList>
             </Tabs>
           ) : null}
           {viewControlsSlot}
           {viewMode === "list" && hiddenAuxiliaryCount ? (
             <Button type="button" variant="ghost" size="sm" onClick={restoreHiddenAuxiliaryGroups}>
-              恢复已隐藏（<span className="font-number">{hiddenAuxiliaryCount}</span>）
+              {en ? "Restore hidden" : "恢复已隐藏"}（<span className="font-number">{hiddenAuxiliaryCount}</span>）
             </Button>
           ) : null}
           {viewMode === "list" && auxiliaryGroups.length ? (
@@ -1524,7 +1575,7 @@ export function ScheduleBoard({
                 >
                   <ChevronDown className="size-4" />
                 </motion.span>
-                {allAuxiliaryCollapsed ? "展开辅助设施" : "一键折叠辅助设施"}
+                {allAuxiliaryCollapsed ? (en ? "Expand auxiliary facilities" : "展开辅助设施") : (en ? "Collapse auxiliary facilities" : "一键折叠辅助设施")}
               </Button>
               {mobileActionsSlot ? <div className="min-w-0 flex-1 md:hidden">{mobileActionsSlot}</div> : null}
             </div>
@@ -1563,6 +1614,8 @@ export function ScheduleBoard({
           <>
           {rowGroups.map((group) => {
         const visual = roomVisualFor(group.rows[0]?.group ?? "default");
+        const firstGroup = group.rows[0]?.group ?? "";
+        const displayGroupLabel = en ? ({ control: "Control Center", trading: "Trading Posts", manufacture: "Factories", power: "Power Plants", dormitory: "Dormitories", meeting: "Reception Room", hire: "Office", processing: "Workshop", training: "Training Room" }[firstGroup] ?? (group.label === "功能设施" ? "Functional Facilities" : group.label)) : group.label;
         const groupStyle = {
           "--room-accent": visual.accent,
         } as CSSProperties;
@@ -1572,7 +1625,13 @@ export function ScheduleBoard({
         if (hiddenGroups[group.label]) return null;
 
         return (
-          <section key={group.label} className="min-w-0" aria-label={group.label} style={groupStyle}>
+          <section
+            key={group.label}
+            className="min-w-0"
+            aria-label={displayGroupLabel}
+            style={groupStyle}
+            data-list-room-group={firstGroup}
+          >
             <div className="mb-2 flex min-w-0 items-center justify-between gap-3">
               <button
                 type="button"
@@ -1581,7 +1640,7 @@ export function ScheduleBoard({
                 onClick={() => setCollapsedGroups((current) => ({ ...current, [group.label]: !current[group.label] }))}
               >
                 <span className="infra-room-accent h-7 w-1.5 shrink-0 bg-[var(--room-accent)]" aria-hidden="true" />
-                <h3 className="truncate text-[21px] font-medium leading-none text-[#313131]">{group.label}</h3>
+                <h3 className="truncate text-[21px] font-medium leading-none text-[#313131]">{displayGroupLabel}</h3>
                 <span className="font-number text-xs text-[#313131]/56">{group.rows.length}</span>
                 <motion.span
                   className="flex size-4 shrink-0 items-center justify-center text-[#313131]/45"
@@ -1600,7 +1659,7 @@ export function ScheduleBoard({
                   className="shrink-0 text-muted-foreground"
                   onClick={() => setHiddenGroups((current) => ({ ...current, [group.label]: true }))}
                 >
-                  暂不显示
+                  {en ? "Hide" : "暂不显示"}
                 </Button>
               ) : null}
             </div>
@@ -1668,7 +1727,7 @@ export function ScheduleBoard({
                           <div>
                             <div className="flex items-center gap-2.5 max-sm:gap-1.5">
                               <div className={cn("font-number min-w-0 truncate font-medium tracking-[-0.02em] text-white [text-shadow:0_2px_3px_rgba(0,0,0,0.75)]", listRoomTitleSizeClass())}>
-                                {row.title}
+                                {demoRoomTitle(row.title, row.group, locale)}
                               </div>
                               <LevelDiamonds level={row.level} maxLevel={layoutRoom ? maxRoomLevel(layoutRoom.kind) : row.level} />
                             </div>
@@ -1743,7 +1802,7 @@ export function ScheduleBoard({
                             variant="ghost"
                             size="icon-sm"
                             className="border border-white/10 bg-[#3C3C3C]/55 text-white/70 hover:bg-[#4B4B4B] hover:text-white disabled:cursor-not-allowed disabled:opacity-45 max-sm:size-11"
-                            aria-label={`${row.title} 反馈排班问题`}
+                            aria-label={en ? `${demoRoomTitle(row.title, row.group, locale)} report schedule issue` : `${row.title} 反馈排班问题`}
                             disabled={feedbackDisabled}
                             onClick={() => onIssue(row)}
                           >
@@ -1752,7 +1811,11 @@ export function ScheduleBoard({
                           </span>
                         }
                       />
-                      <TooltipContent side="left">{feedbackDisabled ? "全角色导入为体验数据，不能提交反馈" : "反馈排班问题"}</TooltipContent>
+                      <TooltipContent side="left">
+                        {feedbackDisabled
+                          ? en ? "Sample data cannot submit feedback" : "全角色导入为体验数据，不能提交反馈"
+                          : en ? "Report schedule issue" : "反馈排班问题"}
+                      </TooltipContent>
                     </Tooltip>
                   </div>
                 );
@@ -1772,10 +1835,11 @@ export function ScheduleBoard({
               activePlan={activePlan}
               shiftDirection={shiftDirection}
               onIssue={onIssue}
+              feedbackDisabled={feedbackDisabled}
             />
           ) : compactScheduleLoadFailed ? (
             <div className="grid min-h-[420px] place-items-center border-y border-destructive/35 text-sm text-destructive" role="alert">
-              一图流布局加载失败，请切换到列表式布局。
+              {en ? "Overview failed to load. Switch to the list view." : "一图流布局加载失败，请切换到列表式布局。"}
             </div>
           ) : (
             <CompactScheduleLoading />
@@ -1797,25 +1861,27 @@ export function ShortcutGuideDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="gap-5 sm:max-w-2xl sm:p-6">
         <DialogHeader className="gap-1.5 px-1 sm:px-2">
-          <DialogTitle className="text-xl font-semibold">快捷键</DialogTitle>
-          <DialogDescription className="max-w-lg text-sm leading-6">在排班主界面快速定位搜索、关闭临时状态或切换导航。</DialogDescription>
+          <DialogTitle className="text-xl font-semibold">{en ? "Keyboard shortcuts" : "快捷键"}</DialogTitle>
+          <DialogDescription className="max-w-lg text-sm leading-6">{en ? "Quickly focus search, close temporary states, or toggle navigation from the scheduler." : "在排班主界面快速定位搜索、关闭临时状态或切换导航。"}</DialogDescription>
         </DialogHeader>
         <div className="divide-y divide-border/70 border-y border-border/70 px-1 sm:px-2">
           <div className="flex min-h-14 items-center justify-between gap-8 py-3 max-sm:flex-wrap max-sm:gap-2">
-            <span className="text-[15px] font-medium leading-6">聚焦排班搜索</span>
-            <KbdGroup className="shrink-0" aria-label="Control 加 K"><Kbd>Ctrl</Kbd><span aria-hidden="true">+</span><Kbd>K</Kbd></KbdGroup>
+            <span className="text-[15px] font-medium leading-6">{en ? "Focus schedule search" : "聚焦排班搜索"}</span>
+            <KbdGroup className="shrink-0" aria-label={en ? "Control plus K" : "Control 加 K"}><Kbd>Ctrl</Kbd><span aria-hidden="true">+</span><Kbd>K</Kbd></KbdGroup>
           </div>
           <div className="flex min-h-14 items-center justify-between gap-8 py-3 max-sm:flex-wrap max-sm:gap-2">
-            <span className="text-[15px] font-medium leading-6">清空搜索；计算中取消请求</span>
+            <span className="text-[15px] font-medium leading-6">{en ? "Clear search; cancel an active calculation" : "清空搜索；计算中取消请求"}</span>
             <Kbd className="shrink-0">Esc</Kbd>
           </div>
           <div className="flex min-h-14 items-center justify-between gap-8 py-3 max-sm:flex-wrap max-sm:gap-2">
-            <span className="text-[15px] font-medium leading-6">展开或收起侧边栏</span>
-            <KbdGroup className="shrink-0" aria-label="Control 加 B"><Kbd>Ctrl</Kbd><span aria-hidden="true">+</span><Kbd>B</Kbd></KbdGroup>
+            <span className="text-[15px] font-medium leading-6">{en ? "Expand or collapse sidebar" : "展开或收起侧边栏"}</span>
+            <KbdGroup className="shrink-0" aria-label={en ? "Control plus B" : "Control 加 B"}><Kbd>Ctrl</Kbd><span aria-hidden="true">+</span><Kbd>B</Kbd></KbdGroup>
           </div>
         </div>
       </DialogContent>
@@ -1842,6 +1908,8 @@ export function IssueNoteModal({
   onSave: () => void;
   onCancel: () => void;
 }) {
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
   const [consented, setConsented] = useState(false);
   const returnFocusId = useRef<string | null>(null);
   const returnToPlanSummary = useRef(false);
@@ -1878,20 +1946,20 @@ export function IssueNoteModal({
         }}
       >
         <DialogHeader>
-          <DialogTitle>{isPerformance ? "提交性能反馈" : row?.title ?? "反馈排班问题"}</DialogTitle>
-          <DialogDescription>{isPerformance ? "反馈本次求解性能" : "反馈排班问题"}</DialogDescription>
+          <DialogTitle>{isPerformance ? (en ? "Submit performance feedback" : "提交性能反馈") : row?.title ?? (en ? "Report schedule issue" : "反馈排班问题")}</DialogTitle>
+          <DialogDescription>{isPerformance ? (en ? "Share feedback about this solve" : "反馈本次求解性能") : (en ? "Report a schedule issue" : "反馈排班问题")}</DialogDescription>
         </DialogHeader>
         <DialogBody>
           <p className="text-[13px] leading-5 text-muted-foreground">
             {isPerformance
-              ? "将提交本次排班的诊断编号、求解耗时、换班方式、布局和你的说明；不会附带任意房间或完整干员数据。"
-              : "将提交本次排班的诊断编号、房间名称、当前干员和你的说明；不会重复上传完整干员数据或调试包。"}
+              ? (en ? "This submits the diagnostic ID, solve time, rotation, layout, and your note. It does not include arbitrary rooms or the complete operator roster." : "将提交本次排班的诊断编号、求解耗时、换班方式、布局和你的说明；不会附带任意房间或完整干员数据。")
+              : (en ? "This submits the diagnostic ID, room name, current operators, and your note. It does not upload the complete roster or debug bundle again." : "将提交本次排班的诊断编号、房间名称、当前干员和你的说明；不会重复上传完整干员数据或调试包。")}
           </p>
           <Textarea
             autoFocus
             value={note}
             onChange={(event) => onNoteChange(event.target.value)}
-            placeholder={isPerformance ? "例如：同一份 Box 之前通常可以更快完成。" : "例如：这组应该换成可露希尔 / 当前站位有误。"}
+            placeholder={isPerformance ? (en ? "Example: This same BOX usually completed faster before." : "例如：同一份 Box 之前通常可以更快完成。") : (en ? "Example: This team should use Closure / the current placement is wrong." : "例如：这组应该换成可露希尔 / 当前站位有误。")}
             className="min-h-36 text-[13px]"
             maxLength={1000}
           />
@@ -1902,16 +1970,16 @@ export function IssueNoteModal({
               onChange={(event) => setConsented(event.target.checked)}
               className="size-4"
             />
-            <span>我确认提交以上{isPerformance ? "性能" : "排班问题"}信息。</span>
+            <span>{en ? `I confirm submitting the ${isPerformance ? "performance" : "schedule issue"} information above.` : <>我确认提交以上{isPerformance ? "性能" : "排班问题"}信息。</>}</span>
           </label>
         </DialogBody>
         <DialogFooter>
           <Button className="max-sm:min-w-16 sm:min-w-[88px]" size="dialog" variant="ghost" onClick={onCancel}>
-            取消
+            {en ? "Cancel" : "取消"}
           </Button>
           <Button size="dialog" onClick={onSave} disabled={!note.trim() || note.trim().length > 1000 || !consented || saving}>
             {saving ? <Loader2 className="animate-spin" /> : <Save />}
-            {saving ? "提交中" : "提交反馈"}
+            {saving ? (en ? "Submitting" : "提交中") : (en ? "Submit feedback" : "提交反馈")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1936,6 +2004,8 @@ export function ProductChangeConfirmModal({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
   return (
     <Dialog
       open={open}
@@ -1951,24 +2021,24 @@ export function ProductChangeConfirmModal({
         data-product-change-confirm
       >
         <DialogHeader>
-          <DialogTitle>更改配置并重新排班？</DialogTitle>
+          <DialogTitle>{en ? "Change settings and regenerate?" : "更改配置并重新排班？"}</DialogTitle>
           <DialogDescription>
-            {roomLabel} 的{changeKind}将切换为「{nextValueLabel}」。当前排班结果会被替换，并立即使用新配置重新排班。
+            {en ? `${roomLabel}'s ${changeKind === "制造配方" ? "factory recipe" : "trade strategy"} will change to “${nextValueLabel}”. The current result will be replaced and regenerated immediately.` : `${roomLabel} 的${changeKind}将切换为「${nextValueLabel}」。当前排班结果会被替换，并立即使用新配置重新排班。`}
           </DialogDescription>
         </DialogHeader>
         <DialogBody className="py-2">
           <p className="flex items-start gap-2 text-[13px] leading-5 text-muted-foreground">
             <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden="true" />
-            重新排班完成前，配置修改会暂时锁定。
+            {en ? "Settings remain locked until regeneration completes." : "重新排班完成前，配置修改会暂时锁定。"}
           </p>
         </DialogBody>
         <DialogFooter>
           <Button className="max-sm:min-w-16 sm:min-w-[88px]" type="button" size="dialog" variant="ghost" disabled={busy} autoFocus onClick={onCancel}>
-            取消
+            {en ? "Cancel" : "取消"}
           </Button>
           <Button type="button" size="dialog" variant="destructive" disabled={busy} onClick={onConfirm}>
             {busy ? <Loader2 className="animate-spin" /> : <RotateCcw />}
-            {busy ? "重新排班中" : "确认并重新排班"}
+            {busy ? (en ? "Regenerating" : "重新排班中") : (en ? "Confirm and regenerate" : "确认并重新排班")}
           </Button>
         </DialogFooter>
       </DialogContent>

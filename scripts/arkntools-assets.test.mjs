@@ -22,6 +22,17 @@ import {
 const SOURCE_SHA = "0123456789abcdef0123456789abcdef01234567";
 const PORTRAITS_SHA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
+test("full operator fixture covers the generated operator catalog", async () => {
+  const projectRoot = path.resolve(import.meta.dirname, "..");
+  const [catalog, fullFixture] = await Promise.all([
+    readFile(path.join(projectRoot, "src/generated/arkntools/operator-catalog.json"), "utf8").then(JSON.parse),
+    readFile(path.join(projectRoot, "fixtures/operbox_full_e2.json"), "utf8").then(JSON.parse),
+  ]);
+  const fixtureIds = new Set(fullFixture.map((operator) => operator.id));
+  assert.equal(fullFixture.length, catalog.length);
+  assert.deepEqual(catalog.filter((operator) => !fixtureIds.has(operator.id)).map((operator) => operator.id), []);
+});
+
 async function makeTemp(t) {
   const root = await mkdtemp(path.join(os.tmpdir(), "arkntools-assets-test-"));
   t.after(() => rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));

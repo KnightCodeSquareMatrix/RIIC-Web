@@ -10,13 +10,14 @@ import { animate, motion, useMotionValue, useReducedMotion, useTransform } from 
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
+import { useLanguageDemo } from "@/language-demo";
 
 type HoldPhase = "idle" | "holding" | "releasing" | "committed";
 
 export function HoldToConfirm({
   children,
   onConfirm,
-  confirmLabel = "已确认",
+  confirmLabel,
   duration = 1800,
   disabled = false,
   className,
@@ -28,6 +29,9 @@ export function HoldToConfirm({
   disabled?: boolean;
   className?: string;
 }) {
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
+  const effectiveConfirmLabel = confirmLabel ?? (en ? "Confirmed" : "已确认");
   const [phase, setPhase] = useState<HoldPhase>("idle");
   const phaseRef = useRef<HoldPhase>("idle");
   const startedAtRef = useRef(0);
@@ -154,12 +158,12 @@ export function HoldToConfirm({
         className,
       )}
     >
-      <span className="col-start-1 row-start-1 flex items-center justify-center gap-2 whitespace-nowrap">{committed ? confirmLabel : children}</span>
+      <span className="col-start-1 row-start-1 flex items-center justify-center gap-2 whitespace-nowrap">{committed ? effectiveConfirmLabel : children}</span>
       <motion.span aria-hidden style={{ clipPath }} className="absolute inset-0 grid place-items-center bg-[#E23B32] px-4 text-white">
-        <span className="flex items-center justify-center gap-2 whitespace-nowrap">{committed ? confirmLabel : children}</span>
+        <span className="flex items-center justify-center gap-2 whitespace-nowrap">{committed ? effectiveConfirmLabel : children}</span>
       </motion.span>
-      <span id={hintId} className="font-number sr-only">按住 {duration / 1000} 秒确认；提前松开将取消，且不会删除任何数据。</span>
-      <span role="status" aria-live="polite" className="sr-only">{committed ? confirmLabel : ""}</span>
+      <span id={hintId} className="font-number sr-only">{en ? `Hold for ${duration / 1000} seconds to confirm. Releasing early cancels without deleting data.` : `按住 ${duration / 1000} 秒确认；提前松开将取消，且不会删除任何数据。`}</span>
+      <span role="status" aria-live="polite" className="sr-only">{committed ? effectiveConfirmLabel : ""}</span>
     </button>
   );
 }
