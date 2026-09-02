@@ -72,6 +72,18 @@ test("the plan worker centrally dispatches an eight-task pipeline across four is
   assert.match(workerRuntime, /PLAN_TASK_PIPELINE_DEPTH = 2/);
   assert.match(infra, /export async function warmPlanServeLane[\s\S]+getPlanServeClient\(serveLane\)[\s\S]+await serveClient\.ping\(\)[\s\S]+inspectSolverDeploymentReadiness/);
   assert.match(workerRuntime, /warmPlanServeLane[\s\S]+length: PLAN_TASK_WORKER_CONCURRENCY[\s\S]+warmPlanServeLane\(serveLane\)[\s\S]+recoverStaleRunningTasks[\s\S]+recordPlanWorkerHeartbeat/);
+  const startup = workerRuntime.slice(workerRuntime.indexOf("export async function runPlanWorker"));
+  const firstHeartbeat = startup.indexOf("await recordPlanWorkerHeartbeat");
+  const heartbeatTimer = startup.indexOf("const heartbeatTimer = setInterval");
+  const artifactRecovery = startup.indexOf("void resumePendingPlanArtifactFinalizations");
+  assert.ok(firstHeartbeat >= 0 && firstHeartbeat < heartbeatTimer);
+  assert.ok(heartbeatTimer < artifactRecovery);
+  const artifactResume = infra.slice(
+    infra.indexOf("export async function resumePendingPlanArtifactFinalizations"),
+    infra.indexOf("export async function waitForPlanArtifactFinalizers"),
+  );
+  assert.match(artifactResume, /batchSize = 64[\s\S]+await Promise\.all[\s\S]+await readdir\(runDir\)/);
+  assert.doesNotMatch(artifactResume, /existsSync/);
   assert.match(workerRuntime, /capacity = PLAN_TASK_WORKER_CONCURRENCY \* PLAN_TASK_PIPELINE_DEPTH/);
   assert.match(workerRuntime, /runPlanWorkerDispatcher[\s\S]+Math\.min\(\.\.\.laneLoads\)[\s\S]+laneLoads\.findIndex[\s\S]+dependencies\.claim[\s\S]+dependencies\.execute\(task, serveLane\)/);
   assert.match(workerRuntime, /listenForPlanTaskAvailability[\s\S]+using 2s fallback polling/);

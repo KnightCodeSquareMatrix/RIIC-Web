@@ -414,7 +414,6 @@ export async function runPlanWorker(): Promise<void> {
   if (!/^[0-9a-f]{40}$/.test(releaseSha)) throw new Error("APP_RELEASE_SHA must be a full lowercase Git commit SHA.");
 
   const startedAt = new Date();
-  const resumedArtifacts = await resumePendingPlanArtifactFinalizations();
   await Promise.all(Array.from(
     { length: PLAN_TASK_WORKER_CONCURRENCY },
     (_, serveLane) => warmPlanServeLane(serveLane),
@@ -430,7 +429,7 @@ export async function runPlanWorker(): Promise<void> {
     pipelineDepth: PLAN_TASK_PIPELINE_DEPTH,
     inFlight: 0,
   });
-  console.log(`[plan-worker] started release=${releaseSha} solverLanes=${PLAN_TASK_WORKER_CONCURRENCY} pipelineDepth=${PLAN_TASK_PIPELINE_DEPTH} capacity=${PLAN_TASK_WORKER_CONCURRENCY * PLAN_TASK_PIPELINE_DEPTH} recovered=${recovery.recovered} failed=${recovery.failed} resumedArtifacts=${resumedArtifacts}`);
+  console.log(`[plan-worker] started release=${releaseSha} solverLanes=${PLAN_TASK_WORKER_CONCURRENCY} pipelineDepth=${PLAN_TASK_PIPELINE_DEPTH} capacity=${PLAN_TASK_WORKER_CONCURRENCY * PLAN_TASK_PIPELINE_DEPTH} recovered=${recovery.recovered} failed=${recovery.failed}`);
 
   let shuttingDown = false;
   let heartbeatInFlight = false;
@@ -458,6 +457,10 @@ export async function runPlanWorker(): Promise<void> {
   }, CLEANUP_INTERVAL_MS);
   heartbeatTimer.unref();
   cleanupTimer.unref();
+
+  void resumePendingPlanArtifactFinalizations()
+    .then((resumedArtifacts) => console.log(`[plan-worker] artifact recovery queued=${resumedArtifacts}`))
+    .catch((error) => console.error("[plan-worker] artifact recovery scan failed:", error));
 
   const stopListening = await listenForPlanTaskAvailability(() => wake.notify()).catch((error) => {
     console.error("[plan-worker] LISTEN unavailable; using 2s fallback polling:", error);
