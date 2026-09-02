@@ -19,6 +19,7 @@ All notable changes to RIIC-Web are documented in this file.
 
 ### Fixed
 
+- Worker readiness no longer waits for the historical artifact recovery scan, preventing large retained record sets from exhausting the deployment health window.
 - Worker notification connections now reconnect after initial handshake or socket failures without leaving the queue asleep.
 - Queue schema upgrades now serialize concurrent migrations and build admission indexes online, avoiding conflicting deploys and unnecessary scheduling downtime.
 - Artifact completion no longer becomes permanently pending when database confirmation is temporarily unavailable or a process crashes before its run record is created.
