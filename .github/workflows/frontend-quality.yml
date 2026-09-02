@@ -70,7 +70,7 @@ jobs:
               echo "Maintainer-authorized direct main release; develop ancestry is intentionally skipped."
             else
               git fetch --no-tags origin develop:refs/remotes/origin/develop
-              git merge-base --is-ancestor "$HEAD_SHA" refs/remotes/origin/develop
+              git merge-base --is-ancestor refs/remotes/origin/develop "$HEAD_SHA"
             fi
           fi
 
