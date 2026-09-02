@@ -65,7 +65,6 @@ import {
   type OnboardingPreference,
 } from "./onboarding";
 import { normalizeOperboxEntries } from "./operbox-normalization";
-import type { UpgradeSimulationSelection } from "./components/UpgradeSimulationDialog";
 import { effectiveFiammettaSetting, resolvePlanPresentationLayout } from "./plan-presentation";
 import {
   applyLocalLayoutPatch,
@@ -306,6 +305,8 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   const [sampleLoading, setSampleLoading] = useState(false);
   const sampleTrialInFlightRef = useRef(false);
   const [result, setResult] = useState<PublicPlanData | null>(null);
+  const [upgradeComparison, setUpgradeComparison] = useState<{ baseline: PublicPlanData; trial: PublicPlanData } | null>(null);
+  const [scheduleVariant, setScheduleVariant] = useState<"baseline" | "trial">("baseline");
   const [loading, setLoading] = useState(false);
   const [cliReady, setCliReady] = useState(false);
   const [taskQueueEnabled, setTaskQueueEnabled] = useState(false);
@@ -381,11 +382,19 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     setLoading(Boolean(planTask.taskId));
   }, [planTask.taskId]);
 
-  // 公开排班结果只包含产品页面需要的效率、MAA 与轮换数据。
-  const scheduleResult = result;
+  // 升级试算不覆盖原求解结果；两份完整班表在此处切换展示。
+  const scheduleResult = scheduleVariant === "trial" && upgradeComparison?.baseline === result
+    ? upgradeComparison.trial
+    : result;
+  useEffect(() => {
+    if (upgradeComparison && upgradeComparison.baseline !== result) {
+      setUpgradeComparison(null);
+      setScheduleVariant("baseline");
+    }
+  }, [result, upgradeComparison]);
   const activePlan = scheduleResult?.maa.plans?.[activeShift];
   const activeRotationShift = scheduleResult?.rotation.shifts?.[activeShift];
-  const activeTrainingRoomShift = result?.trainingRoom?.shifts[activeShift];
+  const activeTrainingRoomShift = scheduleResult?.trainingRoom?.shifts[activeShift];
   const [baseRows, setBaseRows] = useState<RoomRow[]>([]);
   useEffect(() => {
     let cancelled = false;
@@ -1041,23 +1050,16 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     await runPlanForLayout(layout);
   }
 
-  async function handleSimulateUpgrades(operators: UpgradeSimulationSelection[]): Promise<PublicPlanData> {
+  async function handleSimulateUpgrades(trialOperbox: OperBoxEntry[]): Promise<PublicPlanData> {
     if (!operbox) throw new Error("请先导入干员数据。");
-    const selected = new Map(operators.map((operator) => [operator.id, operator]));
-    if (selected.size === 0) throw new Error("请至少选择一名干员进行试算。");
-    const trialOperbox = operbox.map((entry) => selected.has(entry.id)
-      ? { ...entry, own: true, elite: 2, level: 1 }
-      : entry);
-    const knownIds = new Set(operbox.map((entry) => entry.id));
-    for (const operator of selected.values()) {
-      if (!knownIds.has(operator.id)) trialOperbox.push({ ...operator, own: true, elite: 2, level: 1, potential: 1 });
-    }
+    if (!trialOperbox.some((entry) => entry.own)) throw new Error("请至少选择一名干员进行试算。");
     trackTelemetry({ type: "interaction", name: "upgrade_simulation_submit", page: "calculator" });
     const response = await computePlan({
       layout,
       operbox: normalizeOperboxEntries(trialOperbox),
-      sourceName: fileName,
-      boxSource,
+      sourceName: "升级试算 Box.json",
+      // 试算始终提交完整替代 BOX，不能沿用 sample，否则 API 会用服务端示例覆盖它。
+      boxSource: "maa",
       rotation: rotationProfile,
       fiammetta_enable: effectiveFiammettaSetting(trialOperbox, rotationProfile, fiammettaEnabled),
     });
@@ -1696,6 +1698,15 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       onOpenSetup: handleProtectedSetup,
       onRun: handleProtectedRun,
       onSimulateUpgrades: handleSimulateUpgrades,
+      upgradeComparison: upgradeComparison?.baseline === result ? { trial: upgradeComparison.trial } : null,
+      scheduleVariant,
+      onScheduleVariantChange: setScheduleVariant,
+      onUpgradeTrialReady: (trial: PublicPlanData) => {
+        if (!result) return;
+        setUpgradeComparison({ baseline: result, trial });
+        setScheduleVariant("trial");
+        setActiveShift(0);
+      },
       onCancelRun: handleCancelRun,
       onSetActiveShift: setActiveShift,
       onMarkIssue: handleMarkIssue,
