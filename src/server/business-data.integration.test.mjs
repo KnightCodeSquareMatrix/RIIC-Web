@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
 import { randomUUID } from "node:crypto";
+import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import process from "node:process";
 import test from "node:test";
 
@@ -45,6 +48,13 @@ test("admin solver metrics trend query preserves PostgreSQL grouping identity", 
 });
 
 const taskMasterKey = Buffer.alloc(32, 13);
+const artifactWorkspace = await mkdtemp(path.join(tmpdir(), "arkinfra-artifact-integration-"));
+const artifactStorageRoot = path.join(artifactWorkspace, "storage");
+const artifactRunsRoot = path.join(artifactStorageRoot, "cli-runs");
+process.env.BETA_BUSINESS_DB_ENABLED = "1";
+process.env.BETA_STORAGE_DIR = artifactStorageRoot;
+process.env.BETA_CLI_RUN_DIR = artifactRunsRoot;
+process.env.BETA_FEEDBACK_DIR = path.join(artifactStorageRoot, "feedback");
 process.env.WORKSPACE_ACTIVE_KEY_VERSION = "integration";
 process.env.WORKSPACE_MASTER_KEYS = JSON.stringify({ integration: `base64:${taskMasterKey.toString("base64")}` });
 
@@ -55,11 +65,121 @@ const {
   createPlanTask,
   planQueuePosition,
 } = await import("./plan-task.ts");
-const { queryAdminSolverMetrics } = await import("./business-records.ts");
+const {
+  queryAdminSolverMetrics,
+  updatePlanRunArtifactBestEffort,
+} = await import("./business-records.ts");
 const { getDatabase } = await import("./db/index.ts");
+const {
+  resumePendingPlanArtifactFinalizations,
+  waitForPlanArtifactFinalizers,
+} = await import("./infra.ts");
 
 test.after(async () => {
   await getDatabase().$client.end().catch(() => undefined);
+  await rm(artifactWorkspace, { recursive: true, force: true });
+});
+
+test("online queue indexes are valid and artifact finalization requires an existing run row", async () => {
+  const pool = new Pool({ connectionString: databaseUrl, max: 2 });
+  const diagnosticId = randomUUID();
+  const missingDiagnosticId = randomUUID();
+  try {
+    const indexes = await pool.query(
+      `SELECT pg_class.relname AS name, pg_index.indisvalid AS valid, pg_get_indexdef(pg_index.indexrelid) AS definition
+       FROM pg_index
+       JOIN pg_class ON pg_class.oid = pg_index.indexrelid
+       JOIN pg_namespace ON pg_namespace.oid = pg_class.relnamespace
+       WHERE pg_namespace.nspname = 'app'
+         AND pg_class.relname = ANY($1::text[])
+       ORDER BY pg_class.relname`,
+      [[
+        "plan_task_account_active_idx",
+        "plan_task_active_expires_idx",
+        "plan_task_ip_active_idx",
+      ]],
+    );
+    assert.equal(indexes.rows.length, 3);
+    assert.ok(indexes.rows.every((row) => row.valid === true));
+    assert.match(indexes.rows.find((row) => row.name === "plan_task_active_expires_idx").definition, /\(status, expires_at\)/);
+
+    assert.equal(await updatePlanRunArtifactBestEffort({
+      diagnosticId: missingDiagnosticId,
+      status: "complete",
+    }), "missing");
+
+    await pool.query(
+      `INSERT INTO app.plan_run
+       (diagnostic_id,source_type,status,layout_template,room_count,operator_count,rotation,fiammetta_enable,artifact_status,created_at,expires_at)
+       VALUES ($1,'sample','success','243',1,1,'abc',false,'pending',now(),now()+interval '1 day')`,
+      [diagnosticId],
+    );
+    assert.equal(await updatePlanRunArtifactBestEffort({
+      diagnosticId,
+      status: "complete",
+      artifact: { key: diagnosticId, bytes: 42, sha256: "b".repeat(64) },
+    }), "updated");
+    const finalized = await pool.query(
+      "SELECT artifact_status,artifact_bytes,artifact_sha256,artifact_finalized_at FROM app.plan_run WHERE diagnostic_id=$1",
+      [diagnosticId],
+    );
+    assert.equal(finalized.rows[0].artifact_status, "complete");
+    assert.equal(Number(finalized.rows[0].artifact_bytes), 42);
+    assert.equal(finalized.rows[0].artifact_sha256, "b".repeat(64));
+    assert.ok(finalized.rows[0].artifact_finalized_at instanceof Date);
+  } finally {
+    await pool.query("DELETE FROM app.plan_run WHERE diagnostic_id=$1", [diagnosticId]).catch(() => undefined);
+    await pool.end();
+  }
+});
+
+test("artifact finalization stays pending across a transient missing run and retries to completion", async () => {
+  const pool = new Pool({ connectionString: databaseUrl, max: 2 });
+  const diagnosticId = randomUUID();
+  const runRoot = path.join(artifactRunsRoot, `pending-${diagnosticId}`);
+  const envelopePath = path.join(runRoot, "run-envelope.json");
+  const finalizedPath = path.join(runRoot, "artifact-finalized.json");
+  await mkdir(runRoot, { recursive: true });
+  await writeFile(envelopePath, JSON.stringify({
+    version: "plan-run-envelope-v1",
+    diagnosticId,
+    dataOwnerTag: null,
+    result: {
+      success: false,
+      startedAt: "2026-09-02T00:00:00.000Z",
+      runId: diagnosticId,
+      error: "fixture",
+    },
+  }), "utf-8");
+
+  try {
+    assert.equal(await resumePendingPlanArtifactFinalizations(), 1);
+    assert.equal(await waitForPlanArtifactFinalizers(500), false);
+    await assert.rejects(readFile(finalizedPath, "utf-8"), (error) => error?.code === "ENOENT");
+    const expanded = JSON.parse(await readFile(path.join(runRoot, "artifact-expanded.json"), "utf-8"));
+    const resultMtimeBeforeRetry = (await stat(path.join(runRoot, "result.json"))).mtimeMs;
+    assert.equal(expanded.diagnosticId, diagnosticId);
+
+    await pool.query(
+      `INSERT INTO app.plan_run
+       (diagnostic_id,source_type,status,layout_template,room_count,operator_count,rotation,fiammetta_enable,artifact_status,created_at,expires_at)
+       VALUES ($1,'sample','failed','243',1,1,'abc',false,'pending',now(),now()+interval '1 day')`,
+      [diagnosticId],
+    );
+
+    assert.equal(await waitForPlanArtifactFinalizers(5_000), true);
+    assert.equal(JSON.parse(await readFile(finalizedPath, "utf-8")).diagnosticId, diagnosticId);
+    assert.equal((await stat(path.join(runRoot, "result.json"))).mtimeMs, resultMtimeBeforeRetry);
+    const [artifact] = (await pool.query(
+      "SELECT artifact_status,artifact_finalized_at FROM app.plan_run WHERE diagnostic_id=$1",
+      [diagnosticId],
+    )).rows;
+    assert.equal(artifact.artifact_status, "complete");
+    assert.ok(artifact.artifact_finalized_at instanceof Date);
+  } finally {
+    await pool.query("DELETE FROM app.plan_run WHERE diagnostic_id=$1", [diagnosticId]).catch(() => undefined);
+    await pool.end();
+  }
 });
 
 function integrationTaskPayload() {

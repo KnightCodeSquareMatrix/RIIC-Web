@@ -515,7 +515,7 @@ test("trusted anonymous samples receive bounded admission after a cache miss", a
 
 test("task queue keeps anonymous samples cache-only and applies persistent authenticated admission", async () => {
   const source = await readFile(new URL("../app/api/tasks/route.ts", import.meta.url), "utf8");
-  const cacheResolution = source.indexOf("await resolvePlanCache");
+  const cacheResolution = source.indexOf("await lookupPlanCache");
   const anonymousGuard = source.indexOf("if (!session?.user?.id)");
   const taskCreation = source.indexOf("await createPlanTask");
   assert.equal(cacheResolution > 0, true);
@@ -540,15 +540,23 @@ test("task queue keeps only the trusted sample on the bounded synchronous endpoi
 
 test("worker finalization records saved-plan bindings and cache ownership before publication", async () => {
   const source = await readFile(new URL("../../scripts/plan-worker-runtime.mts", import.meta.url), "utf8");
-  const runRecord = source.indexOf("await recordPlanRunBestEffort");
-  const cacheReference = source.indexOf("await recordPlanCacheReferenceBestEffort", runRecord);
-  const cachePublication = source.indexOf("await completePlanCache", cacheReference);
+  const runRecord = source.indexOf("await dependencies.recordRun");
+  const cacheReference = source.indexOf("await dependencies.recordCacheReference", runRecord);
+  const cachePublication = source.indexOf("await dependencies.completeCache", cacheReference);
+  const deferredRun = source.indexOf("deferArtifacts: true");
+  const solverRunRecord = source.indexOf("await dependencies.recordRun", deferredRun);
+  const taskPublication = source.indexOf('await dependencies.completeTask(id, { status: "done"', solverRunRecord);
+  const artifactPublication = source.indexOf("dependencies.enqueueArtifact", taskPublication);
   assert.equal(source.includes("calculationContext: savedPlanContext"), true);
   assert.equal(source.includes("publicResultSha256"), true);
   assert.equal(source.includes("operboxContentHmac"), true);
   assert.equal(runRecord > 0, true);
   assert.equal(cacheReference > runRecord, true);
   assert.equal(cachePublication > cacheReference, true);
+  assert.equal(deferredRun > 0, true);
+  assert.equal(solverRunRecord > deferredRun, true);
+  assert.equal(taskPublication > solverRunRecord, true);
+  assert.equal(artifactPublication > taskPublication, true);
 });
 
 test("worker loads the sealed release environment before evaluating runtime modules", async () => {

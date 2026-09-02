@@ -39,7 +39,7 @@
 - Tailwind CSS 4、shadcn/ui、Base UI
 - Better Auth、Drizzle ORM 与 PostgreSQL
 - `skland-kit`，仅用于可选的森空岛扫码或凭证导入授权
-- 外部长驻进程 `infra-cli serve`；生产排班 Worker 使用三个相互隔离的求解通道
+- 外部长驻进程 `infra-cli serve`；生产排班 Worker 用中央调度器驱动四个相互隔离的求解通道，每通道保留两个有界任务槽
 
 页面和 `/api/*` 由同一个 Next.js 服务提供，不需要单独启动 Express 或 Vite 服务。
 
