@@ -21,6 +21,8 @@ import {
 
 const databaseUrl = process.env.AUTH_INTEGRATION_DATABASE_URL?.trim();
 if (!databaseUrl) throw new Error("AUTH_INTEGRATION_DATABASE_URL is required for the business-data integration test.");
+const migrationDatabaseUrl = process.env.DATABASE_MIGRATION_URL?.trim();
+if (!migrationDatabaseUrl) throw new Error("DATABASE_MIGRATION_URL is required for the business-data integration test.");
 
 test("admin solver metrics trend query preserves PostgreSQL grouping identity", async () => {
   const pool = new Pool({ connectionString: databaseUrl, max: 2 });
@@ -156,7 +158,7 @@ test("admin feedback workflow defaults, filters, transitions, and cascades witho
 });
 
 test("feedback status migration converts existing rows and installs the new default", async () => {
-  const pool = new Pool({ connectionString: databaseUrl, max: 1 });
+  const pool = new Pool({ connectionString: migrationDatabaseUrl, max: 1 });
   const feedbackIds = [randomUUID(), randomUUID(), randomUUID()];
   const eventIds = [randomUUID(), randomUUID(), randomUUID()];
   const legacyStatuses = ["pending", "working", "resolved"];
