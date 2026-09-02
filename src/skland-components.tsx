@@ -40,6 +40,8 @@ const SklandCredentialPanel = dynamic(
 type ScanState = "idle" | "loading" | "waiting" | "scanned" | "expired";
 type AuthMethod = "qr" | "credential";
 
+const sklandQrStatusIconClassName = "text-neutral-700 [forced-color-adjust:auto] forced-colors:bg-[Canvas] forced-colors:text-[CanvasText]";
+
 interface SklandLoginPanelProps {
   configured: boolean;
   disabledReason?: string | null;
@@ -305,13 +307,26 @@ export function SklandLoginPanel({
                 <div className="order-1 grid place-items-center gap-3 md:order-2">
                   <div className="grid size-52 place-items-center rounded-xl bg-white p-3 ring-1 ring-black/10 sm:size-56 md:size-52" data-skland-qr-visual>
                     {scanState === "scanned" ? (
-                      <LoaderCircle className="size-9 animate-spin text-muted-foreground motion-reduce:animate-none" aria-hidden="true" data-skland-login-progress />
+                      <LoaderCircle
+                        className={cn("size-9 animate-spin motion-reduce:animate-none", sklandQrStatusIconClassName)}
+                        aria-hidden="true"
+                        data-skland-login-progress
+                        data-skland-login-status-icon="scanned"
+                      />
                     ) : scanUrl ? (
                       <QRCodeSVG value={scanUrl} size={196} className="size-full" title="森空岛登录二维码" role="img" aria-label="森空岛登录二维码" />
                     ) : scanState === "loading" ? (
-                      <LoaderCircle className="size-8 animate-spin text-muted-foreground motion-reduce:animate-none" aria-hidden="true" />
+                      <LoaderCircle
+                        className={cn("size-8 animate-spin motion-reduce:animate-none", sklandQrStatusIconClassName)}
+                        aria-hidden="true"
+                        data-skland-login-status-icon="loading"
+                      />
                     ) : (
-                      <ScanLine className="size-12 text-muted-foreground" aria-hidden="true" />
+                      <ScanLine
+                        className={cn("size-12", sklandQrStatusIconClassName)}
+                        aria-hidden="true"
+                        data-skland-login-status-icon="idle"
+                      />
                     )}
                   </div>
                   <p className="text-center text-sm leading-6 text-muted-foreground" role="status" aria-live="polite">{pageStatusText}</p>
