@@ -148,8 +148,11 @@ export function SkillQuery() {
               key={`${query}:${selectedRoom ?? ""}:${selectedTag ?? ""}`}
               hasMore={hasMore}
               onLoad={loadMore}
+              auto={false}
               className="mt-4 border-t border-border/60 pt-2"
-              labels={en ? { idle: "Load more", loading: "Loading", error: "Load failed — retry", end: "All results shown" } : undefined}
+              labels={en
+                ? { idle: "Show 10 more", loading: "Loading", error: "Load failed — retry", end: "All results shown" }
+                : { idle: "再展开 10 名" }}
             />
           </>
         )}

@@ -36,6 +36,30 @@ test("mobile interactive targets remain at least 44 CSS pixels", async ({ page }
   expect(undersized).toEqual([]);
 });
 
+test("skill query reveals results ten at a time only after manual expansion", async ({ page }) => {
+  await mockApis(page);
+  await seedPreferences(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/skills");
+
+  const skillQuery = page.locator("[data-skill-query-page]");
+  const results = skillQuery.locator('article[aria-label$="的基建技能"]');
+  const loadMore = skillQuery.locator("[data-load-more]");
+  const expandButton = loadMore.getByRole("button", { name: /再展开 10 名/ });
+
+  await expect(skillQuery).toBeVisible();
+  await expect(results).toHaveCount(10);
+  await loadMore.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(300);
+  await expect(results).toHaveCount(10);
+  await expect(expandButton).toBeVisible();
+
+  await expandButton.click();
+  await expect(results).toHaveCount(20);
+  await expandButton.click();
+  await expect(results).toHaveCount(30);
+});
+
 test("an empty generated profile explains that no training action is needed", async ({ page }) => {
   await mockApis(page);
   await seedV4Session(page);
