@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { and, desc, eq, gt, gte, inArray, lte, lt, or, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, gt, gte, inArray, lte, lt, notInArray, or, sql, type SQL } from "drizzle-orm";
 
 import { PRIVACY_VERSION, TERMS_VERSION } from "@/legal-policy";
 import {
@@ -9,7 +9,7 @@ import {
   ADMIN_SOLVER_TREND_WINDOW_MINUTES,
 } from "@/solver-metrics-config";
 import { buildAdminSolverMetricsData } from "@/solver-metrics";
-import type { AppErrorCode, FeedbackRequest, SavedPlanCalculationContext, SolverObservation } from "@/types";
+import type { AdminFeedbackFacility, AdminFeedbackStatus, AppErrorCode, FeedbackRequest, SavedPlanCalculationContext, SolverObservation } from "@/types";
 import { buildAdminSolverTrendQuery } from "./admin-solver-metrics-trend";
 import { BUSINESS_DATA_TTL_MS, isBusinessDatabaseEnabled, isPlanCacheEnabled } from "./business-config";
 import { getDatabase } from "./db";
@@ -222,7 +222,7 @@ export async function recordFeedbackStrict(input: FeedbackSummaryInput): Promise
       room: "room" in issue ? issue.room : null,
       note: issue.note,
       consentAt: input.savedAt,
-      status: "pending",
+      status: "unreviewed",
       artifactKey: input.artifact?.key ?? null,
       artifactBytes: input.artifact?.bytes ?? null,
       artifactSha256: input.artifact?.sha256 ?? null,
@@ -234,7 +234,7 @@ export async function recordFeedbackStrict(input: FeedbackSummaryInput): Promise
     await tx.insert(feedbackEvent).values({
       id: randomUUID(),
       feedbackId: input.feedbackId,
-      status: "pending",
+      status: "unreviewed",
       note: null,
       createdAt: input.savedAt,
     });
@@ -254,9 +254,22 @@ export type BusinessRecordQuery = {
   from?: Date;
   to?: Date;
   status?: string;
+  facility?: AdminFeedbackFacility;
   errorCode?: string;
   solverExecutableSha256?: string;
 };
+
+const ROOM_FEEDBACK_FACILITIES: Exclude<AdminFeedbackFacility, "solver" | "unknown">[] = [
+  "trading",
+  "manufacture",
+  "power",
+  "control",
+  "dormitory",
+  "meeting",
+  "hire",
+  "processing",
+  "training",
+];
 
 export async function queryBusinessRecords(query: BusinessRecordQuery) {
   const requestedLimit = Number(query.limit ?? 50);
@@ -301,11 +314,23 @@ export async function queryBusinessRecords(query: BusinessRecordQuery) {
   if (query.from) conditions.push(gte(feedback.createdAt, query.from));
   if (query.to) conditions.push(lte(feedback.createdAt, query.to));
   if (query.status) conditions.push(eq(feedback.status, query.status));
+  if (query.facility === "solver") {
+    conditions.push(eq(feedback.kind, "performance_issue"));
+  } else if (query.facility) {
+    conditions.push(eq(feedback.kind, "room_issue"));
+    const group = sql<string>`${feedback.room} ->> 'group'`;
+    if (query.facility === "unknown") {
+      conditions.push(or(sql`${group} is null`, notInArray(group, ROOM_FEEDBACK_FACILITIES))!);
+    } else {
+      conditions.push(eq(group, query.facility));
+    }
+  }
   const where = conditions.length ? and(...conditions) : undefined;
   const [items, total] = await Promise.all([
     getDatabase().select({
       id: feedback.id,
       diagnosticId: feedback.diagnosticId,
+      planRunDiagnosticId: feedback.planRunDiagnosticId,
       kind: feedback.kind,
       room: feedback.room,
       note: feedback.note,
@@ -392,7 +417,7 @@ export async function queryAdminSolverMetrics(now = new Date()) {
 
 export async function updateFeedbackRecord(input: {
   feedbackId: string;
-  status: "pending" | "working" | "resolved";
+  status: AdminFeedbackStatus;
   note: string;
   actorUserId?: string | null;
 }) {
@@ -415,6 +440,54 @@ export async function updateFeedbackRecord(input: {
     });
     return { status: input.status, note, updatedAt: now.toISOString() };
   });
+}
+
+export async function findFeedbackRecord(feedbackId: string) {
+  const [item] = await getDatabase().select({
+    id: feedback.id,
+    diagnosticId: feedback.diagnosticId,
+    planRunDiagnosticId: feedback.planRunDiagnosticId,
+    kind: feedback.kind,
+    room: feedback.room,
+    note: feedback.note,
+    status: feedback.status,
+    adminNote: feedback.adminNote,
+    createdAt: feedback.createdAt,
+    updatedAt: feedback.updatedAt,
+    expiresAt: feedback.expiresAt,
+  }).from(feedback).where(eq(feedback.id, feedbackId)).limit(1);
+  return item ?? null;
+}
+
+export async function findPlanRunRecord(diagnosticId: string) {
+  const [item] = await getDatabase().select({
+    diagnosticId: planRun.diagnosticId,
+    sourceType: planRun.sourceType,
+    status: planRun.status,
+    layoutTemplate: planRun.layoutTemplate,
+    roomCount: planRun.roomCount,
+    operatorCount: planRun.operatorCount,
+    rotation: planRun.rotation,
+    fiammettaEnable: planRun.fiammettaEnable,
+    durationMs: planRun.durationMs,
+    errorCode: planRun.errorCode,
+    solverExecutableSha256: planRun.solverExecutableSha256,
+    protocolVersion: planRun.protocolVersion,
+    planSchemaVersion: planRun.planSchemaVersion,
+    artifactKey: planRun.artifactKey,
+    createdAt: planRun.createdAt,
+    expiresAt: planRun.expiresAt,
+  }).from(planRun).where(eq(planRun.diagnosticId, diagnosticId)).limit(1);
+  return item ?? null;
+}
+
+export async function deleteFeedbackRecords(feedbackIds: string[]): Promise<string[]> {
+  if (!feedbackIds.length) return [];
+  const deleted = await getDatabase().delete(feedback)
+    .where(inArray(feedback.id, feedbackIds))
+    .returning({ id: feedback.id });
+  const deletedSet = new Set(deleted.map((item) => item.id));
+  return feedbackIds.filter((id) => deletedSet.has(id));
 }
 
 export async function deleteExpiredBusinessRecords(now = new Date()): Promise<void> {

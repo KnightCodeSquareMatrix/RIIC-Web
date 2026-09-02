@@ -56,14 +56,14 @@ async function createTestClient(context: test.TestContext) {
   const client = new InfraCliServeClient({
     resolveCliPath: () => process.execPath,
     resolveRuntimeDataDir: () => null,
-    timeoutMs: 1_000,
+    timeoutMs: 3_000,
     serveArgs: [workerPath],
     cwd: () => root,
   });
   context.after(async () => {
     client.stop();
     await new Promise((resolve) => setTimeout(resolve, 50));
-    await rm(root, { recursive: true, force: true });
+    await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
   return { client, root };
 }

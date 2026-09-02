@@ -159,16 +159,20 @@ test("admin solver metrics polling deduplicates requests and pauses in hidden ta
   assert.equal(source.includes("activeRequest?.abort()"), true);
 });
 
-test("admin dashboard exposes three sections and lazy-loads an accessible area chart", async () => {
-  const [page, chartClient, chart] = await Promise.all([
+test("admin routes split overview, issue triage, and users while keeping the accessible metrics chart", async () => {
+  const [page, issuesPage, usersPage, chartClient, chart] = await Promise.all([
     readFile(new URL("./app/admin/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("./app/admin/issues/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("./app/admin/users/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("./app/admin/users/solver-metrics-client.tsx", import.meta.url), "utf8"),
     readFile(new URL("./app/admin/users/solver-metrics-chart.tsx", import.meta.url), "utf8"),
   ]);
 
   assert.equal(page.includes("<SolverVersion"), true);
   assert.equal(page.includes("<AdminSolverMetrics"), true);
-  assert.equal(page.includes("<AdminUserManagement"), true);
+  assert.equal(page.includes("<AdminUserManagement"), false);
+  assert.equal(issuesPage.includes("<AdminIssues"), true);
+  assert.equal(usersPage.includes("<AdminUserManagement"), true);
   assert.equal(chartClient.includes("dynamic("), true);
   assert.equal(chartClient.includes("ssr: false"), true);
   assert.equal(chart.includes("<AreaChart accessibilityLayer"), true);

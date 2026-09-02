@@ -82,6 +82,8 @@ let migrationLockHeld = false;
 try {
   await client.query("SELECT pg_advisory_lock(hashtext($1))", [MIGRATION_ADVISORY_LOCK_NAME]);
   migrationLockHeld = true;
+  await client.query("SET lock_timeout = '5s'");
+  await client.query("SET statement_timeout = '5min'");
   await migrate(drizzle({ client }), { migrationsFolder: "drizzle" });
   await ensureOnlinePlanTaskIndexes(client);
   const runtimeUrl = process.env.DATABASE_URL?.trim();

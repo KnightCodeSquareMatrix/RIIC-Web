@@ -1256,6 +1256,96 @@ export interface AdminUserUpdateData {
   updated: true;
 }
 
+export type AdminFeedbackStatus = "unreviewed" | "reproduced" | "fixed";
+
+export type AdminFeedbackFacility =
+  | "trading"
+  | "manufacture"
+  | "power"
+  | "control"
+  | "dormitory"
+  | "meeting"
+  | "hire"
+  | "processing"
+  | "training"
+  | "solver"
+  | "unknown";
+
+export interface AdminFeedbackRecordData {
+  id: string;
+  diagnosticId: string;
+  kind: FeedbackKind;
+  facility: AdminFeedbackFacility;
+  room: FeedbackRoom | null;
+  note: string;
+  status: AdminFeedbackStatus;
+  adminNote: string | null;
+  hasLinkedRun: boolean;
+  createdAt: string;
+  updatedAt: string;
+  expiresAt: string;
+}
+
+export interface AdminPlanRunRecordData {
+  diagnosticId: string;
+  sourceType: "sample" | "maa" | "skland";
+  status: "success" | "failed";
+  layoutTemplate: string;
+  roomCount: number;
+  operatorCount: number;
+  rotation: string;
+  fiammettaEnable: boolean;
+  durationMs: number | null;
+  errorCode: AppErrorCode | null;
+  solverExecutableSha256: string | null;
+  protocolVersion: number | null;
+  planSchemaVersion: number | null;
+  hasReproduction: boolean;
+  createdAt: string;
+  expiresAt: string;
+}
+
+export interface AdminRecordListData<T> {
+  items: T[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export type AdminFeedbackListData = AdminRecordListData<AdminFeedbackRecordData>;
+export type AdminPlanRunListData = AdminRecordListData<AdminPlanRunRecordData>;
+
+export interface AdminReproductionData {
+  available: boolean;
+  diagnosticId: string;
+  sourceName: string | null;
+  layout: BaseBlueprint | null;
+  operbox: OperBoxEntry[] | null;
+  rotation: RotationProfile | null;
+  rotationCount: number | null;
+  fiammettaEnabled: boolean | null;
+  error: string | null;
+  stderrExcerpt: string | null;
+  stdoutExcerpt: string | null;
+}
+
+export interface AdminFeedbackDetailData {
+  feedback: AdminFeedbackRecordData;
+  reproduction: AdminReproductionData;
+}
+
+export interface AdminPlanRunDetailData {
+  run: AdminPlanRunRecordData;
+  reproduction: AdminReproductionData;
+}
+
+export interface AdminFeedbackDeleteData {
+  deletedIds: string[];
+  deletedCount: number;
+  privateArtifactsDeleted: number;
+}
+
+
 export interface AdminSolverMetricsData {
   generatedAt: string;
   solver: {
