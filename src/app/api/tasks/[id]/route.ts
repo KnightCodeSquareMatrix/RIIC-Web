@@ -8,10 +8,10 @@ import {
 import { requireWebsiteSession } from "@/server/auth/authorization";
 import {
   cancelPlanTask,
+  currentPlanTaskEtaSeconds,
   getPlanTask,
   planQueuePosition,
   planSelectionPoolSize,
-  planTaskEtaSeconds,
 } from "@/server/plan-task";
 
 export const runtime = "nodejs";
@@ -47,7 +47,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         taskId,
         status: "pending",
         queuePosition,
-        etaSeconds: planTaskEtaSeconds(queuePosition),
+        etaSeconds: await currentPlanTaskEtaSeconds(queuePosition),
       }, requestId);
     }
     if (task.status === "running") {
@@ -55,7 +55,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         taskId,
         status: "running",
         queuePosition: 0,
-        etaSeconds: planTaskEtaSeconds(1),
+        etaSeconds: await currentPlanTaskEtaSeconds(1, false),
       }, requestId);
     }
     if (task.status === "done") {

@@ -1195,11 +1195,12 @@ test("two-shift output drives product estimates, room formulas, and profile deta
   await expect(detailsSheet.locator('[data-production-group="orundum"] [data-production-detail]').nth(0)).toHaveAttribute("data-production-detail", "orundum");
   await expect(detailsSheet.locator('[data-production-group="orundum"] [data-production-detail]').nth(1)).toHaveAttribute("data-production-detail", "shards");
   await expect(detailsSheet.locator('[data-production-detail="shards"]')).toContainText("制造环节");
-  await expect(detailsSheet.locator('[data-production-detail="experience"]')).toContainText(/22,400.*估算自然制造.*估算无人机制造.*拆分为前端估算，总量以求解器为准/s);
-  await expect(detailsSheet.locator('[data-production-detail="lmd-orders"]')).toContainText(/34,254.*估算自然订单.*估算无人机订单.*拆分为前端估算，总量以求解器为准/s);
-  await expect(detailsSheet.locator('[data-production-detail="gold"]')).toContainText(/106.*估算自然制造.*估算无人机制造.*拆分为前端估算，总量以求解器为准/s);
-  await expect(detailsSheet.locator('[data-production-detail="orundum"]')).toContainText(/360.*估算碎片阶段可供.*估算订单阶段可交付.*限制环节：.*拆分为前端估算，总量以求解器为准/s);
-  await expect(detailsSheet.locator('[data-production-detail="shards"]')).toContainText(/48.*估算自然制造.*估算无人机制造.*拆分为前端估算，总量以求解器为准/s);
+  await expect(detailsSheet.locator('[data-production-detail="experience"]')).toContainText(/22,400.*估算自然制造.*估算无人机制造/s);
+  await expect(detailsSheet.locator('[data-production-detail="lmd-orders"]')).toContainText(/34,254.*估算自然订单.*估算无人机订单/s);
+  await expect(detailsSheet.locator('[data-production-detail="gold"]')).toContainText(/106.*估算自然制造.*估算无人机制造/s);
+  await expect(detailsSheet.locator('[data-production-detail="orundum"]')).toContainText(/360.*估算碎片阶段可供.*估算订单阶段可交付.*限制环节：/s);
+  await expect(detailsSheet.locator('[data-production-detail="shards"]')).toContainText(/48.*估算自然制造.*估算无人机制造/s);
+  await expect(detailsSheet).not.toContainText("拆分为前端估算，总量以求解器为准");
   await expect(detailsSheet.getByText(/限制环节：/)).toHaveCount(1);
   await expect(detailsSheet.locator("[data-production-method]")).toHaveCount(0);
   await expect(detailsSheet.getByRole("heading", { name: "产线提升空间" })).toBeVisible();

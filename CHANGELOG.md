@@ -2,6 +2,43 @@
 
 All notable changes to RIIC-Web are documented in this file.
 
+## [0.3.0] - 2026-09-02
+
+### Added
+
+- Personal planning can now use four solver lanes in parallel, with one prepared task behind each active computation so available CPU capacity is used continuously.
+- The persistent queue now admits up to 1,000 active tasks, reserves up to 600 slots for new accounts, and places overflow candidates in a bounded random-selection ring.
+
+### Changed
+
+- Queued tasks now wake workers through database notifications, while a low-frequency safety poll keeps recovery reliable after connection failures.
+- Queue progress polling uses status-aware intervals and estimates wait time from observed worker service time, reducing unnecessary requests without making progress feel stale.
+- Cache hits can complete immediately without waiting for another solver lease, and each solver process reuses its verified capability information.
+- Diagnostic processing now runs in the background, resumes safely after restarts, and quarantines malformed or crash-orphaned records instead of leaving them in an endless retry loop.
+- Administrator metrics now distinguish solver compute time, Worker overhead, queue wait, and cache-backed results.
+
+### Fixed
+
+- Worker notification connections now reconnect after initial handshake or socket failures without leaving the queue asleep.
+- Queue schema upgrades now serialize concurrent migrations and build admission indexes online, avoiding conflicting deploys and unnecessary scheduling downtime.
+- Artifact completion no longer becomes permanently pending when database confirmation is temporarily unavailable or a process crashes before its run record is created.
+
+## [0.2.4] - 2026-09-02
+
+### Changed
+
+- Daily production details no longer show the solver-total estimate disclaimer; solver totals and the natural/drone estimate rows remain unchanged.
+
+### Fixed
+
+- Deleting all Skland data no longer runs unrelated global private-record maintenance, preventing maintenance failures from surfacing as `AIC-SYS-5000` before account cleanup.
+- Successful all-data deletion now resolves the account store with the verified website user, removes every persisted Skland binding for that user, and clears the browser account state.
+
+### For contributors
+
+- `package.json` and `package-lock.json` record release `0.2.4`.
+- Account-data deletion has direct route-level and private-artifact regression coverage.
+
 ## [0.2.3] - 2026-09-02
 
 ### Changed
