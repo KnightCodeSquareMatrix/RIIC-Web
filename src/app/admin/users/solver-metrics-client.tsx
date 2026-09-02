@@ -149,9 +149,9 @@ export function AdminSolverMetrics() {
               detail={`成功 ${metrics.solver.successCount}，失败 ${metrics.solver.failureCount}`}
             />
             <Metric
-              label="成功求解耗时"
-              value={duration(metrics.solver.averageDurationMs)}
-              detail={`P95 ${duration(metrics.solver.p95DurationMs)}`}
+              label="求解器纯计算耗时"
+              value={duration(metrics.solver.averageSolverDurationMs)}
+              detail={`P95 ${duration(metrics.solver.p95SolverDurationMs)} · Worker 全链路平均 ${duration(metrics.solver.averageWorkerDurationMs)}`}
             />
             <Metric
               label="当前任务队列"
@@ -206,7 +206,7 @@ export function AdminSolverMetrics() {
           </div>
 
           <p className="border-t px-5 py-3 text-xs leading-5 text-muted-foreground sm:px-6">
-            错误率只统计已写入记录的实际求解，不含限流或准入拒绝；队列数字只统计异步任务。缓存每个有效项的首次填充计为未命中，森空岛求解按设计绕过缓存。
+            错误率只统计已写入记录的实际求解，不含限流或准入拒绝；队列数字只统计异步任务。缓存命中与未命中按任务实际执行来源统计，森空岛求解按设计绕过缓存。
           </p>
         </div>
       ) : (

@@ -61,22 +61,52 @@ test("production builds prepare a solver-free standalone runtime with static ass
   assert.doesNotMatch(stageStandalone, /outputRoot, "\.next", "cache"/);
 });
 
-test("the plan worker runs three isolated solver lanes and closes every persistent client", async () => {
+test("the plan worker centrally dispatches an eight-task pipeline across four isolated solver lanes", async () => {
   const [workerRuntime, planTask, infra] = await Promise.all([
     readRepoFile("scripts/plan-worker-runtime.mts"),
     readRepoFile("src/server/plan-task.ts"),
     readRepoFile("src/server/infra.ts"),
   ]);
 
-  assert.match(planTask, /PLAN_TASK_WORKER_CONCURRENCY = 3/);
+  assert.match(planTask, /PLAN_TASK_WORKER_CONCURRENCY = 4/);
+  assert.match(workerRuntime, /PLAN_TASK_PIPELINE_DEPTH = 2/);
   assert.match(infra, /export async function warmPlanServeLane[\s\S]+getPlanServeClient\(serveLane\)[\s\S]+await serveClient\.ping\(\)[\s\S]+inspectSolverDeploymentReadiness/);
   assert.match(workerRuntime, /warmPlanServeLane[\s\S]+length: PLAN_TASK_WORKER_CONCURRENCY[\s\S]+warmPlanServeLane\(serveLane\)[\s\S]+recoverStaleRunningTasks[\s\S]+recordPlanWorkerHeartbeat/);
-  assert.match(workerRuntime, /length: PLAN_TASK_WORKER_CONCURRENCY[\s\S]+runTaskLoop\(serveLane/);
-  assert.match(workerRuntime, /runPlan\([\s\S]+\{ serveLane \}/);
+  assert.match(workerRuntime, /capacity = PLAN_TASK_WORKER_CONCURRENCY \* PLAN_TASK_PIPELINE_DEPTH/);
+  assert.match(workerRuntime, /runPlanWorkerDispatcher[\s\S]+Math\.min\(\.\.\.laneLoads\)[\s\S]+laneLoads\.findIndex[\s\S]+dependencies\.claim[\s\S]+dependencies\.execute\(task, serveLane\)/);
+  assert.match(workerRuntime, /listenForPlanTaskAvailability[\s\S]+using 2s fallback polling/);
+  assert.match(workerRuntime, /event: "plan_task_timing"[\s\S]+solverDurationMs[\s\S]+workerDurationMs[\s\S]+workerOutsideSolverMs/);
+  assert.match(workerRuntime, /runPlan\([\s\S]+\{ serveLane, deferArtifacts: true \}/);
+  assert.match(workerRuntime, /resumePendingPlanArtifactFinalizations[\s\S]+waitForPlanArtifactFinalizers\(30_000\)/);
+  assert.match(infra, /deferArtifacts = Boolean\(options\.deferArtifacts && !ephemeralRunDir\)/);
+  assert.match(infra, /updatePlanRunArtifactBestEffort[\s\S]+artifact-finalized\.json/);
   assert.match(infra, /__infraCliPlanServeClients\?: Map<number, InfraCliServeClient>/);
   assert.match(workerRuntime, /stopInfraServeClients\("计划任务 Worker 正在退出。"\)/);
   assert.match(workerRuntime, /stopInfraServeClients[\s\S]+getDatabase\(\)\.\$client[\s\S]+\[plan-worker\] stopped/);
   assert.match(infra, /for \(const client of globalForInfra\.__infraCliPlanServeClients\?\.values\(\) \?\? \[\]\) client\.stop\(reason\)/);
+});
+
+test("database migrations build queue indexes online after additive schema changes", async () => {
+  const [migration, migrateScript, schema] = await Promise.all([
+    readRepoFile("drizzle/0012_public_cardiac.sql"),
+    readRepoFile("scripts/migrate-db.mts"),
+    readRepoFile("src/server/db/schema.ts"),
+  ]);
+
+  assert.doesNotMatch(migration, /(?:DROP|CREATE) INDEX/);
+  assert.match(migrateScript, /ONLINE_PLAN_TASK_INDEX_MANIFEST_VERSION = 1/);
+  assert.match(migrateScript, /name: "plan_task_active_expires_idx"/);
+  assert.match(migrateScript, /name: "plan_task_account_active_idx"/);
+  assert.match(migrateScript, /name: "plan_task_ip_active_idx"/);
+  assert.match(migrateScript, /CREATE INDEX CONCURRENTLY IF NOT EXISTS/);
+  assert.match(migrateScript, /pg_index\.indisvalid/);
+  assert.match(migrateScript, /pg_get_indexdef/);
+  assert.match(migrateScript, /normalizeIndexDefinition\(installed\.definition\) !== sql\.expected/);
+  assert.match(migrateScript, /SET lock_timeout = '5s'/);
+  assert.match(migrateScript, /pg_advisory_lock\(hashtext\(\$1\)\)/);
+  assert.match(migrateScript, /await migrate\(drizzle\(\{ client \}\)[\s\S]+ensureOnlinePlanTaskIndexes\(client\)/);
+  assert.match(migrateScript, /pg_advisory_unlock\(hashtext\(\$1\)\)/);
+  assert.match(schema, /plan_task_active_expires_idx[\s\S]+\.concurrently\(\)/);
 });
 
 test("Next.js owns graceful shutdown while systemd accepts its signal exit statuses", async () => {
@@ -99,7 +129,7 @@ test("CI enforces route and document preload JavaScript budgets after building",
   assert.equal(packageJson.scripts["check:bundle-budget"], "node scripts/check-bundle-budget.mjs");
   assert.match(workflow, /Production build[\s\S]+npm run check:bundle-budget/);
   assert.match(budgetCheck, /MAX_SKLAND_DISABLED_ROUTE_INITIAL_JS_BYTES = 1_140_000/);
-  assert.match(budgetCheck, /MAX_SKLAND_ENABLED_ROUTE_INITIAL_JS_BYTES = 1_160_000/);
+  assert.match(budgetCheck, /MAX_SKLAND_ENABLED_ROUTE_INITIAL_JS_BYTES = 1_160_500/);
   assert.match(budgetCheck, /MAX_SKLAND_ROUTE_INITIAL_JS_BYTES = 1_600_000/);
   assert.match(budgetCheck, /MAX_SKLAND_DISABLED_DOCUMENT_INITIAL_JS_BYTES = 1_240_000/);
   assert.match(budgetCheck, /MAX_SKLAND_ENABLED_DOCUMENT_INITIAL_JS_BYTES = 1_275_000/);

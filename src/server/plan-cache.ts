@@ -9,6 +9,7 @@ import { isPlanCacheEnabled, PLAN_CACHE_TTL_MS, planCacheHmacKey } from "./busin
 import { getDatabase } from "./db";
 import { planCache, planCacheReference, policyConsent } from "./db/schema";
 import { stablePlanCacheHmac } from "./plan-cache-key";
+import { normalizeSolverOperbox } from "./plan-solver-input";
 
 export type PlanCacheKeyInput = {
   layout: BaseBlueprint;
@@ -34,7 +35,7 @@ export function createPlanCacheKey(input: PlanCacheKeyInput): string | null {
   if (!sha || typeof protocol !== "number" || !Number.isInteger(protocol) || typeof schema !== "number" || !Number.isInteger(schema)) return null;
   return stablePlanCacheHmac(planCacheHmacKey(), {
     layout: input.layout,
-    operbox: input.operbox,
+    operbox: normalizeSolverOperbox(input.operbox),
     sourceType: input.sourceType,
     sourceName: input.sourceName,
     rotation: input.rotation,
@@ -61,10 +62,10 @@ async function findHit(keyHmac: string, startedAt: number): Promise<CacheHit | n
   const durationMs = Math.max(0, Math.round(performance.now() - startedAt));
   const result = cachedResult(row.result, randomUUID(), durationMs);
   if (!result) return null;
-  await getDatabase().update(planCache).set({
+  void getDatabase().update(planCache).set({
     hitCount: sql`${planCache.hitCount} + 1`,
     updatedAt: now,
-  }).where(eq(planCache.keyHmac, keyHmac));
+  }).where(eq(planCache.keyHmac, keyHmac)).catch(() => undefined);
   return { kind: "hit", keyHmac, result, lookupDurationMs: durationMs };
 }
 
@@ -72,6 +73,18 @@ function leaseDurationMs(): number {
   const cliTimeout = Number(process.env.BETA_CLI_TIMEOUT_MS || 120_000);
   const effectiveTimeout = Number.isFinite(cliTimeout) && cliTimeout > 0 ? cliTimeout : 120_000;
   return Math.max(30_000, Math.min(2_147_000_000, effectiveTimeout + 15_000));
+}
+
+export async function lookupPlanCache(input: PlanCacheKeyInput): Promise<CacheHit | CacheBypass> {
+  const startedAt = performance.now();
+  let keyHmac: string | null;
+  try { keyHmac = createPlanCacheKey(input); } catch { return { kind: "bypass" }; }
+  if (!keyHmac) return { kind: "bypass" };
+  try {
+    return await findHit(keyHmac, startedAt) ?? { kind: "bypass" };
+  } catch {
+    return { kind: "bypass" };
+  }
 }
 
 export async function resolvePlanCache(input: PlanCacheKeyInput): Promise<PlanCacheResolution> {

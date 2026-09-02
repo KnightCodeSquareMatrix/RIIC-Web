@@ -28,3 +28,9 @@ export function getDatabase(): Database {
   state.__aicDb = drizzle({ client: pool, schema });
   return state.__aicDb;
 }
+
+export function getDatabasePool(): Pool {
+  getDatabase();
+  if (!state.__aicPool) throw new Error("Database pool was not initialized.");
+  return state.__aicPool;
+}
