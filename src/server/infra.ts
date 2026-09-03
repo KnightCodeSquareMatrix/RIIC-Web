@@ -593,6 +593,20 @@ type PrivateRunLookup =
   | { status: "invalid"; directory: string }
   | { status: "found"; directory: string; result: JsonRecord };
 
+type PrivateFeedbackLookup =
+  | { status: "missing" }
+  | { status: "invalid"; directory: string }
+  | { status: "found"; directory: string };
+
+type PlanReproductionFallback = {
+  rotation?: unknown;
+  fiammettaEnabled?: unknown;
+  artifactKey?: unknown;
+  artifactStatus?: unknown;
+  executionSource?: unknown;
+  expiresAt?: unknown;
+};
+
 async function lookupPrivateRun(diagnosticId: string): Promise<PrivateRunLookup> {
   if (!/^[a-f0-9-]{36}$/i.test(diagnosticId)) return { status: "missing" };
   const suffix = `_${diagnosticId}`;
@@ -614,6 +628,18 @@ async function privateRunForDiagnostic(
 ): Promise<{ directory: string; result: JsonRecord } | null> {
   const lookup = await lookupPrivateRun(diagnosticId);
   return lookup.status === "found" ? lookup : null;
+}
+
+async function lookupPrivateFeedback(feedbackId: string): Promise<PrivateFeedbackLookup> {
+  if (!/^[a-f0-9-]{36}$/i.test(feedbackId)) return { status: "missing" };
+  const suffix = `_${feedbackId}`;
+  const directory = (await feedbackDirectories())
+    .find((candidate) => path.basename(candidate).endsWith(suffix));
+  if (!directory) return { status: "missing" };
+  const meta = await readJsonIfExists(path.join(directory, "meta.json"));
+  return isObject(meta) && meta.feedbackId === feedbackId
+    ? { status: "found", directory }
+    : { status: "invalid", directory };
 }
 
 function textTail(value: unknown, maxBytes = 16 * 1024): string | null {
@@ -650,14 +676,7 @@ function reproductionExpired(expiresAt: unknown): boolean {
 
 export async function readPlanReproduction(
   diagnosticId: string,
-  fallback: {
-    rotation?: unknown;
-    fiammettaEnabled?: unknown;
-    artifactKey?: unknown;
-    artifactStatus?: unknown;
-    executionSource?: unknown;
-    expiresAt?: unknown;
-  } = {},
+  fallback: PlanReproductionFallback = {},
 ): Promise<AdminReproductionData> {
   if (reproductionExpired(fallback.expiresAt)) {
     return toAdminReproductionData({
@@ -712,6 +731,68 @@ export async function readPlanReproduction(
     fallbackRotation: fallback.rotation,
     fallbackFiammettaEnabled: legacyBackfillWithoutExactFiammetta ? undefined : fallback.fiammettaEnabled,
   });
+}
+
+export async function readFeedbackReproduction(
+  feedbackId: string,
+  diagnosticId: string,
+  options: {
+    expiresAt?: unknown;
+    plan?: PlanReproductionFallback;
+  } = {},
+): Promise<AdminReproductionData> {
+  if (reproductionExpired(options.expiresAt)) {
+    return toAdminReproductionData({
+      diagnosticId,
+      layout: null,
+      operbox: null,
+      context: null,
+      result: null,
+      fallbackRotation: options.plan?.rotation,
+      fallbackFiammettaEnabled: options.plan?.fiammettaEnabled,
+      unavailableReason: "expired",
+    });
+  }
+
+  const [lookup, linkedRun] = await Promise.all([
+    lookupPrivateFeedback(feedbackId),
+    readPlanReproduction(diagnosticId, options.plan),
+  ]);
+  if (lookup.status === "missing") return linkedRun;
+  if (lookup.status === "invalid") {
+    if (linkedRun.available) return linkedRun;
+    return toAdminReproductionData({
+      diagnosticId,
+      layout: null,
+      operbox: null,
+      context: null,
+      result: { error: linkedRun.error },
+      stderrExcerpt: linkedRun.stderrExcerpt,
+      stdoutExcerpt: linkedRun.stdoutExcerpt,
+      fallbackRotation: options.plan?.rotation,
+      fallbackFiammettaEnabled: options.plan?.fiammettaEnabled,
+      unavailableReason: "invalid",
+    });
+  }
+
+  const [layout, operbox, context] = await Promise.all([
+    readJsonIfExists(path.join(lookup.directory, "layout.json")),
+    readJsonIfExists(path.join(lookup.directory, "operbox.json")),
+    readJsonIfExists(path.join(lookup.directory, "reproduction.json")),
+  ]);
+  const reproduction = toAdminReproductionData({
+    diagnosticId,
+    layout,
+    operbox,
+    context,
+    result: { error: linkedRun.error },
+    stderrExcerpt: linkedRun.stderrExcerpt,
+    stdoutExcerpt: linkedRun.stdoutExcerpt,
+    fallbackRotation: options.plan?.rotation,
+    fallbackFiammettaEnabled: options.plan?.fiammettaEnabled,
+  });
+  if (reproduction.available) return reproduction;
+  return linkedRun.available ? linkedRun : reproduction;
 }
 
 async function readShiftFiles(outputDir: string) {
@@ -1036,7 +1117,10 @@ export async function getSampleOperbox() {
   };
 }
 
-export async function saveFeedback(body: FeedbackRequest): Promise<FeedbackData> {
+export async function saveFeedback(
+  body: FeedbackRequest,
+  options: { userId?: string | null; dataOwnerTag?: string | null } = {},
+): Promise<FeedbackData> {
   const savedAt = new Date().toISOString();
   const feedbackId = randomUUID();
   const kind = body.kind ?? "room_issue";
@@ -1044,15 +1128,32 @@ export async function saveFeedback(body: FeedbackRequest): Promise<FeedbackData>
   const feedbackDir = path.join(feedbackRoot, dirName);
   const metaPath = path.join(feedbackDir, "meta.json");
   const issuePath = path.join(feedbackDir, "issue.json");
+  const layoutPath = path.join(feedbackDir, "layout.json");
+  const operboxPath = path.join(feedbackDir, "operbox.json");
+  const reproductionPath = path.join(feedbackDir, "reproduction.json");
+
+  const reproduction = toAdminReproductionData({
+    diagnosticId: body.diagnosticId,
+    layout: body.reproduction.layout,
+    operbox: body.reproduction.operbox,
+    context: {
+      ...body.reproduction,
+      sourceName: body.reproduction.sourceType === "skland" ? "森空岛同步" : "MAA 导入",
+    },
+    result: null,
+  });
+  if (!reproduction.available) throw new PublicApiError("AIC-FEEDBACK-4001");
   await mkdir(feedbackDir, { recursive: true });
 
   const linkedRun = await privateRunForDiagnostic(body.diagnosticId);
   const owner = linkedRun ? await ownerMetadata(linkedRun.directory) : null;
-  const dataOwnerTag = owner?.diagnosticId === body.diagnosticId && typeof owner.ownerTag === "string"
+  const linkedDataOwnerTag = owner?.diagnosticId === body.diagnosticId && typeof owner.ownerTag === "string"
     ? owner.ownerTag
     : null;
+  const dataOwnerTag = options.dataOwnerTag ?? linkedDataOwnerTag;
   const solver = solverObservationFromPlanRecord(linkedRun?.result);
   const meta = {
+    version: "feedback-record-v2",
     feedbackId,
     savedAt,
     diagnosticId: body.diagnosticId,
@@ -1067,13 +1168,27 @@ export async function saveFeedback(body: FeedbackRequest): Promise<FeedbackData>
     ...(dataOwnerTag ? { dataOwnerTag } : {}),
   };
 
-  await writeJson(metaPath, meta);
-  await writeJson(issuePath, toStoredFeedbackIssue(body));
+  await Promise.all([
+    writeJson(metaPath, meta),
+    writeJson(issuePath, toStoredFeedbackIssue(body)),
+    writeJson(layoutPath, reproduction.layout),
+    writeJson(operboxPath, reproduction.operbox),
+    writeJson(reproductionPath, {
+      version: 1,
+      diagnosticId: body.diagnosticId,
+      sourceName: reproduction.sourceName,
+      sourceType: body.reproduction.sourceType,
+      rotation: reproduction.rotation,
+      rotationCount: reproduction.rotationCount,
+      fiammettaEnabled: reproduction.fiammettaEnabled,
+    }),
+  ]);
   await recordFeedbackIfEnabled({
     feedbackId,
     savedAt: new Date(savedAt),
     body,
-    artifact: await artifactDescriptor(feedbackId, [metaPath, issuePath]),
+    userId: options.userId ?? null,
+    artifact: await artifactDescriptor(feedbackId, [metaPath, issuePath, layoutPath, operboxPath, reproductionPath]),
   });
 
   return {

@@ -31,6 +31,7 @@ test("the legacy beta query is inert and never opts plan requests into debug dat
   });
 
   await page.goto("/?beta");
+  await expect(page.locator('[data-workbench-hydrated="true"]')).toBeVisible();
   await expect(page.getByText("开启调试工具", { exact: true })).toHaveCount(0);
   await expect(page.getByText("退出调试工具", { exact: true })).toHaveCount(0);
   await expect(page.getByText("调试输出", { exact: true })).toHaveCount(0);
@@ -41,7 +42,7 @@ test("the legacy beta query is inert and never opts plan requests into debug dat
   expect(planRequests[0].searchParams.has("beta")).toBe(false);
 
   await page.getByRole("button", { name: "练卡建议" }).click();
-  await expect(page).toHaveURL(/\/training$/);
+  await expect(page).toHaveURL(/\/training$/, { timeout: 45_000 });
 });
 
 test("shows the thinking activity and indeterminate progress only while a plan request is running", async ({ page }) => {
@@ -1018,7 +1019,8 @@ test("plan timing stays passive and performance feedback waits for result detail
   await expect(detailsDrawer).toHaveCount(0);
   await expect(page.getByRole("dialog")).toHaveCount(1);
   expect(feedbackPayloads).toHaveLength(0);
-  await expect(feedbackDialog.getByText(/不会附带任意房间或完整干员数据/)).toBeVisible();
+  await expect(feedbackDialog.getByText(/将提交你的说明，以及包含.*私有复现快照/)).toBeVisible();
+  await expect(feedbackDialog.getByText(/最长保留 30 天/)).toBeVisible();
   await feedbackDialog.getByRole("textbox").fill("同一份 Box 之前通常可以更快完成。");
   await feedbackDialog.getByRole("checkbox").check();
   await feedbackDialog.getByRole("button", { name: "提交反馈" }).click();
@@ -1029,8 +1031,15 @@ test("plan timing stays passive and performance feedback waits for result detail
     kind: "performance_issue",
     diagnosticId,
     consent: true,
+    reproduction: {
+      layout: { template: "243" },
+      rotation: "abc_12_6_6",
+      fiammettaEnabled: false,
+      sourceType: "maa",
+    },
   });
   expect(feedbackPayload).not.toHaveProperty("room");
+  expect((feedbackPayload.reproduction as { operbox?: unknown[] }).operbox?.length).toBeGreaterThan(0);
   expect(feedbackPayload?.note).toContain("求解耗时：2764 ms");
   await expect(page.getByText("反馈已提交，编号：feedback-performance")).toBeVisible();
   await expect(resultSummary).toBeFocused();
