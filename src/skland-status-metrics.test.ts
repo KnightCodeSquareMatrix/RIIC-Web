@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { deriveSklandBuildingMetrics } from "./skland-status-metrics.ts";
+import { deriveSklandBuildingMetrics, sklandTradingOrderRewardLabel } from "./skland-status-metrics.ts";
 import type { SklandStatusSnapshot } from "./types.ts";
 
 function snapshot(): SklandStatusSnapshot {
@@ -116,4 +116,15 @@ test("preserves missing manufacture formula capacity", () => {
   manufacture.production.unitCapacity = null;
   const metrics = deriveSklandBuildingMetrics(value, value.infrastructure.currentTs);
   assert.equal(metrics.find((metric) => metric.id === "manufacture")?.total, "—");
+});
+
+test("labels originium-shard orders as orundum even when a cached reward type is stale", () => {
+  assert.equal(sklandTradingOrderRewardLabel({
+    delivery: [{ type: "originium_shard", count: 2 }],
+    reward: { type: "lmd", count: 20 },
+  }), "合成玉");
+  assert.equal(sklandTradingOrderRewardLabel({
+    delivery: [{ type: "material", count: 3 }],
+    reward: { type: "lmd", count: 1_500 },
+  }), "龙门币");
 });
