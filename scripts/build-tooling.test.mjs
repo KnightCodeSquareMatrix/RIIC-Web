@@ -263,8 +263,16 @@ test("public deployment automation is repository-bound, opt-in, and secret-safe"
   assert.match(policyWorkflow, /types: \[opened, synchronize, reopened, labeled, unlabeled\]/);
   assert.match(policyWorkflow, /DIRECT_MAIN_RELEASE: \$\{\{ contains\(github\.event\.pull_request\.labels\.\*\.name, 'direct-main-release'\)[\s\S]+"\$DIRECT_MAIN_RELEASE" == "1"[\s\S]+develop ancestry is intentionally skipped/);
   assert.match(policyWorkflow, /git merge-base --is-ancestor refs\/remotes\/origin\/develop "\$HEAD_SHA"/);
-  assert.match(qualityWorkflow, /github\.event_name == 'push'[\s\S]+needs\.quality\.result == 'success'[\s\S]+needs\.changes\.outputs\.deploy_required == 'true'[\s\S]+vars\.DEPLOY_AUTOMATION_ENABLED == '1'[\s\S]+github\.repository == 'KnightCodeSquareMatrix\/RIIC-Web'/);
-  assert.match(deployWorkflow, /github\.event_name == 'push'[\s\S]+vars\.DEPLOY_AUTOMATION_ENABLED == '1'[\s\S]+github\.repository == 'KnightCodeSquareMatrix\/RIIC-Web'/);
+  assert.match(qualityWorkflow, /workflow_dispatch:[\s\S]+deploy:[\s\S]+expected_sha:[\s\S]+type: string/);
+  assert.match(qualityWorkflow, /deployment_authorized: \$\{\{ steps\.deploy_authorization\.outputs\.authorized \}\}/);
+  assert.match(qualityWorkflow, /Authorize deployment trigger[\s\S]+EVENT_NAME: \$\{\{ github\.event_name \}\}[\s\S]+DEPLOY_REQUESTED: \$\{\{ inputs\.deploy \}\}[\s\S]+test "\$GITHUB_SHA" = "\$EXPECTED_SHA"[\s\S]+authorized=true[\s\S]+printf 'authorized=%s\\n'/);
+  assert.match(qualityWorkflow, /Upload release for deployment[\s\S]+needs\.changes\.outputs\.deployment_authorized == 'true'/);
+  assert.match(qualityWorkflow, /deploy:\r?\n {4}needs: \[changes, quality, release_artifact\][\s\S]+always\(\) &&[\s\S]+needs\.changes\.result == 'success'[\s\S]+needs\.quality\.result == 'success'[\s\S]+needs\.release_artifact\.result == 'success'[\s\S]+needs\.changes\.outputs\.deployment_authorized == 'true'[\s\S]+needs\.changes\.outputs\.deploy_required == 'true'[\s\S]+uses: \.\/\.github\/workflows\/deploy\.yml[\s\S]+deployment_authorized: \$\{\{ needs\.changes\.outputs\.deployment_authorized == 'true' \}\}[\s\S]+deploy_required: \$\{\{ needs\.changes\.outputs\.deploy_required == 'true' \}\}/);
+  assert.match(deployWorkflow, /^on:\r?\n {2}workflow_call:/m);
+  assert.doesNotMatch(deployWorkflow, /^ {2}(?:push|workflow_dispatch):/m);
+  assert.doesNotMatch(deployWorkflow, /allow_workflow_dispatch|github\.event_name/);
+  assert.match(deployWorkflow, /deployment_authorized:[\s\S]+type: boolean[\s\S]+deploy_required:[\s\S]+type: boolean/);
+  assert.match(deployWorkflow, /inputs\.deployment_authorized &&[\s\S]+inputs\.deploy_required &&[\s\S]+github\.ref_name == 'main'[\s\S]+vars\.DEPLOY_AUTOMATION_ENABLED == '1'[\s\S]+github\.repository == 'KnightCodeSquareMatrix\/RIIC-Web'/);
   assert.match(deployWorkflow, /DEPLOY_APPROVED_SOLVER_SHA256: \$\{\{ vars\.DEPLOY_APPROVED_SOLVER_SHA256 \}\}[\s\S]+DEPLOY_EXPECTED_REPOSITORY: KnightCodeSquareMatrix\/RIIC-Web[\s\S]+DEPLOY_RELEASE_HELPER_CONTRACT: "6"/);
   assert.doesNotMatch(deployWorkflow, /DEPLOY_PREPARE_HELPER_CONTRACT|arknights-infra-prepare-release/);
   assert.match(deployWorkflow, /DEPLOY_PUBLIC_HEALTH_URL: \$\{\{ secrets\.DEPLOY_PUBLIC_HEALTH_URL \}\}/);
@@ -297,8 +305,13 @@ test("public deployment automation is repository-bound, opt-in, and secret-safe"
   assert.doesNotMatch(deployWorkflow, /'\$DEPLOY_PUBLIC_HEALTH_URL'/);
   assert.match(deployWorkflow, /Remove SSH credentials from the runner[\s\S]+rm -f -- "\$HOME\/\.ssh\/id_ed25519" "\$HOME\/\.ssh\/known_hosts"/);
   assert.match(deployWorkflow, /Verify public response compression[\s\S]+DEPLOY_PUBLIC_HEALTH_URL: \$\{\{ secrets\.DEPLOY_PUBLIC_HEALTH_URL \}\}[\s\S]+node scripts\/verify-public-compression\.mjs/);
-  assert.match(assetWorkflow, /BASE_BRANCH: develop/);
+  assert.match(assetWorkflow, /BASE_BRANCH: main/);
+  assert.match(assetWorkflow, /UPDATE_BRANCH: release\/automation\/arkntools-assets/);
   assert.match(assetWorkflow, /gh pr (?:list|create)[\s\S]+--base "\$BASE_BRANCH"/);
+  assert.match(assetWorkflow, /--label "direct-main-release"/);
+  assert.match(assetWorkflow, /gh api --method PUT[\s\S]+pulls\/\$PR_NUMBER\/merge/);
+  assert.match(assetWorkflow, /gh workflow run frontend-quality\.yml[\s\S]+--ref "\$BASE_BRANCH"[\s\S]+deploy=true[\s\S]+expected_sha="\$MERGED_SHA"/);
+  assert.match(assetWorkflow, /develop_parity:[\s\S]+BASE_BRANCH: develop[\s\S]+SOURCE_BRANCH: main/);
 
   for (const workflow of workflows) {
     assert.doesNotMatch(workflow, /^\s*pull_request_target\s*:/m);
@@ -347,13 +360,15 @@ test("asset synchronization isolates untrusted generation from repository write 
   assert.match(generate, /persist-credentials: false/);
   assert.doesNotMatch(generate, /contents: write|pull-requests: write|actions: write|GH_TOKEN:/);
   assert.match(generate, /actions\/upload-artifact@[0-9a-f]{40}/);
-  assert.match(publish, /permissions:\n {6}actions: write\n {6}contents: write\n {6}pull-requests: write/);
+  assert.match(publish, /permissions:\n {6}actions: write\n {6}contents: write\n {6}issues: write\n {6}pull-requests: write/);
   assert.match(publish, /GH_TOKEN: \$\{\{ github\.token \}\}/);
   assert.match(publish, /actions\/download-artifact@[0-9a-f]{40}/);
   assert.match(publish, /git apply --check --index "\$publication\/managed\.patch"/);
   assert.match(publish, /patch_bytes > 0 && patch_bytes <= 104857600/);
   assert.match(publish, /awk '\$1 != "100644"/);
   assert.match(publish, /Publication artifact changed a forbidden path/);
+  assert.match(publish, /Resource pull request changed a forbidden path/);
+  assert.match(publish, /git restore --source "refs\/remotes\/origin\/\$SOURCE_BRANCH" --staged --worktree --/);
   assert.doesNotMatch(publish, /npm (?:ci|run)|node scripts\//);
 });
 
