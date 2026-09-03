@@ -559,5 +559,4 @@ jobs:
     uses: ./.github/workflows/deploy.yml
     with:
       artifact_name: riic-web-release-${{ github.sha }}
-      allow_workflow_dispatch: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy }}
     secrets: inherit
