@@ -209,7 +209,7 @@ test("CI gates releases on Chromium and a WebKit Skland smoke test, then schedul
   assert.equal(readinessTestCount, 94);
   assert.equal(e2eFiles.includes("production-readiness.spec.ts"), false);
   assert.match(playwrightConfig, /fullyParallel: true/);
-  assert.match(playwrightConfig, /workers: process\.env\.CI \? 4 : undefined/);
+  assert.match(playwrightConfig, /workers: process\.env\.CI \? 2 : undefined/);
   assert.match(playwrightConfig, /timeout: process\.env\.CI \? 10_000 : 5_000/);
 });
 
