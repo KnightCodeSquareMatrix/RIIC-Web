@@ -5,9 +5,11 @@ import { useReducedMotion } from "motion/react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { useLanguageDemo } from "@/language-demo";
 import { cn } from "@/lib/utils";
 
 export function HelpBackToTop() {
+  const { locale } = useLanguageDemo();
   const reduceMotion = useReducedMotion();
   const [visible, setVisible] = useState(false);
 
@@ -42,7 +44,7 @@ export function HelpBackToTop() {
   return (
     <Button
       aria-hidden={!visible}
-      aria-label="回到顶部"
+      aria-label={locale === "en" ? "Back to top" : "回到顶部"}
       className={cn(
         "fixed z-40 size-12 rounded-full border-border bg-background/95 text-foreground shadow-xl shadow-foreground/15 ring-4 ring-background/75 backdrop-blur-sm transition-[opacity,transform,background-color,border-color,box-shadow] duration-200 hover:bg-muted motion-reduce:transform-none motion-reduce:transition-none print:hidden",
         visible

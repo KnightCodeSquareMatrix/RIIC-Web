@@ -32,6 +32,9 @@ test("help pages provide an accessible back-to-top control", async ({ page }) =>
   await expect(page.locator("#help-content")).toBeFocused();
   await expect(backToTop).toHaveAttribute("aria-hidden", "true");
 
+  await page.getByRole("button", { name: "EN", exact: true }).click();
+  await expect(backToTop).toHaveAttribute("aria-label", "Back to top");
+
   const dimensions = await page.evaluate(() => ({
     clientWidth: document.documentElement.clientWidth,
     scrollWidth: document.documentElement.scrollWidth,
