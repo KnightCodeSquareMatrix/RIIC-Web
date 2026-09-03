@@ -31,6 +31,10 @@ function locationKey(group: string, index: number): string {
   return `${group}:${index}`;
 }
 
+function sameFacilityType(left: string, right: string): boolean {
+  return left.split(":", 1)[0] === right.split(":", 1)[0];
+}
+
 export function compareShifts(maaJson: MaaJson | undefined, infrastructure: SklandScheduleInfrastructure | undefined): ShiftComparison[] {
   if (!maaJson?.plans?.length || !infrastructure) return [];
   const tired = new Set(infrastructure.tiredOperators);
@@ -58,7 +62,7 @@ export function compareShifts(maaJson: MaaJson | undefined, infrastructure: Skla
     const misplaced: string[] = [];
     for (const [name, expectedLocation] of plannedLocationByOperator) {
       const actualLocation = actualLocationByOperator.get(name);
-      if (actualLocation === expectedLocation) matched.push(name);
+      if (actualLocation && sameFacilityType(actualLocation, expectedLocation)) matched.push(name);
       else if (actualLocation) misplaced.push(name);
       else missing.push(name);
     }
@@ -72,7 +76,7 @@ export function compareShifts(maaJson: MaaJson | undefined, infrastructure: Skla
         const issues = [] as ShiftComparison["adjustments"][number]["issues"];
         if (!currentRoomKey && targetRoomKey) issues.push("missing");
         if (currentRoomKey && !targetRoomKey) issues.push("unexpected");
-        if (currentRoomKey && targetRoomKey && currentRoomKey !== targetRoomKey) issues.push("misplaced");
+        if (currentRoomKey && targetRoomKey && !sameFacilityType(currentRoomKey, targetRoomKey)) issues.push("misplaced");
         if (targetRoomKey && tired.has(name)) issues.push("tired");
         return issues.length ? [{ operator: name, currentRoomKey, targetRoomKey, issues }] : [];
       })
