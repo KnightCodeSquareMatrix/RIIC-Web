@@ -556,15 +556,9 @@ jobs:
 
   deploy:
     needs: [changes, quality, release_artifact]
-    if: >-
-      (github.ref_name == 'main' || github.ref_name == 'develop') &&
-      needs.changes.outputs.deployment_authorized == 'true' &&
-      needs.quality.result == 'success' &&
-      needs.release_artifact.result == 'success' &&
-      needs.changes.outputs.deploy_required == 'true' &&
-      vars.DEPLOY_AUTOMATION_ENABLED == '1' &&
-      github.repository == 'KnightCodeSquareMatrix/RIIC-Web'
     uses: ./.github/workflows/deploy.yml
     with:
       artifact_name: riic-web-release-${{ github.sha }}
+      deployment_authorized: ${{ needs.changes.outputs.deployment_authorized == 'true' }}
+      deploy_required: ${{ needs.changes.outputs.deploy_required == 'true' }}
     secrets: inherit
