@@ -593,6 +593,20 @@ type PrivateRunLookup =
   | { status: "invalid"; directory: string }
   | { status: "found"; directory: string; result: JsonRecord };
 
+type PrivateFeedbackLookup =
+  | { status: "missing" }
+  | { status: "invalid"; directory: string }
+  | { status: "found"; directory: string };
+
+type PlanReproductionFallback = {
+  rotation?: unknown;
+  fiammettaEnabled?: unknown;
+  artifactKey?: unknown;
+  artifactStatus?: unknown;
+  executionSource?: unknown;
+  expiresAt?: unknown;
+};
+
 async function lookupPrivateRun(diagnosticId: string): Promise<PrivateRunLookup> {
   if (!/^[a-f0-9-]{36}$/i.test(diagnosticId)) return { status: "missing" };
   const suffix = `_${diagnosticId}`;
@@ -614,6 +628,18 @@ async function privateRunForDiagnostic(
 ): Promise<{ directory: string; result: JsonRecord } | null> {
   const lookup = await lookupPrivateRun(diagnosticId);
   return lookup.status === "found" ? lookup : null;
+}
+
+async function lookupPrivateFeedback(feedbackId: string): Promise<PrivateFeedbackLookup> {
+  if (!/^[a-f0-9-]{36}$/i.test(feedbackId)) return { status: "missing" };
+  const suffix = `_${feedbackId}`;
+  const directory = (await feedbackDirectories())
+    .find((candidate) => path.basename(candidate).endsWith(suffix));
+  if (!directory) return { status: "missing" };
+  const meta = await readJsonIfExists(path.join(directory, "meta.json"));
+  return isObject(meta) && meta.feedbackId === feedbackId
+    ? { status: "found", directory }
+    : { status: "invalid", directory };
 }
 
 function textTail(value: unknown, maxBytes = 16 * 1024): string | null {
@@ -650,14 +676,7 @@ function reproductionExpired(expiresAt: unknown): boolean {
 
 export async function readPlanReproduction(
   diagnosticId: string,
-  fallback: {
-    rotation?: unknown;
-    fiammettaEnabled?: unknown;
-    artifactKey?: unknown;
-    artifactStatus?: unknown;
-    executionSource?: unknown;
-    expiresAt?: unknown;
-  } = {},
+  fallback: PlanReproductionFallback = {},
 ): Promise<AdminReproductionData> {
   if (reproductionExpired(fallback.expiresAt)) {
     return toAdminReproductionData({
@@ -684,10 +703,14 @@ export async function readPlanReproduction(
       unavailableReason: lookup.status === "invalid" ? "invalid" : missingReproductionReason(fallback),
     });
   }
+  const taskSnapshotDir = path.join(lookup.directory, "task-reproduction");
   const [layout, operbox, context, stderrExcerpt, stdoutExcerpt] = await Promise.all([
-    readJsonIfExists(path.join(lookup.directory, "layout.json")),
-    readJsonIfExists(path.join(lookup.directory, "operbox.json")),
-    readJsonIfExists(path.join(lookup.directory, "reproduction.json")),
+    readJsonIfExists(path.join(taskSnapshotDir, "layout.json"))
+      .then((value) => value ?? readJsonIfExists(path.join(lookup.directory, "layout.json"))),
+    readJsonIfExists(path.join(taskSnapshotDir, "operbox.json"))
+      .then((value) => value ?? readJsonIfExists(path.join(lookup.directory, "operbox.json"))),
+    readJsonIfExists(path.join(taskSnapshotDir, "reproduction.json"))
+      .then((value) => value ?? readJsonIfExists(path.join(lookup.directory, "reproduction.json"))),
     readTextTail(path.join(lookup.directory, "stderr.txt")),
     readTextTail(path.join(lookup.directory, "stdout.txt")),
   ]);
@@ -712,6 +735,68 @@ export async function readPlanReproduction(
     fallbackRotation: fallback.rotation,
     fallbackFiammettaEnabled: legacyBackfillWithoutExactFiammetta ? undefined : fallback.fiammettaEnabled,
   });
+}
+
+export async function readFeedbackReproduction(
+  feedbackId: string,
+  diagnosticId: string,
+  options: {
+    expiresAt?: unknown;
+    plan?: PlanReproductionFallback;
+  } = {},
+): Promise<AdminReproductionData> {
+  if (reproductionExpired(options.expiresAt)) {
+    return toAdminReproductionData({
+      diagnosticId,
+      layout: null,
+      operbox: null,
+      context: null,
+      result: null,
+      fallbackRotation: options.plan?.rotation,
+      fallbackFiammettaEnabled: options.plan?.fiammettaEnabled,
+      unavailableReason: "expired",
+    });
+  }
+
+  const [lookup, linkedRun] = await Promise.all([
+    lookupPrivateFeedback(feedbackId),
+    readPlanReproduction(diagnosticId, options.plan),
+  ]);
+  if (lookup.status === "missing") return linkedRun;
+  if (lookup.status === "invalid") {
+    if (linkedRun.available) return linkedRun;
+    return toAdminReproductionData({
+      diagnosticId,
+      layout: null,
+      operbox: null,
+      context: null,
+      result: { error: linkedRun.error },
+      stderrExcerpt: linkedRun.stderrExcerpt,
+      stdoutExcerpt: linkedRun.stdoutExcerpt,
+      fallbackRotation: options.plan?.rotation,
+      fallbackFiammettaEnabled: options.plan?.fiammettaEnabled,
+      unavailableReason: "invalid",
+    });
+  }
+
+  const [layout, operbox, context] = await Promise.all([
+    readJsonIfExists(path.join(lookup.directory, "layout.json")),
+    readJsonIfExists(path.join(lookup.directory, "operbox.json")),
+    readJsonIfExists(path.join(lookup.directory, "reproduction.json")),
+  ]);
+  const reproduction = toAdminReproductionData({
+    diagnosticId,
+    layout,
+    operbox,
+    context,
+    result: { error: linkedRun.error },
+    stderrExcerpt: linkedRun.stderrExcerpt,
+    stdoutExcerpt: linkedRun.stdoutExcerpt,
+    fallbackRotation: options.plan?.rotation,
+    fallbackFiammettaEnabled: options.plan?.fiammettaEnabled,
+  });
+  if (reproduction.available) return reproduction;
+  return linkedRun.available ? linkedRun : reproduction;
 }
 
 async function readShiftFiles(outputDir: string) {
@@ -1036,7 +1121,10 @@ export async function getSampleOperbox() {
   };
 }
 
-export async function saveFeedback(body: FeedbackRequest): Promise<FeedbackData> {
+export async function saveFeedback(
+  body: FeedbackRequest,
+  options: { userId?: string | null; dataOwnerTag?: string | null } = {},
+): Promise<FeedbackData> {
   const savedAt = new Date().toISOString();
   const feedbackId = randomUUID();
   const kind = body.kind ?? "room_issue";
@@ -1044,15 +1132,32 @@ export async function saveFeedback(body: FeedbackRequest): Promise<FeedbackData>
   const feedbackDir = path.join(feedbackRoot, dirName);
   const metaPath = path.join(feedbackDir, "meta.json");
   const issuePath = path.join(feedbackDir, "issue.json");
+  const layoutPath = path.join(feedbackDir, "layout.json");
+  const operboxPath = path.join(feedbackDir, "operbox.json");
+  const reproductionPath = path.join(feedbackDir, "reproduction.json");
+
+  const reproduction = toAdminReproductionData({
+    diagnosticId: body.diagnosticId,
+    layout: body.reproduction.layout,
+    operbox: body.reproduction.operbox,
+    context: {
+      ...body.reproduction,
+      sourceName: body.reproduction.sourceType === "skland" ? "森空岛同步" : "MAA 导入",
+    },
+    result: null,
+  });
+  if (!reproduction.available) throw new PublicApiError("AIC-FEEDBACK-4001");
   await mkdir(feedbackDir, { recursive: true });
 
   const linkedRun = await privateRunForDiagnostic(body.diagnosticId);
   const owner = linkedRun ? await ownerMetadata(linkedRun.directory) : null;
-  const dataOwnerTag = owner?.diagnosticId === body.diagnosticId && typeof owner.ownerTag === "string"
+  const linkedDataOwnerTag = owner?.diagnosticId === body.diagnosticId && typeof owner.ownerTag === "string"
     ? owner.ownerTag
     : null;
+  const dataOwnerTag = options.dataOwnerTag ?? linkedDataOwnerTag;
   const solver = solverObservationFromPlanRecord(linkedRun?.result);
   const meta = {
+    version: "feedback-record-v2",
     feedbackId,
     savedAt,
     diagnosticId: body.diagnosticId,
@@ -1067,19 +1172,139 @@ export async function saveFeedback(body: FeedbackRequest): Promise<FeedbackData>
     ...(dataOwnerTag ? { dataOwnerTag } : {}),
   };
 
-  await writeJson(metaPath, meta);
-  await writeJson(issuePath, toStoredFeedbackIssue(body));
+  await Promise.all([
+    writeJson(metaPath, meta),
+    writeJson(issuePath, toStoredFeedbackIssue(body)),
+    writeJson(layoutPath, reproduction.layout),
+    writeJson(operboxPath, reproduction.operbox),
+    writeJson(reproductionPath, {
+      version: 1,
+      diagnosticId: body.diagnosticId,
+      sourceName: reproduction.sourceName,
+      sourceType: body.reproduction.sourceType,
+      rotation: reproduction.rotation,
+      rotationCount: reproduction.rotationCount,
+      fiammettaEnabled: reproduction.fiammettaEnabled,
+    }),
+  ]);
   await recordFeedbackIfEnabled({
     feedbackId,
     savedAt: new Date(savedAt),
     body,
-    artifact: await artifactDescriptor(feedbackId, [metaPath, issuePath]),
+    userId: options.userId ?? null,
+    artifact: await artifactDescriptor(feedbackId, [metaPath, issuePath, layoutPath, operboxPath, reproductionPath]),
   });
 
   return {
     feedbackId,
     savedAt,
   };
+}
+
+export async function savePlanFailureArtifact(input: PlanRequestBody & {
+  diagnosticId: string;
+  errorCode: string;
+}): Promise<PrivateArtifactDescriptor | null> {
+  assertPlanBody(input);
+  if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(input.diagnosticId)) {
+    throw new Error("Plan failure diagnostic ID is invalid.");
+  }
+
+  await ensurePrivateStorageBoundaries();
+  const startedAt = new Date().toISOString();
+  const suffix = `_${input.diagnosticId}`;
+  const existingDir = (await runDirectories())
+    .find((candidate) => path.basename(candidate).endsWith(suffix));
+  if (existingDir) {
+    const existing = await lookupPrivateRun(input.diagnosticId);
+    if (existing.status !== "found") throw new Error("Existing plan failure artifact is invalid.");
+    const existingArtifact = existsSync(path.join(existingDir, "run-envelope.json"))
+      ? path.join(existingDir, "run-envelope.json")
+      : path.join(existingDir, "result.json");
+    const snapshotDir = path.join(existingDir, "task-reproduction");
+    const snapshotPaths = [
+      path.join(snapshotDir, "layout.json"),
+      path.join(snapshotDir, "operbox.json"),
+      path.join(snapshotDir, "reproduction.json"),
+    ];
+    if (snapshotPaths.every((filePath) => existsSync(filePath))) {
+      return artifactDescriptor(input.diagnosticId, [existingArtifact, ...snapshotPaths]);
+    }
+
+    const stagingSnapshotDir = `${snapshotDir}.pending-${randomUUID()}`;
+    await mkdir(stagingSnapshotDir);
+    try {
+      await Promise.all([
+        writeJsonAtomic(path.join(stagingSnapshotDir, "layout.json"), input.layout),
+        writeJsonAtomic(path.join(stagingSnapshotDir, "operbox.json"), input.operbox),
+        writeJsonAtomic(path.join(stagingSnapshotDir, "reproduction.json"), {
+          version: 1,
+          diagnosticId: input.diagnosticId,
+          sourceName: input.sourceName ?? null,
+          rotation: input.rotation,
+          fiammettaEnabled: input.fiammettaEnable ?? true,
+        }),
+      ]);
+      await rename(stagingSnapshotDir, snapshotDir);
+    } catch (error) {
+      await rm(stagingSnapshotDir, { recursive: true, force: true }).catch(() => undefined);
+      throw error;
+    }
+    return artifactDescriptor(input.diagnosticId, [existingArtifact, ...snapshotPaths]);
+  }
+
+  const runDir = path.join(
+    cliRunRoot,
+    makeStampedDirName(startedAt, input.sourceName, input.diagnosticId),
+  );
+  const stagingDir = `${runDir}.pending-${randomUUID()}`;
+  const layoutPath = path.join(stagingDir, "layout.json");
+  const operboxPath = path.join(stagingDir, "operbox.json");
+  const reproductionPath = path.join(stagingDir, "reproduction.json");
+  const resultPath = path.join(stagingDir, "result.json");
+  const ownerPath = path.join(stagingDir, "owner.json");
+  const artifactPaths = [layoutPath, operboxPath, reproductionPath, resultPath];
+
+  await mkdir(stagingDir);
+  try {
+    await Promise.all([
+      writeJsonAtomic(layoutPath, input.layout),
+      writeJsonAtomic(operboxPath, input.operbox),
+      writeJsonAtomic(reproductionPath, {
+        version: 1,
+        diagnosticId: input.diagnosticId,
+        sourceName: input.sourceName ?? null,
+        rotation: input.rotation,
+        fiammettaEnabled: input.fiammettaEnable ?? true,
+      }),
+      writeJsonAtomic(resultPath, {
+        success: false,
+        startedAt,
+        durationMs: 0,
+        error: input.errorCode,
+        runId: input.diagnosticId,
+      } satisfies PlanApiResponse),
+      ...(input.dataOwnerTag ? [
+        writeJsonAtomic(ownerPath, {
+          version: 1,
+          ownerTag: input.dataOwnerTag,
+          diagnosticId: input.diagnosticId,
+          sourceName: input.sourceName ?? null,
+          createdAt: startedAt,
+        }, true),
+      ] : []),
+    ]);
+    if (input.dataOwnerTag) artifactPaths.push(ownerPath);
+    await rename(stagingDir, runDir);
+  } catch (error) {
+    await rm(stagingDir, { recursive: true, force: true }).catch(() => undefined);
+    throw error;
+  }
+
+  return artifactDescriptor(
+    input.diagnosticId,
+    artifactPaths.map((filePath) => path.join(runDir, path.basename(filePath))),
+  );
 }
 
 export async function describePlanArtifact(result: PlanApiResponse): Promise<PrivateArtifactDescriptor | null> {
