@@ -242,10 +242,6 @@ jobs:
               --body-file "$body"
           fi
 
-      - name: Dispatch full frontend quality workflow
-        shell: bash
-        run: gh workflow run frontend-quality.yml --ref "$UPDATE_BRANCH"
-
       - name: Report publication failure
         if: failure()
         shell: bash
