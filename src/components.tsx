@@ -47,7 +47,9 @@ import { demoBuildingSkill, demoOperatorName, demoRoomTitle, useLanguageDemo } f
 import {
   BUILDING_SKILL_ENHANCED_WORD,
   buildingSkillUnlockLabel,
+  buildingSkillUnlockLabelEnglish,
   buildingSkillUnlockPrefix,
+  operatorProfessionLabelEnglishForCode,
   operatorProfessionPresentationForCode,
 } from "@/operator-presentation";
 import { roomVisualFor } from "@/room-visuals";
@@ -108,6 +110,7 @@ import {
   MaaJson,
   MaaPlan,
   PresetDef,
+  RotationProfile,
   RotationJson,
   UserProfile,
 } from "./types";
@@ -709,10 +712,10 @@ export function ShiftTabs({
             <TabsTrigger
               key={`${plan.name}-${index}`}
               value={String(index)}
-              aria-label={teamSummary ? `${label}，${teamSummary}` : label}
+              aria-label={teamSummary ? `${label}${en ? ", " : "，"}${teamSummary}` : label}
             >
               {label}
-              {closest === index ? <span className="rounded-full bg-primary/10 px-1.5 text-xs text-primary max-md:hidden">最接近</span> : null}
+              {closest === index ? <span className="rounded-full bg-primary/10 px-1.5 text-xs text-primary max-md:hidden">{en ? "Closest" : "最接近"}</span> : null}
             </TabsTrigger>
           );
         })}
@@ -746,12 +749,24 @@ export function PlanTelemetry({
   planRevision?: string;
 }) {
   const shouldReduceMotion = useReducedMotion();
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
   if (!profile && !rotation) return null;
 
   const active = rotation?.shifts?.[activeShift];
   const rotationProfile = rotation?.profile ?? profile?.rotation_profile ?? DEFAULT_ROTATION_PROFILE;
   const selectedRotation = rotationOption(rotationProfile);
-  const activeTeamSummary = shiftTeamSummary(active, rotationProfile);
+  const selectedRotationLabel = en ? ({
+    abc_12_6_6: "Three shifts per day",
+    main_backup_12_12: "Primary / backup rotation",
+    abc_12_12_12: "Two changes per day",
+    fiammetta_8_8_4_4: "Fiammetta rotation",
+    abyssal_7_5_7_5: "Abyssal Hunters rotation",
+  } satisfies Record<RotationProfile, string>)[rotationProfile] : selectedRotation.label;
+  const originalActiveTeamSummary = shiftTeamSummary(active, rotationProfile);
+  const activeTeamSummary = en && originalActiveTeamSummary
+    ? originalActiveTeamSummary.replaceAll("主力", "Main").replaceAll("替补", "Backup").replaceAll("上班", "working").replaceAll("休息", "resting")
+    : originalActiveTeamSummary;
   const summary = profile?.summary;
   const manufactureReady = summary ? manufacturePoolReady(summary) : undefined;
   const currentProfileRotation = profile?.rotation;
@@ -759,21 +774,21 @@ export function PlanTelemetry({
   const dailyMetrics = [
     {
       kind: "trade" as const,
-      label: "24h 贸易",
+      label: en ? "24h Trading" : "24h 贸易",
       value: rotation?.daily.trade ?? currentProfileRotation?.daily_trade_efficiency ?? currentProfileRotation?.daily_trade,
       baseline: baselineProfileRotation?.daily_trade_efficiency ?? baselineProfileRotation?.daily_trade,
       suffix: "×",
     },
     {
       kind: "manu" as const,
-      label: "24h 制造",
+      label: en ? "24h Manufacturing" : "24h 制造",
       value: rotation?.daily.manufacture ?? currentProfileRotation?.daily_manufacture_efficiency ?? currentProfileRotation?.daily_manu,
       baseline: baselineProfileRotation?.daily_manufacture_efficiency ?? baselineProfileRotation?.daily_manu,
       suffix: "%",
     },
     {
       kind: "power" as const,
-      label: "24h 发电",
+      label: en ? "24h Power" : "24h 发电",
       value: rotation?.daily.power ?? currentProfileRotation?.daily_power_efficiency ?? currentProfileRotation?.daily_power,
       baseline: baselineProfileRotation?.daily_power_efficiency ?? baselineProfileRotation?.daily_power,
       suffix: "%",
@@ -790,7 +805,7 @@ export function PlanTelemetry({
   return (
     <motion.section
       className="mb-4 overflow-hidden border-y border-[#313131]/15 bg-[#F3F1EA]"
-      aria-label="效率概览"
+      aria-label={en ? "Efficiency overview" : "效率概览"}
       data-plan-summary
       data-plan-revision={planRevision}
       initial={{
@@ -813,13 +828,13 @@ export function PlanTelemetry({
     >
       <div className="grid grid-cols-[auto_1fr] items-stretch max-md:grid-cols-1">
         <div className="flex min-w-36 flex-col justify-center bg-[#313131] px-4 py-3 text-white">
-          <span className="text-xs font-semibold uppercase tracking-[0.12em] text-white/55">效率概览</span>
-          <strong className="mt-0.5 text-xl font-medium">当前方案</strong>
+          <span className="text-xs font-semibold uppercase tracking-[0.12em] text-white/55">{en ? "Efficiency overview" : "效率概览"}</span>
+          <strong className="mt-0.5 text-xl font-medium">{en ? "Current plan" : "当前方案"}</strong>
           <span className="mt-1 text-xs text-white/62">
-            <span className="font-number">{layout.template}</span> · <span className="font-number">{layout.rooms.length}</span> 个设施
+            <span className="font-number">{layout.template}</span> · <span className="font-number">{layout.rooms.length}</span> {en ? "facilities" : "个设施"}
           </span>
           <span className="mt-0.5 text-xs text-white/62">
-            {selectedRotation.label} · <span className="font-number">{rotation?.shifts.length ?? 0}</span> 班
+            {selectedRotationLabel} · <span className="font-number">{rotation?.shifts.length ?? 0}</span> {en ? "shifts" : "班"}
           </span>
         </div>
         <div className="grid grid-cols-[repeat(auto-fit,minmax(112px,1fr))] divide-x divide-[#313131]/10 max-sm:divide-x-0 max-sm:grid-cols-2">
@@ -853,7 +868,7 @@ export function PlanTelemetry({
                   <AnimatedNumber value={`${compactNumber(value, displayDigits)}${metric.suffix}`} />
                 </strong>
                 <span className="mt-0.5 block whitespace-nowrap text-[10px] tabular-nums text-[#313131]/52">
-                  参考 {baseline === undefined ? "—" : `${compactNumber(baseline, displayDigits)}${metric.suffix}`}
+                  {en ? "Reference" : "参考"} {baseline === undefined ? "—" : `${compactNumber(baseline, displayDigits)}${metric.suffix}`}
                   {delta === undefined ? null : (
                     <span className={cn("ml-1", delta >= 0 ? "text-emerald-700" : "text-red-700")}>
                       · {delta >= 0 ? "+" : ""}{compactNumber(delta)}%
@@ -878,7 +893,7 @@ export function PlanTelemetry({
                 ease: MOTION_EASE_OUT,
               }}
             >
-              <span className="block text-xs text-[#313131]/58">当前班次</span>
+              <span className="block text-xs text-[#313131]/58">{en ? "Current shift" : "当前班次"}</span>
               <strong className="font-technical mt-0.5 block text-lg font-semibold tabular-nums tracking-[0.01em] text-[#313131]">
                 <AnimatedNumber value={`${compactNumber(active.duration_hours)}h`} />
               </strong>
@@ -894,20 +909,20 @@ export function PlanTelemetry({
 
       {summary ? (
         <div className="flex flex-wrap gap-x-5 gap-y-1 border-t border-[#313131]/10 px-4 py-2 text-xs text-[#313131]/68">
-          <span>已拥有 <strong className="font-number text-[#313131]">{summary.owned}</strong></span>
-          <span>进阶可用 <strong className="font-number text-[#313131]">{summary.tier_up_owned}</strong></span>
-          <span>贸易候选 <strong className="font-number text-[#313131]">{summary.trade_pool_ready}</strong></span>
-          {manufactureReady !== undefined ? <span>制造候选 <strong className="font-number text-[#313131]">{manufactureReady}</strong></span> : null}
-          <span>中枢等级 Lv<span className="font-number">.{layout.rooms.find((room) => room.kind === "control_center")?.level ?? "—"}</span></span>
+          <span>{en ? "Owned" : "已拥有"} <strong className="font-number text-[#313131]">{summary.owned}</strong></span>
+          <span>{en ? "Promotion-ready" : "进阶可用"} <strong className="font-number text-[#313131]">{summary.tier_up_owned}</strong></span>
+          <span>{en ? "Trading candidates" : "贸易候选"} <strong className="font-number text-[#313131]">{summary.trade_pool_ready}</strong></span>
+          {manufactureReady !== undefined ? <span>{en ? "Manufacturing candidates" : "制造候选"} <strong className="font-number text-[#313131]">{manufactureReady}</strong></span> : null}
+          <span>{en ? "Control Center" : "中枢等级"} Lv<span className="font-number">.{layout.rooms.find((room) => room.kind === "control_center")?.level ?? "—"}</span></span>
         </div>
       ) : null}
 
       {domains.length > 0 || profile?.actions.length || profile?.flags.length || profile?.narration_hints.length ? (
         <details className="group border-t border-[#313131]/10">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-2.5 text-xs font-medium text-[#313131] marker:content-none">
-            <span>效率详情 · <span className="font-number">{domains.length}</span> 个指标</span>
-            <span className="text-[#313131]/50 group-open:hidden">展开</span>
-            <span className="hidden text-[#313131]/50 group-open:inline">收起</span>
+            <span>{en ? "Efficiency details" : "效率详情"} · <span className="font-number">{domains.length}</span> {en ? "metrics" : "个指标"}</span>
+            <span className="text-[#313131]/50 group-open:hidden">{en ? "Expand" : "展开"}</span>
+            <span className="hidden text-[#313131]/50 group-open:inline">{en ? "Collapse" : "收起"}</span>
           </summary>
           <div className="border-t border-[#313131]/10 bg-white/55 px-4 py-3">
             {domains.length > 0 ? (
@@ -923,17 +938,17 @@ export function PlanTelemetry({
                         {domain.current.mechanic_equivalent_efficiency !== undefined
                           || domain.baseline.mechanic_equivalent_efficiency !== undefined ? (
                             <span className="mt-0.5 block truncate text-[10px] tabular-nums text-[#313131]/48">
-                              机制等效 当前 {domain.current.mechanic_equivalent_efficiency === undefined
+                              {en ? "Mechanic equivalent · Current" : "机制等效 当前"} {domain.current.mechanic_equivalent_efficiency === undefined
                                 ? "—"
                                 : compactNumber(domain.current.mechanic_equivalent_efficiency, 3)}
-                              {" · "}参考 {domain.baseline.mechanic_equivalent_efficiency === undefined
+                              {" · "}{en ? "Reference" : "参考"} {domain.baseline.mechanic_equivalent_efficiency === undefined
                                 ? "—"
                                 : compactNumber(domain.baseline.mechanic_equivalent_efficiency, 3)}
                             </span>
                           ) : null}
                       </div>
-                      <span className="tabular-nums text-[#313131]">当前 {current === undefined ? "—" : compactNumber(current, 2)}</span>
-                      <span className="tabular-nums text-[#313131]/55 max-sm:hidden">基准 {baseline === undefined ? "—" : compactNumber(baseline, 2)}</span>
+                      <span className="tabular-nums text-[#313131]">{en ? "Current" : "当前"} {current === undefined ? "—" : compactNumber(current, 2)}</span>
+                      <span className="tabular-nums text-[#313131]/55 max-sm:hidden">{en ? "Baseline" : "基准"} {baseline === undefined ? "—" : compactNumber(baseline, 2)}</span>
                       <span className={cn("rounded-sm px-1.5 py-0.5 text-xs font-semibold", profileSeverityClass(domain.severity))}>
                         {domain.gap_ratio >= 0 ? "+" : ""}{compactNumber(domain.gap_ratio * 100)}%
                       </span>
@@ -1137,6 +1152,7 @@ function OperatorSlotShell({
   compactView,
   frameClassName,
   frameContent,
+  frameFocusable = false,
   frameWrapper = (frame) => frame,
   label,
   labelClassName,
@@ -1149,6 +1165,7 @@ function OperatorSlotShell({
   compactView: boolean;
   frameClassName: string;
   frameContent?: ReactNode;
+  frameFocusable?: boolean;
   /** 可选：包装头像框元素（例如包上技能 tooltip 的 trigger）。默认原样返回。 */
   frameWrapper?: (frame: ReactElement) => ReactElement;
   label: ReactNode;
@@ -1161,9 +1178,12 @@ function OperatorSlotShell({
       className={cn(
         "relative aspect-square h-[var(--operator-slot-size)] min-w-0 shrink-0 overflow-hidden border-2 max-sm:border",
         frameClassName,
+        frameFocusable && "cursor-help outline-none transition-[border-color,box-shadow] hover:border-white/90 focus-visible:border-[#FFD501] focus-visible:ring-2 focus-visible:ring-[#FFD501]/70",
         centerFrameInList && "max-sm:h-auto max-sm:w-full sm:absolute sm:left-0 sm:top-1/2 sm:-translate-y-1/2",
       )}
       aria-label={ariaLabel}
+      role={frameFocusable ? "button" : undefined}
+      tabIndex={frameFocusable ? 0 : undefined}
     >
       {frameContent}
     </div>
@@ -1201,7 +1221,9 @@ function BuildingSkillBadge({ skill }: { skill: NonNullable<RoomRow["operatorSlo
   const [open, setOpen] = useState(false);
   const { locale } = useLanguageDemo();
   const displaySkill = demoBuildingSkill(skill.id, locale, skill);
-  const unlockLabel = buildingSkillUnlockLabel(skill.elite, skill.level, skill.enhanced);
+  const unlockLabel = locale === "en"
+    ? buildingSkillUnlockLabelEnglish(skill.elite, skill.level, skill.enhanced)
+    : buildingSkillUnlockLabel(skill.elite, skill.level, skill.enhanced);
   return (
     <Tooltip open={open} onOpenChange={setOpen}>
       <TooltipTrigger
@@ -1226,7 +1248,9 @@ function BuildingSkillBadge({ skill }: { skill: NonNullable<RoomRow["operatorSlo
       >
         <span className="font-semibold">S<span className="font-number">{skill.index}</span> · {displaySkill.name}</span>
         <span className="text-background/72">
-          {skill.enhanced ? (
+          {locale === "en" ? (
+            unlockLabel
+          ) : skill.enhanced ? (
             <>
               <span>{buildingSkillUnlockPrefix(skill.elite, skill.level)}</span>
               <span className="text-[#22BBFF]">{BUILDING_SKILL_ENHANCED_WORD}</span>
@@ -1253,6 +1277,9 @@ export function OperatorSlot({
   portraitSize = 180,
   positionLabel,
   showSkillTooltip = false,
+  skillTooltipFocusable = false,
+  skillTooltipHighlightIds = [],
+  skillTooltipContextLabel,
   searchQuery = "",
 }: {
   slot: RoomRow["operatorSlots"][number] | undefined;
@@ -1267,6 +1294,11 @@ export function OperatorSlot({
   positionLabel?: string;
   /** 悬停卡片时展示干员全部基建技能 tooltip，并关闭卡片自身的原生 title hover。 */
   showSkillTooltip?: boolean;
+  /** 让头像进入键盘焦点顺序；仅用于需要主动查看技能的界面，避免排班图产生过多 Tab 停靠点。 */
+  skillTooltipFocusable?: boolean;
+  /** 练卡建议等场景中，需要在技能 tooltip 内强调的技能。 */
+  skillTooltipHighlightIds?: readonly string[];
+  skillTooltipContextLabel?: string;
   searchQuery?: string;
 }) {
   const shouldReduceMotion = useReducedMotion();
@@ -1276,12 +1308,16 @@ export function OperatorSlot({
   const identity = slot?.name ?? (autofill ? "autofill" : "empty");
   const suppressNativeTitles = showSkillTooltip && slot !== undefined;
   const profession = slot ? operatorProfessionPresentationForCode(slot.profession) : undefined;
+  const professionLabelEnglish = slot ? operatorProfessionLabelEnglishForCode(slot.profession) : undefined;
   const enterX = shouldReduceMotion ? 0 : shiftDirection * 6;
   const exitX = shouldReduceMotion ? 0 : shiftDirection * -4;
   const occupantLabel = displayName ?? (autofill ? (locale === "en" ? "Auto-fill" : "自动补位") : (locale === "en" ? "Empty" : "空置"));
-  const ariaLabel = displayPositionLabel
+  const occupantAriaLabel = displayPositionLabel
     ? `${displayPositionLabel}${locale === "en" ? ": " : "："}${occupantLabel}`
     : occupantLabel;
+  const ariaLabel = showSkillTooltip && skillTooltipFocusable && slot
+    ? `${occupantAriaLabel}${locale === "en" ? ". Focus to view infrastructure skills" : "，聚焦可查看基建技能"}`
+    : occupantAriaLabel;
   const searchMatched = Boolean(slot && searchQuery && slot.name.toLocaleLowerCase("zh-CN").includes(searchQuery));
   const frameClassName = slot
     ? "border-[#7F7F7F] bg-[#3C3C3C] shadow-[inset_0_0_18px_rgba(255,255,255,0.16)]"
@@ -1337,7 +1373,7 @@ export function OperatorSlot({
                         src={profession.icon}
                         alt=""
                         aria-hidden="true"
-                        title={suppressNativeTitles ? undefined : `职业：${profession.label}`}
+                        title={suppressNativeTitles ? undefined : locale === "en" ? `Profession: ${professionLabelEnglish ?? "Unknown"}` : `职业：${profession.label}`}
                         className="absolute left-0 top-0 z-10 h-[25%] w-auto"
                       />
                     ) : null}
@@ -1352,7 +1388,7 @@ export function OperatorSlot({
                 ) : typeof slot.skill === "number" ? (
                   <span
                     className="absolute right-0 top-0 z-10 flex size-9 items-center justify-center border-b border-l border-white/22 bg-black/76 text-xs font-semibold text-white"
-                    aria-label={`基建技能 S${slot.skill}，暂无技能资料`}
+                    aria-label={locale === "en" ? `Infrastructure skill S${slot.skill}, no skill data` : `基建技能 S${slot.skill}，暂无技能资料`}
                   >
                     S<span className="font-number">{slot.skill}</span>
                   </span>
@@ -1360,11 +1396,11 @@ export function OperatorSlot({
                 {typeof currentMorale === "number" ? (
                   <span
                     className="absolute bottom-0.5 left-0.5 flex items-center gap-0.5 whitespace-nowrap rounded-sm bg-black/72 px-1 py-0.5 text-xs font-normal leading-none text-white shadow-[0_1px_3px_rgba(0,0,0,0.5)] [&_svg]:size-2.5 max-sm:bottom-0.5 max-sm:left-0.5 max-sm:px-0.5 max-sm:[&_svg]:size-2.5"
-                    aria-label={`当前心情 ${currentMorale}/24`}
-                    title={suppressNativeTitles ? undefined : `当前心情 ${currentMorale}/24`}
+                    aria-label={locale === "en" ? `Current morale ${currentMorale}/24` : `当前心情 ${currentMorale}/24`}
+                    title={suppressNativeTitles ? undefined : locale === "en" ? `Current morale ${currentMorale}/24` : `当前心情 ${currentMorale}/24`}
                   >
                     <Smile className="text-[#FFD501]" />
-                    <span className="max-sm:hidden">当前</span>
+                    <span className="max-sm:hidden">{locale === "en" ? "Now" : "当前"}</span>
                     <span className="font-number"><AnimatedText value={currentMorale} trend={shiftDirection} /></span>
                   </span>
                 ) : null}
@@ -1379,9 +1415,15 @@ export function OperatorSlot({
           </motion.div>
         </AnimatePresence>
       }
+      frameFocusable={showSkillTooltip && skillTooltipFocusable && Boolean(slot)}
       frameWrapper={showSkillTooltip && slot ? (frame) => (
         <Suspense fallback={frame}>
-          <OperatorSkillTooltip name={slot.name} trigger={frame} />
+          <OperatorSkillTooltip
+            name={slot.name}
+            trigger={frame}
+            highlightedSkillIds={skillTooltipHighlightIds}
+            contextLabel={skillTooltipContextLabel}
+          />
         </Suspense>
       ) : undefined}
       label={slot ? <AnimatedText value={displayName ?? slot.name} trend={shiftDirection} /> : autofill ? (locale === "en" ? "Auto-fill" : "自动补位") : (locale === "en" ? "Slot" : "占")}
@@ -1561,7 +1603,7 @@ export function ScheduleBoard({
           {viewControlsSlot}
           {viewMode === "list" && hiddenAuxiliaryCount ? (
             <Button type="button" variant="ghost" size="sm" onClick={restoreHiddenAuxiliaryGroups}>
-              {en ? "Restore hidden" : "恢复已隐藏"}（<span className="font-number">{hiddenAuxiliaryCount}</span>）
+              {en ? "Restore hidden" : "恢复已隐藏"}{en ? " (" : "（"}<span className="font-number">{hiddenAuxiliaryCount}</span>{en ? ")" : "）"}
             </Button>
           ) : null}
           {viewMode === "list" && auxiliaryGroups.length ? (
@@ -1952,8 +1994,8 @@ export function IssueNoteModal({
         <DialogBody>
           <p className="text-[13px] leading-5 text-muted-foreground">
             {isPerformance
-              ? (en ? "This submits the diagnostic ID, solve time, rotation, layout, and your note. It does not include arbitrary rooms or the complete operator roster." : "将提交本次排班的诊断编号、求解耗时、换班方式、布局和你的说明；不会附带任意房间或完整干员数据。")
-              : (en ? "This submits the diagnostic ID, room name, current operators, and your note. It does not upload the complete roster or debug bundle again." : "将提交本次排班的诊断编号、房间名称、当前干员和你的说明；不会重复上传完整干员数据或调试包。")}
+              ? (en ? "This submits your note plus a private reproduction snapshot containing the diagnostic ID, solve time, base layout, operator BOX submitted for the plan, rotation setting, and Fiammetta setting. Only administrators can access it, and it is retained for up to 30 days." : "将提交你的说明，以及包含诊断编号、求解耗时、基建布局、本次排班提交的干员 Box、轮换设置和菲亚梅塔状态的私有复现快照；仅管理员可访问，最长保留 30 天。")
+              : (en ? "This submits the room issue and a private reproduction snapshot containing the base layout, operator BOX submitted for the plan, rotation setting, and Fiammetta setting. Only administrators can access it, and it is retained for up to 30 days." : "将提交房间问题，以及包含基建布局、本次排班提交的干员 Box、轮换设置和菲亚梅塔状态的私有复现快照；仅管理员可访问，最长保留 30 天。")}
           </p>
           <Textarea
             autoFocus
@@ -1970,7 +2012,7 @@ export function IssueNoteModal({
               onChange={(event) => setConsented(event.target.checked)}
               className="size-4"
             />
-            <span>{en ? `I confirm submitting the ${isPerformance ? "performance" : "schedule issue"} information above.` : <>我确认提交以上{isPerformance ? "性能" : "排班问题"}信息。</>}</span>
+            <span>{en ? `I consent to submitting the ${isPerformance ? "performance" : "schedule issue"} information and private reproduction snapshot described above.` : <>我同意提交以上{isPerformance ? "性能" : "排班问题"}信息和私有复现快照。</>}</span>
           </label>
         </DialogBody>
         <DialogFooter>

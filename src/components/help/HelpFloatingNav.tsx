@@ -10,17 +10,20 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { MOTION_DURATION, MOTION_EASE_OUT } from "@/motion";
+import { useLanguageDemo } from "@/language-demo";
 
 const helpLinks = [
-  { href: "/help", label: "帮助首页", description: "常见问题快速自检" },
-  { href: "/help/import-operators", label: "导入干员数据", description: "森空岛与 MAA 详细步骤" },
-  { href: "/help/owned-operators", label: "切换已有干员", description: "换回自己的 Box" },
+  { href: "/help", zh: ["帮助首页", "常见问题快速自检"], en: ["Help Home", "Quick troubleshooting"] },
+  { href: "/help/import-operators", zh: ["导入干员数据", "森空岛与 MAA 详细步骤"], en: ["Import Operator Data", "Skland and MAA walkthrough"] },
+  { href: "/help/owned-operators", zh: ["切换已有干员", "换回自己的 Box"], en: ["Use Owned Operators", "Restore your own Operator Box"] },
 ];
 
 export function HelpFloatingNav() {
   const pathname = usePathname();
   const reduceMotion = useReducedMotion();
   const [openPath, setOpenPath] = useState<string | null>(null);
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
   const open = openPath === pathname;
 
   return (
@@ -33,7 +36,7 @@ export function HelpFloatingNav() {
         data-help-floating-trigger
         render={
           <Button
-            aria-label="帮助目录"
+            aria-label={en ? "Help menu" : "帮助目录"}
             className="fixed right-[max(1rem,env(safe-area-inset-right))] bottom-[max(1rem,env(safe-area-inset-bottom))] z-40 size-12 rounded-full border border-background/20 shadow-xl shadow-foreground/20 ring-4 ring-background/75 transition-transform duration-200 hover:scale-105 motion-reduce:transform-none motion-reduce:transition-none print:hidden"
             size="icon"
           />
@@ -73,22 +76,23 @@ export function HelpFloatingNav() {
           >
             <div className="flex items-start justify-between gap-3 px-3 pb-2 pt-1">
               <div>
-                <PopoverPrimitive.Title className="text-base font-semibold">使用帮助</PopoverPrimitive.Title>
+                <PopoverPrimitive.Title className="text-base font-semibold">{en ? "Help Center" : "使用帮助"}</PopoverPrimitive.Title>
                 <PopoverPrimitive.Description className="mt-1 text-xs leading-5 text-muted-foreground">
-                  选择需要查看的帮助页面
+                  {en ? "Choose a help article" : "选择需要查看的帮助页面"}
                 </PopoverPrimitive.Description>
               </div>
               <PopoverPrimitive.Close
-                render={<Button aria-label="关闭帮助目录" className="size-11 rounded-full" size="icon-sm" variant="ghost" />}
+                render={<Button aria-label={en ? "Close help menu" : "关闭帮助目录"} className="size-11 rounded-full" size="icon-sm" variant="ghost" />}
               >
                 <X className="size-4" aria-hidden="true" />
               </PopoverPrimitive.Close>
             </div>
 
-            <nav aria-label="帮助文档导航">
+            <nav aria-label={en ? "Help navigation" : "帮助文档导航"}>
               <ul className="grid gap-1">
-                {helpLinks.map(({ href, label, description }) => {
+                {helpLinks.map(({ href, zh, en: english }) => {
                   const active = pathname === href;
+                  const [label, description] = en ? english : zh;
                   return (
                     <li key={href}>
                       <Link
@@ -106,7 +110,7 @@ export function HelpFloatingNav() {
                             <strong className="block text-sm font-medium group-hover:text-primary">{label}</strong>
                             {active ? (
                               <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-primary">
-                                <Check className="size-3.5" aria-hidden="true" />当前
+                                <Check className="size-3.5" aria-hidden="true" />{en ? "Current" : "当前"}
                               </span>
                             ) : null}
                           </span>
@@ -120,7 +124,7 @@ export function HelpFloatingNav() {
             </nav>
 
             <p className="mx-3 mt-2 border-t border-border pt-3 text-xs leading-5 text-muted-foreground">
-              找不到入口时，先回到计算器，再打开「配置Box与布局」。
+              {en ? "If you cannot find an entry point, return to the calculator and open “Configure BOX & base”." : "找不到入口时，先回到计算器，再打开「配置Box与布局」。"}
             </p>
           </PopoverPrimitive.Popup>
         </PopoverPrimitive.Positioner>

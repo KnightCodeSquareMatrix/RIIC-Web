@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 import { LegalDocument } from "@/components/legal/LegalDocument";
 import { isSklandFeatureEnabled } from "@/deployment";
-import { legalIdentity } from "@/legal";
+import { DEFAULT_LEGAL_OPERATOR_NAME, legalIdentity } from "@/legal";
 import { PRIVACY_EFFECTIVE_DATE } from "@/legal-policy";
 
 export const metadata: Metadata = {
@@ -12,9 +12,85 @@ export const metadata: Metadata = {
 
 export default function PrivacyPage() {
   const identity = legalIdentity();
+  const englishOperatorName = identity.operatorName === DEFAULT_LEGAL_OPERATOR_NAME ? "Closure Infrastructure Terminal maintainers" : identity.operatorName;
   const sklandEnabled = isSklandFeatureEnabled();
+  const englishContent = <>
+    <section>
+      <h2>Website accounts and email</h2>
+      <ul>
+        <li>When you register, we process the submitted display name, email address, irreversible password hash, email-verification status, and account-creation time.</li>
+        <li>After sign-in, PostgreSQL stores the website account and database sessions. A session contains a random token, expiry, IP address, and browser identifier used for security decisions. Plain-text passwords are never stored.</li>
+        <li>For email verification and password reset, the email address, message body, and necessary delivery metadata are sent to Resend. Email verification codes expire after <span className="font-number">10</span> minutes and password-reset links after one hour.</li>
+        <li>Account information is retained until you delete the account or it must be removed by law. Sessions remain until expiry, sign-out, password reset, suspension, or revocation. Account deletion removes the account, all sessions, and associated business data.</li>
+        <li>After sign-in, automatic synchronization of the MAA Box, layout, settings, limited workspace versions, and schedule history begins only after you accept the current policies. Until then, or if you decline, the site remains in local-only mode.</li>
+        <li>Each MAA Box is protected with an independent data key and AES-<span className="font-number">256</span>-GCM envelope encryption. The master key exists only in server configuration and is not written to the database, logs, or backups. Layouts and schedule results are allowlisted before storage.</li>
+        <li>At most <span className="font-number">10</span> cloud workspace versions are retained for up to <span className="font-number">30</span> days. At most <span className="font-number">5</span> ordinary schedules are retained on a rolling <span className="font-number">30</span>-day basis, and up to <span className="font-number">5</span> may be pinned for long-term storage.</li>
+        <li>You may withdraw synchronization consent or delete cloud data. This removes the workspace, encrypted Box, schedule history, and related cache references. A sanitized local copy may remain in the browser if you choose.</li>
+        {sklandEnabled ? <li>Skland UID, display name, Box, credentials, and full status snapshots are never written to the business database. Only an irreversible binding identifier and authorization time are stored.</li> : null}
+      </ul>
+    </section>
+    <section>
+      <h2>Experience analytics and device information</h2>
+      <ul>
+        <li>First-party experience analytics automatically record allowlisted events such as page views, schedule requests and rendering, Web Vitals, long tasks, and front-end errors. There is currently no separate opt-out, and no third-party analytics SDK is used.</li>
+        <li>A randomly generated stable analytics-session identifier is saved in localStorage to associate events from the same browser. “Clear local data” removes it; a new identifier is generated on a later visit.</li>
+        <li>A record may contain server receipt time, page route, precise duration in milliseconds or an integer metric, and allowlisted environment fields such as device type, operating system, browser category, screen size, pixel ratio, memory, processor-core count, and network type. Full User-Agent strings, request bodies, MAA Boxes, and login credentials are not stored.</li>
+        <li>When signed in, events are associated with the website user ID. If the browser also has an active Skland account, events are associated with an irreversible HMAC derived from the upstream account identifier. Skland UID, display name, Box, full status, and tokens are not written.</li>
+        <li>Detailed events expire <span className="font-number">30</span> days after server receipt and are deleted during later writes and server maintenance. Deleting a website account cascades to events associated with that account. Unassociated browser events remain until expiry.</li>
+        <li>Network addresses are used for same-origin checks and rate limiting but are not stored in the application event table. Analytics requests and error logs contain only minimum diagnostic fields, not event bodies.</li>
+      </ul>
+    </section>
+    {sklandEnabled ? <>
+      <section><h2 className="font-number">1. Scope and operator</h2><p>This policy applies to “Closure Infrastructure Terminal” (the “site”), an unofficial, non-commercial scheduling assistant with no affiliation, agency relationship, or endorsement from Hypergryph, Skland, or the official Arknights project.</p><p>Operator: {englishOperatorName}. Contact us through the <a href={identity.contactUrl}>project issue tracker</a>{identity.contactEmail ? <> or <a href={`mailto:${identity.contactEmail}`}>{identity.contactEmail}</a></> : null}.</p></section>
+      <section><h2 className="font-number">2. Information we process</h2><h3>Scheduling data</h3><ul>
+        <li>Credentials, tokens, device identifiers, and upstream user identifiers produced by Skland QR-code or credential import.</li>
+        <li>Bound characters, operator ownership and progression, base facilities, current assignments, morale, production recipes, and trading orders.</li>
+        <li>Imported MAA JSON, compatible spreadsheets, layout settings, and generated schedules.</li>
+      </ul><h3>Full status-center data</h3><p>After you accept this policy and sign in, the site directly reads full status information—including avatar, UID, level, sanity, missions, recruitment, outfits, training, clues, events, and game progress—and displays fields supported by the interface. No separate status-center authorization is required.</p><h3>Necessary technical information</h3><p>For API security and troubleshooting, the site briefly processes request ID, time, route, error code, response status, and network address forwarded by a proxy. Logs do not contain request bodies or login credentials.</p></section>
+      <section><h2 className="font-number">3. Processing and purposes</h2><ul>
+        <li>Login credentials are encrypted with AES-<span className="font-number">256</span>-GCM and stored in this browser as an HttpOnly cookie. They are decrypted by the server during requests and are not written to the business database.</li>
+        <li>Raw credential text exists only briefly in component memory and for one request. After success it is cleared immediately and is not written to localStorage, sessionStorage, telemetry, logs, or the database.</li>
+        <li>To distinguish a bound account from a currently valid browser credential, PostgreSQL stores an irreversible HMAC derived from the upstream Skland account identifier, the associated website user, and authorization time. It does not store Skland UID, display name, Box, or tokens.</li>
+        <li>Credentials are used only to synchronize character data, switch characters, and refresh a Skland session. The site does not read, store, or display inventory materials, sign in automatically, or post, like, or operate community content.</li>
+        <li>The Skland player-information API returns combined data. After sign-in, the server derives a minimum scheduling snapshot and a full-status allowlist. The raw response is not returned to the browser; full-status snapshots remain only in page memory and are not persisted in the browser or server run records.</li>
+        <li>Operator and layout data are sent to the site’s solver to generate rotations, efficiency summaries, and MAA exports.</li>
+      </ul></section>
+      <section><h2 className="font-number">4. Retention</h2><ul>
+        <li>Skland credentials are stored for a fixed <span className="font-number">7</span> days after a successful scan or import. Reloading the page or refreshing a token does not extend this period.</li>
+        <li>A Skland binding remains until you sign out that account, delete all Skland data, or delete the website account. Seven days after the latest authorization it is marked “renewal required”, and authorization must be repeated before synchronization.</li>
+        <li>Server CLI run records are retained for at most <span className="font-number">7</span> days and may be deleted earlier.</li>
+        <li>Browser layouts, Operator Boxes, and recent schedules are normally retained for at most <span className="font-number">30</span> days. “Delete all Skland data” immediately removes Skland-sourced content from them.</li>
+        <li>Incomplete QR-code login records are retained for at most <span className="font-number">10</span> minutes.</li>
+      </ul></section>
+      <section><h2 className="font-number">5. Third-party services</h2><p>QR-code sign-in, credential validation, and character synchronization send requests to Skland and Hypergryph login services and are governed by the <a href="https://assets.skland.com/protocols/agreement.html">Skland License and Service Agreement</a> and <a href="https://assets.skland.com/protocols/privacy.html">Skland Personal Information Protection Policy</a>. The site does not sell your information or use credentials for purposes outside this policy.</p></section>
+      <section><h2 className="font-number">6. Your choices and rights</h2><ul>
+        <li>You may use MAA JSON or a compatible file without signing in to Skland.</li>
+        <li>You may sign out the current Skland account and remove its website-account binding at any time.</li>
+        <li>“Delete all Skland data” removes all login credentials, synchronized data, and linkable server records. It does not delete your official Skland account.</li>
+        <li>To access, correct, or remove information that cannot be deleted through the page, use the contact channel in this policy.</li>
+      </ul></section>
+      <section><h2 className="font-number">7. Minors</h2><p>If you are a minor under applicable law, use Skland synchronization only after a guardian has read and accepted this policy. A guardian may contact us to request deletion.</p></section>
+      <section><h2 className="font-number">8. Security and changes</h2><p>The site uses measures including HTTPS, HttpOnly cookies, same-origin checks, rate limiting, field allowlists, and minimal logging. No internet service can guarantee absolute security. Material changes to this policy or processing purposes will update the version and require renewed consent before the next Skland authorization.</p></section>
+    </> : <>
+      <section><h2 className="font-number">1. Scope and operator</h2><p>This policy applies to “Closure Infrastructure Terminal” (the “site”), an unofficial, non-commercial scheduling assistant with no affiliation, agency relationship, or endorsement from Hypergryph or the official Arknights project.</p><p>Operator: {englishOperatorName}. Contact us through the <a href={identity.contactUrl}>project issue tracker</a>{identity.contactEmail ? <> or <a href={`mailto:${identity.contactEmail}`}>{identity.contactEmail}</a></> : null}.</p></section>
+      <section><h2 className="font-number">2. Information we process</h2><ul>
+        <li>Imported MAA JSON, compatible spreadsheets, layout settings, and generated schedules.</li>
+        <li>Minimum issue reports you submit, including diagnostic number, room summary, and description.</li>
+        <li>Request ID, time, route, error code, response status, and network address forwarded by a proxy when needed for API security and troubleshooting.</li>
+      </ul><p>Logs do not contain request bodies or complete operator data.</p></section>
+      <section><h2 className="font-number">3. Processing and purposes</h2><p>Operator and layout data are sent to the site’s solver to generate rotations, efficiency summaries, training advice, and MAA exports. The browser stores only allowlisted fields needed to continue using the product.</p></section>
+      <section><h2 className="font-number">4. Retention</h2><ul>
+        <li>Server CLI run records are retained for at most <span className="font-number">7</span> days.</li>
+        <li>Browser layouts, Operator Boxes, and recent schedules are normally retained for at most <span className="font-number">30</span> days. After you accept the current policies, they synchronize automatically to the account workspace within the limits above.</li>
+        <li>You may clear browser data at any time using the page controls.</li>
+      </ul></section>
+      <section><h2 className="font-number">5. Your choices and rights</h2><p>You may decline to submit issue reports or synchronize cloud data, and may clear browser data, withdraw synchronization consent, or delete cloud data at any time. To access, correct, or remove information that cannot be deleted through the page, use the contact channel in this policy.</p></section>
+      <section><h2 className="font-number">6. Minors</h2><p>If you are a minor under applicable law, use the site only after a guardian has read and accepted this policy.</p></section>
+      <section><h2 className="font-number">7. Security and changes</h2><p>The site uses measures including HTTPS, same-origin checks, rate limiting, field allowlists, and minimal logging. No internet service can guarantee absolute security. Material changes to this policy or processing purposes will update the version.</p></section>
+    </>}
+  </>;
   return (
-    <LegalDocument eyebrow="可露希尔基建终端" title="隐私政策" effectiveDate={PRIVACY_EFFECTIVE_DATE}>
+    <LegalDocument eyebrow="可露希尔基建终端" title="隐私政策" effectiveDate={PRIVACY_EFFECTIVE_DATE} englishEyebrow="Closure Infrastructure Terminal" englishTitle="Privacy Policy" englishChildren={englishContent}>
       <section>
         <h2>网站账号与邮件</h2>
         <ul>
@@ -27,6 +103,15 @@ export default function PrivacyPage() {
           <li>云端工作区版本最多保留 <span className="font-number">10</span> 份且不超过 <span className="font-number">30</span> 天；普通排班最多保留 <span className="font-number">5</span> 条并滚动保留 <span className="font-number">30</span> 天，另可固定最多 <span className="font-number">5</span> 条长期保存。</li>
           <li>你可以撤销同步同意或删除云端数据；这会删除工作区、Box 密文、排班历史和相关缓存引用。浏览器仍可按你的选择保留清理后的本地副本。</li>
           {sklandEnabled ? <li>森空岛 UID、昵称、Box、凭据和完整状态快照始终不会写入业务数据库；只额外保存不可逆的绑定标识和授权时间。</li> : null}
+        </ul>
+      </section>
+      <section>
+        <h2>主动反馈与复现资料</h2>
+        <ul>
+          <li>只有你在反馈窗口明确勾选同意并提交时，本站才会保存反馈内容和对应的私有复现快照。</li>
+          <li>复现快照包括本次排班的诊断编号、基建布局、提交的干员 Box、轮换设置、轮换次数、菲亚梅塔启用状态和数据来源类型；房间反馈还包括房间摘要，性能反馈还包括求解耗时。</li>
+          <li>这些资料只供管理员复现和处理问题，不会出现在公开反馈响应、产品页面、体验分析或普通日志中，最长保留 <span className="font-number">30</span> 天。</li>
+          <li>删除网站账号会删除账号关联的反馈和复现快照；删除全部森空岛数据会删除可关联到对应森空岛账号的反馈快照。如需提前处理其他反馈资料，可以通过本政策列明的联系渠道提出请求。</li>
         </ul>
       </section>
       <section>
@@ -70,6 +155,7 @@ export default function PrivacyPage() {
           <li>凭证仅用于同步角色数据、切换角色和刷新森空岛会话；本站不会读取、保存或展示仓库物资，不会自动签到，也不会发布、点赞或操作社区内容。</li>
           <li>森空岛的玩家信息接口会一次返回组合数据。登录后，服务端分别生成最小排班快照和完整状态白名单；原始响应不会返回浏览器，完整状态快照只保留在页面内存，不写入浏览器持久化或服务端运行记录。</li>
           <li>干员和布局数据会发送给本站部署的排班求解器，以生成轮班、效率概览和 MAA 导出。</li>
+          <li>你主动提交反馈时，本次求解的复现快照会按本政策“主动反馈与复现资料”一节保存，且不会包含森空岛登录凭证或完整状态快照。</li>
         </ul>
       </section>
 
@@ -78,7 +164,7 @@ export default function PrivacyPage() {
         <ul>
           <li>森空岛登录凭证自扫码或导入成功起固定保存 <span className="font-number">7</span> 天，刷新页面或 token 不会延长期限。</li>
           <li>森空岛绑定记录保留至你退出对应森空岛账号、删除全部森空岛数据或注销网站账号；最近授权满 <span className="font-number">7</span> 天后会标记为“待续期”，必须重新授权才能继续同步。</li>
-          <li>服务端 CLI 运行记录最多保存 <span className="font-number">30</span> 天，以便管理员复现求解器报错和经你主动提交的问题；你也可以随时提前删除。</li>
+          <li>服务端 CLI 运行记录和主动反馈的私有复现快照最多保存 <span className="font-number">30</span> 天，以便管理员复现求解器报错和经你主动提交的问题；你也可以随时提前删除可关联的森空岛数据。</li>
           <li>浏览器中的布局、干员 Box 和最近排班通常最多保存 <span className="font-number">30</span> 天；“删除全部森空岛数据”会立即移除其中的森空岛来源内容。</li>
           <li>未完成的二维码登录记录最多保留 <span className="font-number">10</span> 分钟。</li>
         </ul>
@@ -119,7 +205,7 @@ export default function PrivacyPage() {
           <h2 className="font-number">2. 我们处理哪些信息</h2>
           <ul>
             <li>你导入的 MAA JSON、兼容表格、布局设置和生成的排班结果。</li>
-            <li>你主动提交的最小问题反馈，包括诊断编号、房间摘要和说明。</li>
+            <li>你主动提交的问题说明和房间摘要；对应的私有复现快照按本政策前述专门章节处理。</li>
             <li>保障接口安全和排查故障所需的请求 ID、时间、路由、错误码、响应状态和经代理传递的网络地址。</li>
           </ul>
           <p>日志不记录请求正文或完整干员数据。</p>
@@ -133,7 +219,7 @@ export default function PrivacyPage() {
         <section>
           <h2 className="font-number">4. 保存期限</h2>
           <ul>
-            <li>服务端 CLI 运行记录最多保存 <span className="font-number">30</span> 天，以便管理员复现求解器报错和经你主动提交的问题。</li>
+            <li>服务端 CLI 运行记录和主动反馈的私有复现快照最多保存 <span className="font-number">30</span> 天，以便管理员复现求解器报错和经你主动提交的问题。</li>
             <li>浏览器中的布局、干员 Box 和最近排班通常最多保存 <span className="font-number">30</span> 天；确认当前政策后会按本政策开头所列范围自动同步到账号云端工作区。</li>
             <li>你可以随时使用页面中的清除功能删除浏览器本地数据。</li>
           </ul>

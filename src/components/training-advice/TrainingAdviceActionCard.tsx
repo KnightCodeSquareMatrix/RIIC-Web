@@ -22,6 +22,7 @@ import {
   trainingProductLabel,
   trainingReasonLabel,
 } from "./presentation";
+import { trainingAdviceSkillSummary } from "./skill-selection";
 
 const ACTION_LABELS: Record<string, string> = { acquire: "获取", train: "培养" };
 type ActionCardItem = TrainingNewbieItem | TrainingRecommendation;
@@ -42,6 +43,7 @@ export function TrainingAdviceActionCard({
   const currentText = action.current ? `${en ? "Current" : "当前"} ${trainingLevelText(action.current, en)} → ` : "";
   const targetText = trainingLevelText(action.target, en);
   const operatorName = demoOperatorName(action.operator, locale);
+  const skillSummary = trainingAdviceSkillSummary(action.operator, action.current, action.target);
 
   return (
     <motion.div
@@ -68,6 +70,11 @@ export function TrainingAdviceActionCard({
             }}
             portraitSize={80}
             showSkillTooltip
+            skillTooltipFocusable={skillSummary.skills.length > 0}
+            skillTooltipHighlightIds={skillSummary.highlightedSkillIds}
+            skillTooltipContextLabel={skillSummary.highlightedSkillIds.length
+              ? (en ? "Operator skills · target skill highlighted" : "干员基建技能 · 已标出本次目标")
+              : (en ? "Operator infrastructure skills" : "该干员的基建技能")}
           />
           <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
             <div className="min-w-0">

@@ -11,6 +11,7 @@ import {
   BUILDING_SKILL_ENHANCED_WORD,
   buildingSkillPrefixFor,
   buildingSkillUnlockLabel,
+  buildingSkillUnlockLabelEnglish,
   buildingSkillUnlockPrefix,
   isBuildingSkillEnhanced,
   type OperatorAssetRecord,
@@ -40,7 +41,7 @@ function groupSkillsByPrefix(skills: OperatorBuildingSkillRef[]): OperatorBuildi
 /** 强化技能的尾词用一图流同款蓝色。 */
 function BuildingSkillUnlockText({ elite, level, enhanced }: { elite: number; level: number; enhanced: boolean }) {
   const { locale } = useLanguageDemo();
-  if (locale === "en") return <>{`Elite ${elite}${level > 1 ? ` Lv.${level}` : ""}${enhanced ? " · Upgrade" : ""}`}</>;
+  if (locale === "en") return <>{buildingSkillUnlockLabelEnglish(elite, level, enhanced)}</>;
   if (!enhanced) return <>{buildingSkillUnlockLabel(elite, level)}</>;
   return (
     <>
@@ -98,7 +99,7 @@ export function SkillResultRow({ operator }: SkillResultRowProps) {
                 </div>
               ))
             ) : (
-              <span className="text-sm text-white/55">暂无技能资料</span>
+              <span className="text-sm text-white/55">{locale === "en" ? "No skill data" : "暂无技能资料"}</span>
             )}
           </div>
         )}
@@ -127,7 +128,7 @@ function SkillColumn({
   if (!skill) {
     return (
       <span className="text-sm text-white/55">
-        S<span className="font-number">{index}</span> 暂无技能资料
+        S<span className="font-number">{index}</span> {locale === "en" ? "No skill data" : "暂无技能资料"}
       </span>
     );
   }

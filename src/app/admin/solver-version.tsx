@@ -1,14 +1,17 @@
+"use client";
+
 import { ChevronDown } from "lucide-react";
 
 import type { SolverPingFingerprint } from "@/types";
+import { useLanguageDemo } from "@/language-demo";
 
-function FingerprintValue({ value, dataAttribute }: { value: string | number | null; dataAttribute?: string }) {
+function FingerprintValue({ value, dataAttribute, unavailable }: { value: string | number | null; dataAttribute?: string; unavailable: string }) {
   return (
     <code
       className="mt-1 block break-all font-mono text-xs leading-5 text-foreground"
       {...(dataAttribute ? { [dataAttribute]: value ?? "unavailable" } : {})}
     >
-      {value ?? "未返回"}
+      {value ?? unavailable}
     </code>
   );
 }
@@ -20,6 +23,9 @@ export function SolverVersion({
   plannerReady: boolean;
   solverFingerprint: SolverPingFingerprint | null;
 }) {
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
+  const unavailable = en ? "Unavailable" : "未返回";
   const executableSha256 = solverFingerprint?.pong
     ? solverFingerprint.solverExecutableSha256
     : null;
@@ -34,13 +40,13 @@ export function SolverVersion({
         <div className="flex gap-3">
           <span className="pt-0.5 font-mono text-xs text-muted-foreground" aria-hidden="true">01</span>
           <div>
-            <h2 className="text-lg font-semibold tracking-tight">求解器版本</h2>
-            <p className="mt-1 text-sm text-muted-foreground">线上 Worker 当前实际运行的构建身份与协议能力</p>
+            <h2 className="text-lg font-semibold tracking-tight">{en ? "Solver version" : "求解器版本"}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{en ? "Build identity and protocol capabilities currently running on the production worker" : "线上 Worker 当前实际运行的构建身份与协议能力"}</p>
           </div>
         </div>
         <span className={`inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-medium ${plannerReady ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300" : "bg-destructive/10 text-destructive"}`}>
           <span className={`size-1.5 rounded-full ${plannerReady ? "bg-emerald-500" : "bg-destructive"}`} aria-hidden="true" />
-          {plannerReady ? "运行中" : "未就绪"}
+          {plannerReady ? (en ? "Running" : "运行中") : (en ? "Not ready" : "未就绪")}
         </span>
       </header>
 
@@ -51,63 +57,63 @@ export function SolverVersion({
           data-solver-fingerprint={executableSha256 ?? "unavailable"}
           data-solver-fingerprint-source="ping.result.solver_executable_sha256"
         >
-          {executableSha256 ?? "Worker ping 未返回有效的 solver_executable_sha256"}
+          {executableSha256 ?? (en ? "Worker ping did not return a valid solver_executable_sha256" : "Worker ping 未返回有效的 solver_executable_sha256")}
         </code>
 
         <details className="group mt-4 border-t pt-2" data-solver-fingerprint-details>
           <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-4 rounded-lg px-2 text-sm outline-none transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
             <span>
-              <span className="block font-medium">完整 Worker 指纹</span>
-              <span className="mt-0.5 block text-xs text-muted-foreground">构建提交、协议版本与计划契约</span>
+              <span className="block font-medium">{en ? "Full worker fingerprint" : "完整 Worker 指纹"}</span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">{en ? "Build commit, protocol versions, and plan contract" : "构建提交、协议版本与计划契约"}</span>
             </span>
             <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
-              <span className="group-open:hidden">展开</span>
-              <span className="hidden group-open:inline">收起</span>
+              <span className="group-open:hidden">{en ? "Expand" : "展开"}</span>
+              <span className="hidden group-open:inline">{en ? "Collapse" : "收起"}</span>
               <ChevronDown aria-hidden="true" className="size-4 transition-transform duration-200 group-open:rotate-180" />
             </span>
           </summary>
 
           <div className="grid gap-6 px-2 pb-2 pt-5 lg:grid-cols-[1fr_1fr]">
             <div>
-              <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">构建身份</h3>
+              <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{en ? "Build identity" : "构建身份"}</h3>
               <dl className="mt-3 grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
                 <div>
                   <dt className="text-xs text-muted-foreground">solver.git_commit</dt>
-                  <dd><FingerprintValue value={solverFingerprint?.envelopeSolverGitCommit ?? null} dataAttribute="data-solver-envelope-git-commit" /></dd>
+                  <dd><FingerprintValue value={solverFingerprint?.envelopeSolverGitCommit ?? null} dataAttribute="data-solver-envelope-git-commit" unavailable={unavailable} /></dd>
                 </div>
                 <div>
                   <dt className="text-xs text-muted-foreground">solver.built_at</dt>
-                  <dd><FingerprintValue value={solverFingerprint?.envelopeSolverBuiltAt ?? null} /></dd>
+                  <dd><FingerprintValue value={solverFingerprint?.envelopeSolverBuiltAt ?? null} unavailable={unavailable} /></dd>
                 </div>
                 <div>
                   <dt className="text-xs text-muted-foreground">result.solver_git_commit</dt>
-                  <dd><FingerprintValue value={solverFingerprint?.solverGitCommit ?? null} dataAttribute="data-solver-git-commit" /></dd>
+                  <dd><FingerprintValue value={solverFingerprint?.solverGitCommit ?? null} dataAttribute="data-solver-git-commit" unavailable={unavailable} /></dd>
                 </div>
                 <div>
                   <dt className="text-xs text-muted-foreground">result.solver_built_at</dt>
-                  <dd><FingerprintValue value={solverFingerprint?.solverBuiltAt ?? null} /></dd>
+                  <dd><FingerprintValue value={solverFingerprint?.solverBuiltAt ?? null} unavailable={unavailable} /></dd>
                 </div>
               </dl>
             </div>
 
             <div className="border-t pt-5 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
-              <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">协议能力</h3>
+              <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{en ? "Protocol capabilities" : "协议能力"}</h3>
               <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-4">
                 <div>
                   <dt className="text-xs text-muted-foreground">pong</dt>
-                  <dd className="mt-1 text-sm font-medium">{solverFingerprint ? String(solverFingerprint.pong) : "未返回"}</dd>
+                  <dd className="mt-1 text-sm font-medium">{solverFingerprint ? String(solverFingerprint.pong) : unavailable}</dd>
                 </div>
                 <div>
                   <dt className="text-xs text-muted-foreground">elapsed_ms</dt>
-                  <dd><FingerprintValue value={solverFingerprint?.elapsedMs ?? null} /></dd>
+                  <dd><FingerprintValue value={solverFingerprint?.elapsedMs ?? null} unavailable={unavailable} /></dd>
                 </div>
                 <div>
                   <dt className="text-xs text-muted-foreground">protocol_version</dt>
-                  <dd><FingerprintValue value={solverFingerprint?.protocolVersion ?? null} /></dd>
+                  <dd><FingerprintValue value={solverFingerprint?.protocolVersion ?? null} unavailable={unavailable} /></dd>
                 </div>
                 <div>
                   <dt className="text-xs text-muted-foreground">plan_schema_version</dt>
-                  <dd><FingerprintValue value={solverFingerprint?.planSchemaVersion ?? null} /></dd>
+                  <dd><FingerprintValue value={solverFingerprint?.planSchemaVersion ?? null} unavailable={unavailable} /></dd>
                 </div>
               </dl>
               <p className="mt-4 text-xs text-muted-foreground">supported_plan_schema_versions</p>
@@ -116,14 +122,14 @@ export function SolverVersion({
                   ? solverFingerprint.supportedPlanSchemaVersions.map((version) => (
                     <code key={version} className="rounded-md bg-muted px-2 py-1 font-mono text-xs">v{version}</code>
                   ))
-                  : <span className="text-xs text-muted-foreground">未返回</span>}
+                  : <span className="text-xs text-muted-foreground">{unavailable}</span>}
               </div>
             </div>
 
             <div className="border-t pt-5 lg:col-span-2">
-              <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">计划契约</h3>
+              <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{en ? "Plan contract" : "计划契约"}</h3>
               <p className="mt-3 text-xs text-muted-foreground">plan_contract_sha256</p>
-              <FingerprintValue value={solverFingerprint?.planContractSha256 ?? null} dataAttribute="data-plan-contract-sha256" />
+              <FingerprintValue value={solverFingerprint?.planContractSha256 ?? null} dataAttribute="data-plan-contract-sha256" unavailable={unavailable} />
               <div className="mt-3 overflow-hidden rounded-xl border">
                 {solverFingerprint?.planContractSha256ByVersion.length
                   ? solverFingerprint.planContractSha256ByVersion.map(({ version, sha256 }, index) => (
@@ -136,7 +142,7 @@ export function SolverVersion({
                       <code className="min-w-0 break-all text-right font-mono text-xs leading-5">{sha256}</code>
                     </div>
                   ))
-                  : <p className="px-3 py-2.5 text-xs text-muted-foreground">Worker 未返回按版本划分的契约指纹。</p>}
+                  : <p className="px-3 py-2.5 text-xs text-muted-foreground">{en ? "The worker did not return per-version contract fingerprints." : "Worker 未返回按版本划分的契约指纹。"}</p>}
               </div>
             </div>
           </div>
