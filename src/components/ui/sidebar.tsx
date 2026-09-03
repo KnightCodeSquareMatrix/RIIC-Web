@@ -55,6 +55,7 @@ function useSidebar() {
 
 function SidebarProvider({
   defaultOpen = true,
+  defaultOpenBreakpoint,
   open: openProp,
   onOpenChange: setOpenProp,
   className,
@@ -63,6 +64,7 @@ function SidebarProvider({
   ...props
 }: React.ComponentProps<"div"> & {
   defaultOpen?: boolean
+  defaultOpenBreakpoint?: number
   open?: boolean
   onOpenChange?: (open: boolean) => void
 }) {
@@ -80,8 +82,10 @@ function SidebarProvider({
       .find((entry) => entry.startsWith(`${SIDEBAR_COOKIE_NAME}=`))
     if (cookie) {
       _setOpen(cookie.split("=")[1] === "true")
+    } else if (defaultOpenBreakpoint !== undefined) {
+      _setOpen(window.innerWidth >= defaultOpenBreakpoint)
     }
-  }, [])
+  }, [defaultOpenBreakpoint])
   const open = openProp ?? _open
   const setOpen = React.useCallback(
     (value: boolean | ((value: boolean) => boolean)) => {
