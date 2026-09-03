@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, Ellipsis, FlaskConical, HeartPulse, Keyboard, Loader2, Play, RefreshCw, Search, Settings2, Sparkles, X } from "lucide-react";
+import { Download, Ellipsis, FlaskConical, HeartPulse, Keyboard, Loader2, Play, RefreshCw, Search, Settings2, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { ScheduleBoard, ShiftTabs } from "@/components";
@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PlanResultSummarySkeleton } from "@/components/PlanResultSummarySkeleton";
 
 import type { FactoryRecipe, TradeOrder } from "@/blueprint";
@@ -559,22 +560,21 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                       {en ? "Cancel task" : "取消任务"}
                     </Button>
                   </div>
-                ) : <RunButton canRun={canRun} hasBox={hasBox} plannerReady={plannerReady} requiresAccount={requiresAccount} runCooldownSeconds={runCooldownSeconds} onRun={onRun} />}
+                ) : (
+                  <div className="flex min-w-0 items-center justify-end gap-2 max-sm:justify-self-end">
+                    {operbox && scheduleResult ? (
+                      <Suspense fallback={<Button type="button" variant="outline" size="sm" className="h-9 min-h-0 max-sm:h-11" disabled><FlaskConical />{en ? "Adjust progression" : "调整练度"}</Button>}>
+                        <UpgradeSimulationDialog operbox={operbox} baseline={result ?? scheduleResult} onSimulate={onSimulateUpgrades} onTrialReady={onUpgradeTrialReady} />
+                      </Suspense>
+                    ) : null}
+                    <RunButton canRun={canRun} hasBox={hasBox} plannerReady={plannerReady} requiresAccount={requiresAccount} runCooldownSeconds={runCooldownSeconds} onRun={onRun} />
+                  </div>
+                )}
               </div>
             ) : null}
           >
             {scheduleResult ? (
               <>
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                  {upgradeComparison ? (
-                    <section className="flex min-h-11 flex-wrap items-center gap-1 rounded-lg border border-primary/20 bg-primary/5 p-1" aria-label={en ? "Schedule variant" : "排班方案切换"}>
-                      <Button type="button" size="sm" variant={scheduleVariant === "baseline" ? "default" : "ghost"} aria-pressed={scheduleVariant === "baseline"} onClick={() => onScheduleVariantChange("baseline")}>{en ? "Current plan" : "当前方案"}</Button>
-                      <Button type="button" size="sm" variant={scheduleVariant === "trial" ? "default" : "ghost"} aria-pressed={scheduleVariant === "trial"} onClick={() => onScheduleVariantChange("trial")}><Sparkles />{en ? "Upgrade simulation" : "升级试算方案"}</Button>
-                    </section>
-                  ) : <span />}
-                  {operbox ? <Suspense fallback={<Button type="button" variant="outline" size="sm" className="min-h-11" disabled><FlaskConical />{en ? "Upgrade simulation" : "升级试算"}</Button>}><UpgradeSimulationDialog operbox={operbox} baseline={result ?? scheduleResult} disabled={loading} onSimulate={onSimulateUpgrades} onTrialReady={onUpgradeTrialReady} /></Suspense> : null}
-                </div>
-                {upgradeComparison ? <p className="mb-4 text-sm text-muted-foreground" role="status">{en ? `Viewing the ${scheduleVariant === "trial" ? "upgrade simulation" : "current plan"}. You can switch between both schedules without changing your BOX.` : `正在查看${scheduleVariant === "trial" ? "升级试算方案" : "当前方案"}。两份班表可随时切换，不会改动你的 BOX。`}</p> : null}
                 <Suspense fallback={<DeferredResultLoading />}>
                   <PlanResultSummary
                     profile={scheduleResult.profile}
@@ -585,6 +585,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                     comparison={closestComparison}
                     durationMs={scheduleResult.durationMs}
                     planRevision={scheduleResult.diagnosticId}
+                    animationRevision={result?.diagnosticId ?? scheduleResult.diagnosticId}
                     animateEntrance={animatePlanEntrance}
                     onEntranceConsumed={onPlanEntranceConsumed}
                     onPerformanceIssue={onPerformanceIssue}
@@ -618,6 +619,18 @@ export function InfraCalculator(props: InfraCalculatorProps) {
               activePlan={activePlan}
               searchQuery={operatorQuery}
               animateInitialView={!scheduleResult && animateEmptyScheduleEntrance}
+              viewControlsSlot={upgradeComparison ? (
+                <Tabs
+                  className="w-full sm:w-auto"
+                  value={scheduleVariant}
+                  onValueChange={(value) => onScheduleVariantChange(value as "baseline" | "trial")}
+                >
+                  <TabsList className="grid w-full grid-cols-2 sm:inline-flex sm:w-fit" aria-label={en ? "Schedule variant" : "排班方案切换"}>
+                    <TabsTrigger value="baseline">{en ? "Current plan" : "当前方案"}</TabsTrigger>
+                    <TabsTrigger value="trial">{en ? "Adjusted progression" : "调整练度方案"}</TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              ) : undefined}
               mobileActionsSlot={renderExportActions("mobile")}
               shiftInfoSlot={(
                 <div className="flex flex-wrap items-center justify-end gap-2 max-sm:w-full max-sm:justify-between" data-shift-actions>

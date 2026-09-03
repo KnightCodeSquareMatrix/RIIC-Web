@@ -88,6 +88,7 @@ export function PlanResultSummary({
   comparison,
   durationMs,
   planRevision,
+  animationRevision = planRevision,
   animateEntrance = true,
   onEntranceConsumed,
   onPerformanceIssue,
@@ -101,6 +102,7 @@ export function PlanResultSummary({
   comparison: ShiftComparison | null;
   durationMs: number;
   planRevision?: string;
+  animationRevision?: string;
   animateEntrance?: boolean;
   onEntranceConsumed?: (revision: string) => void;
   onPerformanceIssue: () => void;
@@ -164,7 +166,7 @@ export function PlanResultSummary({
         {animateOnMount ? (
           <motion.span key={`accent-${planRevision}`} className="pointer-events-none absolute inset-x-0 top-0 z-20 h-0.5 origin-left bg-[#FFD501]" aria-hidden="true" initial={{ scaleX: 0, opacity: 0 }} animate={{ scaleX: 1, opacity: [0, 1, 1, 0] }} transition={{ duration: shouldReduceMotion ? 0 : 0.62, delay: shouldReduceMotion ? 0 : 0.08, times: [0, 0.15, 0.82, 1], ease: MOTION_EASE_OUT }} />
         ) : null}
-        <div key={planRevision} className="grid min-h-[84px] grid-cols-[minmax(10rem,1.05fr)_minmax(0,5fr)] items-stretch max-[820px]:grid-cols-1">
+        <div key={animationRevision} className="grid min-h-[84px] grid-cols-[minmax(10rem,1.05fr)_minmax(0,5fr)] items-stretch max-[820px]:grid-cols-1">
           <motion.button type="button" className={cn("group relative flex min-w-0 items-center justify-between gap-3 overflow-hidden bg-[#272A2B] px-5 py-3 text-left text-white focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-[#FFD800] max-[820px]:row-span-1 max-sm:min-h-16", comparison && "row-span-2")} data-plan-details-trigger="efficiency" data-plan-primary-details-trigger whileHover={shouldReduceMotion ? undefined : { x: 2 }} whileTap={shouldReduceMotion ? undefined : { scale: 0.985 }} onClick={() => openDetails("efficiency")}>
             <motion.span className="min-w-0" data-plan-metric initial={animateOnMount ? { opacity: 0, x: shouldReduceMotion ? 0 : -10 } : false} animate={{ opacity: 1, x: 0 }} transition={{ duration: shouldReduceMotion ? MOTION_DURATION.feedback : 0.36, delay: shouldReduceMotion ? 0 : 0.1, ease: MOTION_EASE_OUT }}>
               <strong className="block truncate text-lg font-medium"><span className="font-number">{layout.template}</span> {en ? "Base Plan" : "基建方案"}</strong>

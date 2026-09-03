@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { SetupActionButton } from "@/components/setup/SetupActionButton";
 import { RotationSettings } from "@/components/RotationSettings";
 import { FiammettaSettings } from "@/components/FiammettaSettings";
 import { WizardSteps } from "@/components/interior/wizard-steps";
@@ -271,7 +272,7 @@ export function SetupDialog({
       }
       onOpenChange(nextOpen);
     }}>
-      <DialogContent data-setup-dialog className="h-[min(660px,calc(100dvh-1rem))] max-w-[calc(100%-1rem)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-[24px] p-0 sm:max-w-[min(880px,calc(100%-2rem))] sm:rounded-[32px]">
+      <DialogContent data-setup-dialog className="h-[min(720px,calc(100dvh-1rem))] max-w-[calc(100%-1rem)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-[24px] p-0 sm:max-w-[min(960px,calc(100%-2rem))] sm:rounded-[32px]">
         <Tabs
           value={step === "facilities" ? "layout" : step}
           onValueChange={(value) => {
@@ -330,16 +331,15 @@ export function SetupDialog({
                         </p>
                       </div>
                     </div>
-                    <Button
+                    <SetupActionButton
                       type="button"
-                      variant="ghost"
-                      className="h-10 shrink-0"
+                      className="shrink-0"
                       aria-expanded={showImportOptions}
                       aria-controls="setup-import-options"
                       onClick={() => setShowImportOptions((current) => !current)}
                     >
                       {showImportOptions ? (en ? "Collapse" : "收起") : (en ? "Change" : "更换")}
-                    </Button>
+                    </SetupActionButton>
                   </section>
                 ) : null}
 
@@ -436,9 +436,9 @@ export function SetupDialog({
                               aria-invalid={Boolean(inputError)}
                               aria-describedby={inputError ? "setup-box-error" : undefined}
                             />
-                            <Button type="button" variant="outline" className="h-10 w-full" disabled={!maaPaste.trim()} onClick={() => void importMaaPaste()}>
+                            <SetupActionButton type="button" className="w-full" disabled={!maaPaste.trim()} onClick={() => void importMaaPaste()}>
                               {en ? "Import JSON" : "导入 JSON"}
-                            </Button>
+                            </SetupActionButton>
                           </div>
                         ) : null}
                       </TabsContent>
@@ -454,7 +454,15 @@ export function SetupDialog({
                           </Alert>
                         ) : (
                           <Suspense fallback={<div className="grid min-h-40 place-items-center border border-dashed border-border text-sm text-muted-foreground">{en ? "Loading operator roster" : "正在加载干员列表"}</div>}>
-                            <ManualOperboxPicker operbox={boxSource === "sample" ? null : operbox} onApply={applyManualBox} />
+                            <ManualOperboxPicker
+                              compact
+                              operbox={operbox}
+                              title={en ? "Build your operator BOX" : "手动选择干员 Box"}
+                              description={en
+                                ? "Ownership and elite stages are shared with Adjust progression."
+                                : "持有与精英阶段会同步用于排班和调整练度。"}
+                              onApply={applyManualBox}
+                            />
                           </Suspense>
                         )}
                       </TabsContent>
@@ -475,9 +483,9 @@ export function SetupDialog({
                   <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">{en ? "Data management" : "数据管理"}</summary>
                   <div className="flex flex-wrap items-center justify-between gap-3 py-3">
                     <span className="text-xs text-muted-foreground">{en ? <>Data is stored in this browser for <span className="font-number">30</span> days.</> : <>数据在此浏览器保存 <span className="font-number">30</span> 天。</>}</span>
-                    <Button type="button" variant="outline" className="min-h-11" onClick={() => setClearConfirmOpen(true)}>
+                    <SetupActionButton type="button" variant="destructive" onClick={() => setClearConfirmOpen(true)}>
                       <Trash2 />{en ? "Clear local data" : "清除本地数据"}
-                    </Button>
+                    </SetupActionButton>
                   </div>
                 </details>
               </motion.div>
@@ -524,7 +532,10 @@ export function SetupDialog({
                     <details className="setup-quiet-details pt-1">
                       <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">{en ? "Advanced tools" : "高级工具"}</summary>
                       <div className="grid gap-2 py-3 sm:grid-cols-2">
-                        <Label pressable className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-[4px] border border-dashed text-sm font-medium text-muted-foreground transition-[color,border-color,background-color] duration-[var(--motion-duration-state)] ease-[var(--motion-ease-out)] hover:border-primary hover:bg-muted/40 hover:text-primary">
+                        <SetupActionButton
+                          asLabel
+                          className="w-full cursor-pointer"
+                        >
                           <Upload className="size-4" />{en ? "Import layout" : "导入布局"}
                           <input
                             className="sr-only"
@@ -536,10 +547,10 @@ export function SetupDialog({
                               event.currentTarget.value = "";
                             }}
                           />
-                        </Label>
-                        <Button type="button" variant="outline" className="min-h-11 w-full" onClick={onDownloadLayout}>
+                        </SetupActionButton>
+                        <SetupActionButton type="button" className="w-full" onClick={onDownloadLayout}>
                           <FileJson />{en ? "Export layout" : "导出布局"}
-                        </Button>
+                        </SetupActionButton>
                         {resultClearWarningDismissed ? (
                           <Button type="button" variant="ghost" className="min-h-11 w-fit" onClick={onRestoreResultClearWarning}>
                             {en ? "Restore change warning" : "恢复切换提示"}
