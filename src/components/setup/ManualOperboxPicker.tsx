@@ -164,17 +164,30 @@ const ManualOperatorCard = memo(function ManualOperatorCard({
 export function ManualOperboxPicker({
   operbox,
   onApply,
+  title,
+  description,
+  applyLabel,
+  applyDisabled = false,
+  scheduledOperatorNames,
 }: {
   operbox: OperBoxEntry[] | null;
   onApply: (entries: OperBoxEntry[]) => void;
+  title?: string;
+  description?: string;
+  applyLabel?: string;
+  applyDisabled?: boolean;
+  scheduledOperatorNames?: readonly string[];
 }) {
   const { locale } = useLanguageDemo();
   const en = locale === "en";
   const [query, setQuery] = useState("");
   const [onlyOwned, setOnlyOwned] = useState(false);
+  const [rosterScope, setRosterScope] = useState<"scheduled" | "other">("scheduled");
   const [visibleLimit, setVisibleLimit] = useState(PAGE_SIZE);
   const [stages, setStages] = useState<Record<string, ManualOperboxStage>>(() => initialStages(operbox));
   const deferredQuery = useDeferredValue(query.trim().toLocaleLowerCase(locale === "en" ? "en-US" : "zh-CN"));
+  const scheduledNames = useMemo(() => new Set(scheduledOperatorNames ?? []), [scheduledOperatorNames]);
+  const hasScheduledOperators = scheduledNames.size > 0;
 
   const handleStageChange = useCallback((id: string, stage: ManualOperboxStage) => {
     setStages((current) => ({ ...current, [id]: stage }));
@@ -189,20 +202,21 @@ export function ManualOperboxPicker({
 
   const filteredOperators = useMemo(() => MANUAL_ROSTER.filter((operator) => {
     const stage = stages[operator.id] ?? "none";
+    if (hasScheduledOperators && (rosterScope === "scheduled") !== scheduledNames.has(operator.name)) return false;
     if (onlyOwned && stage === "none") return false;
     if (!deferredQuery) return true;
     const displayName = demoOperatorName(operator.name, locale).toLocaleLowerCase(locale === "en" ? "en-US" : "zh-CN");
     return operator.name.toLocaleLowerCase("zh-CN").includes(deferredQuery)
       || displayName.includes(deferredQuery)
       || operator.id.toLocaleLowerCase("en-US").includes(deferredQuery);
-  }), [deferredQuery, locale, onlyOwned, stages]);
+  }), [deferredQuery, hasScheduledOperators, locale, onlyOwned, rosterScope, scheduledNames, stages]);
 
   function resetListView() {
     setVisibleLimit(PAGE_SIZE);
   }
 
   function applySelection() {
-    if (!ownedCount) return;
+    if (!ownedCount || applyDisabled) return;
     onApply(buildManualOperbox(MANUAL_ROSTER, stages));
   }
 
@@ -210,11 +224,11 @@ export function ManualOperboxPicker({
     <div className="grid gap-4" data-manual-operbox-picker>
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border/70 pb-4">
         <div className="min-w-0">
-          <h4 className="text-sm font-semibold">{en ? "Build your operator Box" : "手动选择干员 Box"}</h4>
+          <h4 className="text-sm font-semibold">{title ?? (en ? "Build your operator Box" : "手动选择干员 Box")}</h4>
           <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">
-            {en
+            {description ?? (en
               ? "Choose ownership and elite stage. Levels use each stage cap so level-gated infrastructure skills remain available."
-              : "选择持有状态与精英阶段；等级按该阶段上限估算，避免漏掉有等级要求的基建技能。"}
+              : "选择持有状态与精英阶段；等级按该阶段上限估算，避免漏掉有等级要求的基建技能。")}
           </p>
         </div>
         <Button
@@ -223,10 +237,10 @@ export function ManualOperboxPicker({
           className={APPLY_BUTTON_CLASS}
           style={APPLY_BUTTON_STYLE}
           data-manual-operbox-apply
-          disabled={!ownedCount}
+          disabled={!ownedCount || applyDisabled}
           onClick={applySelection}
         >
-          <Check />{en ? "Use this Box" : "使用这份 Box"}
+          <Check />{applyLabel ?? (en ? "Use this Box" : "使用这份 Box")}
         </Button>
       </div>
 
@@ -293,6 +307,17 @@ export function ManualOperboxPicker({
         </div>
       </div>
 
+      {hasScheduledOperators ? (
+        <div className="grid grid-cols-2 gap-2" aria-label={en ? "Operator list scope" : "干员列表范围"}>
+          <Button type="button" variant={rosterScope === "scheduled" ? "default" : "outline"} className="min-h-11" aria-pressed={rosterScope === "scheduled"} onClick={() => { setRosterScope("scheduled"); resetListView(); }}>
+            {en ? "In this schedule" : "本次进入排班"}
+          </Button>
+          <Button type="button" variant={rosterScope === "other" ? "default" : "outline"} className="min-h-11" aria-pressed={rosterScope === "other"} onClick={() => { setRosterScope("other"); resetListView(); }}>
+            {en ? "Not scheduled" : "未进排班"}
+          </Button>
+        </div>
+      ) : null}
+
       {filteredOperators.length ? (
         <>
           <div className="grid gap-3 md:grid-cols-2">
@@ -332,10 +357,10 @@ export function ManualOperboxPicker({
               className={APPLY_BUTTON_CLASS}
               style={APPLY_BUTTON_STYLE}
               data-manual-operbox-apply
-              disabled={!ownedCount}
+              disabled={!ownedCount || applyDisabled}
               onClick={applySelection}
             >
-              <Check />{en ? `Use this Box (${ownedCount})` : `使用这份 Box（${ownedCount} 名）`}
+              <Check />{applyLabel ?? (en ? `Use this Box (${ownedCount})` : `使用这份 Box（${ownedCount} 名）`)}
             </Button>
           </div>
         </>

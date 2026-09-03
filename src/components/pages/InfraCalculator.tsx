@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, Ellipsis, FlaskConical, HeartPulse, Keyboard, Loader2, Play, RefreshCw, Search, Settings2, X } from "lucide-react";
+import { Download, Ellipsis, FlaskConical, HeartPulse, Keyboard, Loader2, Play, RefreshCw, Search, Settings2, Sparkles, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { ScheduleBoard, ShiftTabs } from "@/components";
@@ -27,12 +27,14 @@ import type {
   BaseBlueprint,
   FeedbackData,
   MaaPlan,
+  OperBoxEntry,
   PublicPlanData,
   ShiftComparison,
 } from "@/types";
 
 const PlanResultSummary = lazy(() => loadClientFeature("planResultSummary").then((module) => ({ default: module.PlanResultSummary })));
 const ShortcutGuideDialog = lazy(() => loadClientFeature("sharedComponents").then((module) => ({ default: module.ShortcutGuideDialog })));
+const UpgradeSimulationDialog = lazy(() => import("@/components/UpgradeSimulationDialog").then((module) => ({ default: module.UpgradeSimulationDialog })));
 
 function DeferredResultLoading() {
   return <PlanResultSummarySkeleton />;
@@ -325,6 +327,7 @@ export interface InfraCalculatorProps {
   closestComparison: ShiftComparison | null;
   resultClearNotice: string | null;
   feedbackResult: FeedbackData | null;
+  operbox: OperBoxEntry[] | null;
   sampleLoading: boolean;
   loading: boolean;
   canRun: boolean;
@@ -354,6 +357,11 @@ export interface InfraCalculatorProps {
   onDismissOnboarding: () => void;
   onOpenSetup: () => void;
   onRun: () => void;
+  onSimulateUpgrades: (trialOperbox: OperBoxEntry[]) => Promise<PublicPlanData>;
+  upgradeComparison: { trial: PublicPlanData } | null;
+  scheduleVariant: "baseline" | "trial";
+  onScheduleVariantChange: (variant: "baseline" | "trial") => void;
+  onUpgradeTrialReady: (trial: PublicPlanData) => void;
   onCancelRun: () => void;
   onSetActiveShift: (shift: number) => void;
   onMarkIssue: (row: RoomRow) => void;
@@ -372,8 +380,9 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     activePlan, closestComparison,
     resultClearNotice,
     feedbackResult,
+    operbox,
     sampleLoading, loading, canRun, runCooldownSeconds, hasBox, hasPersonalBox, feedbackDisabledForSampleBox, plannerReady, websiteAuthenticated, showOnboarding, taskQueue, animatePlanEntrance, animateEmptyScheduleEntrance, onPlanEntranceConsumed, requiresAccount = false, accountControl,
-    onRunSampleTrial, onStartPersonalFlow, onDismissOnboarding, onOpenSetup, onRun, onCancelRun,
+    onRunSampleTrial, onStartPersonalFlow, onDismissOnboarding, onOpenSetup, onRun, onSimulateUpgrades, upgradeComparison, scheduleVariant, onScheduleVariantChange, onUpgradeTrialReady, onCancelRun,
     onSetActiveShift, onMarkIssue, onPerformanceIssue,
     onFactoryRecipeChange, onTradeOrderChange,
     onDownloadMaa,
@@ -556,6 +565,16 @@ export function InfraCalculator(props: InfraCalculatorProps) {
           >
             {scheduleResult ? (
               <>
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                  {upgradeComparison ? (
+                    <section className="flex min-h-11 flex-wrap items-center gap-1 rounded-lg border border-primary/20 bg-primary/5 p-1" aria-label={en ? "Schedule variant" : "排班方案切换"}>
+                      <Button type="button" size="sm" variant={scheduleVariant === "baseline" ? "default" : "ghost"} aria-pressed={scheduleVariant === "baseline"} onClick={() => onScheduleVariantChange("baseline")}>{en ? "Current plan" : "当前方案"}</Button>
+                      <Button type="button" size="sm" variant={scheduleVariant === "trial" ? "default" : "ghost"} aria-pressed={scheduleVariant === "trial"} onClick={() => onScheduleVariantChange("trial")}><Sparkles />{en ? "Upgrade simulation" : "升级试算方案"}</Button>
+                    </section>
+                  ) : <span />}
+                  {operbox ? <Suspense fallback={<Button type="button" variant="outline" size="sm" className="min-h-11" disabled><FlaskConical />{en ? "Upgrade simulation" : "升级试算"}</Button>}><UpgradeSimulationDialog operbox={operbox} baseline={result ?? scheduleResult} disabled={loading} onSimulate={onSimulateUpgrades} onTrialReady={onUpgradeTrialReady} /></Suspense> : null}
+                </div>
+                {upgradeComparison ? <p className="mb-4 text-sm text-muted-foreground" role="status">{en ? `Viewing the ${scheduleVariant === "trial" ? "upgrade simulation" : "current plan"}. You can switch between both schedules without changing your BOX.` : `正在查看${scheduleVariant === "trial" ? "升级试算方案" : "当前方案"}。两份班表可随时切换，不会改动你的 BOX。`}</p> : null}
                 <Suspense fallback={<DeferredResultLoading />}>
                   <PlanResultSummary
                     profile={scheduleResult.profile}
@@ -592,7 +611,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
             ) : rows.length > 0 ? <ScheduleBoard
               rows={rows}
               layout={layout}
-              planRevision={result?.diagnosticId}
+              planRevision={scheduleResult?.diagnosticId}
               currentMoraleByOperator={currentMoraleByOperator}
               activeShift={activeShift}
               shiftDirection={shiftDirection}
@@ -611,8 +630,8 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                     </span>
                   ) : null}
                   <ShiftTabs
-                    maaJson={result?.maa}
-                    rotation={result?.rotation}
+                    maaJson={scheduleResult?.maa}
+                    rotation={scheduleResult?.rotation}
                     active={activeShift}
                     closest={closestComparison?.planIndex}
                     onChange={handleSetActiveShift}

@@ -65,6 +65,7 @@ import {
   type OnboardingPreference,
 } from "./onboarding";
 import { normalizeOperboxEntries } from "./operbox-normalization";
+import { upgradeSimulationBoxSource } from "./upgrade-simulation";
 import { effectiveFiammettaSetting, resolvePlanPresentationLayout } from "./plan-presentation";
 import {
   applyLocalLayoutPatch,
@@ -305,6 +306,8 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   const [sampleLoading, setSampleLoading] = useState(false);
   const sampleTrialInFlightRef = useRef(false);
   const [result, setResult] = useState<PublicPlanData | null>(null);
+  const [upgradeComparison, setUpgradeComparison] = useState<{ baseline: PublicPlanData; trial: PublicPlanData } | null>(null);
+  const [scheduleVariant, setScheduleVariant] = useState<"baseline" | "trial">("baseline");
   const [loading, setLoading] = useState(false);
   const [cliReady, setCliReady] = useState(false);
   const [taskQueueEnabled, setTaskQueueEnabled] = useState(false);
@@ -380,11 +383,19 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     setLoading(Boolean(planTask.taskId));
   }, [planTask.taskId]);
 
-  // 公开排班结果只包含产品页面需要的效率、MAA 与轮换数据。
-  const scheduleResult = result;
+  // 升级试算不覆盖原求解结果；两份完整班表在此处切换展示。
+  const scheduleResult = scheduleVariant === "trial" && upgradeComparison?.baseline === result
+    ? upgradeComparison.trial
+    : result;
+  useEffect(() => {
+    if (upgradeComparison && upgradeComparison.baseline !== result) {
+      setUpgradeComparison(null);
+      setScheduleVariant("baseline");
+    }
+  }, [result, upgradeComparison]);
   const activePlan = scheduleResult?.maa.plans?.[activeShift];
   const activeRotationShift = scheduleResult?.rotation.shifts?.[activeShift];
-  const activeTrainingRoomShift = result?.trainingRoom?.shifts[activeShift];
+  const activeTrainingRoomShift = scheduleResult?.trainingRoom?.shifts[activeShift];
   const [baseRows, setBaseRows] = useState<RoomRow[]>([]);
   useEffect(() => {
     let cancelled = false;
@@ -1040,6 +1051,23 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     await runPlanForLayout(layout);
   }
 
+  async function handleSimulateUpgrades(trialOperbox: OperBoxEntry[]): Promise<PublicPlanData> {
+    if (!operbox) throw new Error(locale === "en" ? "Import operator data first." : "请先导入干员数据。");
+    if (!trialOperbox.some((entry) => entry.own)) throw new Error(locale === "en" ? "Select at least one operator for the simulation." : "请至少选择一名干员进行试算。");
+    trackTelemetry({ type: "interaction", name: "upgrade_simulation_submit", page: "calculator" });
+    const response = await computePlan({
+      layout,
+      operbox: normalizeOperboxEntries(trialOperbox),
+      sourceName: locale === "en" ? "Upgrade simulation Box.json" : "升级试算 Box.json",
+      // 示例数据的替代 BOX 不能沿用 sample；森空岛来源则保留其数据归属标签。
+      boxSource: upgradeSimulationBoxSource(boxSource),
+      rotation: rotationProfile,
+      fiammetta_enable: effectiveFiammettaSetting(trialOperbox, rotationProfile, fiammettaEnabled),
+    });
+    trackTelemetry({ type: "interaction", name: "upgrade_simulation_response", page: "calculator" });
+    return response;
+  }
+
   async function handleRunSampleTrial(): Promise<boolean> {
     if (sampleTrialInFlightRef.current) return false;
     sampleTrialInFlightRef.current = true;
@@ -1646,6 +1674,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       closestComparison,
       resultClearNotice,
       feedbackResult,
+      operbox,
       sampleLoading,
       loading,
       canRun,
@@ -1693,6 +1722,16 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       onDismissOnboarding: dismissOnboarding,
       onOpenSetup: handleProtectedSetup,
       onRun: handleProtectedRun,
+      onSimulateUpgrades: handleSimulateUpgrades,
+      upgradeComparison: upgradeComparison?.baseline === result ? { trial: upgradeComparison.trial } : null,
+      scheduleVariant,
+      onScheduleVariantChange: setScheduleVariant,
+      onUpgradeTrialReady: (trial: PublicPlanData) => {
+        if (!result) return;
+        setUpgradeComparison({ baseline: result, trial });
+        setScheduleVariant("trial");
+        setActiveShift(0);
+      },
       onCancelRun: handleCancelRun,
       onSetActiveShift: setActiveShift,
       onMarkIssue: handleMarkIssue,
