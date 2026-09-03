@@ -1,11 +1,12 @@
 "use client";
 
-import { FlaskConical, Loader2, TrendingUp } from "lucide-react";
-import { useRef, useState } from "react";
+import { FlaskConical, Loader2 } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
 
 import { ManualOperboxPicker } from "@/components/setup/ManualOperboxPicker";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useLanguageDemo } from "@/language-demo";
 import { cn } from "@/lib/utils";
 import type { MaaRoom, OperBoxEntry, PublicPlanData } from "@/types";
@@ -51,11 +52,23 @@ export function UpgradeSimulationDialog({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pendingRef = useRef(false);
-  const scheduledOperatorNames = baseline.maa.plans.flatMap((plan) => (
-    Object.values(plan.rooms) as Array<MaaRoom[] | undefined>
-  ).flatMap((rooms) => (rooms ?? []).flatMap((room) => room.operators.flatMap((operator) => (
-    typeof operator === "string" ? [operator] : operator?.name ? [operator.name] : []
-  )))));
+  const scheduledOperatorShifts = useMemo(() => {
+    const shiftsByName: Record<string, number[]> = {};
+    baseline.maa.plans.slice(0, 3).forEach((plan, planIndex) => {
+      const shift = planIndex + 1;
+      (Object.values(plan.rooms) as Array<MaaRoom[] | undefined>)
+        .flatMap((rooms) => rooms ?? [])
+        .flatMap((room) => room.operators)
+        .forEach((operator) => {
+          const name = typeof operator === "string" ? operator : operator?.name;
+          if (!name) return;
+          const shifts = shiftsByName[name] ?? [];
+          if (!shifts.includes(shift)) shiftsByName[name] = [...shifts, shift];
+        });
+    });
+    return shiftsByName;
+  }, [baseline.maa.plans]);
+  const scheduledOperatorNames = useMemo(() => Object.keys(scheduledOperatorShifts), [scheduledOperatorShifts]);
 
   const apply = async (nextBox: OperBoxEntry[]) => {
     if (pendingRef.current) return;
@@ -74,10 +87,11 @@ export function UpgradeSimulationDialog({
       const nextTrial = await onSimulate(nextBox);
       setTrial(nextTrial);
       onTrialReady?.(nextTrial);
+      setOpen(false);
     } catch (reason) {
       setError(reason instanceof Error
         ? reason.message
-        : en ? "Upgrade simulation failed. Please try again later." : "升级试算失败，请稍后重试。");
+        : en ? "Progression adjustment failed. Please try again later." : "调整练度试算失败，请稍后重试。");
     } finally {
       pendingRef.current = false;
       setPending(false);
@@ -86,67 +100,72 @@ export function UpgradeSimulationDialog({
 
   return (
     <>
-      <Button type="button" variant="outline" size="sm" className="min-h-11" disabled={disabled} onClick={() => setOpen(true)}>
-        <FlaskConical />{en ? "Upgrade simulation" : "升级试算"}
+      <Button type="button" variant="outline" size="sm" className="h-9 min-h-0 max-sm:h-11" disabled={disabled} onClick={() => setOpen(true)}>
+        <FlaskConical />{en ? "Adjust progression" : "调整练度"}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-1rem)] max-w-[min(90rem,calc(100%-1rem))] overflow-y-auto p-0 sm:w-[calc(100%-2rem)] sm:max-w-[min(90rem,calc(100%-2rem))]" aria-describedby="upgrade-simulation-description">
-          <DialogHeader className="border-b border-border/70 px-5 py-5 sm:px-7">
-            <DialogTitle className="flex items-center gap-2 text-xl">
-              <TrendingUp className="size-5" />{en ? "Same-layout upgrade simulation" : "同布局升级试算"}
+        <DialogContent data-upgrade-simulation-dialog className="h-[min(720px,calc(100dvh-1rem))] max-w-[calc(100%-1rem)] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden rounded-[24px] p-0 sm:max-w-[min(1060px,calc(100%-2rem))] sm:rounded-[32px]" aria-describedby="upgrade-simulation-description">
+          <DialogHeader className="border-b border-border/70 px-4 py-3 pr-14 sm:flex-row sm:items-center sm:gap-5 sm:px-6 sm:py-4 sm:pr-16">
+            <DialogTitle className="shrink-0 text-lg">
+              {en ? "Same-layout progression adjustment" : "同布局调整练度"}
             </DialogTitle>
-            <DialogDescription id="upgrade-simulation-description" className="mt-2 leading-6">
+            <DialogDescription id="upgrade-simulation-description" className="max-w-3xl leading-5">
               {en
-                ? "Operators in this schedule are shown first. Switch to Not scheduled to search for any operator and change their elite stage. Unowned operators can be included as a hypothetical upgrade without changing your BOX or current schedule."
-                : "默认先看本次上岗干员。需要补人时切到“未进排班”，再搜索任意干员并调整精英化状态；未拥有干员会作为假设获得加入本次计算，不会改动 BOX 或当前班表。"}
+                ? "Adjust ownership or elite stage and solve with the same base layout. Successful changes sync to the manual BOX; the current schedule stays available for comparison."
+                : "调整干员持有或精英化状态，按当前布局重新求解；成功后同步到手动 BOX，当前班表保留用于对比。"}
             </DialogDescription>
           </DialogHeader>
-          <div className="px-5 py-5 sm:px-7">
-            <ManualOperboxPicker
-              operbox={operbox}
-              scheduledOperatorNames={scheduledOperatorNames}
-              title={en ? "Choose operators to simulate" : "选择要试算的干员"}
-              description={en
-                ? "Change at least one operator's ownership or elite stage. You can search for unowned operators and assign any available elite stage."
-                : "至少调整一名干员的精英化状态；可以搜索未拥有干员并设置任意精英化阶段。"}
-              applyLabel={pending
-                ? (en ? "Solving again…" : "正在重新求解…")
-                : (en ? "Run upgrade simulation" : "运行升级试算")}
-              applyDisabled={pending}
-              onApply={(entries) => void apply(entries)}
-            />
-            {pending ? (
-              <p className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="size-4 animate-spin" />
-                {en ? "Solving again with the same layout…" : "正在按同一布局重新求解…"}
-              </p>
-            ) : null}
-            {error ? <p className="mt-4 border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive" role="alert">{error}</p> : null}
-            {trial ? (
-              <section className="mt-5 border border-primary/25 bg-primary/5 p-4" aria-label={en ? "Upgrade simulation result" : "升级试算结果"}>
-                <h3 className="font-semibold">{en ? "Simulation complete" : "试算完成"}</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {en
-                    ? "Use the Current plan / Upgrade simulation controls on the main screen to inspect both complete schedules."
-                    : "已在主界面新增“当前方案 / 升级试算方案”切换，可直接查看两份完整班表。"}
+          <ScrollArea className="min-h-0" viewportClassName="overflow-x-hidden">
+            <div className="px-4 py-3 sm:px-6 sm:py-4">
+              <ManualOperboxPicker
+                compact
+                operbox={operbox}
+                scheduledOperatorNames={scheduledOperatorNames}
+                scheduledOperatorShifts={scheduledOperatorShifts}
+                scheduledShiftCount={Math.min(3, baseline.maa.plans.length)}
+                title={en ? "Operators for this simulation" : "本次试算干员"}
+                description={en
+                  ? "Change at least one operator; this selection is shared with Schedule Settings."
+                  : "至少调整一名干员；这里的选择会与排班设置同步。"}
+                applyLabel={pending
+                  ? (en ? "Solving again…" : "正在重新求解…")
+                  : (en ? "Solve with adjustments" : "按调整重新试算")}
+                applyDisabled={pending}
+                onApply={(entries) => void apply(entries)}
+              />
+              {pending ? (
+                <p className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin" />
+                  {en ? "Solving again with the same layout…" : "正在按同一布局重新求解…"}
                 </p>
-                <dl className="mt-4 grid grid-cols-3 gap-2">
-                  {METRICS.map(({ key, en: englishLabel, zh }) => {
-                    const change = delta(baseline.rotation.daily[key], trial.rotation.daily[key], en);
-                    return (
-                      <div key={key} className="border border-primary/15 bg-background p-3">
-                        <dt className="text-xs text-muted-foreground">{en ? `${englishLabel} efficiency` : `${zh}效率`}</dt>
-                        <dd className="mt-1 font-number text-lg font-semibold">{metric(trial.rotation.daily[key])}</dd>
-                        <span className={cn("mt-1 block text-xs font-medium", change.startsWith("+") ? "text-emerald-700" : change.startsWith("-") ? "text-red-700" : "text-muted-foreground")}>
-                          {en ? `vs current ${change}` : `较当前 ${change}`}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </dl>
-              </section>
-            ) : null}
-          </div>
+              ) : null}
+              {error ? <p className="mt-3 border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive" role="alert">{error}</p> : null}
+              {trial ? (
+                <section className="mt-3 flex flex-wrap items-center gap-3 border border-primary/25 bg-primary/5 px-3 py-2.5" aria-label={en ? "Progression adjustment result" : "调整练度结果"}>
+                  <div className="min-w-48 flex-1">
+                    <h3 className="font-semibold">{en ? "Simulation complete" : "试算完成"}</h3>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {en ? "The manual BOX is synced. Switch between both schedules on the main screen." : "手动 BOX 已同步，可在主界面切换当前方案与调整练度方案。"}
+                    </p>
+                  </div>
+                  <dl className="grid w-full grid-cols-3 divide-x divide-primary/15 border border-primary/15 bg-background sm:w-auto">
+                    {METRICS.map(({ key, en: englishLabel, zh }) => {
+                      const change = delta(baseline.rotation.daily[key], trial.rotation.daily[key], en);
+                      return (
+                        <div key={key} className="min-w-24 px-3 py-1.5">
+                          <dt className="text-[11px] text-muted-foreground">{en ? englishLabel : zh}</dt>
+                          <dd className="font-number text-base font-semibold">{metric(trial.rotation.daily[key])}</dd>
+                          <span className={cn("block text-[11px] font-medium", change.startsWith("+") ? "text-emerald-700" : change.startsWith("-") ? "text-red-700" : "text-muted-foreground")}>
+                            {en ? `vs current ${change}` : `较当前 ${change}`}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </dl>
+                </section>
+              ) : null}
+            </div>
+          </ScrollArea>
         </DialogContent>
       </Dialog>
     </>

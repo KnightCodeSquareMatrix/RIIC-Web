@@ -8,6 +8,8 @@ import operatorCatalogJson from "../../generated/arkntools/operator-catalog.json
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { LoadMore } from "@/components/ui/load-more";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { SetupActionButton } from "@/components/setup/SetupActionButton";
 import { demoOperatorName, useLanguageDemo, type DemoLocale } from "@/language-demo";
 import { cn } from "@/lib/utils";
 import {
@@ -19,8 +21,6 @@ import {
 import type { OperBoxEntry } from "@/types";
 
 const PAGE_SIZE = 48;
-const APPLY_BUTTON_CLASS = "h-9 min-w-[152px] px-4 text-xs font-semibold max-sm:min-h-9 max-sm:min-w-[152px] sm:h-9 sm:min-w-[152px] sm:px-4";
-const APPLY_BUTTON_STYLE = { borderRadius: 18 } as const;
 
 type CatalogOperator = {
   id: string;
@@ -54,6 +54,18 @@ const STAGE_COLOR: Record<ManualOperboxStage, string> = {
   e2: "#FFD800",
 };
 
+const SHIFT_BADGE_CLASS = [
+  "border-[#C7A600]/40 bg-[#FFD501]/18 text-[#695700] dark:text-[#FFE36B]",
+  "border-sky-500/35 bg-sky-500/10 text-sky-800 dark:text-sky-300",
+  "border-emerald-500/35 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300",
+] as const;
+
+function shiftLabel(shift: number, en: boolean, short = false): string {
+  if (en) return short ? `S${shift}` : `Shift ${shift}`;
+  if (short) return `${shift}班`;
+  return ["第一班", "第二班", "第三班"][shift - 1] ?? `第${shift}班`;
+}
+
 function initialStages(operbox: OperBoxEntry[] | null): Record<string, ManualOperboxStage> {
   const byId = new Map(operbox?.map((entry) => [entry.id, entry]) ?? []);
   const byName = new Map(operbox?.map((entry) => [entry.name, entry]) ?? []);
@@ -81,11 +93,15 @@ const ManualOperatorCard = memo(function ManualOperatorCard({
   operator,
   stage,
   locale,
+  compact = false,
+  scheduledShifts,
   onStageChange,
 }: {
   operator: ManualRosterOperator;
   stage: ManualOperboxStage;
   locale: DemoLocale;
+  compact?: boolean;
+  scheduledShifts?: readonly number[];
   onStageChange: (id: string, stage: ManualOperboxStage) => void;
 }) {
   const en = locale === "en";
@@ -93,9 +109,14 @@ const ManualOperatorCard = memo(function ManualOperatorCard({
   const maxElite = maxEliteForRarity(operator.rarity);
 
   return (
-    <article className="grid gap-3 rounded-[4px] border border-border/80 bg-background p-3 [content-visibility:auto] [contain-intrinsic-size:8.5rem]">
-      <div className="flex min-w-0 items-center gap-3">
-        <div className="size-12 shrink-0 overflow-hidden border border-border bg-muted sm:size-14">
+    <article className={cn(
+      "rounded-[4px] border border-border/80 bg-background [content-visibility:auto]",
+      compact
+        ? "grid grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-x-2 gap-y-2 p-2 [contain-intrinsic-size:4.5rem] sm:grid-cols-[2.5rem_minmax(6.5rem,0.72fr)_minmax(13rem,1.28fr)]"
+        : "grid gap-3 p-3 [contain-intrinsic-size:8.5rem]",
+    )}>
+      <div className={cn("flex min-w-0 items-center", compact ? "contents" : "gap-3")}>
+        <div className={cn("shrink-0 overflow-hidden border border-border bg-muted", compact ? "size-10" : "size-12 sm:size-14")}>
           {operator.portrait ? (
             <img
               src={operator.portrait}
@@ -108,16 +129,30 @@ const ManualOperatorCard = memo(function ManualOperatorCard({
         </div>
         <div className="min-w-0">
           <h5 className="truncate text-sm font-semibold">{displayName}</h5>
-          <p className="font-number mt-1 text-xs text-muted-foreground">
-            {operator.rarity}★ · {en ? `Up to E${maxElite}` : `最高精${maxElite}`}
-          </p>
+          <div className={cn("flex min-w-0 flex-wrap items-center gap-1", compact ? "mt-0.5" : "mt-1")}>
+            <span className="font-number text-xs text-muted-foreground">
+              {operator.rarity}★ · {en ? `Up to E${maxElite}` : `最高精${maxElite}`}
+            </span>
+            {scheduledShifts?.map((shift) => (
+              <span
+                key={shift}
+                className={cn(
+                  "inline-flex h-4 items-center border px-1 text-[10px] font-semibold leading-none",
+                  SHIFT_BADGE_CLASS[(shift - 1) % SHIFT_BADGE_CLASS.length],
+                )}
+                title={shiftLabel(shift, en)}
+              >
+                {shiftLabel(shift, en, true)}
+              </span>
+            ))}
+          </div>
         </div>
       </div>
 
       <div
         role="radiogroup"
         aria-label={en ? `${displayName} ownership and elite stage` : `${displayName}持有与精英阶段`}
-        className="grid grid-cols-4 gap-1.5"
+        className={cn("grid grid-cols-4", compact ? "col-span-2 gap-1 sm:col-span-1" : "gap-1.5")}
       >
         {STAGES.map((option) => {
           const requestedElite = option === "e2" ? 2 : option === "e1" ? 1 : 0;
@@ -145,12 +180,7 @@ const ManualOperatorCard = memo(function ManualOperatorCard({
                 disabled && "cursor-not-allowed border-border/50 bg-muted/30 text-muted-foreground/40",
               )}
             >
-              <span className="inline-flex items-center justify-center gap-1">
-                <span
-                  className={cn("size-2 shrink-0 rounded-[2px]", disabled && "opacity-30")}
-                  style={{ backgroundColor: STAGE_COLOR[option] }}
-                  aria-hidden="true"
-                />
+              <span className="inline-flex items-center justify-center">
                 {stageLabel(option, locale)}
               </span>
             </Button>
@@ -169,6 +199,9 @@ export function ManualOperboxPicker({
   applyLabel,
   applyDisabled = false,
   scheduledOperatorNames,
+  scheduledOperatorShifts,
+  scheduledShiftCount = 0,
+  compact = false,
 }: {
   operbox: OperBoxEntry[] | null;
   onApply: (entries: OperBoxEntry[]) => void;
@@ -177,17 +210,30 @@ export function ManualOperboxPicker({
   applyLabel?: string;
   applyDisabled?: boolean;
   scheduledOperatorNames?: readonly string[];
+  scheduledOperatorShifts?: Readonly<Record<string, readonly number[]>>;
+  scheduledShiftCount?: number;
+  compact?: boolean;
 }) {
   const { locale } = useLanguageDemo();
   const en = locale === "en";
   const [query, setQuery] = useState("");
   const [onlyOwned, setOnlyOwned] = useState(false);
   const [rosterScope, setRosterScope] = useState<"scheduled" | "other">("scheduled");
+  const [scheduledShift, setScheduledShift] = useState<"all" | number>("all");
   const [visibleLimit, setVisibleLimit] = useState(PAGE_SIZE);
   const [stages, setStages] = useState<Record<string, ManualOperboxStage>>(() => initialStages(operbox));
   const deferredQuery = useDeferredValue(query.trim().toLocaleLowerCase(locale === "en" ? "en-US" : "zh-CN"));
-  const scheduledNames = useMemo(() => new Set(scheduledOperatorNames ?? []), [scheduledOperatorNames]);
+  const scheduledNames = useMemo(() => new Set([
+    ...(scheduledOperatorNames ?? []),
+    ...Object.keys(scheduledOperatorShifts ?? {}),
+  ]), [scheduledOperatorNames, scheduledOperatorShifts]);
   const hasScheduledOperators = scheduledNames.size > 0;
+  const shiftCounts = useMemo(() => Array.from({ length: scheduledShiftCount }, (_, index) => {
+    const shift = index + 1;
+    return MANUAL_ROSTER.reduce((count, operator) => (
+      scheduledOperatorShifts?.[operator.name]?.includes(shift) ? count + 1 : count
+    ), 0);
+  }), [scheduledOperatorShifts, scheduledShiftCount]);
 
   const handleStageChange = useCallback((id: string, stage: ManualOperboxStage) => {
     setStages((current) => ({ ...current, [id]: stage }));
@@ -203,13 +249,14 @@ export function ManualOperboxPicker({
   const filteredOperators = useMemo(() => MANUAL_ROSTER.filter((operator) => {
     const stage = stages[operator.id] ?? "none";
     if (hasScheduledOperators && (rosterScope === "scheduled") !== scheduledNames.has(operator.name)) return false;
+    if (rosterScope === "scheduled" && scheduledShift !== "all" && !scheduledOperatorShifts?.[operator.name]?.includes(scheduledShift)) return false;
     if (onlyOwned && stage === "none") return false;
     if (!deferredQuery) return true;
     const displayName = demoOperatorName(operator.name, locale).toLocaleLowerCase(locale === "en" ? "en-US" : "zh-CN");
     return operator.name.toLocaleLowerCase("zh-CN").includes(deferredQuery)
       || displayName.includes(deferredQuery)
       || operator.id.toLocaleLowerCase("en-US").includes(deferredQuery);
-  }), [deferredQuery, hasScheduledOperators, locale, onlyOwned, rosterScope, scheduledNames, stages]);
+  }), [deferredQuery, hasScheduledOperators, locale, onlyOwned, rosterScope, scheduledNames, scheduledOperatorShifts, scheduledShift, stages]);
 
   function resetListView() {
     setVisibleLimit(PAGE_SIZE);
@@ -221,54 +268,61 @@ export function ManualOperboxPicker({
   }
 
   return (
-    <div className="grid gap-4" data-manual-operbox-picker>
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border/70 pb-4">
-        <div className="min-w-0">
-          <h4 className="text-sm font-semibold">{title ?? (en ? "Build your operator Box" : "手动选择干员 Box")}</h4>
-          <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">
+    <div className={cn("grid", compact ? "gap-2.5" : "gap-4")} data-manual-operbox-picker data-density={compact ? "compact" : "comfortable"}>
+      <div className={cn("flex flex-wrap justify-between gap-3 border-b border-border/70", compact ? "items-center pb-2.5" : "items-start pb-4")}>
+        <div className={cn("min-w-0", compact && "flex flex-1 flex-wrap items-baseline gap-x-3 gap-y-1 max-sm:w-full max-sm:flex-none")}>
+          <h4 className="shrink-0 text-sm font-semibold">{title ?? (en ? "Build your operator Box" : "手动选择干员 Box")}</h4>
+          <p className={cn("max-w-2xl text-xs text-muted-foreground", compact ? "leading-4" : "mt-1 leading-5")}>
             {description ?? (en
               ? "Choose ownership and elite stage. Levels use each stage cap so level-gated infrastructure skills remain available."
               : "选择持有状态与精英阶段；等级按该阶段上限估算，避免漏掉有等级要求的基建技能。")}
           </p>
+          {compact ? (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs" aria-live="polite">
+              <strong className="font-number text-foreground">{en ? `${ownedCount} owned` : `已拥有 ${ownedCount} 名`}</strong>
+              <span className="font-number text-muted-foreground">{en ? `E0 ${summary.e0} · E1 ${summary.e1} · E2 ${summary.e2}` : `精0 ${summary.e0} · 精1 ${summary.e1} · 精2 ${summary.e2}`}</span>
+              <span className="font-number text-muted-foreground">{en ? `${summary.none} unowned` : `未拥有 ${summary.none} 名`}</span>
+            </div>
+          ) : null}
         </div>
-        <Button
+        <SetupActionButton
           type="button"
-          size="dialog"
-          className={APPLY_BUTTON_CLASS}
-          style={APPLY_BUTTON_STYLE}
+          className={cn(compact && "max-sm:w-full")}
           data-manual-operbox-apply
           disabled={!ownedCount || applyDisabled}
           onClick={applySelection}
         >
           <Check />{applyLabel ?? (en ? "Use this Box" : "使用这份 Box")}
-        </Button>
+        </SetupActionButton>
       </div>
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs" aria-live="polite">
-        <strong className="font-number text-foreground">{en ? `${ownedCount} owned` : `已拥有 ${ownedCount} 名`}</strong>
-        <span className="font-number text-muted-foreground">{en ? `E0 ${summary.e0} · E1 ${summary.e1} · E2 ${summary.e2}` : `精0 ${summary.e0} · 精1 ${summary.e1} · 精2 ${summary.e2}`}</span>
-        <span className="font-number text-muted-foreground">{en ? `${summary.none} unowned` : `未拥有 ${summary.none} 名`}</span>
-      </div>
+      {!compact ? (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs" aria-live="polite">
+          <strong className="font-number text-foreground">{en ? `${ownedCount} owned` : `已拥有 ${ownedCount} 名`}</strong>
+          <span className="font-number text-muted-foreground">{en ? `E0 ${summary.e0} · E1 ${summary.e1} · E2 ${summary.e2}` : `精0 ${summary.e0} · 精1 ${summary.e1} · 精2 ${summary.e2}`}</span>
+          <span className="font-number text-muted-foreground">{en ? `${summary.none} unowned` : `未拥有 ${summary.none} 名`}</span>
+        </div>
+      ) : null}
 
-      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+      <div className={cn("grid gap-2", compact ? "lg:grid-cols-[minmax(14rem,1fr)_auto]" : "sm:grid-cols-[minmax(0,1fr)_auto]")}>
         <label className="relative min-w-0">
-          <Search className="pointer-events-none absolute left-3 top-3.5 size-4 text-muted-foreground" aria-hidden="true" />
+          <Search className={cn("pointer-events-none absolute left-3 size-4 text-muted-foreground", compact ? "top-2.5 max-sm:top-3.5" : "top-3.5")} aria-hidden="true" />
           <Input
             value={query}
             onChange={(event) => {
               setQuery(event.target.value);
               resetListView();
             }}
-            className="h-11 pl-9"
+            className={cn("pl-9", compact ? "h-9 max-sm:h-11" : "h-11")}
             placeholder={en ? "Search operator" : "搜索干员"}
             aria-label={en ? "Search operator" : "搜索干员"}
           />
         </label>
-        <div className="grid grid-cols-3 gap-2" data-manual-operbox-actions>
+        <div className={cn("grid grid-cols-3", compact ? "gap-1.5" : "gap-2")} data-manual-operbox-actions>
           <Button
             type="button"
             variant={onlyOwned ? "default" : "outline"}
-            className="min-h-11 min-w-0 overflow-hidden px-2 text-ellipsis text-xs sm:px-3 sm:text-sm"
+            className={cn("min-w-0 overflow-hidden px-2 text-ellipsis text-xs sm:px-3", compact ? "h-9" : "min-h-11 sm:text-sm")}
             aria-pressed={onlyOwned}
             onClick={() => {
               setOnlyOwned((current) => !current);
@@ -280,7 +334,7 @@ export function ManualOperboxPicker({
           <Button
             type="button"
             variant="outline"
-            className="min-h-11 min-w-0 overflow-hidden px-2 text-ellipsis text-xs sm:px-3 sm:text-sm"
+            className={cn("min-w-0 overflow-hidden px-2 text-ellipsis text-xs sm:px-3", compact ? "h-9" : "min-h-11 sm:text-sm")}
             onClick={() => {
               setStages(Object.fromEntries(
                 MANUAL_ROSTER.map((operator) => [operator.id, maximumStageForRarity(operator.rarity)]),
@@ -294,7 +348,7 @@ export function ManualOperboxPicker({
           <Button
             type="button"
             variant="ghost"
-            className="min-h-11 min-w-0 overflow-hidden px-2 text-ellipsis text-xs sm:px-3 sm:text-sm"
+            className={cn("min-w-0 overflow-hidden px-2 text-ellipsis text-xs sm:px-3", compact ? "h-9" : "min-h-11 sm:text-sm")}
             disabled={!ownedCount}
             onClick={() => {
               setStages(Object.fromEntries(MANUAL_ROSTER.map((operator) => [operator.id, "none"])));
@@ -308,31 +362,69 @@ export function ManualOperboxPicker({
       </div>
 
       {hasScheduledOperators ? (
-        <div className="grid grid-cols-2 gap-2" aria-label={en ? "Operator list scope" : "干员列表范围"}>
-          <Button type="button" variant={rosterScope === "scheduled" ? "default" : "outline"} className="min-h-11" aria-pressed={rosterScope === "scheduled"} onClick={() => { setRosterScope("scheduled"); resetListView(); }}>
-            {en ? "In this schedule" : "本次进入排班"}
-          </Button>
-          <Button type="button" variant={rosterScope === "other" ? "default" : "outline"} className="min-h-11" aria-pressed={rosterScope === "other"} onClick={() => { setRosterScope("other"); resetListView(); }}>
-            {en ? "Not scheduled" : "未进排班"}
-          </Button>
+        <div className={cn(compact ? "flex flex-wrap items-center gap-1.5" : "flex flex-wrap items-center gap-2")}>
+          <Tabs
+            value={rosterScope}
+            onValueChange={(value) => {
+              const nextScope = value as "scheduled" | "other";
+              setRosterScope(nextScope);
+              if (nextScope === "other") setScheduledShift("all");
+              resetListView();
+            }}
+          >
+            <TabsList aria-label={en ? "Operator list scope" : "干员列表范围"}>
+              <TabsTrigger value="scheduled">
+                {en ? "In schedule" : "进入排班"}<span className="font-number opacity-65">{scheduledNames.size}</span>
+              </TabsTrigger>
+              <TabsTrigger value="other">
+                {en ? "Not scheduled" : "未进排班"}<span className="font-number opacity-65">{MANUAL_ROSTER.length - scheduledNames.size}</span>
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+          {compact && rosterScope === "scheduled" && scheduledShiftCount > 0 ? (
+            <div className="ml-1 flex flex-wrap items-center gap-1 border-l border-border/70 pl-2" aria-label={en ? "Schedule shift" : "排班班次"}>
+              <Button type="button" size="sm" variant={scheduledShift === "all" ? "secondary" : "ghost"} aria-pressed={scheduledShift === "all"} onClick={() => { setScheduledShift("all"); resetListView(); }}>
+                {en ? "All shifts" : "全部班次"}
+              </Button>
+              {shiftCounts.map((count, index) => {
+                const shift = index + 1;
+                return (
+                  <Button
+                    key={shift}
+                    type="button"
+                    size="sm"
+                    variant={scheduledShift === shift ? "secondary" : "ghost"}
+                    className={cn("border", scheduledShift === shift ? SHIFT_BADGE_CLASS[index % SHIFT_BADGE_CLASS.length] : "border-transparent")}
+                    aria-pressed={scheduledShift === shift}
+                    onClick={() => { setScheduledShift(shift); resetListView(); }}
+                  >
+                    {shiftLabel(shift, en)}<span className="font-number opacity-65">{count}</span>
+                  </Button>
+                );
+              })}
+            </div>
+          ) : null}
         </div>
       ) : null}
 
       {filteredOperators.length ? (
         <>
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className={cn("grid md:grid-cols-2", compact ? "gap-2" : "gap-3")}>
             {filteredOperators.slice(0, visibleLimit).map((operator) => (
               <ManualOperatorCard
                 key={operator.id}
                 operator={operator}
                 stage={stages[operator.id] ?? "none"}
                 locale={locale}
+                compact={compact}
+                scheduledShifts={rosterScope === "scheduled" ? scheduledOperatorShifts?.[operator.name] : undefined}
                 onStageChange={handleStageChange}
               />
             ))}
           </div>
           <LoadMore
             auto={false}
+            className={compact ? "min-h-9" : undefined}
             hasMore={visibleLimit < filteredOperators.length}
             onLoad={() => {
               setVisibleLimit((current) => current + PAGE_SIZE);
@@ -350,19 +442,18 @@ export function ManualOperboxPicker({
               end: "已显示全部符合条件的干员",
             }}
           />
-          <div className="flex justify-end">
-            <Button
-              type="button"
-              size="dialog"
-              className={APPLY_BUTTON_CLASS}
-              style={APPLY_BUTTON_STYLE}
-              data-manual-operbox-apply
-              disabled={!ownedCount || applyDisabled}
-              onClick={applySelection}
-            >
-              <Check />{applyLabel ?? (en ? `Use this Box (${ownedCount})` : `使用这份 Box（${ownedCount} 名）`)}
-            </Button>
-          </div>
+          {!compact ? (
+            <div className="flex justify-end">
+              <SetupActionButton
+                type="button"
+                data-manual-operbox-apply
+                disabled={!ownedCount || applyDisabled}
+                onClick={applySelection}
+              >
+                <Check />{applyLabel ?? (en ? `Use this Box (${ownedCount})` : `使用这份 Box（${ownedCount} 名）`)}
+              </SetupActionButton>
+            </div>
+          ) : null}
         </>
       ) : (
         <div className="grid min-h-32 place-items-center border border-dashed border-border text-center text-sm text-muted-foreground">

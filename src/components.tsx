@@ -1581,8 +1581,8 @@ export function ScheduleBoard({
 
   return (
     <div className="flex flex-col gap-7">
-      <div className="flex flex-wrap items-center justify-between gap-3 max-sm:flex-col max-sm:items-stretch">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-3 max-sm:flex-col max-sm:items-stretch" data-schedule-toolbar>
+        <div className="flex flex-wrap items-center gap-2 max-sm:w-full" data-schedule-view-controls>
           {supportsCompactLayout && viewMode ? (
             <Tabs
               className="hidden lg:block"
@@ -1594,7 +1594,7 @@ export function ScheduleBoard({
                 onViewModeChange?.(nextViewMode);
               }}
             >
-              <TabsList>
+              <TabsList aria-label={en ? "Schedule layout" : "排班布局切换"}>
                 <TabsTrigger value="compact">{en ? "Overview" : "一图流布局"}</TabsTrigger>
                 <TabsTrigger value="list">{en ? "List" : "列表式布局"}</TabsTrigger>
               </TabsList>
