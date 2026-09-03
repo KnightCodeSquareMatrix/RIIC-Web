@@ -267,11 +267,12 @@ test("public deployment automation is repository-bound, opt-in, and secret-safe"
   assert.match(qualityWorkflow, /deployment_authorized: \$\{\{ steps\.deploy_authorization\.outputs\.authorized \}\}/);
   assert.match(qualityWorkflow, /Authorize deployment trigger[\s\S]+EVENT_NAME: \$\{\{ github\.event_name \}\}[\s\S]+DEPLOY_REQUESTED: \$\{\{ inputs\.deploy \}\}[\s\S]+test "\$GITHUB_SHA" = "\$EXPECTED_SHA"[\s\S]+authorized=true[\s\S]+printf 'authorized=%s\\n'/);
   assert.match(qualityWorkflow, /Upload release for deployment[\s\S]+needs\.changes\.outputs\.deployment_authorized == 'true'/);
-  assert.match(qualityWorkflow, /deploy:[\s\S]+needs\.changes\.outputs\.deployment_authorized == 'true'[\s\S]+needs\.quality\.result == 'success'[\s\S]+needs\.changes\.outputs\.deploy_required == 'true'[\s\S]+vars\.DEPLOY_AUTOMATION_ENABLED == '1'[\s\S]+github\.repository == 'KnightCodeSquareMatrix\/RIIC-Web'/);
+  assert.match(qualityWorkflow, /deploy:\r?\n {4}needs: \[changes, quality, release_artifact\][\s\S]+uses: \.\/\.github\/workflows\/deploy\.yml[\s\S]+deployment_authorized: \$\{\{ needs\.changes\.outputs\.deployment_authorized == 'true' \}\}[\s\S]+deploy_required: \$\{\{ needs\.changes\.outputs\.deploy_required == 'true' \}\}/);
   assert.match(deployWorkflow, /^on:\r?\n {2}workflow_call:/m);
   assert.doesNotMatch(deployWorkflow, /^ {2}(?:push|workflow_dispatch):/m);
   assert.doesNotMatch(deployWorkflow, /allow_workflow_dispatch|github\.event_name/);
-  assert.match(deployWorkflow, /github\.ref_name == 'main'[\s\S]+vars\.DEPLOY_AUTOMATION_ENABLED == '1'[\s\S]+github\.repository == 'KnightCodeSquareMatrix\/RIIC-Web'/);
+  assert.match(deployWorkflow, /deployment_authorized:[\s\S]+type: boolean[\s\S]+deploy_required:[\s\S]+type: boolean/);
+  assert.match(deployWorkflow, /inputs\.deployment_authorized &&[\s\S]+inputs\.deploy_required &&[\s\S]+github\.ref_name == 'main'[\s\S]+vars\.DEPLOY_AUTOMATION_ENABLED == '1'[\s\S]+github\.repository == 'KnightCodeSquareMatrix\/RIIC-Web'/);
   assert.match(deployWorkflow, /DEPLOY_APPROVED_SOLVER_SHA256: \$\{\{ vars\.DEPLOY_APPROVED_SOLVER_SHA256 \}\}[\s\S]+DEPLOY_EXPECTED_REPOSITORY: KnightCodeSquareMatrix\/RIIC-Web[\s\S]+DEPLOY_RELEASE_HELPER_CONTRACT: "6"/);
   assert.doesNotMatch(deployWorkflow, /DEPLOY_PREPARE_HELPER_CONTRACT|arknights-infra-prepare-release/);
   assert.match(deployWorkflow, /DEPLOY_PUBLIC_HEALTH_URL: \$\{\{ secrets\.DEPLOY_PUBLIC_HEALTH_URL \}\}/);
