@@ -267,7 +267,7 @@ test("public deployment automation is repository-bound, opt-in, and secret-safe"
   assert.match(qualityWorkflow, /deployment_authorized: \$\{\{ steps\.deploy_authorization\.outputs\.authorized \}\}/);
   assert.match(qualityWorkflow, /Authorize deployment trigger[\s\S]+EVENT_NAME: \$\{\{ github\.event_name \}\}[\s\S]+DEPLOY_REQUESTED: \$\{\{ inputs\.deploy \}\}[\s\S]+test "\$GITHUB_SHA" = "\$EXPECTED_SHA"[\s\S]+authorized=true[\s\S]+printf 'authorized=%s\\n'/);
   assert.match(qualityWorkflow, /Upload release for deployment[\s\S]+needs\.changes\.outputs\.deployment_authorized == 'true'/);
-  assert.match(qualityWorkflow, /deploy:\r?\n {4}needs: \[changes, quality, release_artifact\][\s\S]+uses: \.\/\.github\/workflows\/deploy\.yml[\s\S]+deployment_authorized: \$\{\{ needs\.changes\.outputs\.deployment_authorized == 'true' \}\}[\s\S]+deploy_required: \$\{\{ needs\.changes\.outputs\.deploy_required == 'true' \}\}/);
+  assert.match(qualityWorkflow, /deploy:\r?\n {4}needs: \[changes, quality, release_artifact\][\s\S]+always\(\) &&[\s\S]+needs\.changes\.result == 'success'[\s\S]+needs\.quality\.result == 'success'[\s\S]+needs\.release_artifact\.result == 'success'[\s\S]+needs\.changes\.outputs\.deployment_authorized == 'true'[\s\S]+needs\.changes\.outputs\.deploy_required == 'true'[\s\S]+uses: \.\/\.github\/workflows\/deploy\.yml[\s\S]+deployment_authorized: \$\{\{ needs\.changes\.outputs\.deployment_authorized == 'true' \}\}[\s\S]+deploy_required: \$\{\{ needs\.changes\.outputs\.deploy_required == 'true' \}\}/);
   assert.match(deployWorkflow, /^on:\r?\n {2}workflow_call:/m);
   assert.doesNotMatch(deployWorkflow, /^ {2}(?:push|workflow_dispatch):/m);
   assert.doesNotMatch(deployWorkflow, /allow_workflow_dispatch|github\.event_name/);
