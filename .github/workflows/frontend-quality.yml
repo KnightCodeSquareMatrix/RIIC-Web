@@ -350,6 +350,9 @@ jobs:
       - name: Chromium end-to-end tests
         run: npm run test:e2e
 
+      - name: WebKit Skland QR smoke test
+        run: npm run test:e2e:webkit:skland-qr
+
       - name: Production profile enabled boundary
         run: npm run test:e2e:production-profile
 

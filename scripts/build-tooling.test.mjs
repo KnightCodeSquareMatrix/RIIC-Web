@@ -184,7 +184,8 @@ test("Next and the verified deployment keep real public GET responses compressed
   assert.doesNotMatch(deployWorkflow, /verify-public-compression\.mjs "\$DEPLOY_PUBLIC_HEALTH_URL"/);
 });
 
-test("CI gates releases on Chromium and schedules the full WebKit suite", async () => {
+test("CI gates releases on Chromium and a WebKit Skland smoke test, then schedules the full WebKit suite", async () => {
+  const packageJson = JSON.parse(await readRepoFile("package.json"));
   const workflow = await readRepoFile(".github/workflows/frontend-quality.yml");
   const playwrightConfig = await readRepoFile("playwright.config.ts");
   const e2eFiles = await readdir(new URL("../e2e/", import.meta.url));
@@ -192,7 +193,11 @@ test("CI gates releases on Chromium and schedules the full WebKit suite", async 
   const readinessTestCount = (await Promise.all(readinessSpecs.map((file) => readRepoFile(`e2e/${file}`))))
     .reduce((count, source) => count + (source.match(/^test\(/gm)?.length ?? 0), 0);
 
-  assert.match(workflow, /browser_e2e:[\s\S]+npm run test:e2e[\s\S]+npm run test:e2e:production-profile/);
+  assert.equal(
+    packageJson.scripts["test:e2e:webkit:skland-qr"],
+    "playwright test e2e/production-readiness-skland.spec.ts --project=webkit --grep \"Skland login exposes both methods\"",
+  );
+  assert.match(workflow, /browser_e2e:[\s\S]+npm run test:e2e[\s\S]+npm run test:e2e:webkit:skland-qr[\s\S]+npm run test:e2e:production-profile/);
   assert.match(workflow, /webkit_e2e:[\s\S]+github\.event_name == 'schedule'[\s\S]+npm run test:e2e:webkit/);
   assert.match(workflow, /quality:[\s\S]+needs: \[pull_request_policy, changes, repository_hygiene, checks, browser_e2e\]/);
   assert.doesNotMatch(workflow, /quality:[\s\S]+needs: \[[^\]]*webkit_e2e/);
