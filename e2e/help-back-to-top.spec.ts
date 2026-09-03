@@ -2,8 +2,8 @@ import { expect, test } from "@playwright/test";
 
 test("help pages provide an accessible back-to-top control", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.setViewportSize({ width: 375, height: 812 });
-  await page.goto("/help/owned-operators?issue=unexpected-operators");
+  await page.setViewportSize({ width: 375, height: 320 });
+  await page.goto("/help/import-operators");
 
   const backToTop = page.locator("[data-help-back-to-top]");
   const helpMenu = page.getByRole("button", { name: "帮助目录", exact: true });
@@ -11,7 +11,10 @@ test("help pages provide an accessible back-to-top control", async ({ page }) =>
   await expect(backToTop).toHaveAttribute("aria-hidden", "true");
   await expect(backToTop).toHaveAttribute("tabindex", "-1");
 
-  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await expect.poll(() => page.evaluate(() => {
+    window.scrollTo(0, document.documentElement.scrollHeight);
+    return window.scrollY;
+  })).toBeGreaterThanOrEqual(320);
   await expect(backToTop).toHaveAttribute("aria-hidden", "false");
   await expect(backToTop).toBeVisible();
   await expect(backToTop).toHaveAccessibleName("回到顶部");
