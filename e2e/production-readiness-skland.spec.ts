@@ -49,6 +49,7 @@ test("Skland login exposes both methods and starts QR only after explicit consen
     }),
   }));
   await seedPreferences(page);
+  await page.addInitScript(() => window.localStorage.setItem("infra-demo-locale", "zh"));
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
   await expect(page.locator("[data-skland-account-control]")).toHaveCount(0);
@@ -83,6 +84,16 @@ test("Skland login exposes both methods and starts QR only after explicit consen
   await expect(page.getByRole("link", { name: "本站服务条款" }).first()).toHaveAttribute("href", "/terms");
   await expect(page.getByRole("link", { name: "本站隐私政策" }).first()).toHaveAttribute("href", "/privacy");
   await expect(page.getByText(/skland-kit/i)).toHaveCount(0);
+
+  await page.evaluate(() => document.documentElement.classList.add("dark"));
+  const qrVisual = page.locator("[data-skland-qr-visual]");
+  const qrImage = page.getByRole("img", { name: "森空岛登录二维码" });
+  await expect(qrVisual).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  await expect(qrVisual).toHaveCSS("forced-color-adjust", "none");
+  expect(await qrVisual.evaluate((element) => getComputedStyle(element).colorScheme)).toMatch(/\bonly\b.*\blight\b|\blight\b.*\bonly\b/);
+  await expect(qrImage.locator("path").nth(0)).toHaveAttribute("fill", "#FFFFFF");
+  await expect(qrImage.locator("path").nth(1)).toHaveAttribute("fill", "#000000");
+  await expect(qrImage).toBeVisible();
 
   for (const viewport of [
     { width: 390, height: 844 },
