@@ -68,6 +68,7 @@ import { roomGridTone } from "@/schedule-view-presentation";
 import { SklandLoginPanel } from "@/skland-components";
 import {
   deriveSklandBuildingMetrics,
+  sklandTradingOrderRewardLabel,
   type SklandStatusMetric,
 } from "@/skland-status-metrics";
 import type {
@@ -785,7 +786,7 @@ function RoomCard({ room }: { room: SklandInfrastructureRoom }) {
                 {room.orders.map((order, index) => (
                   <p key={`${room.key}-order-${index}`} className="font-number">
                     订单 {index + 1}：交付 {order.delivery.reduce((total, item) => total + item.count, 0)}
-                    ，获得 {order.reward.count} {order.reward.type === "orundum" ? "合成玉" : "龙门币"}
+                    ，获得 {order.reward.count} {sklandTradingOrderRewardLabel(order)}
                   </p>
                 ))}
               </div>
