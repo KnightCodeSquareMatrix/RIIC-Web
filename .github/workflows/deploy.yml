@@ -7,6 +7,14 @@ on:
         description: Immutable release artifact produced by the post-merge build job
         required: true
         type: string
+      deployment_authorized:
+        description: The caller validated that this event may deploy the verified ref
+        required: true
+        type: boolean
+      deploy_required:
+        description: The verified change scope requires an application release
+        required: true
+        type: boolean
 
 permissions:
   contents: read
@@ -14,6 +22,8 @@ permissions:
 jobs:
   deploy:
     if: >-
+      inputs.deployment_authorized &&
+      inputs.deploy_required &&
       (github.ref_name == 'main' || github.ref_name == 'develop') &&
       vars.DEPLOY_AUTOMATION_ENABLED == '1' &&
       github.repository == 'KnightCodeSquareMatrix/RIIC-Web'
