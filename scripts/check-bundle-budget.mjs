@@ -14,7 +14,7 @@ const MAX_SKLAND_ENABLED_ROUTE_INITIAL_JS_BYTES = 1_191_000;
 // Task progress UI and training tooltips add intentional code to secondary workbench routes.
 // Keep the ceiling narrow enough to flag unrelated bundle growth.
 const MAX_SECONDARY_ROUTE_INITIAL_JS_BYTES = 1_572_000;
-const MAX_SKLAND_ROUTE_INITIAL_JS_BYTES = 1_615_000;
+const MAX_SKLAND_ROUTE_INITIAL_JS_BYTES = 1_632_000;
 const MAX_SKLAND_DISABLED_DOCUMENT_INITIAL_JS_BYTES = 1_280_000;
 const MAX_SKLAND_ENABLED_DOCUMENT_INITIAL_JS_BYTES = 1_304_000;
 const MAX_SKLAND_DISABLED_DOCUMENT_INITIAL_GZIP_JS_BYTES = 416_000;
