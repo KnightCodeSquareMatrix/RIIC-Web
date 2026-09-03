@@ -191,7 +191,9 @@ test("Skland login exposes both methods and starts QR only after explicit consen
   const qrVisual = page.locator("[data-skland-qr-visual]");
   const qrImage = page.getByRole("img", { name: "森空岛登录二维码" });
   await expect(qrVisual).toHaveCSS("background-color", "rgb(255, 255, 255)");
-  await expect(qrVisual).toHaveCSS("forced-color-adjust", "none");
+  if (await page.evaluate(() => CSS.supports("forced-color-adjust", "none"))) {
+    await expect(qrVisual).toHaveCSS("forced-color-adjust", "none");
+  }
   expect(await qrVisual.evaluate((element) => getComputedStyle(element).colorScheme)).toMatch(/\bonly\b.*\blight\b|\blight\b.*\bonly\b/);
   await expect(qrImage.locator("path").nth(0)).toHaveAttribute("fill", "#FFFFFF");
   await expect(qrImage.locator("path").nth(1)).toHaveAttribute("fill", "#000000");
