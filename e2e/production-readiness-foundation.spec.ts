@@ -77,17 +77,19 @@ test("an anonymous cold start probes the shared session once and does not touch 
 
 test("the anonymous sample trial fetches and solves once before showing the schedule", async ({ page }) => {
   await mockAnonymousWebsiteSession(page);
-  await mockApis(page);
+  await mockApis(page, { taskQueueEnabled: true });
   let releasePlan!: () => void;
   const planGate = new Promise<void>((resolve) => {
     releasePlan = resolve;
   });
   let sampleRequests = 0;
   let planRequests = 0;
+  let taskRequests = 0;
   let planPayload: Record<string, unknown> | null = null;
   page.on("request", (request) => {
     const pathname = new URL(request.url()).pathname;
     if (pathname === "/api/sample-operbox") sampleRequests += 1;
+    if (pathname === "/api/tasks") taskRequests += 1;
   });
   await page.unroute("**/api/plan");
   await page.route("**/api/plan", async (route) => {
@@ -107,7 +109,7 @@ test("the anonymous sample trial fetches and solves once before showing the sche
   await expect(page.getByRole("button", { name: "正在生成示例排班…" })).toBeDisabled();
   await expect(page.getByRole("button", { name: "配置Box与布局" })).toBeDisabled();
   await expect(page.getByRole("button", { name: "暂时跳过引导" })).toBeDisabled();
-  await expect.poll(() => ({ sampleRequests, planRequests })).toEqual({ sampleRequests: 1, planRequests: 1 });
+  await expect.poll(() => ({ sampleRequests, planRequests, taskRequests })).toEqual({ sampleRequests: 1, planRequests: 1, taskRequests: 0 });
   expect(planPayload).toMatchObject({ boxSource: "sample", sourceName: "243 全精二示例" });
   expect(planPayload).not.toHaveProperty("operbox");
 
@@ -345,19 +347,21 @@ test("a 768px solved plan defaults to list layout and stays inside the viewport"
   expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth + 1);
 });
 
-test("Rainyun computing service credit stays at the page footer's right edge and opens safely", async ({ page }) => {
+test("ICP filing and Rainyun sponsorship stay grouped at the page footer's right edge", async ({ page }) => {
   await mockApis(page);
   await seedPreferences(page);
   await page.goto("/");
 
-  const link = page.getByRole("link", { name: "由雨云提供计算服务（在新标签页打开雨云官网）" });
+  const filingLink = page.getByRole("link", { name: "沪ICP备2026041492号" });
+  const link = page.getByRole("link", { name: "由雨云提供赞助（在新标签页打开雨云官网）" });
   const image = link.locator("img");
+  await expect(filingLink).toHaveAttribute("href", "https://beian.miit.gov.cn/");
   await expect(link).toHaveAttribute("href", "https://www.rainyun.com/riic_");
   await expect(link).toHaveAttribute("target", "_blank");
   await expect(link).toHaveAttribute("rel", /noopener/);
   await expect(link).toHaveAttribute("rel", /noreferrer/);
   await expect(link).toContainText("由");
-  await expect(link).toContainText("提供计算服务");
+  await expect(link).toContainText("提供赞助");
   await expect(image).toHaveAttribute("src", /rainyun-logo\.png/);
   await expect.poll(() => image.evaluate((element) => {
     const logo = element as HTMLImageElement;
@@ -485,16 +489,28 @@ test("resource-oriented admin APIs keep authentication and method boundaries", a
   const reads = [
     "/api/admin/users/user_test/sessions",
     "/api/admin/plan-runs",
+    "/api/admin/plan-runs/run_test",
     "/api/admin/feedback",
+    "/api/admin/feedback/feedback_test",
+    "/api/admin/solver-metrics",
   ];
-  for (const path of reads) expect((await request.get(path)).status(), path).toBe(401);
+  for (const path of reads) {
+    const response = await request.get(path);
+    expect(response.status(), path).toBe(401);
+    if (path === "/api/admin/solver-metrics") {
+      expect(response.headers()["cache-control"]).toContain("no-store");
+    }
+  }
 
   expect((await request.patch("/api/admin/users/user_test", {
     data: { banned: true },
   })).status()).toBe(401);
   expect((await request.delete("/api/admin/users/user_test/sessions")).status()).toBe(401);
   expect((await request.patch("/api/admin/feedback/feedback_test", {
-    data: { status: "working", note: "test" },
+    data: { status: "reproduced", note: "test" },
+  })).status()).toBe(401);
+  expect((await request.delete("/api/admin/feedback", {
+    data: { ids: ["feedback_test"] },
   })).status()).toBe(401);
 });
 
@@ -754,6 +770,44 @@ test("password reset rejects a link without a token before making a request", as
   expect(resetRequests).toBe(0);
 });
 
+test("password reset requires matching password confirmation before making a request", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  let resetRequests = 0;
+  await page.route("**/api/auth/reset-password", async (route) => {
+    resetRequests += 1;
+    expect(route.request().postDataJSON()).toMatchObject({
+      newPassword: "Strong-password-1",
+      token: "valid-reset-token",
+    });
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ status: true }) });
+  });
+  await page.goto("/account/reset-password?token=valid-reset-token");
+
+  await page.getByLabel("新密码", { exact: true }).fill("weakpassword1");
+  await page.getByLabel("确认新密码", { exact: true }).fill("weakpassword1");
+  await page.getByRole("button", { name: "确认重置" }).click();
+  await expect(page.getByText(/密码强度不足：请满足全部强度规则/)).toBeVisible();
+  expect(resetRequests).toBe(0);
+
+  await page.getByLabel("新密码", { exact: true }).fill("Strong-password-1");
+  await page.getByLabel("确认新密码", { exact: true }).fill("Different-password-1");
+  await expect(page.getByText(/密码强度不足：请满足全部强度规则/)).toHaveCount(0);
+  await expect(page.getByLabel("新密码", { exact: true })).toHaveAttribute("type", "password");
+  await page.getByRole("button", { name: "显示新密码" }).click();
+  await expect(page.getByLabel("新密码", { exact: true })).toHaveAttribute("type", "text");
+  await page.getByRole("button", { name: "隐藏新密码" }).click();
+  await expect(page.getByLabel("新密码", { exact: true })).toHaveAttribute("type", "password");
+  await page.getByRole("button", { name: "确认重置" }).click();
+  await expect(page.getByText("两次输入的密码不一致。", { exact: true })).toBeVisible();
+  expect(resetRequests).toBe(0);
+
+  await page.getByLabel("确认新密码", { exact: true }).fill("Strong-password-1");
+  await expect(page.getByText("两次输入的密码不一致。", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "确认重置" }).click();
+  await expect.poll(() => resetRequests).toBe(1);
+  await expect(page.getByText("密码已重置，旧 Session 已撤销，请返回首页登录。", { exact: true })).toBeVisible();
+});
+
 test("anonymous MAA data cannot drive planning or training advice", async ({ page }) => {
   await page.unroute("**/api/auth/get-session");
   await page.route("**/api/auth/get-session", (route) => route.fulfill({ status: 200, contentType: "application/json", body: "null" }));
@@ -776,6 +830,7 @@ test("anonymous MAA data cannot drive planning or training advice", async ({ pag
 });
 
 test("server auth boundaries reject anonymous planning and every development Skland route", async ({ request }) => {
+  test.setTimeout(60_000);
   const maaResponse = await request.post("/api/plan", {
     data: { layout: layout243, operbox: [], sourceName: "anonymous.json", boxSource: "maa", rotation: "abc_12_6_6" },
   });
@@ -813,6 +868,8 @@ test("server auth boundaries reject anonymous planning and every development Skl
 
   const nativeAdmin = await request.post("/api/auth/admin/list-users", { data: {} });
   expect(nativeAdmin.status()).toBe(404);
+  expect((await request.get("/admin")).status()).toBe(404);
+  expect((await request.get("/admin/issues")).status()).toBe(404);
   expect((await request.get("/admin/users")).status()).toBe(404);
 });
 
@@ -1147,12 +1204,13 @@ test("two-shift output drives product estimates, room formulas, and profile deta
   await expect(detailsSheet.locator('[data-production-group="orundum"] [data-production-detail]').nth(0)).toHaveAttribute("data-production-detail", "orundum");
   await expect(detailsSheet.locator('[data-production-group="orundum"] [data-production-detail]').nth(1)).toHaveAttribute("data-production-detail", "shards");
   await expect(detailsSheet.locator('[data-production-detail="shards"]')).toContainText("制造环节");
-  await expect(detailsSheet.locator('[data-production-detail="experience"]')).toContainText(/求解器日产量.*22,400 经验/s);
-  await expect(detailsSheet.locator('[data-production-detail="lmd-orders"]')).toContainText(/求解器日产量.*34,254 龙门币/s);
-  await expect(detailsSheet.locator('[data-production-detail="gold"]')).toContainText(/求解器日产量.*106 枚/s);
-  await expect(detailsSheet.locator('[data-production-detail="orundum"]')).toContainText(/求解器日产量.*360 合成玉/s);
-  await expect(detailsSheet.locator('[data-production-detail="shards"]')).toContainText(/求解器日产量.*48 枚/s);
-  await expect(detailsSheet.getByText(/限制环节：/)).toHaveCount(0);
+  await expect(detailsSheet.locator('[data-production-detail="experience"]')).toContainText(/22,400.*估算自然制造.*估算无人机制造/s);
+  await expect(detailsSheet.locator('[data-production-detail="lmd-orders"]')).toContainText(/34,254.*估算自然订单.*估算无人机订单/s);
+  await expect(detailsSheet.locator('[data-production-detail="gold"]')).toContainText(/106.*估算自然制造.*估算无人机制造/s);
+  await expect(detailsSheet.locator('[data-production-detail="orundum"]')).toContainText(/360.*估算碎片阶段可供.*估算订单阶段可交付.*限制环节：/s);
+  await expect(detailsSheet.locator('[data-production-detail="shards"]')).toContainText(/48.*估算自然制造.*估算无人机制造/s);
+  await expect(detailsSheet).not.toContainText("拆分为前端估算，总量以求解器为准");
+  await expect(detailsSheet.getByText(/限制环节：/)).toHaveCount(1);
   await expect(detailsSheet.locator("[data-production-method]")).toHaveCount(0);
   await expect(detailsSheet.getByRole("heading", { name: "产线提升空间" })).toBeVisible();
   await expect(detailsSheet.getByText("贸易产线", { exact: true }).locator("..")).toContainText("领先推荐方案 6.4%");
@@ -1161,11 +1219,11 @@ test("two-shift output drives product estimates, room formulas, and profile deta
   await expect(detailsSheet.getByRole("heading", { name: "设施组合提升空间" })).toBeVisible();
   await expect(detailsSheet.getByText("领先推荐组合 10.7%", { exact: true })).toBeVisible();
   await expect(detailsSheet.getByText("状态良好", { exact: true })).toBeVisible();
-  await expect(detailsSheet.getByText("下一步建议", { exact: true })).toBeVisible();
+  await expect(detailsSheet.getByText("下一步建议", { exact: true })).toHaveCount(0);
   await expect(detailsSheet.getByText("原效率与基准", { exact: true })).toHaveCount(0);
   await expect(detailsSheet.getByText("领域指标", { exact: true })).toHaveCount(0);
   await expect(detailsSheet.getByText(/机制等效|当前 1\.42|参考 1\.31/)).toHaveCount(0);
-  await expect(detailsSheet.locator('[data-recommendation-card="compact"]')).toHaveCount(1);
+  await expect(detailsSheet.locator('[data-recommendation-card="compact"]')).toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(page.locator('[data-slot="drawer-root"]')).toHaveCount(0);
   await expect(detailsTrigger).toBeFocused();
@@ -1276,9 +1334,11 @@ for (const viewport of [
   { width: 1440, height: 900 },
 ]) {
   test(`website account registration is reachable and explains consent at ${viewport.width}px`, async ({ page }) => {
+    let signUpRequests = 0;
     await page.unroute("**/api/auth/get-session");
     await page.route("**/api/auth/get-session", (route) => route.fulfill({ status: 200, contentType: "application/json", body: "null" }));
     await page.route("**/api/auth/sign-up/email", async (route) => {
+      signUpRequests += 1;
       const body = route.request().postDataJSON() as { email?: string; password?: string };
       expect(body.email).toBe(`account-${viewport.width}@example.test`);
       expect(body.password).toBe("secure-password-1");
@@ -1322,13 +1382,32 @@ for (const viewport of [
     await expect(accountPanel.getByRole("link", { name: "隐私政策", exact: true })).toHaveAttribute("href", "/privacy");
     await expect(accountPanel.getByText("2–20 个字符，可使用中文、英文字母、数字、空格、下划线和短横线。", { exact: true })).toBeVisible();
     await accountPanel.getByRole("textbox", { name: "邮箱", exact: true }).fill(`account-${viewport.width}@example.test`);
-    await page.getByLabel("密码", { exact: true }).fill("secure-password-1");
+    await page.getByLabel("密码", { exact: true }).fill("weakpassword1");
+    await page.getByLabel("确认密码", { exact: true }).fill("weakpassword1");
+    await expect(page.getByLabel("密码", { exact: true })).toHaveAttribute("type", "password");
+    await page.getByRole("button", { name: "显示密码" }).click();
+    await expect(page.getByLabel("密码", { exact: true })).toHaveAttribute("type", "text");
+    await page.getByRole("button", { name: "隐藏密码" }).click();
+    await expect(page.getByLabel("密码", { exact: true })).toHaveAttribute("type", "password");
     await page.getByLabel("昵称").fill("博士😀");
     await page.getByRole("button", { name: "创建账号并发送验证码" }).click();
     await expect(accountPanel.getByText(/昵称只能使用中文、英文字母、数字/)).toBeVisible();
     await page.getByLabel("昵称").fill("测试用户");
+    await expect(accountPanel.getByRole("meter", { name: "密码强度" })).toHaveAttribute("aria-valuetext", "良好");
+    await page.getByRole("button", { name: "创建账号并发送验证码" }).click();
+    await expect(accountPanel.getByText(/密码强度不足：请满足全部强度规则/)).toBeVisible();
+    expect(signUpRequests).toBe(0);
+    await page.getByLabel("密码", { exact: true }).fill("secure-password-1");
+    await page.getByLabel("确认密码", { exact: true }).fill("different-password-1");
+    await expect(accountPanel.getByText(/密码强度不足：请满足全部强度规则/)).toHaveCount(0);
     await expect(accountPanel.getByRole("meter", { name: "密码强度" })).toHaveAttribute("aria-valuetext", "强");
     await page.getByRole("button", { name: "创建账号并发送验证码" }).click();
+    await expect(accountPanel.getByText("两次输入的密码不一致。", { exact: true })).toBeVisible();
+    expect(signUpRequests).toBe(0);
+    await page.getByLabel("确认密码", { exact: true }).fill("secure-password-1");
+    await expect(accountPanel.getByText("两次输入的密码不一致。", { exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: "创建账号并发送验证码" }).click();
+    expect(signUpRequests).toBe(1);
     await expect(accountPanel.locator("[data-wizard-steps]")).toHaveCount(0);
     for (const [index, digit] of [..."123456"].entries()) {
       await accountPanel.getByRole("textbox", { name: `邮箱验证码第 ${index + 1} 位，共 6 位` }).fill(digit);
@@ -1372,7 +1451,12 @@ for (const viewport of [
     await page.route("**/api/account/data-consent", async (route) => {
       if (route.request().method() === "POST") {
         const body = route.request().postDataJSON() as Record<string, unknown>;
-        expect(body).toMatchObject({ termsAccepted: true, privacyAccepted: true });
+        expect(body).toMatchObject({
+          termsAccepted: true,
+          privacyAccepted: true,
+          termsVersion: "2026-08-21-cloud-workspace",
+          privacyVersion: "2026-09-03-solver-reproduction-retention",
+        });
         consentCurrent = true;
       } else if (route.request().method() === "DELETE") {
         consentCurrent = false;
@@ -1382,7 +1466,7 @@ for (const viewport of [
       return fulfill(route, {
         current: consentCurrent,
         termsVersion: "2026-08-21-cloud-workspace",
-        privacyVersion: "2026-08-27-detailed-telemetry",
+        privacyVersion: "2026-09-03-solver-reproduction-retention",
         acceptedAt: consentCurrent ? timestamp : null,
         revokedAt: null,
         cloudSyncEnabled: true,

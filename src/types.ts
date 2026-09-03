@@ -895,6 +895,9 @@ export interface DebugBundle {
   version: string;
   startedAt: string;
   durationMs: number;
+  solverDurationMs?: number;
+  solverStartedAt?: string;
+  solverFinishedAt?: string;
   cliPath: string;
   command: string;
   exitCode: number | null;
@@ -978,6 +981,10 @@ export interface PlanApiResponse {
   success: boolean;
   startedAt?: string;
   durationMs?: number;
+  /** Time reported by the solver process itself, excluding transport and artifact I/O. */
+  solverDurationMs?: number;
+  solverStartedAt?: string;
+  solverFinishedAt?: string;
   cliPath?: string;
   command?: string;
   exitCode?: number | null;
@@ -996,6 +1003,8 @@ export interface PlanApiResponse {
   relativeRunPath?: string;
   resultPath?: string;
   relativeResultPath?: string;
+  artifactEnvelopePath?: string;
+  relativeArtifactEnvelopePath?: string;
   error?: string;
 }
 
@@ -1018,6 +1027,10 @@ export type AppErrorCode =
   | "AIC-PLAN-3002"
   | "AIC-PLAN-3003"
   | "AIC-PLAN-3004"
+  | "AIC-PLAN-3005"
+  | "AIC-PLAN-3006"
+  | "AIC-PLAN-3007"
+  | "AIC-PLAN-3008"
   | "AIC-FEEDBACK-4001"
   | "AIC-FEEDBACK-4002"
   | "AIC-SYS-5000"
@@ -1047,6 +1060,7 @@ export type ApiFailure = {
     message: string;
     requestId: string;
     retryable: boolean;
+    retryAfterSeconds?: number;
     fieldErrors?: ApiFieldError[];
   };
 };
@@ -1061,6 +1075,11 @@ export interface PublicFeatureFlags {
 export interface PublicHealthData {
   status: "ready" | "unavailable";
   plannerReady: boolean;
+  taskQueue: {
+    enabled: boolean;
+    ready: boolean;
+    releaseMatched: boolean;
+  };
   skland?: {
     available: boolean;
     message: string | null;
@@ -1100,10 +1119,19 @@ export interface FeedbackRoom {
 
 export type FeedbackKind = "room_issue" | "performance_issue";
 
+export interface FeedbackReproductionSnapshot {
+  layout: BaseBlueprint;
+  operbox: OperBoxEntry[];
+  rotation: RotationProfile;
+  fiammettaEnabled: boolean;
+  sourceType: Exclude<BoxSource, "sample">;
+}
+
 type FeedbackRequestBase = {
   diagnosticId: string;
   note: string;
   consent: true;
+  reproduction: FeedbackReproductionSnapshot;
 };
 
 export type FeedbackRequest = FeedbackRequestBase & (
@@ -1237,6 +1265,166 @@ export interface AdminUserUpdateData {
   updated: true;
 }
 
+export type AdminFeedbackStatus = "unreviewed" | "reproduced" | "fixed";
+
+export type AdminFeedbackFacility =
+  | "trading"
+  | "manufacture"
+  | "power"
+  | "control"
+  | "dormitory"
+  | "meeting"
+  | "hire"
+  | "processing"
+  | "training"
+  | "solver"
+  | "unknown";
+
+export interface AdminFeedbackRecordData {
+  id: string;
+  diagnosticId: string;
+  kind: FeedbackKind;
+  facility: AdminFeedbackFacility;
+  room: FeedbackRoom | null;
+  note: string;
+  status: AdminFeedbackStatus;
+  adminNote: string | null;
+  hasLinkedRun: boolean;
+  createdAt: string;
+  updatedAt: string;
+  expiresAt: string;
+}
+
+export interface AdminPlanRunRecordData {
+  diagnosticId: string;
+  sourceType: "sample" | "maa" | "skland";
+  status: "success" | "failed";
+  layoutTemplate: string;
+  roomCount: number;
+  operatorCount: number;
+  rotation: string;
+  fiammettaEnable: boolean;
+  durationMs: number | null;
+  errorCode: AppErrorCode | null;
+  solverExecutableSha256: string | null;
+  protocolVersion: number | null;
+  planSchemaVersion: number | null;
+  hasReproduction: boolean;
+  createdAt: string;
+  expiresAt: string;
+}
+
+export interface AdminRecordListData<T> {
+  items: T[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export type AdminFeedbackListData = AdminRecordListData<AdminFeedbackRecordData>;
+export type AdminPlanRunListData = AdminRecordListData<AdminPlanRunRecordData>;
+
+export type AdminReproductionUnavailableReason =
+  | "expired"
+  | "cache_hit"
+  | "finalizing"
+  | "finalization_failed"
+  | "not_recorded"
+  | "missing"
+  | "invalid"
+  | "incomplete";
+
+interface AdminReproductionDataBase {
+  diagnosticId: string;
+  sourceName: string | null;
+  error: string | null;
+  stderrExcerpt: string | null;
+  stdoutExcerpt: string | null;
+}
+
+export type AdminReproductionData = AdminReproductionDataBase & ({
+  available: true;
+  unavailableReason: null;
+  layout: BaseBlueprint;
+  operbox: OperBoxEntry[];
+  rotation: RotationProfile;
+  rotationCount: number;
+  fiammettaEnabled: boolean;
+} | {
+  available: false;
+  unavailableReason: AdminReproductionUnavailableReason;
+  layout: BaseBlueprint | null;
+  operbox: OperBoxEntry[] | null;
+  rotation: RotationProfile | null;
+  rotationCount: number | null;
+  fiammettaEnabled: boolean | null;
+});
+
+export interface AdminFeedbackDetailData {
+  feedback: AdminFeedbackRecordData;
+  reproduction: AdminReproductionData;
+}
+
+export interface AdminPlanRunDetailData {
+  run: AdminPlanRunRecordData;
+  reproduction: AdminReproductionData;
+}
+
+export interface AdminFeedbackDeleteData {
+  deletedIds: string[];
+  deletedCount: number;
+  privateArtifactsDeleted: number;
+}
+
+
+export interface AdminSolverMetricsData {
+  generatedAt: string;
+  solver: {
+    windowMinutes: number;
+    trendWindowMinutes: number;
+    trendBucketMinutes: number;
+    successCount: number;
+    failureCount: number;
+    completedCount: number;
+    errorRate: number | null;
+    throughputPerMinute: number;
+    averageDurationMs: number | null;
+    p95DurationMs: number | null;
+    averageSolverDurationMs: number | null;
+    p95SolverDurationMs: number | null;
+    averageWorkerDurationMs: number | null;
+    sourceCounts: {
+      maa: number;
+      skland: number;
+      sample: number;
+    };
+    trend: Array<{
+      bucketStartedAt: string;
+      successCount: number;
+      failureCount: number;
+      completedCount: number;
+      errorRate: number | null;
+      averageDurationMs: number | null;
+    }>;
+  };
+  queue: {
+    bufferedCount: number;
+    pendingCount: number;
+    runningCount: number;
+    averageWaitMs: number | null;
+    p95WaitMs: number | null;
+  };
+  cache: {
+    enabled: boolean;
+    hitCount: number;
+    missCount: number;
+    lookupCount: number;
+    hitRate: number | null;
+    readyEntryCount: number;
+    fillingEntryCount: number;
+  };
+}
+
 export interface SklandSessionData {
   authenticated: boolean;
   configured: boolean;
@@ -1277,5 +1465,6 @@ export interface DisplayError {
   message: string;
   requestId?: string;
   retryable: boolean;
+  retryAfterSeconds?: number;
   fieldErrors?: ApiFieldError[];
 }

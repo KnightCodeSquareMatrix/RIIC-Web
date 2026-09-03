@@ -7,16 +7,25 @@ import { gzipSync } from "node:zlib";
 import { verifyPublicCompression } from "./verify-public-compression.mjs";
 
 const scriptBody = "globalThis.__compressionCheck = true;\n".repeat(64);
-const documentBody = '<!doctype html><html><body><script src="/_next/static/chunks/app.js"></script></body></html>';
+const expectedBuildId = "b".repeat(40);
 
-async function withServer({ compressScript }, run) {
+function documentBody(buildId) {
+  return `<!doctype html><html><head><meta name="riic-build-id" content="${buildId}"></head><body><script src="/_next/static/chunks/app.js"></script></body></html>`;
+}
+
+async function withServer({
+  buildId = expectedBuildId,
+  compressScript,
+  pageCacheControl = "private, no-cache, no-store, max-age=0, must-revalidate",
+}, run) {
   const server = createServer((request, response) => {
     if (request.url === "/") {
       response.writeHead(200, {
+        "cache-control": pageCacheControl,
         "content-encoding": "gzip",
         "content-type": "text/html; charset=utf-8",
       });
-      response.end(gzipSync(documentBody));
+      response.end(gzipSync(documentBody(buildId)));
       return;
     }
     if (request.url === "/_next/static/chunks/app.js") {
@@ -41,8 +50,10 @@ async function withServer({ compressScript }, run) {
 
 test("public compression verification accepts compressed HTML and JavaScript GET responses", async () => {
   await withServer({ compressScript: true }, async (healthUrl) => {
-    const result = await verifyPublicCompression(healthUrl);
+    const result = await verifyPublicCompression(healthUrl, globalThis.fetch, expectedBuildId);
     assert.equal(result.pageEncoding, "gzip");
+    assert.equal(result.buildId, expectedBuildId);
+    assert.match(result.pageCacheControl, /no-store/);
     assert.equal(result.scriptEncoding, "gzip");
     assert.equal(result.scriptBytes, Buffer.byteLength(scriptBody));
   });
@@ -51,8 +62,26 @@ test("public compression verification accepts compressed HTML and JavaScript GET
 test("public compression verification rejects an uncompressed JavaScript GET response", async () => {
   await withServer({ compressScript: false }, async (healthUrl) => {
     await assert.rejects(
-      verifyPublicCompression(healthUrl),
+      verifyPublicCompression(healthUrl, globalThis.fetch, expectedBuildId),
       /public JavaScript must use gzip or Brotli for a real GET response/,
+    );
+  });
+});
+
+test("public release verification rejects HTML cached from a previous build", async () => {
+  await withServer({ buildId: "a".repeat(40), compressScript: true }, async (healthUrl) => {
+    await assert.rejects(
+      verifyPublicCompression(healthUrl, globalThis.fetch, expectedBuildId),
+      /public HTML build ID is a{40}; expected b{40}/,
+    );
+  });
+});
+
+test("public release verification rejects HTML that shared caches may retain", async () => {
+  await withServer({ compressScript: true, pageCacheControl: "s-maxage=31536000" }, async (healthUrl) => {
+    await assert.rejects(
+      verifyPublicCompression(healthUrl, globalThis.fetch, expectedBuildId),
+      /public HTML must not be stored by a shared cache/,
     );
   });
 });

@@ -3760,5 +3760,68 @@
     "own": true,
     "potential": 6,
     "rarity": 5
+  },
+  {
+    "id": "char_1015_aglna2",
+    "name": "予愿安洁莉娜",
+    "elite": 2,
+    "level": 90,
+    "own": true,
+    "potential": 6,
+    "rarity": 6
+  },
+  {
+    "id": "char_4229_aphris",
+    "name": "谬因",
+    "elite": 2,
+    "level": 90,
+    "own": true,
+    "potential": 6,
+    "rarity": 6
+  },
+  {
+    "id": "char_4230_mcnist",
+    "name": "机械师",
+    "elite": 2,
+    "level": 90,
+    "own": true,
+    "potential": 6,
+    "rarity": 6
+  },
+  {
+    "id": "char_4234_pedro",
+    "name": "佩德洛",
+    "elite": 2,
+    "level": 80,
+    "own": true,
+    "potential": 6,
+    "rarity": 5
+  },
+  {
+    "id": "char_4235_thumpy",
+    "name": "珊比",
+    "elite": 2,
+    "level": 90,
+    "own": true,
+    "potential": 6,
+    "rarity": 6
+  },
+  {
+    "id": "char_4236_tmslot",
+    "name": "时隙",
+    "elite": 2,
+    "level": 80,
+    "own": true,
+    "potential": 6,
+    "rarity": 5
+  },
+  {
+    "id": "char_4237_jcinta",
+    "name": "嘉辛塔",
+    "elite": 2,
+    "level": 80,
+    "own": true,
+    "potential": 6,
+    "rarity": 5
   }
 ]

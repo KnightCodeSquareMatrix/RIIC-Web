@@ -1,10 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
-import { chmod, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, open, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 
 import type {
+  AdminReproductionData,
+  AdminReproductionUnavailableReason,
   BaseBlueprint,
   CliCandidate,
   DebugBundle,
@@ -16,6 +18,7 @@ import type {
   RotationProfile,
   SolverObservation,
 } from "@/types";
+import { legacyAdminFeedbackStatus, toAdminReproductionData } from "./admin-record-dto";
 import { isSklandConfigured, sklandDisabledReason } from "@/server/skland/session";
 import { PublicApiError } from "./api-contract";
 import { feedbackDirectoryGroup, toStoredFeedbackIssue } from "./feedback-record";
@@ -26,7 +29,10 @@ import {
   inspectSolverPingFingerprint,
   inspectSolverDeploymentReadiness,
   parsePlanComputePayload,
+  PLAN_PROTOCOL_VERSION,
+  PLAN_SCHEMA_VERSION,
   solverObservationFromPlanRecord,
+  type PlanComputeCapability,
 } from "./plan-protocol";
 import { normalizeRotationResult } from "@/rotation-result";
 import { parseShiftFile } from "./shift-parser";
@@ -41,16 +47,19 @@ import {
   deleteExpiredBusinessRecords,
   queryBusinessRecords,
   recordFeedbackIfEnabled,
+  updatePlanRunArtifactBestEffort,
   updateFeedbackRecord,
   type PrivateArtifactDescriptor,
 } from "./business-records";
-import { isBusinessDatabaseReadEnabled, isBusinessFileFallbackEnabled } from "./business-config";
+import { BUSINESS_DATA_TTL_MS, isBusinessDatabaseReadEnabled, isBusinessFileFallbackEnabled } from "./business-config";
 import {
   InfraCliServeClient,
   type JsonRecord,
   type ServeResult,
 } from "./serve-client";
 import { registerProcessCleanup } from "./process-cleanup";
+import { normalizeSolverOperbox } from "./plan-solver-input";
+import { legacyPlanReproductionContext } from "./business-backfill";
 
 type PlanRequestBody = {
   layout: BaseBlueprint;
@@ -72,13 +81,66 @@ const cliRunRoot = path.resolve(/* turbopackIgnore: true */ process.env.BETA_CLI
 const cliReleaseRoot = path.resolve(/* turbopackIgnore: true */ process.env.BETA_CLI_RELEASE_DIR || path.join(storageRoot, "cli-releases"));
 const activeCliPath = path.join(storageRoot, "active-cli.json");
 const timeoutMs = Number(process.env.BETA_CLI_TIMEOUT_MS || 180_000);
-const PRIVATE_RECORD_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+export const PRIVATE_RECORD_TTL_MS = BUSINESS_DATA_TTL_MS;
 const PRIVATE_MAINTENANCE_INTERVAL_MS = 60 * 60 * 1000;
 const PLAN_CACHE_SOLVER_IDENTITY_TTL_MS = 60_000;
 const PLAN_CACHE_SOLVER_IDENTITY_RETRY_MS = 5_000;
+const PLAN_ARTIFACT_FINALIZER_CONCURRENCY = 2;
+const PLAN_ARTIFACT_FINALIZER_RETRY_MS = [1_000, 5_000, 30_000] as const;
+const PLAN_ARTIFACT_FINALIZER_SLOW_RETRY_MS = 5 * 60_000;
+const PLAN_ARTIFACT_MISSING_RUN_GRACE_MS = 10 * 60_000;
 const legacySklandPurgeMarker = path.join(storageRoot, ".skland-legacy-purge-v1.json");
 let cachedPlanCacheSolverIdentity: { value: SolverObservation | null; expiresAt: number } | null = null;
 let planCacheSolverIdentityTask: Promise<SolverObservation | null> | null = null;
+
+type PlanArtifactFinalizerState = {
+  queue: Array<{
+    envelopePath: string;
+    attempt: number;
+    dependencies: PlanArtifactFinalizerDependencies;
+  }>;
+  queued: Set<string>;
+  retryTimers: Map<string, ReturnType<typeof setTimeout>>;
+  running: number;
+  idleWaiters: Set<() => void>;
+};
+
+const artifactFinalizerState: PlanArtifactFinalizerState = {
+  queue: [],
+  queued: new Set(),
+  retryTimers: new Map(),
+  running: 0,
+  idleWaiters: new Set(),
+};
+
+type PlanArtifactFinalizerDependencies = {
+  updateArtifact: typeof updatePlanRunArtifactBestEffort;
+  retryMs: readonly number[];
+  slowRetryMs: number;
+  missingRunGraceMs: number;
+  retentionMs: number;
+  now: () => number;
+};
+
+const defaultPlanArtifactFinalizerDependencies: PlanArtifactFinalizerDependencies = {
+  updateArtifact: updatePlanRunArtifactBestEffort,
+  retryMs: PLAN_ARTIFACT_FINALIZER_RETRY_MS,
+  slowRetryMs: PLAN_ARTIFACT_FINALIZER_SLOW_RETRY_MS,
+  missingRunGraceMs: PLAN_ARTIFACT_MISSING_RUN_GRACE_MS,
+  retentionMs: PRIVATE_RECORD_TTL_MS,
+  now: Date.now,
+};
+
+class PlanArtifactPersistenceError extends Error {
+  readonly reason: "missing" | "unavailable";
+
+  constructor(reason: "missing" | "unavailable") {
+    super(reason === "missing"
+      ? "Plan run record does not exist yet."
+      : "Plan run artifact status could not be persisted.");
+    this.reason = reason;
+  }
+}
 
 function cliCandidates() {
   const platformCliName = process.platform === "win32" ? "infra-cli.exe" : "infra-cli";
@@ -236,11 +298,46 @@ async function writeJson(filePath: string, value: unknown) {
   await writeFile(filePath, JSON.stringify(value, null, 2), "utf-8");
 }
 
+async function writeJsonAtomic(filePath: string, value: unknown, compact = false) {
+  const temporaryPath = `${filePath}.tmp-${randomUUID()}`;
+  try {
+    await writeFile(temporaryPath, JSON.stringify(value, null, compact ? undefined : 2), { encoding: "utf-8", flag: "wx" });
+    await rename(temporaryPath, filePath);
+  } finally {
+    await rm(temporaryPath, { force: true }).catch(() => undefined);
+  }
+}
+
+async function writeTextAtomic(filePath: string, value: string) {
+  const temporaryPath = `${filePath}.tmp-${randomUUID()}`;
+  try {
+    await writeFile(temporaryPath, value, { encoding: "utf-8", flag: "wx" });
+    await rename(temporaryPath, filePath);
+  } finally {
+    await rm(temporaryPath, { force: true }).catch(() => undefined);
+  }
+}
+
 async function readJsonIfExists(filePath: string) {
   try {
     return JSON.parse(await readFile(filePath, "utf-8")) as unknown;
   } catch {
     return undefined;
+  }
+}
+
+async function readTextTail(filePath: string, maxBytes = 16 * 1024): Promise<string | null> {
+  const details = await stat(filePath).catch(() => null);
+  if (!details?.isFile() || details.size <= 0) return null;
+  const bytesToRead = Math.min(details.size, maxBytes);
+  const handle = await open(filePath, "r").catch(() => null);
+  if (!handle) return null;
+  try {
+    const buffer = Buffer.alloc(bytesToRead);
+    const { bytesRead } = await handle.read(buffer, 0, bytesToRead, details.size - bytesToRead);
+    return buffer.subarray(0, bytesRead).toString("utf-8").trim() || null;
+  } finally {
+    await handle.close();
   }
 }
 
@@ -336,9 +433,84 @@ async function feedbackDirectories() {
   return privateDirectories(feedbackRoot);
 }
 
-async function ownerMetadata(directory: string): Promise<{ ownerTag?: unknown; diagnosticId?: unknown; sourceName?: unknown } | null> {
+export async function deleteFeedbackArtifacts(feedbackIds: string[]): Promise<number> {
+  const wanted = new Set(feedbackIds);
+  if (!wanted.size) return 0;
+  await ensurePrivateStorageBoundaries();
+  let deleted = 0;
+  for (const directory of await feedbackDirectories()) {
+    const meta = await readJsonIfExists(path.join(directory, "meta.json"));
+    const directoryId = path.basename(directory).match(/(?:^|_)([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i)?.[1];
+    const feedbackId = isObject(meta) && typeof meta.feedbackId === "string"
+      ? meta.feedbackId
+      : directoryId;
+    if (!feedbackId || !wanted.has(feedbackId)) continue;
+    await removePrivateDirectory(feedbackRoot, directory);
+    deleted += 1;
+  }
+  return deleted;
+}
+
+export async function deletePlanRunArtifacts(diagnosticIds: string[]): Promise<number> {
+  const wanted = new Set(diagnosticIds.filter((value) => /^[a-f0-9-]{36}$/i.test(value)));
+  if (!wanted.size) return 0;
+  await ensurePrivateStorageBoundaries();
+  let deleted = 0;
+  for (const directory of await runDirectories()) {
+    const directoryId = path.basename(directory).match(/(?:^|_)([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i)?.[1];
+    const metadata = directoryId && wanted.has(directoryId) ? null : await ownerMetadata(directory);
+    const diagnosticId = directoryId ?? (typeof metadata?.diagnosticId === "string" ? metadata.diagnosticId : null);
+    if (!diagnosticId || !wanted.has(diagnosticId)) continue;
+    await removePrivateDirectory(cliRunRoot, directory);
+    deleted += 1;
+  }
+  return deleted;
+}
+
+type PrivateRunMetadata = {
+  ownerTag?: unknown;
+  diagnosticId?: unknown;
+  sourceName?: unknown;
+  createdAt?: unknown;
+};
+
+function timestampMs(value: unknown): number | null {
+  const parsed = value instanceof Date
+    ? value.getTime()
+    : typeof value === "string" || typeof value === "number" ? new Date(value).getTime() : Number.NaN;
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function filesystemCreatedAtMs(details: { birthtimeMs: number; mtimeMs: number }): number {
+  return details.birthtimeMs > 0 ? Math.min(details.birthtimeMs, details.mtimeMs) : details.mtimeMs;
+}
+
+async function ownerMetadata(directory: string): Promise<PrivateRunMetadata | null> {
   const value = await readJsonIfExists(path.join(directory, "owner.json"));
-  return isObject(value) ? value : null;
+  if (isObject(value)) return value;
+  const envelope = await readJsonIfExists(path.join(directory, "run-envelope.json"));
+  if (!isObject(envelope)) return null;
+  const result = isObject(envelope.result) ? envelope.result : null;
+  const debug = result && isObject(result.debugBundle) ? result.debugBundle : null;
+  const inputSummary = debug && isObject(debug.inputSummary) ? debug.inputSummary : null;
+  return {
+    ownerTag: envelope.dataOwnerTag,
+    diagnosticId: envelope.diagnosticId,
+    sourceName: inputSummary?.sourceName,
+    createdAt: result?.startedAt,
+  };
+}
+
+async function privateRunCreatedAtMs(
+  directory: string,
+  metadata: PrivateRunMetadata | null,
+  details: { birthtimeMs: number; mtimeMs: number },
+): Promise<number> {
+  const metadataCreatedAt = timestampMs(metadata?.createdAt);
+  if (metadataCreatedAt !== null) return metadataCreatedAt;
+  const result = await readJsonIfExists(path.join(directory, "result.json"));
+  const resultCreatedAt = isObject(result) ? timestampMs(result.startedAt) : null;
+  return resultCreatedAt ?? filesystemCreatedAtMs(details);
 }
 
 export async function maintainPrivateRecords(now = Date.now()): Promise<void> {
@@ -348,7 +520,8 @@ export async function maintainPrivateRecords(now = Date.now()): Promise<void> {
   for (const directory of await runDirectories()) {
     const metadata = await ownerMetadata(directory);
     const details = await stat(directory).catch(() => null);
-    const expired = Boolean(details && now - details.mtimeMs >= PRIVATE_RECORD_TTL_MS);
+    const createdAt = details ? await privateRunCreatedAtMs(directory, metadata, details) : null;
+    const expired = createdAt !== null && now - createdAt >= PRIVATE_RECORD_TTL_MS;
     const legacySkland = !legacyPurgeCompleted
       && !metadata?.ownerTag
       && isLegacySklandRunDirectoryName(path.basename(directory));
@@ -393,7 +566,6 @@ async function maintainPrivateRecordsIfDue(now = Date.now()): Promise<void> {
 export async function deleteSklandOwnedData(ownerTags: string[]): Promise<{ runs: number; feedback: number }> {
   const allowed = new Set(ownerTags.filter((value) => /^[a-f0-9]{64}$/.test(value)));
   if (allowed.size === 0) return { runs: 0, feedback: 0 };
-  await maintainPrivateRecords();
   const diagnosticIds = new Set<string>();
   let runs = 0;
   for (const directory of await runDirectories()) {
@@ -416,16 +588,211 @@ export async function deleteSklandOwnedData(ownerTags: string[]): Promise<{ runs
   return { runs, feedback };
 }
 
-async function privateRunForDiagnostic(
-  diagnosticId: string
-): Promise<{ directory: string; result: JsonRecord } | null> {
-  if (!/^[a-f0-9-]{36}$/i.test(diagnosticId)) return null;
+type PrivateRunLookup =
+  | { status: "missing" }
+  | { status: "invalid"; directory: string }
+  | { status: "found"; directory: string; result: JsonRecord };
+
+type PrivateFeedbackLookup =
+  | { status: "missing" }
+  | { status: "invalid"; directory: string }
+  | { status: "found"; directory: string };
+
+type PlanReproductionFallback = {
+  rotation?: unknown;
+  fiammettaEnabled?: unknown;
+  artifactKey?: unknown;
+  artifactStatus?: unknown;
+  executionSource?: unknown;
+  expiresAt?: unknown;
+};
+
+async function lookupPrivateRun(diagnosticId: string): Promise<PrivateRunLookup> {
+  if (!/^[a-f0-9-]{36}$/i.test(diagnosticId)) return { status: "missing" };
   const suffix = `_${diagnosticId}`;
   const directory = (await runDirectories())
     .find((candidate) => path.basename(candidate).endsWith(suffix));
-  if (!directory) return null;
-  const result = await readJsonIfExists(path.join(directory, "result.json"));
-  return isObject(result) && result.runId === diagnosticId ? { directory, result } : null;
+  if (!directory) return { status: "missing" };
+  let result = await readJsonIfExists(path.join(directory, "result.json"));
+  if (!isObject(result)) {
+    const envelope = await readJsonIfExists(path.join(directory, "run-envelope.json"));
+    result = isObject(envelope) ? envelope.result : null;
+  }
+  return isObject(result) && result.runId === diagnosticId
+    ? { status: "found", directory, result }
+    : { status: "invalid", directory };
+}
+
+async function privateRunForDiagnostic(
+  diagnosticId: string
+): Promise<{ directory: string; result: JsonRecord } | null> {
+  const lookup = await lookupPrivateRun(diagnosticId);
+  return lookup.status === "found" ? lookup : null;
+}
+
+async function lookupPrivateFeedback(feedbackId: string): Promise<PrivateFeedbackLookup> {
+  if (!/^[a-f0-9-]{36}$/i.test(feedbackId)) return { status: "missing" };
+  const suffix = `_${feedbackId}`;
+  const directory = (await feedbackDirectories())
+    .find((candidate) => path.basename(candidate).endsWith(suffix));
+  if (!directory) return { status: "missing" };
+  const meta = await readJsonIfExists(path.join(directory, "meta.json"));
+  return isObject(meta) && meta.feedbackId === feedbackId
+    ? { status: "found", directory }
+    : { status: "invalid", directory };
+}
+
+function textTail(value: unknown, maxBytes = 16 * 1024): string | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const bytes = Buffer.from(value, "utf-8");
+  return bytes.subarray(Math.max(0, bytes.byteLength - maxBytes)).toString("utf-8").trim() || null;
+}
+
+function missingReproductionReason(fallback: {
+  artifactKey?: unknown;
+  artifactStatus?: unknown;
+  executionSource?: unknown;
+  expiresAt?: unknown;
+}): AdminReproductionUnavailableReason {
+  const expiresAt = fallback.expiresAt instanceof Date
+    ? fallback.expiresAt.getTime()
+    : typeof fallback.expiresAt === "string" ? new Date(fallback.expiresAt).getTime() : Number.NaN;
+  if (Number.isFinite(expiresAt) && expiresAt <= Date.now()) return "expired";
+  if (fallback.executionSource === "cache") return "cache_hit";
+  if (fallback.artifactStatus === "pending") return "finalizing";
+  if (fallback.artifactStatus === "failed") return "finalization_failed";
+  if (fallback.artifactStatus === "none" || typeof fallback.artifactKey !== "string" || !fallback.artifactKey) {
+    return "not_recorded";
+  }
+  return "missing";
+}
+
+function reproductionExpired(expiresAt: unknown): boolean {
+  const value = expiresAt instanceof Date
+    ? expiresAt.getTime()
+    : typeof expiresAt === "string" ? new Date(expiresAt).getTime() : Number.NaN;
+  return Number.isFinite(value) && value <= Date.now();
+}
+
+export async function readPlanReproduction(
+  diagnosticId: string,
+  fallback: PlanReproductionFallback = {},
+): Promise<AdminReproductionData> {
+  if (reproductionExpired(fallback.expiresAt)) {
+    return toAdminReproductionData({
+      diagnosticId,
+      layout: null,
+      operbox: null,
+      context: null,
+      result: null,
+      fallbackRotation: fallback.rotation,
+      fallbackFiammettaEnabled: fallback.fiammettaEnabled,
+      unavailableReason: "expired",
+    });
+  }
+  const lookup = await lookupPrivateRun(diagnosticId);
+  if (lookup.status !== "found") {
+    return toAdminReproductionData({
+      diagnosticId,
+      layout: null,
+      operbox: null,
+      context: null,
+      result: null,
+      fallbackRotation: fallback.rotation,
+      fallbackFiammettaEnabled: fallback.fiammettaEnabled,
+      unavailableReason: lookup.status === "invalid" ? "invalid" : missingReproductionReason(fallback),
+    });
+  }
+  const [layout, operbox, context, stderrExcerpt, stdoutExcerpt] = await Promise.all([
+    readJsonIfExists(path.join(lookup.directory, "layout.json")),
+    readJsonIfExists(path.join(lookup.directory, "operbox.json")),
+    readJsonIfExists(path.join(lookup.directory, "reproduction.json")),
+    readTextTail(path.join(lookup.directory, "stderr.txt")),
+    readTextTail(path.join(lookup.directory, "stdout.txt")),
+  ]);
+  let debug = isObject(lookup.result.debugBundle) ? lookup.result.debugBundle : null;
+  if (!debug && (!layout || !operbox || !context || !stderrExcerpt || !stdoutExcerpt)) {
+    const storedDebug = await readJsonIfExists(path.join(lookup.directory, "debug-bundle.json"));
+    debug = isObject(storedDebug) ? storedDebug : null;
+  }
+  const legacyContext = legacyPlanReproductionContext(debug);
+  const legacyBackfillWithoutExactFiammetta = !context
+    && Boolean(debug)
+    && fallback.executionSource == null
+    && typeof legacyContext?.fiammettaEnabled !== "boolean";
+  return toAdminReproductionData({
+    diagnosticId,
+    layout: layout ?? debug?.layout,
+    operbox: operbox ?? debug?.operbox,
+    context: context ?? legacyContext,
+    result: lookup.result,
+    stderrExcerpt: stderrExcerpt ?? textTail(debug?.stderr),
+    stdoutExcerpt: stdoutExcerpt ?? textTail(debug?.stdout),
+    fallbackRotation: fallback.rotation,
+    fallbackFiammettaEnabled: legacyBackfillWithoutExactFiammetta ? undefined : fallback.fiammettaEnabled,
+  });
+}
+
+export async function readFeedbackReproduction(
+  feedbackId: string,
+  diagnosticId: string,
+  options: {
+    expiresAt?: unknown;
+    plan?: PlanReproductionFallback;
+  } = {},
+): Promise<AdminReproductionData> {
+  if (reproductionExpired(options.expiresAt)) {
+    return toAdminReproductionData({
+      diagnosticId,
+      layout: null,
+      operbox: null,
+      context: null,
+      result: null,
+      fallbackRotation: options.plan?.rotation,
+      fallbackFiammettaEnabled: options.plan?.fiammettaEnabled,
+      unavailableReason: "expired",
+    });
+  }
+
+  const [lookup, linkedRun] = await Promise.all([
+    lookupPrivateFeedback(feedbackId),
+    readPlanReproduction(diagnosticId, options.plan),
+  ]);
+  if (lookup.status === "missing") return linkedRun;
+  if (lookup.status === "invalid") {
+    if (linkedRun.available) return linkedRun;
+    return toAdminReproductionData({
+      diagnosticId,
+      layout: null,
+      operbox: null,
+      context: null,
+      result: { error: linkedRun.error },
+      stderrExcerpt: linkedRun.stderrExcerpt,
+      stdoutExcerpt: linkedRun.stdoutExcerpt,
+      fallbackRotation: options.plan?.rotation,
+      fallbackFiammettaEnabled: options.plan?.fiammettaEnabled,
+      unavailableReason: "invalid",
+    });
+  }
+
+  const [layout, operbox, context] = await Promise.all([
+    readJsonIfExists(path.join(lookup.directory, "layout.json")),
+    readJsonIfExists(path.join(lookup.directory, "operbox.json")),
+    readJsonIfExists(path.join(lookup.directory, "reproduction.json")),
+  ]);
+  const reproduction = toAdminReproductionData({
+    diagnosticId,
+    layout,
+    operbox,
+    context,
+    result: { error: linkedRun.error },
+    stderrExcerpt: linkedRun.stderrExcerpt,
+    stdoutExcerpt: linkedRun.stdoutExcerpt,
+    fallbackRotation: options.plan?.rotation,
+    fallbackFiammettaEnabled: options.plan?.fiammettaEnabled,
+  });
+  if (reproduction.available) return reproduction;
+  return linkedRun.available ? linkedRun : reproduction;
 }
 
 async function readShiftFiles(outputDir: string) {
@@ -507,7 +874,8 @@ function formatPlanFailure({
 
 const globalForInfra = globalThis as typeof globalThis & {
   __infraCliHealthServeClient?: InfraCliServeClient;
-  __infraCliPlanServeClient?: InfraCliServeClient;
+  __infraCliPlanServeClients?: Map<number, InfraCliServeClient>;
+  __infraCliPlanCapabilities?: Map<number, { generation: number; capability: PlanComputeCapability }>;
   __infraCliCleanupRegistered?: boolean;
   __infraPrivateMaintenance?: {
     lastCompletedAt: number;
@@ -528,20 +896,66 @@ function getHealthServeClient() {
   return globalForInfra.__infraCliHealthServeClient;
 }
 
-function getPlanServeClient() {
-  globalForInfra.__infraCliPlanServeClient ??= new InfraCliServeClient(serveClientOptions());
-  return globalForInfra.__infraCliPlanServeClient;
+function getPlanServeClient(lane = 0) {
+  globalForInfra.__infraCliPlanServeClients ??= new Map();
+  const existing = globalForInfra.__infraCliPlanServeClients.get(lane);
+  if (existing) return existing;
+  const client = new InfraCliServeClient(serveClientOptions());
+  globalForInfra.__infraCliPlanServeClients.set(lane, client);
+  return client;
 }
 
-function stopServeClient(reason: string) {
+export async function warmPlanServeLane(serveLane: number): Promise<void> {
+  if (!Number.isSafeInteger(serveLane) || serveLane < 0) {
+    throw new Error("Plan solver lane must be a non-negative integer.");
+  }
+  const serveClient = getPlanServeClient(serveLane);
+  const ping = await serveClient.ping();
+  const capability = inspectPlanComputeCapability(ping.response);
+  globalForInfra.__infraCliPlanCapabilities ??= new Map();
+  globalForInfra.__infraCliPlanCapabilities.set(serveLane, {
+    generation: serveClient.info().restartCount,
+    capability,
+  });
+  if (serveLane === 0 && capability.supported && capability.solverExecutableSha256) {
+    cachedPlanCacheSolverIdentity = {
+      value: createSolverObservation(capability, new Date().toISOString()),
+      expiresAt: Date.now() + PLAN_CACHE_SOLVER_IDENTITY_TTL_MS,
+    };
+  }
+  const readiness = inspectSolverDeploymentReadiness(
+    capability,
+    process.env.INFRA_CLI_EXPECTED_SHA256,
+  );
+  if (!readiness.ready) {
+    throw new Error(`Plan solver lane ${serveLane} is not ready: ${readiness.reason ?? "unknown reason"}`);
+  }
+}
+
+export function stopInfraServeClients(reason: string) {
   globalForInfra.__infraCliHealthServeClient?.stop(reason);
-  globalForInfra.__infraCliPlanServeClient?.stop(reason);
+  for (const client of globalForInfra.__infraCliPlanServeClients?.values() ?? []) client.stop(reason);
+  globalForInfra.__infraCliPlanCapabilities?.clear();
+}
+
+async function getPlanServeCapability(serveLane: number, serveClient: InfraCliServeClient): Promise<PlanComputeCapability> {
+  const info = serveClient.info();
+  const cached = globalForInfra.__infraCliPlanCapabilities?.get(serveLane);
+  if (info.running && cached?.generation === info.restartCount) return cached.capability;
+  const ping = await serveClient.ping();
+  const capability = inspectPlanComputeCapability(ping.response);
+  globalForInfra.__infraCliPlanCapabilities ??= new Map();
+  globalForInfra.__infraCliPlanCapabilities.set(serveLane, {
+    generation: serveClient.info().restartCount,
+    capability,
+  });
+  return capability;
 }
 
 function registerServeClientCleanup() {
   if (globalForInfra.__infraCliCleanupRegistered) return;
   globalForInfra.__infraCliCleanupRegistered = true;
-  registerProcessCleanup(process, stopServeClient);
+  registerProcessCleanup(process, stopInfraServeClients);
 }
 
 registerServeClientCleanup();
@@ -628,16 +1042,33 @@ export async function getPlanCacheSolverIdentity(): Promise<SolverObservation | 
     return cachedPlanCacheSolverIdentity.value;
   }
 
+  const planClient = globalForInfra.__infraCliPlanServeClients?.get(0);
+  const planCapability = globalForInfra.__infraCliPlanCapabilities?.get(0);
+  if (
+    planClient?.info().running
+    && planCapability?.generation === planClient.info().restartCount
+    && planCapability.capability.supported
+    && planCapability.capability.solverExecutableSha256
+  ) {
+    const value = createSolverObservation(planCapability.capability, new Date().toISOString());
+    cachedPlanCacheSolverIdentity = {
+      value,
+      expiresAt: now + PLAN_CACHE_SOLVER_IDENTITY_TTL_MS,
+    };
+    return value;
+  }
+
   if (planCacheSolverIdentityTask) return planCacheSolverIdentityTask;
-  const serveClient = getHealthServeClient();
-  if (serveClient.info().busy) return cachedPlanCacheSolverIdentity?.value ?? null;
+  const serveClient = planClient ?? getHealthServeClient();
+  if (serveClient.info().busy) return null;
 
   const task = (async () => {
     let value: SolverObservation | null = null;
     try {
       resolveCliPath();
-      const ping = await serveClient.ping();
-      const capability = inspectPlanComputeCapability(ping.response);
+      const capability = planClient
+        ? await getPlanServeCapability(0, planClient)
+        : inspectPlanComputeCapability((await serveClient.ping()).response);
       if (capability.supported && capability.solverExecutableSha256) {
         const readiness = inspectSolverDeploymentReadiness(capability, process.env.INFRA_CLI_EXPECTED_SHA256);
         if (readiness.ready) value = createSolverObservation(capability, new Date().toISOString());
@@ -659,6 +1090,23 @@ export async function getPlanCacheSolverIdentity(): Promise<SolverObservation | 
   }
 }
 
+export function getCachedPlanCacheSolverIdentity(): SolverObservation | null {
+  const current = cachedPlanCacheSolverIdentity?.value ?? null;
+  if (!cachedPlanCacheSolverIdentity || cachedPlanCacheSolverIdentity.expiresAt <= Date.now()) {
+    void getPlanCacheSolverIdentity().catch(() => undefined);
+  }
+  if (current) return current;
+  const expectedSha256 = process.env.INFRA_CLI_EXPECTED_SHA256?.trim();
+  if (!expectedSha256 || !/^[a-f0-9]{64}$/.test(expectedSha256)) return null;
+  return {
+    protocol_version: PLAN_PROTOCOL_VERSION,
+    plan_schema_version: PLAN_SCHEMA_VERSION,
+    plan_contract_sha256: null,
+    solver_executable_sha256: expectedSha256,
+    observed_at: new Date().toISOString(),
+  };
+}
+
 export async function getSampleOperbox() {
   const samplePath = resolveSampleOperboxPath();
   const sample = JSON.parse(await readFile(samplePath, "utf-8")) as unknown;
@@ -669,7 +1117,10 @@ export async function getSampleOperbox() {
   };
 }
 
-export async function saveFeedback(body: FeedbackRequest): Promise<FeedbackData> {
+export async function saveFeedback(
+  body: FeedbackRequest,
+  options: { userId?: string | null; dataOwnerTag?: string | null } = {},
+): Promise<FeedbackData> {
   const savedAt = new Date().toISOString();
   const feedbackId = randomUUID();
   const kind = body.kind ?? "room_issue";
@@ -677,31 +1128,67 @@ export async function saveFeedback(body: FeedbackRequest): Promise<FeedbackData>
   const feedbackDir = path.join(feedbackRoot, dirName);
   const metaPath = path.join(feedbackDir, "meta.json");
   const issuePath = path.join(feedbackDir, "issue.json");
+  const layoutPath = path.join(feedbackDir, "layout.json");
+  const operboxPath = path.join(feedbackDir, "operbox.json");
+  const reproductionPath = path.join(feedbackDir, "reproduction.json");
+
+  const reproduction = toAdminReproductionData({
+    diagnosticId: body.diagnosticId,
+    layout: body.reproduction.layout,
+    operbox: body.reproduction.operbox,
+    context: {
+      ...body.reproduction,
+      sourceName: body.reproduction.sourceType === "skland" ? "森空岛同步" : "MAA 导入",
+    },
+    result: null,
+  });
+  if (!reproduction.available) throw new PublicApiError("AIC-FEEDBACK-4001");
   await mkdir(feedbackDir, { recursive: true });
 
   const linkedRun = await privateRunForDiagnostic(body.diagnosticId);
   const owner = linkedRun ? await ownerMetadata(linkedRun.directory) : null;
-  const dataOwnerTag = owner?.diagnosticId === body.diagnosticId && typeof owner.ownerTag === "string"
+  const linkedDataOwnerTag = owner?.diagnosticId === body.diagnosticId && typeof owner.ownerTag === "string"
     ? owner.ownerTag
     : null;
+  const dataOwnerTag = options.dataOwnerTag ?? linkedDataOwnerTag;
   const solver = solverObservationFromPlanRecord(linkedRun?.result);
   const meta = {
+    version: "feedback-record-v2",
     feedbackId,
     savedAt,
     diagnosticId: body.diagnosticId,
     kind,
     consent: body.consent,
     solver,
+    ...(linkedRun ? {
+      runArtifact: path.relative(storageRoot, existsSync(path.join(linkedRun.directory, "run-envelope.json"))
+        ? path.join(linkedRun.directory, "run-envelope.json")
+        : path.join(linkedRun.directory, "result.json")),
+    } : {}),
     ...(dataOwnerTag ? { dataOwnerTag } : {}),
   };
 
-  await writeJson(metaPath, meta);
-  await writeJson(issuePath, toStoredFeedbackIssue(body));
+  await Promise.all([
+    writeJson(metaPath, meta),
+    writeJson(issuePath, toStoredFeedbackIssue(body)),
+    writeJson(layoutPath, reproduction.layout),
+    writeJson(operboxPath, reproduction.operbox),
+    writeJson(reproductionPath, {
+      version: 1,
+      diagnosticId: body.diagnosticId,
+      sourceName: reproduction.sourceName,
+      sourceType: body.reproduction.sourceType,
+      rotation: reproduction.rotation,
+      rotationCount: reproduction.rotationCount,
+      fiammettaEnabled: reproduction.fiammettaEnabled,
+    }),
+  ]);
   await recordFeedbackIfEnabled({
     feedbackId,
     savedAt: new Date(savedAt),
     body,
-    artifact: await artifactDescriptor(feedbackId, [metaPath, issuePath]),
+    userId: options.userId ?? null,
+    artifact: await artifactDescriptor(feedbackId, [metaPath, issuePath, layoutPath, operboxPath, reproductionPath]),
   });
 
   return {
@@ -711,17 +1198,319 @@ export async function saveFeedback(body: FeedbackRequest): Promise<FeedbackData>
 }
 
 export async function describePlanArtifact(result: PlanApiResponse): Promise<PrivateArtifactDescriptor | null> {
-  if (!result.runId || !result.resultPath) return null;
-  const resolved = path.resolve(/* turbopackIgnore: true */ result.resultPath);
+  const artifactPath = result.artifactEnvelopePath ?? result.resultPath;
+  if (!result.runId || !artifactPath) return null;
+  const resolved = path.resolve(/* turbopackIgnore: true */ artifactPath);
   const root = path.resolve(/* turbopackIgnore: true */ cliRunRoot);
   if (!isPrivateStorageChild(root, resolved)) return null;
   return artifactDescriptor(result.runId, [resolved]);
 }
 
-export async function runPlan(body: unknown): Promise<PlanApiResponse> {
+type PlanRunEnvelope = {
+  version: "plan-run-envelope-v1";
+  diagnosticId: string;
+  dataOwnerTag: string | null;
+  result: PlanApiResponse;
+};
+
+function parsePlanRunEnvelope(value: unknown): PlanRunEnvelope {
+  if (!isObject(value) || value.version !== "plan-run-envelope-v1" || typeof value.diagnosticId !== "string" || !isObject(value.result)) {
+    throw new Error("Plan run envelope is invalid.");
+  }
+  return value as unknown as PlanRunEnvelope;
+}
+
+export async function finalizePlanArtifactEnvelope(
+  envelopePath: string,
+  dependencies: PlanArtifactFinalizerDependencies = defaultPlanArtifactFinalizerDependencies,
+): Promise<void> {
+  const resolvedEnvelope = path.resolve(/* turbopackIgnore: true */ envelopePath);
+  const root = path.resolve(/* turbopackIgnore: true */ cliRunRoot);
+  if (!isPrivateStorageChild(root, resolvedEnvelope)) throw new Error("Plan run envelope is outside private storage.");
+  const runDir = path.dirname(resolvedEnvelope);
+  const envelope = parsePlanRunEnvelope(JSON.parse(await readFile(resolvedEnvelope, "utf-8")) as unknown);
+  const { result } = envelope;
+  const expandedMarkerPath = path.join(runDir, "artifact-expanded.json");
+  if (!existsSync(expandedMarkerPath)) {
+    const debug = result.debugBundle;
+    const writes: Promise<unknown>[] = [
+      writeJsonAtomic(path.join(runDir, "result.json"), result),
+    ];
+    if (debug) {
+      writes.push(
+        writeJsonAtomic(path.join(runDir, "debug-bundle.json"), debug),
+        writeJsonAtomic(path.join(runDir, "layout.json"), debug.layout),
+        writeJsonAtomic(path.join(runDir, "operbox.json"), debug.operbox),
+        writeTextAtomic(path.join(runDir, "stdout.txt"), debug.stdout),
+        writeTextAtomic(path.join(runDir, "stderr.txt"), debug.stderr),
+        writeTextAtomic(path.join(runDir, "command.txt"), debug.command),
+      );
+      if (debug.profileJson) writes.push(writeJsonAtomic(path.join(runDir, "profile.json"), debug.profileJson));
+      if (debug.maaJson) writes.push(writeJsonAtomic(path.join(runDir, "maa.json"), debug.maaJson));
+      if (debug.serveRequest) {
+        writes.push(
+          writeJsonAtomic(path.join(runDir, "serve-request.json"), debug.serveRequest),
+          writeTextAtomic(path.join(runDir, "serve-request.jsonl"), `${JSON.stringify(debug.serveRequest)}\n`),
+        );
+      }
+      if (debug.serveResponse) writes.push(writeJsonAtomic(path.join(runDir, "serve-response.json"), debug.serveResponse));
+    }
+    if (envelope.dataOwnerTag) {
+      writes.push(writeJsonAtomic(path.join(runDir, "owner.json"), {
+        version: 1,
+        ownerTag: envelope.dataOwnerTag,
+        diagnosticId: envelope.diagnosticId,
+        sourceName: debug?.inputSummary.sourceName ?? null,
+        createdAt: result.startedAt ?? new Date().toISOString(),
+      }));
+    }
+    await Promise.all(writes);
+    await writeJsonAtomic(expandedMarkerPath, {
+      version: 1,
+      diagnosticId: envelope.diagnosticId,
+      expandedAt: new Date().toISOString(),
+    }, true);
+  }
+  const finalizedAt = new Date();
+  const artifactRecorded = await dependencies.updateArtifact({
+    diagnosticId: envelope.diagnosticId,
+    status: "complete",
+    artifact: await artifactDescriptor(envelope.diagnosticId, [resolvedEnvelope]),
+    finalizedAt,
+  });
+  if (artifactRecorded !== "updated") throw new PlanArtifactPersistenceError(artifactRecorded);
+  await writeJsonAtomic(path.join(runDir, "artifact-finalized.json"), {
+    version: 1,
+    diagnosticId: envelope.diagnosticId,
+    finalizedAt: finalizedAt.toISOString(),
+  }, true);
+}
+
+function settleArtifactFinalizerIdle() {
+  if (
+    artifactFinalizerState.running !== 0
+    || artifactFinalizerState.queue.length !== 0
+    || artifactFinalizerState.retryTimers.size !== 0
+  ) return;
+  for (const resolve of artifactFinalizerState.idleWaiters) resolve();
+  artifactFinalizerState.idleWaiters.clear();
+}
+
+function schedulePlanArtifactRetry(
+  envelopePath: string,
+  attempt: number,
+  delayMs: number,
+  dependencies: PlanArtifactFinalizerDependencies,
+) {
+  const timer = setTimeout(() => {
+    artifactFinalizerState.retryTimers.delete(envelopePath);
+    artifactFinalizerState.queue.push({ envelopePath, attempt, dependencies });
+    pumpArtifactFinalizers();
+  }, delayMs);
+  timer.unref();
+  artifactFinalizerState.retryTimers.set(envelopePath, timer);
+}
+
+function pumpArtifactFinalizers() {
+  while (
+    artifactFinalizerState.running < PLAN_ARTIFACT_FINALIZER_CONCURRENCY
+    && artifactFinalizerState.queue.length > 0
+  ) {
+    const item = artifactFinalizerState.queue.shift();
+    if (!item) break;
+    const { envelopePath, attempt, dependencies } = item;
+    artifactFinalizerState.running += 1;
+    let retryScheduled = false;
+    void finalizePlanArtifactEnvelope(envelopePath, dependencies)
+      .catch(async (error) => {
+        const retryDelayMs = dependencies.retryMs[attempt];
+        retryScheduled = retryDelayMs !== undefined;
+        console.error(JSON.stringify({
+          level: "error",
+          event: "plan_artifact_finalization_failed",
+          envelopePath,
+          attempt: attempt + 1,
+          retryDelayMs: retryDelayMs ?? null,
+          message: error instanceof Error ? error.message : String(error),
+        }));
+        if (!existsSync(envelopePath)) {
+          retryScheduled = false;
+          return;
+        }
+        let envelope: PlanRunEnvelope;
+        try {
+          envelope = parsePlanRunEnvelope(await readJsonIfExists(envelopePath));
+        } catch {
+          retryScheduled = false;
+          const quarantined = await writeJsonAtomic(path.join(path.dirname(envelopePath), "artifact-failed.json"), {
+            version: 1,
+            diagnosticId: null,
+            failedAt: new Date().toISOString(),
+            reason: "invalid-envelope",
+          }, true).then(() => true, () => false);
+          if (!quarantined) {
+            retryScheduled = true;
+            schedulePlanArtifactRetry(envelopePath, attempt, dependencies.slowRetryMs, dependencies);
+          }
+          return;
+        }
+        let envelopeAgeMs: number;
+        try {
+          const details = await stat(envelopePath);
+          const createdAt = timestampMs(envelope.result.startedAt) ?? filesystemCreatedAtMs(details);
+          envelopeAgeMs = Math.max(0, dependencies.now() - createdAt);
+        } catch {
+          retryScheduled = false;
+          return;
+        }
+        const writeFailureMarker = async (reason?: "missing-run-record" | "retention-exceeded") =>
+          writeJsonAtomic(path.join(path.dirname(envelopePath), "artifact-failed.json"), {
+            version: 1,
+            diagnosticId: envelope.diagnosticId,
+            failedAt: new Date(dependencies.now()).toISOString(),
+            ...(reason ? { reason } : {}),
+          }, true).then(() => true, () => false);
+        if (envelopeAgeMs >= dependencies.retentionMs) {
+          retryScheduled = !(await writeFailureMarker("retention-exceeded"));
+          if (retryScheduled) {
+            schedulePlanArtifactRetry(envelopePath, attempt, dependencies.slowRetryMs, dependencies);
+          }
+          return;
+        }
+        if (error instanceof PlanArtifactPersistenceError && error.reason === "missing") {
+          if (envelopeAgeMs >= dependencies.missingRunGraceMs) {
+            retryScheduled = !(await writeFailureMarker("missing-run-record"));
+            if (retryScheduled) {
+              schedulePlanArtifactRetry(envelopePath, attempt, dependencies.slowRetryMs, dependencies);
+            }
+            return;
+          }
+          retryScheduled = true;
+          schedulePlanArtifactRetry(
+            envelopePath,
+            retryDelayMs === undefined ? attempt : attempt + 1,
+            retryDelayMs ?? dependencies.slowRetryMs,
+            dependencies,
+          );
+          return;
+        }
+        if (error instanceof PlanArtifactPersistenceError && error.reason === "unavailable") {
+          retryScheduled = true;
+          schedulePlanArtifactRetry(
+            envelopePath,
+            retryDelayMs === undefined ? attempt : attempt + 1,
+            retryDelayMs ?? dependencies.slowRetryMs,
+            dependencies,
+          );
+          return;
+        }
+        if (retryDelayMs === undefined) {
+          const failureRecorded = await dependencies.updateArtifact({
+            diagnosticId: envelope.diagnosticId,
+            status: "failed",
+          });
+          if (failureRecorded === "updated") {
+            const markerWritten = await writeFailureMarker();
+            if (markerWritten) return;
+          }
+          retryScheduled = true;
+          schedulePlanArtifactRetry(envelopePath, attempt, dependencies.slowRetryMs, dependencies);
+          return;
+        }
+        schedulePlanArtifactRetry(envelopePath, attempt + 1, retryDelayMs, dependencies);
+      })
+      .finally(() => {
+        artifactFinalizerState.running -= 1;
+        if (!retryScheduled) artifactFinalizerState.queued.delete(envelopePath);
+        pumpArtifactFinalizers();
+        settleArtifactFinalizerIdle();
+      });
+  }
+  settleArtifactFinalizerIdle();
+}
+
+function enqueuePlanArtifactEnvelope(
+  envelopePath: string,
+  dependencies: PlanArtifactFinalizerDependencies = defaultPlanArtifactFinalizerDependencies,
+) {
+  const resolved = path.resolve(/* turbopackIgnore: true */ envelopePath);
+  if (artifactFinalizerState.queued.has(resolved)) return;
+  artifactFinalizerState.queued.add(resolved);
+  artifactFinalizerState.queue.push({ envelopePath: resolved, attempt: 0, dependencies });
+  pumpArtifactFinalizers();
+}
+
+export function enqueuePlanArtifactFinalization(result: PlanApiResponse): boolean {
+  if (!result.artifactEnvelopePath) return false;
+  enqueuePlanArtifactEnvelope(result.artifactEnvelopePath);
+  return true;
+}
+
+export async function resumePendingPlanArtifactFinalizations(
+  dependencyOverrides: Partial<PlanArtifactFinalizerDependencies> = {},
+): Promise<number> {
+  const dependencies = { ...defaultPlanArtifactFinalizerDependencies, ...dependencyOverrides };
+  await mkdir(cliRunRoot, { recursive: true });
+  const entries = await readdir(cliRunRoot, { withFileTypes: true });
+  let resumed = 0;
+  const directories = entries.filter((entry) => entry.isDirectory());
+  const batchSize = 64;
+  for (let offset = 0; offset < directories.length; offset += batchSize) {
+    const envelopePaths = await Promise.all(
+      directories.slice(offset, offset + batchSize).map(async (entry) => {
+        const runDir = path.join(cliRunRoot, entry.name);
+        const files = new Set(await readdir(runDir).catch(() => []));
+        if (
+          !files.has("run-envelope.json")
+          || files.has("artifact-finalized.json")
+          || files.has("artifact-failed.json")
+        ) return null;
+        return path.join(runDir, "run-envelope.json");
+      }),
+    );
+    for (const envelopePath of envelopePaths) {
+      if (!envelopePath) continue;
+      enqueuePlanArtifactEnvelope(envelopePath, dependencies);
+      resumed += 1;
+    }
+  }
+  return resumed;
+}
+
+export async function waitForPlanArtifactFinalizers(timeoutMs: number): Promise<boolean> {
+  if (
+    artifactFinalizerState.running === 0
+    && artifactFinalizerState.queue.length === 0
+    && artifactFinalizerState.retryTimers.size === 0
+  ) return true;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  let resolveIdle: (() => void) | undefined;
+  const idle = new Promise<true>((resolve) => {
+    resolveIdle = () => resolve(true);
+    artifactFinalizerState.idleWaiters.add(resolveIdle);
+  });
+  const expired = new Promise<false>((resolve) => {
+    timeout = setTimeout(() => resolve(false), Math.max(0, timeoutMs));
+  });
+  const result = await Promise.race([idle, expired]);
+  if (timeout) clearTimeout(timeout);
+  if (resolveIdle) artifactFinalizerState.idleWaiters.delete(resolveIdle);
+  return result;
+}
+
+export async function runPlan(
+  body: unknown,
+  options: { serveLane?: number; deferArtifacts?: boolean } = {},
+): Promise<PlanApiResponse> {
   let runDir = "";
   let ephemeralRunDir = "";
   let resultPath = "";
+  let artifactEnvelopePath = "";
+  let runId = "";
+  let runDataOwnerTag: string | null = null;
+  let deferArtifacts = false;
+  let solverStartedAt: string | undefined;
+  let solverFinishedAt: string | undefined;
   let solver: SolverObservation | undefined;
   const startedAt = new Date().toISOString();
   const start = performance.now();
@@ -730,9 +1519,9 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
     // Record retention is housekeeping. A corrupt legacy record must not block planning.
     void maintainPrivateRecordsIfDue().catch(() => undefined);
     assertPlanBody(body);
+    runDataOwnerTag = body.dataOwnerTag ?? null;
 
-    const cliPath = resolveCliPath();
-    const runId = randomUUID();
+    runId = randomUUID();
     runDir = path.join(cliRunRoot, makeStampedDirName(startedAt, body.sourceName, runId));
     try {
       await mkdir(runDir, { recursive: true });
@@ -740,14 +1529,19 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
       ephemeralRunDir = await mkdtemp(path.join(tmpdir(), "arknights-infra-run-"));
       runDir = ephemeralRunDir;
     }
+    // A temporary fallback directory is deleted before returning, so it cannot
+    // provide a durable envelope for the asynchronous finalizer.
+    deferArtifacts = Boolean(options.deferArtifacts && !ephemeralRunDir);
     if (body.dataOwnerTag) {
-      await writeJson(path.join(runDir, "owner.json"), {
+      // Keep the ownership marker compatible with the previous release so a
+      // rollback can still delete a pending deferred Skland artifact.
+      await writeJsonAtomic(path.join(runDir, "owner.json"), {
         version: 1,
         ownerTag: body.dataOwnerTag,
         diagnosticId: runId,
         sourceName: body.sourceName ?? null,
         createdAt: startedAt,
-      });
+      }, true);
     }
 
     const layoutPath = path.join(runDir, "layout.json");
@@ -762,19 +1556,12 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
     const serveRequestPath = path.join(runDir, "serve-request.json");
     const serveRequestLinePath = path.join(runDir, "serve-request.jsonl");
     const serveResponsePath = path.join(runDir, "serve-response.json");
+    const reproductionPath = path.join(runDir, "reproduction.json");
     resultPath = path.join(runDir, "result.json");
+    artifactEnvelopePath = path.join(runDir, "run-envelope.json");
 
-    // 只把已拥有的干员交给求解器：未拥有干员 level=0 会违反 plan.compute schema，且排班用不到它们
-    // 去重：同名保留第一个；阿米娅变体直接删除
-    const seenNames = new Set<string>();
-    const skipNames = new Set(["阿米娅（近卫）", "阿米娅（医疗）"]);
-    body.operbox = body.operbox.filter((entry) => {
-      if (!entry.own) return false;
-      const name = entry.name.trim();
-      if (skipNames.has(name) || seenNames.has(name)) return false;
-      seenNames.add(name);
-      return true;
-    });
+    // Keep the cache identity and actual solver request on the exact same effective input.
+    body.operbox = normalizeSolverOperbox(body.operbox);
     if (body.operbox.length === 0) {
       throw new PublicApiError("AIC-BOX-1101", {
         fieldErrors: [{
@@ -787,10 +1574,18 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
 
     await writeJson(layoutPath, body.layout);
     await writeJson(operboxPath, body.operbox);
+    await writeJson(reproductionPath, {
+      version: 1,
+      diagnosticId: runId,
+      sourceName: body.sourceName ?? null,
+      rotation: body.rotation,
+      fiammettaEnabled: body.fiammettaEnable ?? true,
+    });
 
-    const serveClient = getPlanServeClient();
-    const pingResult = await serveClient.ping();
-    const planCompute = inspectPlanComputeCapability(pingResult.response);
+    const cliPath = resolveCliPath();
+    const serveLane = options.serveLane ?? 0;
+    const serveClient = getPlanServeClient(serveLane);
+    const planCompute = await getPlanServeCapability(serveLane, serveClient);
     solver = createSolverObservation(planCompute, new Date().toISOString());
     let serveResult: ServeResult;
     let profileJson: unknown;
@@ -803,15 +1598,21 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
     let shiftReadErrors: string[] = [];
     let shiftsPath: string | undefined;
     let responseValidationError: string | undefined;
+    let solverDurationMs: number | undefined;
 
     if (planCompute.supported) {
-      serveResult = await serveClient.send("plan.compute", createPlanComputeParams({
-        layout: body.layout,
-        operbox: body.operbox,
-        sourceName: body.sourceName,
-        rotation: body.rotation,
-        fiammettaEnable: body.fiammettaEnable,
-      }));
+      solverStartedAt = new Date().toISOString();
+      try {
+        serveResult = await serveClient.send("plan.compute", createPlanComputeParams({
+          layout: body.layout,
+          operbox: body.operbox,
+          sourceName: body.sourceName,
+          rotation: body.rotation,
+          fiammettaEnable: body.fiammettaEnable,
+        }));
+      } finally {
+        solverFinishedAt = new Date().toISOString();
+      }
 
       let payload: ReturnType<typeof parsePlanComputePayload> = null;
       try {
@@ -825,19 +1626,24 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
       trainingAdviceJson = payload?.trainingAdvice;
       rotationSource = payload?.rotation;
       serveShifts = payload && Array.isArray(payload.rotation.shifts) ? payload.rotation.shifts : [];
-      if (profileJson) await writeJson(profilePath, profileJson);
-      if (maaJson) await writeJson(maaPath, maaJson);
+      if (!deferArtifacts && profileJson) await writeJson(profilePath, profileJson);
+      if (!deferArtifacts && maaJson) await writeJson(maaPath, maaJson);
     } else {
-      serveResult = await serveClient.send("plan", {
-        layout: layoutPath,
-        operbox: operboxPath,
-        profile_out: profilePath,
-        maa_out: maaPath,
-        output_dir: shiftsDir,
-        top: 20,
-        rotation: body.rotation,
-        maa_title: `${body.sourceName ?? "Arknights InfraCalc"} · ${String(body.layout.template ?? "layout")}`,
-      });
+      solverStartedAt = new Date().toISOString();
+      try {
+        serveResult = await serveClient.send("plan", {
+          layout: layoutPath,
+          operbox: operboxPath,
+          profile_out: profilePath,
+          maa_out: maaPath,
+          output_dir: shiftsDir,
+          top: 20,
+          rotation: body.rotation,
+          maa_title: `${body.sourceName ?? "Arknights InfraCalc"} · ${String(body.layout.template ?? "layout")}`,
+        });
+      } finally {
+        solverFinishedAt = new Date().toISOString();
+      }
 
       profileJson = await readJsonIfExists(profilePath);
       maaJson = await readJsonIfExists(maaPath);
@@ -854,12 +1660,19 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
       shiftsPath = path.relative(repoRoot, shiftsDir);
     }
 
+    const reportedSolverDuration = serveResult.response.elapsed_ms;
+    if (typeof reportedSolverDuration === "number" && Number.isFinite(reportedSolverDuration) && reportedSolverDuration >= 0) {
+      solverDurationMs = Math.round(reportedSolverDuration);
+    }
+
     const durationMs = Math.round(performance.now() - start);
     const command = `${cliPath} serve < ${path.relative(repoRoot, serveRequestLinePath)}`;
-    await writeFile(commandPath, command, "utf-8");
-    await writeJson(serveRequestPath, serveResult.request);
-    await writeFile(serveRequestLinePath, `${JSON.stringify(serveResult.request)}\n`, "utf-8");
-    await writeJson(serveResponsePath, serveResult.response);
+    if (!deferArtifacts) {
+      await writeFile(commandPath, command, "utf-8");
+      await writeJson(serveRequestPath, serveResult.request);
+      await writeFile(serveRequestLinePath, `${JSON.stringify(serveResult.request)}\n`, "utf-8");
+      await writeJson(serveResponsePath, serveResult.response);
+    }
 
     const rotationJson = normalizeRotationResult({
       source: rotationSource,
@@ -867,14 +1680,19 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
       profile: profileJson,
       fallbackProfile: body.rotation,
     });
-    await writeFile(stdoutPath, serveResult.stdout, "utf-8");
-    await writeFile(stderrPath, serveResult.stderr, "utf-8");
+    if (!deferArtifacts) {
+      await writeFile(stdoutPath, serveResult.stdout, "utf-8");
+      await writeFile(stderrPath, serveResult.stderr, "utf-8");
+    }
 
     const success = serveResult.response.ok === true && Boolean(profileJson) && Boolean(maaJson);
     const debugBundle: DebugBundle = {
       version: "beta-test-bundle-v2-next-serve",
       startedAt,
       durationMs,
+      solverDurationMs,
+      solverStartedAt,
+      solverFinishedAt,
       cliPath,
       command,
       exitCode: success ? 0 : null,
@@ -913,12 +1731,15 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
         result: path.relative(repoRoot, resultPath),
       },
     };
-    await writeJson(debugBundlePath, debugBundle);
+    if (!deferArtifacts) await writeJson(debugBundlePath, debugBundle);
 
     const resultPayload: PlanApiResponse = {
       success,
       startedAt,
       durationMs,
+      solverDurationMs,
+      solverStartedAt,
+      solverFinishedAt,
       cliPath,
       command,
       exitCode: success ? 0 : null,
@@ -937,6 +1758,8 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
       relativeRunPath: path.relative(repoRoot, runDir),
       resultPath,
       relativeResultPath: path.relative(repoRoot, resultPath),
+      artifactEnvelopePath: deferArtifacts ? artifactEnvelopePath : undefined,
+      relativeArtifactEnvelopePath: deferArtifacts ? path.relative(repoRoot, artifactEnvelopePath) : undefined,
       error: success
         ? undefined
         : responseValidationError ??
@@ -946,7 +1769,16 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
             stderr: serveResult.stderr,
           }),
     };
-    await writeJson(resultPath, resultPayload);
+    if (deferArtifacts) {
+      await writeJsonAtomic(artifactEnvelopePath, {
+        version: "plan-run-envelope-v1",
+        diagnosticId: runId,
+        dataOwnerTag: body.dataOwnerTag ?? null,
+        result: resultPayload,
+      }, true);
+    } else {
+      await writeJson(resultPath, resultPayload);
+    }
 
     return resultPayload;
   } catch (error) {
@@ -955,13 +1787,34 @@ export async function runPlan(body: unknown): Promise<PlanApiResponse> {
     const errorPayload: PlanApiResponse = {
       success: false,
       startedAt,
+      durationMs: Math.max(0, Math.round(performance.now() - start)),
+      solverStartedAt,
+      solverFinishedAt,
       solver,
       error: error instanceof Error ? error.message : String(error),
+      runId: runId || undefined,
       runPath: runDir || undefined,
       relativeRunPath: runDir ? path.relative(repoRoot, runDir) : undefined,
+      resultPath: resultPath || undefined,
+      relativeResultPath: resultPath ? path.relative(repoRoot, resultPath) : undefined,
     };
     if (resultPath) {
-      await writeJson(resultPath, errorPayload);
+      if (deferArtifacts && artifactEnvelopePath) {
+        const deferredErrorPayload: PlanApiResponse = {
+          ...errorPayload,
+          artifactEnvelopePath,
+          relativeArtifactEnvelopePath: path.relative(repoRoot, artifactEnvelopePath),
+        };
+        const envelopeWritten = await writeJsonAtomic(artifactEnvelopePath, {
+          version: "plan-run-envelope-v1",
+          diagnosticId: runId,
+          dataOwnerTag: runDataOwnerTag,
+          result: deferredErrorPayload,
+        }, true).then(() => true, () => false);
+        if (envelopeWritten) return deferredErrorPayload;
+      } else {
+        await writeJson(resultPath, errorPayload);
+      }
     }
     return errorPayload;
   } finally {
@@ -1038,11 +1891,12 @@ async function getOpsStorageStats() {
 
 export async function updateFeedbackOps(id: string, status: string, note: string) {
   if (!/^[\w.-]+$/.test(id)) throw new Error("记录 ID 非法。");
-  if (!["pending", "working", "resolved"].includes(status)) throw new Error("状态非法。");
+  const normalizedStatus = legacyAdminFeedbackStatus(status);
+  if (!normalizedStatus) throw new Error("状态非法。");
   if (isBusinessDatabaseReadEnabled()) {
     const updated = await updateFeedbackRecord({
       feedbackId: id,
-      status: status as "pending" | "working" | "resolved",
+      status: normalizedStatus,
       note,
     });
     if (updated || !isBusinessFileFallbackEnabled()) {
@@ -1052,7 +1906,7 @@ export async function updateFeedbackOps(id: string, status: string, note: string
   }
   const dir = path.join(feedbackRoot, id);
   await stat(dir);
-  const value = { status, note: note.trim().slice(0, 2000), updatedAt: new Date().toISOString() };
+  const value = { status: normalizedStatus, note: note.trim().slice(0, 2000), updatedAt: new Date().toISOString() };
   await writeJson(path.join(dir, "ops.json"), value);
   return value;
 }
@@ -1114,7 +1968,7 @@ export async function activateCliRelease(id: string) {
   const temp = `${activeCliPath}.${randomUUID()}.tmp`;
   await writeJson(temp, { releaseId: id, path: metadata.path, activatedAt: new Date().toISOString() });
   await rename(temp, activeCliPath);
-  stopServeClient("CLI 版本已切换，等待下次请求重启。");
+  stopInfraServeClients("CLI 版本已切换，等待下次请求重启。");
   return { releaseId: id, path: metadata.path };
 }
 

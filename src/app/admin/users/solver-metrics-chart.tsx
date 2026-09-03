@@ -1,0 +1,113 @@
+"use client";
+
+import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
+
+import {
+  ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/chart";
+import type { AdminSolverMetricsData } from "@/types";
+
+const chartConfig = {
+  successCount: {
+    label: "成功",
+    theme: {
+      light: "oklch(0.58 0.14 166)",
+      dark: "oklch(0.72 0.13 166)",
+    },
+  },
+  failureCount: {
+    label: "失败",
+    theme: {
+      light: "oklch(0.62 0.2 24)",
+      dark: "oklch(0.72 0.16 24)",
+    },
+  },
+} satisfies ChartConfig;
+
+const AXIS_TIME_FORMATTER = new Intl.DateTimeFormat("zh-CN", {
+  hour: "2-digit",
+  minute: "2-digit",
+});
+const TOOLTIP_TIME_FORMATTER = new Intl.DateTimeFormat("zh-CN", {
+  month: "numeric",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+function formatTime(value: string, formatter: Intl.DateTimeFormat): string {
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) ? formatter.format(date) : value;
+}
+
+export function AdminSolverMetricsChart({
+  trend,
+}: {
+  trend: AdminSolverMetricsData["solver"]["trend"];
+}) {
+  return (
+    <ChartContainer
+      config={chartConfig}
+      className="h-[280px] min-h-[280px] w-full sm:h-[320px]"
+      data-admin-solver-trend-chart
+    >
+      <AreaChart accessibilityLayer data={trend} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
+        <CartesianGrid vertical={false} strokeDasharray="3 4" />
+        <XAxis
+          dataKey="bucketStartedAt"
+          axisLine={false}
+          tickLine={false}
+          tickMargin={10}
+          minTickGap={28}
+          tickFormatter={(value: string) => formatTime(value, AXIS_TIME_FORMATTER)}
+        />
+        <YAxis allowDecimals={false} axisLine={false} tickLine={false} tickMargin={8} width={28} />
+        <ChartTooltip
+          cursor={{ stroke: "var(--border)", strokeDasharray: "3 3" }}
+          content={(
+            <ChartTooltipContent
+              indicator="line"
+              labelFormatter={(value) => formatTime(String(value), TOOLTIP_TIME_FORMATTER)}
+            />
+          )}
+        />
+        <ChartLegend content={<ChartLegendContent />} />
+        <defs>
+          <linearGradient id="admin-success-area" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stopColor="var(--color-successCount)" stopOpacity={0.5} />
+            <stop offset="95%" stopColor="var(--color-successCount)" stopOpacity={0.05} />
+          </linearGradient>
+          <linearGradient id="admin-failure-area" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stopColor="var(--color-failureCount)" stopOpacity={0.42} />
+            <stop offset="95%" stopColor="var(--color-failureCount)" stopOpacity={0.04} />
+          </linearGradient>
+        </defs>
+        <Area
+          dataKey="successCount"
+          type="monotone"
+          fill="url(#admin-success-area)"
+          fillOpacity={1}
+          stroke="var(--color-successCount)"
+          strokeWidth={2}
+          stackId="completed"
+          isAnimationActive={false}
+        />
+        <Area
+          dataKey="failureCount"
+          type="monotone"
+          fill="url(#admin-failure-area)"
+          fillOpacity={1}
+          stroke="var(--color-failureCount)"
+          strokeWidth={2}
+          stackId="completed"
+          isAnimationActive={false}
+        />
+      </AreaChart>
+    </ChartContainer>
+  );
+}

@@ -31,7 +31,7 @@ jobs:
       DEPLOY_RATE_LIMIT_ENABLED: ${{ vars.DEPLOY_RATE_LIMIT_ENABLED || '1' }}
       DEPLOY_APPROVED_SOLVER_SHA256: ${{ vars.DEPLOY_APPROVED_SOLVER_SHA256 }}
       DEPLOY_EXPECTED_REPOSITORY: KnightCodeSquareMatrix/RIIC-Web
-      DEPLOY_RELEASE_HELPER_CONTRACT: "4"
+      DEPLOY_RELEASE_HELPER_CONTRACT: "6"
 
     steps:
       - name: Checkout verified commit
@@ -53,8 +53,13 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$DEPLOY_SHA"
           deploy_tree_sha="$(git rev-parse 'HEAD^{tree}')"
+          source_date_epoch="$(git show -s --format=%ct HEAD)"
           [[ "$deploy_tree_sha" =~ ^[0-9a-f]{40}$ ]]
-          printf 'DEPLOY_TREE_SHA=%s\n' "$deploy_tree_sha" >> "$GITHUB_ENV"
+          [[ "$source_date_epoch" =~ ^[1-9][0-9]*$ ]]
+          {
+            printf 'DEPLOY_TREE_SHA=%s\n' "$deploy_tree_sha"
+            printf 'SOURCE_DATE_EPOCH=%s\n' "$source_date_epoch"
+          } >> "$GITHUB_ENV"
 
       - name: Validate deployment configuration
         shell: bash
@@ -105,6 +110,7 @@ jobs:
 
       - name: Build standalone release
         env:
+          APP_BUILD_ID: ${{ env.DEPLOY_SHA }}
           APP_DEPLOYMENT_ENV: ${{ env.DEPLOYMENT_ENV }}
           SKLAND_FEATURE_ENABLED: "1"
           ACCOUNT_CLOUD_SYNC_ENABLED: "1"
@@ -114,7 +120,7 @@ jobs:
           BETTER_AUTH_URL: ""
           RESEND_API_KEY: ""
           AUTH_EMAIL_FROM: ""
-        run: npm run build
+        run: npm run build && npm run worker:build
 
       - name: Stage and archive standalone release
         shell: bash
@@ -125,12 +131,22 @@ jobs:
           local_archive="$RUNNER_TEMP/arknights-infra-${DEPLOYMENT_ENV}-${DEPLOY_SHA}.tar.gz"
           {
             printf 'DEPLOY_ARTIFACT_PARENT=%s\n' "$artifact_parent"
+            printf 'DEPLOY_ARTIFACT_ROOT=%s\n' "$artifact_root"
             printf 'DEPLOY_LOCAL_ARCHIVE=%s\n' "$local_archive"
           } >> "$GITHUB_ENV"
 
           RELEASE_SHA="$DEPLOY_SHA" RELEASE_TREE_SHA="$DEPLOY_TREE_SHA" \
             npm run release:stage -- --output "$artifact_root"
-          tar -czf "$local_archive" -C "$artifact_root" .
+          tar --sort=name \
+            --mtime="@$SOURCE_DATE_EPOCH" \
+            --owner=0 \
+            --group=0 \
+            --numeric-owner \
+            --mode='u+rwX,go+rX,go-w' \
+            --format=gnu \
+            -cf - \
+            -C "$artifact_root" . \
+            | gzip --best --no-name --rsyncable > "$local_archive"
           gzip -t "$local_archive"
 
           archive_bytes="$(stat -c '%s' "$local_archive")"
@@ -210,14 +226,16 @@ jobs:
           verify_helper deploy /usr/local/sbin/arknights-infra-deploy \
             "$DEPLOY_RELEASE_HELPER_CONTRACT"
 
-      - name: Upload standalone release archive
+      - name: Sync standalone release tree and assemble verified archive
         shell: bash
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
         run: |
           set -euo pipefail
+          release_tree_cache=".cache/riic-web/${DEPLOYMENT_ENV}-standalone-tree"
           remote_archive="/tmp/arknights-infra-${DEPLOYMENT_ENV}-${DEPLOY_SHA}.tar.gz"
+          ssh_target="${DEPLOY_SSH_USER}@${DEPLOY_HOST}"
           ssh_options=(
             -o BatchMode=yes
             -o ConnectTimeout=15
@@ -230,20 +248,95 @@ jobs:
           test ! -L "$DEPLOY_LOCAL_ARCHIVE"
           test "$(stat -c '%s' "$DEPLOY_LOCAL_ARCHIVE")" = "$DEPLOY_ARCHIVE_BYTES"
           test "$(sha256sum "$DEPLOY_LOCAL_ARCHIVE" | cut -d ' ' -f 1)" = "$DEPLOY_ARCHIVE_SHA256"
+          [[ "$DEPLOY_ARCHIVE_BYTES" =~ ^[1-9][0-9]*$ ]]
+          test -d "$DEPLOY_ARTIFACT_ROOT"
+          test ! -L "$DEPLOY_ARTIFACT_ROOT"
+          unsupported_local_entry="$(find "$DEPLOY_ARTIFACT_ROOT" -mindepth 1 ! -type f ! -type d -print -quit)"
+          if [[ -n "$unsupported_local_entry" ]]; then
+            echo "Standalone release tree contains unsupported filesystem entries: $unsupported_local_entry" >&2
+            exit 1
+          fi
+          command -v rsync >/dev/null || {
+            echo "The release runner must provide rsync for verified file-tree delta transfer." >&2
+            exit 1
+          }
 
-          timeout --kill-after=10s 1500s scp "${ssh_options[@]}" \
-            "$DEPLOY_LOCAL_ARCHIVE" \
-            "${DEPLOY_SSH_USER}@${DEPLOY_HOST}:$remote_archive"
+          timeout --kill-after=5s 30s ssh "${ssh_options[@]}" "$ssh_target" \
+            "set -eu
+             command -v rsync >/dev/null
+             cache_parent=\"\$HOME/.cache/riic-web\"
+             remote_cache_path=\"\$HOME/$release_tree_cache\"
+             test ! -L \"\$cache_parent\"
+             install -d -m 700 -- \"\$cache_parent\"
+             test -d \"\$cache_parent\"
+             test ! -L \"\$cache_parent\"
+             test \"\$(stat -c '%U:%a' -- \"\$cache_parent\")\" = \"\$(id -un):700\"
+             case \"\$remote_cache_path\" in \"\$cache_parent\"/*) ;; *) exit 1 ;; esac
+             if [ -e \"\$remote_cache_path\" ]; then
+               test -d \"\$remote_cache_path\"
+               test ! -L \"\$remote_cache_path\"
+             else
+               install -d -m 700 -- \"\$remote_cache_path\"
+             fi
+             test \"\$(stat -c '%U:%a' -- \"\$remote_cache_path\")\" = \"\$(id -un):700\"
+             test -z \"\$(find \"\$remote_cache_path\" -mindepth 1 ! -type f ! -type d -print -quit)\""
+
+          timeout --kill-after=10s 5400s rsync \
+            --recursive \
+            --times \
+            --perms \
+            --checksum \
+            --compress \
+            --delete-delay \
+            --partial \
+            --inplace \
+            --no-owner \
+            --no-group \
+            --info=progress2 \
+            --stats \
+            -e "ssh ${ssh_options[*]}" \
+            -- "$DEPLOY_ARTIFACT_ROOT/" "$ssh_target:$release_tree_cache/"
+
+          timeout --kill-after=10s 900s ssh "${ssh_options[@]}" "$ssh_target" \
+            "set -eu
+             remote_cache_path=\"\$HOME/$release_tree_cache\"
+             test -d \"\$remote_cache_path\"
+             test ! -L \"\$remote_cache_path\"
+             chmod 700 -- \"\$remote_cache_path\"
+             test \"\$(stat -c '%U:%a' -- \"\$remote_cache_path\")\" = \"\$(id -un):700\"
+             test -z \"\$(find \"\$remote_cache_path\" -mindepth 1 ! -type f ! -type d -print -quit)\"
+             staged_archive=\"\$(mktemp '${remote_archive}.XXXXXX')\"
+             trap 'rm -f -- \"\$staged_archive\"' EXIT HUP INT TERM
+             tar --sort=name \
+               --mtime='@$SOURCE_DATE_EPOCH' \
+               --owner=0 \
+               --group=0 \
+               --numeric-owner \
+               --mode='u+rwX,go+rX,go-w' \
+               --format=gnu \
+               -cf - \
+               -C \"\$remote_cache_path\" . \
+               | gzip --best --no-name --rsyncable > \"\$staged_archive\"
+             gzip -t \"\$staged_archive\"
+             remote_bytes=\"\$(stat -c '%s' -- \"\$staged_archive\")\"
+             remote_sha256=\"\$(sha256sum -- \"\$staged_archive\" | cut -d ' ' -f 1)\"
+             test \"\$remote_bytes\" = '$DEPLOY_ARCHIVE_BYTES'
+             test \"\$remote_sha256\" = '$DEPLOY_ARCHIVE_SHA256'
+             chmod 600 -- \"\$staged_archive\"
+             mv -fT -- \"\$staged_archive\" '$remote_archive'
+             trap - EXIT HUP INT TERM"
 
           timeout --kill-after=5s 30s ssh "${ssh_options[@]}" \
-            "${DEPLOY_SSH_USER}@${DEPLOY_HOST}" \
+            "$ssh_target" \
             "test -f '$remote_archive' && test ! -L '$remote_archive'"
           remote_bytes="$(timeout --kill-after=5s 30s ssh "${ssh_options[@]}" \
-            "${DEPLOY_SSH_USER}@${DEPLOY_HOST}" "stat -c '%s' -- '$remote_archive'")"
+            "$ssh_target" "stat -c '%s' -- '$remote_archive'")"
           remote_sha256="$(timeout --kill-after=5s 30s ssh "${ssh_options[@]}" \
-            "${DEPLOY_SSH_USER}@${DEPLOY_HOST}" "sha256sum -- '$remote_archive' | cut -d ' ' -f 1")"
+            "$ssh_target" "sha256sum -- '$remote_archive' | cut -d ' ' -f 1")"
           test "$remote_bytes" = "$DEPLOY_ARCHIVE_BYTES"
           test "$remote_sha256" = "$DEPLOY_ARCHIVE_SHA256"
+          printf 'archive transfer=rsync file-tree delta total_bytes=%s sha256=%s\n' \
+            "$DEPLOY_ARCHIVE_BYTES" "$DEPLOY_ARCHIVE_SHA256" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Deploy and verify
         shell: bash

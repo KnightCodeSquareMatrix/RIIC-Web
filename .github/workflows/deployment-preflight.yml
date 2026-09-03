@@ -34,13 +34,14 @@ jobs:
       cancel-in-progress: false
     env:
       DEPLOY_APP_ROOT: ${{ vars.DEPLOY_APP_ROOT }}
+      DEPLOY_SERVICE: ${{ vars.DEPLOY_SERVICE }}
       DEPLOY_RUN_USER: ${{ vars.DEPLOY_RUN_USER || 'arkinfra' }}
       DEPLOY_INTERNAL_PORT: ${{ vars.DEPLOY_INTERNAL_PORT }}
       DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
       PREFLIGHT_MODE: ${{ inputs.mode }}
       DEPLOY_APPROVED_SOLVER_SHA256: ${{ vars.DEPLOY_APPROVED_SOLVER_SHA256 }}
       DEPLOY_EXPECTED_REPOSITORY: KnightCodeSquareMatrix/RIIC-Web
-      DEPLOY_RELEASE_HELPER_CONTRACT: "4"
+      DEPLOY_RELEASE_HELPER_CONTRACT: "6"
 
     steps:
       - name: Validate preflight configuration
@@ -60,6 +61,7 @@ jobs:
           [[ "$DEPLOY_SSH_USER" =~ ^[A-Za-z0-9_-]+$ ]]
           test "$DEPLOY_SSH_USER" != "root"
           [[ "$DEPLOY_APP_ROOT" =~ ^/opt/arknights-infra(-[A-Za-z0-9._-]+)?$ ]]
+          [[ "$DEPLOY_SERVICE" =~ ^arknights-infra(-[A-Za-z0-9_.@-]+)?$ ]]
           [[ "$DEPLOY_RUN_USER" =~ ^[A-Za-z0-9_-]+$ ]]
           test "$DEPLOY_RUN_USER" != "root"
           [[ "$DEPLOY_INTERNAL_PORT" =~ ^[0-9]{2,5}$ ]]
@@ -162,6 +164,69 @@ jobs:
             echo
             echo "Preflight is read-only: no archive, release directory, symlink switch, or service restart was requested."
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Read-only incident diagnostics
+        if: inputs.mode == 'baseline'
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
+        run: |
+          set -euo pipefail
+          ssh_options=(
+            -o BatchMode=yes
+            -o ConnectTimeout=15
+            -o ConnectionAttempts=2
+            -o ServerAliveInterval=15
+            -o ServerAliveCountMax=3
+          )
+
+          timeout --kill-after=10s 90s ssh "${ssh_options[@]}" \
+            "${DEPLOY_SSH_USER}@${DEPLOY_HOST}" \
+            bash -s -- "$DEPLOY_SERVICE" "$DEPLOY_RUN_USER" <<'REMOTE'
+          set -euo pipefail
+          service="$1"
+          run_user="$2"
+          [[ "$service" =~ ^arknights-infra(-[A-Za-z0-9_.@-]+)?$ ]]
+          [[ "$run_user" =~ ^[A-Za-z0-9_-]+$ ]]
+
+          echo '=== host resources ==='
+          uptime
+          free -m
+          df -Pk /opt
+
+          echo '=== application processes ==='
+          ps -u "$run_user" -o pid=,ppid=,etimes=,rss=,comm= | sort -k5,5 -k1,1n
+          while read -r pid; do
+            [[ "$pid" =~ ^[0-9]+$ ]]
+            printf 'pid=%s cgroup=' "$pid"
+            awk -F: '$1 == "0" { print $3 }' "/proc/$pid/cgroup"
+          done < <(ps -u "$run_user" -o pid=)
+
+          echo '=== application units ==='
+          mapfile -t units < <(
+            systemctl list-unit-files --type=service --no-legend "${service}*.service" \
+              | awk '{ print $1 }' \
+              | grep -E '^arknights-infra[-A-Za-z0-9_.@]*\.service$' \
+              | grep -v '@\.service$' \
+              | sort -u
+          )
+          ((${#units[@]} > 0))
+          for unit in "${units[@]}"; do
+            systemctl show --no-pager "$unit" \
+              --property=Id,ActiveState,SubState,Result,MainPID,NRestarts,MemoryCurrent,MemoryPeak,TasksCurrent,TasksMax,CPUUsageNSec,ExecMainStartTimestamp,ExecMainExitTimestamp
+          done
+
+          echo '=== recent application journals ==='
+          for unit in "${units[@]}"; do
+            echo "--- $unit ---"
+            journalctl --no-pager -o short-iso --since '90 minutes ago' -n 300 -u "$unit" || true
+          done
+
+          echo '=== recent kernel OOM evidence ==='
+          journalctl -k --no-pager -o short-iso --since '90 minutes ago' \
+            | grep -Ei 'out of memory|oom-kill|killed process' || true
+          REMOTE
 
       - name: Remove SSH credentials from the runner
         if: always()

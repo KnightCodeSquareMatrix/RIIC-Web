@@ -136,10 +136,42 @@ function estimateGroups(production: DailyProductionEstimate): DailyProductionGro
   ];
 }
 
+function withSolverTotal(product: ProductionDetailProduct, value: number): ProductionDetailProduct {
+  return {
+    ...product,
+    amount: { ...product.amount, value },
+    rows: product.rows.map(([label, rowValue, unit]) => [`估算${label}`, rowValue, unit]),
+  };
+}
+
+function solverGroupsWithEstimate(
+  production: SolverDailyProduction,
+  estimate: DailyProductionEstimate,
+): DailyProductionGroup[] {
+  const solverValue = (productId: string): number => {
+    if (productId === "experience") return production.battle_records;
+    if (productId === "lmd-orders") return production.lmd;
+    if (productId === "gold") return production.pure_gold / 500;
+    if (productId === "orundum") return production.orundum;
+    if (productId === "shards") return production.originium_shards;
+    throw new Error(`Unsupported production product: ${productId}`);
+  };
+
+  return estimateGroups(estimate).map((group) => ({
+    ...group,
+    source: "solver" as const,
+    primary: withSolverTotal(group.primary, solverValue(group.primary.id)),
+    ...(group.supporting
+      ? { supporting: withSolverTotal(group.supporting, solverValue(group.supporting.id)) }
+      : {}),
+  }));
+}
+
 export function dailyProductionGroups(
   estimate: DailyProductionEstimate | null,
   solverProduction: SolverDailyProduction | null,
 ): DailyProductionGroup[] {
+  if (solverProduction && estimate) return solverGroupsWithEstimate(solverProduction, estimate);
   if (solverProduction) return solverGroups(solverProduction);
   return estimate ? estimateGroups(estimate) : [];
 }

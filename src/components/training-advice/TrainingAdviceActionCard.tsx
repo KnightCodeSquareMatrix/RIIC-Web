@@ -11,6 +11,7 @@ import type {
   TrainingNewbieItem,
   TrainingRecommendation,
 } from "@/types";
+import { demoOperatorName, useLanguageDemo } from "@/language-demo";
 
 import {
   trainingAcquisitionLabel,
@@ -35,9 +36,12 @@ export function TrainingAdviceActionCard({
   index: number;
 }) {
   const reduceMotion = useReducedMotion();
-  const actionLabel = ACTION_LABELS[action.action];
-  const currentText = action.current ? `当前 ${trainingLevelText(action.current)} → ` : "";
-  const targetText = trainingLevelText(action.target);
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
+  const actionLabel = en ? ({ acquire: "Obtain", train: "Train" }[action.action] ?? action.action) : ACTION_LABELS[action.action];
+  const currentText = action.current ? `${en ? "Current" : "当前"} ${trainingLevelText(action.current, en)} → ` : "";
+  const targetText = trainingLevelText(action.target, en);
+  const operatorName = demoOperatorName(action.operator, locale);
 
   return (
     <motion.div
@@ -63,12 +67,13 @@ export function TrainingAdviceActionCard({
               profession: operatorProfessionFor(action.operator),
             }}
             portraitSize={80}
+            showSkillTooltip
           />
           <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2 text-xs text-white/55">
                 <span className="font-medium text-[var(--room-accent)]">
-                  {trainingProductLabel(action.product)}
+                  {trainingProductLabel(action.product, en)}
                 </span>
                 {"combination_name" in action && action.combination_name ? (
                   <>
@@ -78,16 +83,16 @@ export function TrainingAdviceActionCard({
                 ) : null}
               </div>
               <p className="mt-2 max-w-[72ch] text-pretty text-sm leading-6 text-white/82">
-                {actionLabel}「{action.operator}」{currentText}目标 {targetText}
+                {actionLabel} {en ? operatorName : `「${operatorName}」`} · {currentText}{en ? "Target" : "目标"} {targetText}
               </p>
               {action.acquisition ? (
                 <p className="mt-1 text-xs leading-5 text-white/58">
-                  获取方式：{trainingAcquisitionLabel(action.acquisition.kind)} · {action.acquisition.detail}
+                  {en ? "Acquisition" : "获取方式"}：{trainingAcquisitionLabel(action.acquisition.kind, en)} · {action.acquisition.detail}
                 </p>
               ) : null}
               {"efficiency" in action && action.efficiency ? (
                 <p className="mt-1 text-xs leading-5 text-white/58">
-                  效率知识：{action.efficiency.value}%
+                  {en ? "Efficiency insight" : "效率知识"}：{action.efficiency.value}%
                   {action.efficiency.note ? ` · ${action.efficiency.note}` : ""}
                 </p>
               ) : null}
@@ -95,7 +100,7 @@ export function TrainingAdviceActionCard({
                 <ul className="mt-2 grid gap-1 text-xs leading-5 text-white/58">
                   {action.conditions.map(({ condition, status }) => (
                     <li key={`${condition.kind}-${condition.key}`}>
-                      {trainingConditionStatusLabel(status)} · {condition.description}
+                      {trainingConditionStatusLabel(status, en)} · {condition.description}
                     </li>
                   ))}
                 </ul>
@@ -103,10 +108,10 @@ export function TrainingAdviceActionCard({
             </div>
             <div className="flex flex-wrap items-center gap-2 sm:flex-col sm:items-end">
               <span className="font-number border border-[var(--room-accent)] bg-[var(--room-accent)] px-2.5 py-1 text-xs font-semibold text-[#202223]">
-                {trainingPriorityLabel("priority" in action ? action.priority : undefined)}
+                {trainingPriorityLabel("priority" in action ? action.priority : undefined, en)}
               </span>
               <span className="border border-white/15 bg-white/7 px-2.5 py-1 text-xs text-white/70">
-                {trainingReasonLabel("reason" in action ? action.reason : undefined)}
+                {trainingReasonLabel("reason" in action ? action.reason : undefined, en)}
               </span>
             </div>
           </div>

@@ -1,9 +1,14 @@
 "use client";
 
+import { useState } from "react";
+
 import { InfraTechnicalCard } from "@/components/InfraTechnicalCard";
-import { operatorPortraitFor } from "@/operatorPortraits";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { operatorProfessionPresentationForCode } from "@/operator-presentation";
+import { operatorPortraitFor, operatorProfessionFor } from "@/operatorPortraits";
 import { cn } from "@/lib/utils";
 import type { TrainingCombination, TrainingAdviceMember } from "@/types";
+import { demoOperatorName, useLanguageDemo } from "@/language-demo";
 
 import {
   trainingCombinationStateLabel,
@@ -25,6 +30,9 @@ const STATE_CLASSES: Record<string, string> = {
 };
 
 function MemberRow({ member }: { member: TrainingAdviceMember }) {
+  const [professionOpen, setProfessionOpen] = useState(false);
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
   const isReady = member.progress === "ready";
   const isMissing = member.progress === "missing";
   // 就绪：浅灰背景；需培养（需精2 等）：琥珀色边框与状态字同色；缺失保持原样。
@@ -39,35 +47,61 @@ function MemberRow({ member }: { member: TrainingAdviceMember }) {
       ? "text-red-300"
       : "text-amber-300";
   const statusText = member.progress === "needs_review"
-    ? trainingMemberProgressLabel(member.progress)
+    ? trainingMemberProgressLabel(member.progress, en)
     : isReady
-    ? "就绪"
+    ? (en ? "Ready" : "就绪")
     : isMissing
-      ? "缺失"
+      ? (en ? "Missing" : "缺失")
       : member.target
-        ? `需${trainingLevelText(member.target)}`
-        : trainingMemberProgressLabel(member.progress);
+        ? `${en ? "Needs " : "需"}${trainingLevelText(member.target, en)}`
+        : trainingMemberProgressLabel(member.progress, en);
   const roleClass =
     member.role === "core"
       ? "border-white/20 bg-white/10 text-white"
       : "border-white/10 bg-white/5 text-white/65";
-  return (
-    <div className={cn("flex min-w-0 items-center gap-1.5 border px-2 py-1", cardClass)}>
+  const profession = operatorProfessionPresentationForCode(operatorProfessionFor(member.operator));
+  const content = (
+    <>
       <span className="size-8 shrink-0 overflow-hidden border border-white/10 bg-[#272A2B]">
         <img src={operatorPortraitFor(member.operator)} alt="" className="size-full object-cover" loading="lazy" />
       </span>
-      <span className="shrink truncate text-sm text-white/85">{member.operator}</span>
+      <span className="shrink truncate text-sm text-white/85">{demoOperatorName(member.operator, locale)}</span>
       <span className={cn("shrink-0 border px-1.5 py-0.5 text-xs", roleClass)}>
-        {trainingMemberRoleLabel(member.role)}
+        {trainingMemberRoleLabel(member.role, en)}
       </span>
       <span className={cn("shrink-0 text-xs tabular-nums", statusClass)}>
         {statusText}
       </span>
-    </div>
+    </>
+  );
+  const cardClassName = cn("flex min-w-0 items-center gap-1.5 border px-2 py-1", cardClass);
+  if (!profession) return <div className={cardClassName}>{content}</div>;
+  return (
+    <Tooltip open={professionOpen} onOpenChange={setProfessionOpen}>
+      <TooltipTrigger
+        closeOnClick={false}
+        render={(
+        <button
+          type="button"
+          className={cardClassName}
+          aria-label={`${member.operator}，职业：${profession.label}`}
+          onClick={() => setProfessionOpen((value) => !value)}
+        >
+          {content}
+        </button>
+      )}
+      />
+      <TooltipContent side="top" align="center" className="gap-2 whitespace-nowrap px-3.5 py-2">
+        <img src={profession.icon} alt="" aria-hidden="true" className="size-6 shrink-0 object-contain" />
+        <span className="text-sm font-semibold">{profession.label}</span>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
 export function TrainingCombinationCard({ combination }: { combination: TrainingCombination }) {
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
   return (
     <InfraTechnicalCard
       group={trainingProductGroup(combination.product)}
@@ -83,7 +117,7 @@ export function TrainingCombinationCard({ combination }: { combination: Training
               STATE_CLASSES[combination.state ?? ""] ?? "border-white/15 bg-white/5 text-white/70",
             )}
           >
-            {trainingCombinationStateLabel(combination.state)}
+            {trainingCombinationStateLabel(combination.state, en)}
           </span>
           <span className="font-number text-xs text-white/60">
             {combination.completed_slots}/{combination.total_slots}
@@ -91,14 +125,14 @@ export function TrainingCombinationCard({ combination }: { combination: Training
         </div>
 
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-white/50">
-          <span>{trainingScaleLabel(combination.scale)}</span>
-          <span>{trainingProductLabel(combination.product)}</span>
+          <span>{trainingScaleLabel(combination.scale, en)}</span>
+          <span>{trainingProductLabel(combination.product, en)}</span>
           {combination.consumer_products?.length ? (
-            <span>覆盖：{combination.consumer_products.map(trainingProductLabel).join("、")}</span>
+            <span>{en ? "Covers: " : "覆盖："}{combination.consumer_products.map((product) => trainingProductLabel(product, en)).join(en ? ", " : "、")}</span>
           ) : null}
           {combination.facilities?.length ? (
             <span>
-              工作房间：{combination.facilities.map(trainingFacilityLabel).join("、")}
+              {en ? "Facilities: " : "工作房间："}{combination.facilities.map((facility) => trainingFacilityLabel(facility, en)).join(en ? ", " : "、")}
             </span>
           ) : null}
         </div>

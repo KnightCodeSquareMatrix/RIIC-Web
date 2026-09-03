@@ -2,10 +2,20 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from "react";
 
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import { WebsiteAccountDialogLoading } from "@/components/auth/WebsiteAccountDialogLoading";
 import { useAccountCloudWorkspace } from "account-cloud-workspace-bridge";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { AppTopBar, SklandAccountControl } from "@/components/layout/AppTopBar";
@@ -16,19 +26,21 @@ import { LiveActivity, usePlanActivity } from "@/components/ui/live-activity";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { trackTelemetry } from "@/lib/telemetry-dispatch";
 import { loadClientFeature } from "@/client-lazy-loader";
-import { preloadProductIcons } from "@/product-assets";
 import { WorkbenchContext } from "@/workbench-context";
 import { WORKBENCH_PAGE_PATHS, workbenchHref, workbenchPageFromPathname, type AppPage } from "@/workbench-routes";
 import { useWebsiteSession } from "@/website-session";
+import { usePlanTask } from "@/hooks/use-plan-task";
+import { LanguageDemoProvider, LanguageDemoSwitch, useLanguageDemo } from "@/language-demo";
 
 import {
+  computePlan,
   deleteAllSklandAccountData,
   deleteSklandAccount,
   getHealth,
   getSampleOperbox,
   getSklandAccounts,
   refreshSklandStatus,
-  computePlan,
+  submitPlanTask,
   saveFeedback,
   selectSklandRole,
   toDisplayError,
@@ -45,7 +57,6 @@ import {
   updateRoomLevel,
   updateTradeOrder,
 } from "./blueprint";
-import { copyText, downloadJson } from "./download";
 import {
   ONBOARDING_COMPLETED_VALUE,
   ONBOARDING_DISMISSED_VALUE,
@@ -53,7 +64,6 @@ import {
   resolveOnboardingPreference,
   type OnboardingPreference,
 } from "./onboarding";
-import { readOperboxFile, readOperboxText } from "./operbox";
 import { normalizeOperboxEntries } from "./operbox-normalization";
 import { effectiveFiammettaSetting, resolvePlanPresentationLayout } from "./plan-presentation";
 import {
@@ -63,14 +73,12 @@ import {
   persistSession,
   RESULT_CLEAR_WARNING_DISMISSED_KEY,
 } from "./persistence";
-import { planToRows, RoomRow } from "./schedule";
+import type { RoomRow } from "./schedule";
 import { DEFAULT_ROTATION_PROFILE } from "./rotation-settings";
 import { MOTION_DURATION } from "./motion";
-import { closestShift, compareShifts } from "./skland";
 import { emptySklandBindingSummary } from "./skland-binding-state";
 import { createSklandRestoreGuard } from "./skland-restore-guard";
 import { setupConfigurationFingerprint } from "./setup-configuration";
-import { formatSolverDiagnostic } from "./solver-diagnostic";
 import {
   BaseBlueprint,
   BoxSource,
@@ -83,6 +91,7 @@ import {
   PresetDef,
   RotationProfile,
   SavedPlanData,
+  ShiftComparison,
   SklandAccountSummary,
   SklandBindingSummary,
   SklandSessionData,
@@ -211,7 +220,8 @@ function mergeSklandLayout(current: BaseBlueprint, suggestion: BaseBlueprint): B
   };
 }
 
-function WorkbenchApp({ children }: { children: ReactNode }) {
+function WorkbenchAppContent({ children }: { children: ReactNode }) {
+  const { locale } = useLanguageDemo();
   const pathname = usePathname();
   const router = useRouter();
   const page = workbenchPageFromPathname(pathname);
@@ -233,15 +243,31 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   const [preset, setPreset] = useState<PresetDef>(defaultPreset);
   const [layout, setLayout] = useState<BaseBlueprint>(defaultLayout);
   const powerBudget = useMemo(() => computePowerBudget(layout), [layout]);
-  const [operbox, setOperbox] = useState<OperBoxEntry[] | null>(null);
+  const [operbox, setOperboxState] = useState<OperBoxEntry[] | null>(null);
+  const currentOperboxRef = useRef<OperBoxEntry[] | null>(operbox);
+  const setOperbox = useCallback<Dispatch<SetStateAction<OperBoxEntry[] | null>>>((nextOperbox) => {
+    const resolvedOperbox = typeof nextOperbox === "function"
+      ? nextOperbox(currentOperboxRef.current)
+      : nextOperbox;
+    currentOperboxRef.current = resolvedOperbox;
+    setOperboxState(resolvedOperbox);
+  }, []);
   const [fileName, setFileName] = useState<string | null>(null);
-  const [boxSource, setBoxSource] = useState<BoxSource>("sample");
+  const [boxSource, setBoxSourceState] = useState<BoxSource>("sample");
+  const currentBoxSourceRef = useRef<BoxSource>(boxSource);
+  const setBoxSource = useCallback<Dispatch<SetStateAction<BoxSource>>>((nextSource) => {
+    const resolvedSource = typeof nextSource === "function"
+      ? nextSource(currentBoxSourceRef.current)
+      : nextSource;
+    currentBoxSourceRef.current = resolvedSource;
+    setBoxSourceState(resolvedSource);
+  }, []);
   const [layoutDirty, setLayoutDirty] = useState(false);
   const [layoutSource, setLayoutSource] = useState<"local" | "skland">("local");
   const [localLayoutBackup, setLocalLayoutBackup] = useState<BaseBlueprint | null>(null);
   const [rotationProfile, setRotationProfile] = useState<RotationProfile>(DEFAULT_ROTATION_PROFILE);
   const [fiammettaEnabled, setFiammettaEnabled] = useState(false);
-  const [inputMode, setInputMode] = useState<"skland" | "maa">(CLIENT_SKLAND_ENABLED ? "skland" : "maa");
+  const [inputMode, setInputMode] = useState<"skland" | "maa" | "manual">(CLIENT_SKLAND_ENABLED ? "skland" : "maa");
   const [maaPaste, setMaaPaste] = useState("");
   const [sklandScheduleSnapshot, setSklandScheduleSnapshot] = useState<SklandScheduleSnapshot | null>(null);
   const [sklandStatusSnapshot, setSklandStatusSnapshot] = useState<SklandStatusSnapshot | null>(null);
@@ -280,9 +306,11 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   const sampleTrialInFlightRef = useRef(false);
   const [result, setResult] = useState<PublicPlanData | null>(null);
   const [loading, setLoading] = useState(false);
-  const planAbortRef = useRef<AbortController | null>(null);
   const [cliReady, setCliReady] = useState(false);
+  const [taskQueueEnabled, setTaskQueueEnabled] = useState(false);
   const [apiError, setApiError] = useState<DisplayError | null>(null);
+  const [planRetryCountdown, setPlanRetryCountdown] = useState(0);
+  const planRetryTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [storageNotice, setStorageNotice] = useState<DisplayError | null>(null);
   const [activeShift, setActiveShift] = useState(0);
   const [issueDraftKind, setIssueDraftKind] = useState<FeedbackKind>("room_issue");
@@ -295,15 +323,76 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   const [resultClearWarningDismissed, setResultClearWarningDismissed] = useState(false);
   const [pendingProductChange, setPendingProductChange] = useState<ProductChange | null>(null);
 
+  function clearPlanRetryCooldown() {
+    if (planRetryTimerRef.current) {
+      clearInterval(planRetryTimerRef.current);
+      planRetryTimerRef.current = null;
+    }
+    setPlanRetryCountdown(0);
+  }
+
+  function startPlanRetryCooldown(seconds: number) {
+    clearPlanRetryCooldown();
+    setPlanRetryCountdown(Math.max(1, Math.ceil(seconds)));
+    planRetryTimerRef.current = setInterval(() => {
+      setPlanRetryCountdown((current) => {
+        if (current <= 1) {
+          if (planRetryTimerRef.current) clearInterval(planRetryTimerRef.current);
+          planRetryTimerRef.current = null;
+          return 0;
+        }
+        return current - 1;
+      });
+    }, 1_000);
+  }
+
+  useEffect(() => () => {
+    if (planRetryTimerRef.current) clearInterval(planRetryTimerRef.current);
+  }, []);
+
+  const planTask = usePlanTask({
+    onDone: (finalizedResult) => {
+      setCliReady(true);
+      setActiveShift(0);
+      setResult(finalizedResult);
+      setLoading(false);
+      completeOnboarding();
+      setLayout((current) => resolvePlanPresentationLayout(current, finalizedResult));
+      trackTelemetry({ type: "interaction", name: "plan_response", page: "calculator" });
+      trackTelemetry({
+        type: "performance",
+        name: "plan_result",
+        page: "calculator",
+        durationMs: typeof finalizedResult.durationMs === "number" ? finalizedResult.durationMs : undefined,
+      });
+    },
+    onFailed: (message) => {
+      setLoading(false);
+      setApiError(displayError("AIC-PLAN-3004", message));
+    },
+  });
+
+  useEffect(() => {
+    if (planTask.status === "cancelled") setLoading(false);
+  }, [planTask.status]);
+  // loading 完全由任务状态推导：提交、刷新恢复、取消都会同步驱动界面。
+  useEffect(() => {
+    setLoading(Boolean(planTask.taskId));
+  }, [planTask.taskId]);
+
   // 公开排班结果只包含产品页面需要的效率、MAA 与轮换数据。
   const scheduleResult = result;
   const activePlan = scheduleResult?.maa.plans?.[activeShift];
   const activeRotationShift = scheduleResult?.rotation.shifts?.[activeShift];
   const activeTrainingRoomShift = result?.trainingRoom?.shifts[activeShift];
-  const baseRows = useMemo(
-    () => planToRows(activePlan, activeRotationShift, layout, activeTrainingRoomShift),
-    [activePlan, activeRotationShift, activeTrainingRoomShift, layout],
-  );
+  const [baseRows, setBaseRows] = useState<RoomRow[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void import("./schedule").then(({ planToRows }) => {
+      if (!cancelled) setBaseRows(planToRows(activePlan, activeRotationShift, layout, activeTrainingRoomShift));
+    });
+    return () => { cancelled = true; };
+  }, [activePlan, activeRotationShift, activeTrainingRoomShift, layout]);
   const [presentedRows, setPresentedRows] = useState<{ source: RoomRow[]; rows: RoomRow[] } | null>(null);
   useEffect(() => {
     if (!baseRows.some((row) => row.operatorSlots.length > 0)) {
@@ -337,16 +426,22 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       )
     );
   }, [boxSource, sklandScheduleSnapshot]);
-  const shiftComparisons = useMemo(
-    () => CLIENT_SKLAND_ENABLED
-      ? compareShifts(scheduleResult?.maa, sklandScheduleSnapshot?.infrastructure)
-      : [],
-    [scheduleResult?.maa, sklandScheduleSnapshot?.infrastructure]
-  );
-  const closestComparison = useMemo(
-    () => CLIENT_SKLAND_ENABLED ? closestShift(shiftComparisons) : null,
-    [shiftComparisons]
-  );
+  const [closestComparison, setClosestComparison] = useState<ShiftComparison | null>(null);
+  useEffect(() => {
+    const maa = scheduleResult?.maa;
+    const infrastructure = sklandScheduleSnapshot?.infrastructure;
+    if (!CLIENT_SKLAND_ENABLED || !maa || !infrastructure) {
+      setClosestComparison(null);
+      return;
+    }
+
+    let cancelled = false;
+    setClosestComparison(null);
+    void import("./skland").then(({ closestShift, compareShifts }) => {
+      if (!cancelled) setClosestComparison(closestShift(compareShifts(maa, infrastructure)));
+    });
+    return () => { cancelled = true; };
+  }, [scheduleResult?.maa, sklandScheduleSnapshot?.infrastructure]);
   const sklandLayoutMatches = useMemo(() => {
     if (!CLIENT_SKLAND_ENABLED) return false;
     const suggestion = sklandScheduleSnapshot?.infrastructure.layoutSuggestion;
@@ -363,7 +458,14 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   const accountCanUseCurrentBox = boxSource === "sample" || Boolean(websiteSession);
   const hasBox = Boolean(operbox?.length);
   const hasPersonalBox = hasBox && boxSource !== "sample";
-  const canRun = Boolean(operbox && operbox.length > 0 && cliReady && accountCanUseCurrentBox);
+  const feedbackDisabledForSampleBox = boxSource === "sample";
+  const canRun = Boolean(
+    operbox
+    && operbox.length > 0
+    && cliReady
+    && accountCanUseCurrentBox
+    && planRetryCountdown === 0
+  );
   const sklandBindingCount = sklandBindingSummary.totalCount;
   const websiteUserId = websiteSession?.user.id ?? null;
   const accountCloudWorkspace = useAccountCloudWorkspace(CLIENT_ACCOUNT_CLOUD_SYNC_ENABLED ? {
@@ -453,11 +555,13 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && loading) planAbortRef.current?.abort();
+      if (event.key === "Escape" && loading) {
+        void planTask.cancel();
+      }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [loading]);
+  }, [loading, planTask]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -502,7 +606,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     } finally {
       setHasRestoredSession(true);
     }
-  }, []);
+  }, [setBoxSource, setOperbox]);
 
   useEffect(() => {
     if (!hasRestoredSession || typeof window === "undefined") return;
@@ -539,6 +643,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
         if (cancelled) return;
         setSklandConfigured(Boolean(CLIENT_SKLAND_ENABLED && health.skland?.available));
         setSklandDisabledReason(CLIENT_SKLAND_ENABLED ? health.skland?.message ?? null : null);
+        setTaskQueueEnabled(Boolean(health.taskQueue?.enabled));
         if (health.plannerReady) {
           setCliReady(true);
           setApiError(null);
@@ -658,7 +763,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
         setSklandStatusSnapshot(session.statusSnapshot ?? null);
         if (session.authenticated && session.scheduleSnapshot) {
           setSklandScheduleSnapshot(session.scheduleSnapshot);
-          if (initialBoxSource.current === "skland" || !initialOperbox.current) {
+          if (currentBoxSourceRef.current === "skland" || !currentOperboxRef.current?.length) {
             setOperbox(normalizeOperboxEntries(session.scheduleSnapshot.operbox));
             setFileName(session.scheduleSnapshot.sourceName);
             setBoxSource("skland");
@@ -694,7 +799,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [hasRestoredSession, page, setupOpen, websiteAuthReloadKey, websiteSessionPending, websiteUserId]);
+  }, [hasRestoredSession, page, setBoxSource, setOperbox, setupOpen, websiteAuthReloadKey, websiteSessionPending, websiteUserId]);
 
   useEffect(() => {
     if (
@@ -735,13 +840,16 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     setResult(null);
     clearIssueState();
     try {
+      const { readOperboxFile } = await import("./operbox");
       const entries = await readOperboxFile(file);
       setOperbox(entries);
       setFileName(file.name);
       setBoxSource("maa");
       return true;
     } catch (error) {
-      setInputError(error instanceof Error ? error.message : "练度文件解析失败。");
+      setInputError(locale === "en"
+        ? "Could not parse the operator file. Check the file and try again."
+        : error instanceof Error ? error.message : "练度文件解析失败。");
       setInputErrorCode("AIC-BOX-1101");
       return false;
     }
@@ -781,20 +889,31 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     }
   }
 
-  function handleMaaPaste(): boolean {
+  async function handleMaaPaste(): Promise<boolean> {
     setInputError(null);
     try {
-      const entries = readOperboxText(maaPaste);
+      const { readOperboxText } = await import("./operbox");
+      const entries = await readOperboxText(maaPaste);
       setOperbox(entries);
-      setFileName("粘贴的 Arknights_OperBox_Export.json");
+      setFileName(locale === "en" ? "Pasted Arknights_OperBox_Export.json" : "粘贴的 Arknights_OperBox_Export.json");
       setBoxSource("maa");
       clearPlanResult();
       return true;
     } catch (error) {
-      setInputError(error instanceof Error ? error.message : "MAA JSON 解析失败。");
+      setInputError(locale === "en"
+        ? "Could not parse the MAA JSON. Paste the complete export and try again."
+        : error instanceof Error ? error.message : "MAA JSON 解析失败。");
       setInputErrorCode("AIC-BOX-1101");
       return false;
     }
+  }
+
+  function handleManualBox(entries: OperBoxEntry[]) {
+    setInputError(null);
+    setOperbox(normalizeOperboxEntries(entries));
+    setFileName(locale === "en" ? "Manually selected BOX" : "手动选择的 Box");
+    setBoxSource("maa");
+    clearPlanResult();
   }
 
   async function handleSklandRole(accountId: string, uid: string) {
@@ -865,6 +984,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     },
   ): Promise<boolean> {
     if (!planInput.operbox) return false;
+    if (planRetryCountdown > 0) return false;
     planClickAtRef.current = performance.now();
     trackTelemetry({ type: "interaction", name: "plan_click", page: "calculator" });
     const layoutError = layoutValidationError(planLayout);
@@ -876,11 +996,8 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       setApiError(displayError("AIC-PLAN-3001", "排班服务暂不可用，请稍后重试。", true));
       return false;
     }
-    preloadProductIcons();
+    void import("@/product-assets").then(({ preloadProductIcons }) => preloadProductIcons());
     setLoading(true);
-    const controller = new AbortController();
-    planAbortRef.current?.abort();
-    planAbortRef.current = controller;
     setResultClearNotice(null);
     setInputError(null);
     setApiError(null);
@@ -888,44 +1005,35 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
 
     try {
       trackTelemetry({ type: "interaction", name: "plan_submit", page: "calculator" });
-      const response = await computePlan({
+      const payload = {
         layout: planLayout,
         operbox: normalizeOperboxEntries(planInput.operbox),
         sourceName: planInput.sourceName,
         boxSource: planInput.boxSource,
         rotation: rotationProfile,
         fiammetta_enable: effectiveFiammettaSetting(planInput.operbox, rotationProfile, fiammettaEnabled),
-      }, { signal: controller.signal });
-      trackTelemetry({ type: "interaction", name: "plan_response", page: "calculator" });
-      trackTelemetry({
-        type: "performance",
-        name: "plan_result",
-        page: "calculator",
-        durationMs: typeof response.durationMs === "number" ? response.durationMs : undefined,
-      });
-      setCliReady(true);
-      setActiveShift(0);
-      const finalizedResult = response;
-      setResult(finalizedResult);
-      completeOnboarding();
-      setLayout((current) => resolvePlanPresentationLayout(current, response));
+      };
+      if (!taskQueueEnabled || payload.boxSource === "sample") {
+        planTask.complete(await computePlan(payload));
+        return true;
+      }
+      const submitted = await submitPlanTask(payload);
+      if (submitted.status === "done") planTask.complete(submitted.result);
+      else planTask.begin(submitted);
       return true;
     } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") return false;
-      setApiError(toDisplayError(error, "排班请求失败，请稍后重试。"));
+      const normalized = toDisplayError(error, "排班请求失败，请稍后重试。");
+      setApiError(normalized);
+      if (normalized.retryAfterSeconds) startPlanRetryCooldown(normalized.retryAfterSeconds);
+      setLoading(false);
       return false;
-    } finally {
-      if (planAbortRef.current === controller) {
-        planAbortRef.current = null;
-        setLoading(false);
-      }
     }
   }
 
   function handleCancelRun() {
-    planAbortRef.current?.abort();
-    planAbortRef.current = null;
-    setLoading(false);
+    void planTask.cancel().then((cancelled) => {
+      if (cancelled) setApiError(null);
+    });
   }
 
   async function handleRun() {
@@ -962,8 +1070,9 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     }
   }
 
-  function handleDownloadMaa() {
+  async function handleDownloadMaa() {
     if (!result?.maa) return;
+    const { downloadJson } = await import("./download");
     downloadJson("arknights-infra-schedule-maa.json", result.maa);
   }
 
@@ -976,6 +1085,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   }
 
   function handleMarkIssue(row: RoomRow) {
+    if (feedbackDisabledForSampleBox) return;
     setIssueDraftKind("room_issue");
     setIssueDraftRow(row);
     setIssueDraftNote("");
@@ -984,6 +1094,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   }
 
   function handlePerformanceIssue() {
+    if (feedbackDisabledForSampleBox) return;
     if (!result?.diagnosticId) return;
     setIssueDraftKind("performance_issue");
     setIssueDraftRow(null);
@@ -998,6 +1109,10 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       setApiError(displayError("AIC-FEEDBACK-4001", "请先生成排班，再提交问题。"));
       return;
     }
+    if (!operbox || boxSource === "sample") {
+      setApiError(displayError("AIC-FEEDBACK-4001", "当前排班缺少可提交的个人干员 Box，请重新导入后生成排班。"));
+      return;
+    }
 
     const environment = [
       `求解耗时：${Math.round(result.durationMs)} ms`,
@@ -1006,6 +1121,13 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       `布局：${preset.label}`,
     ].join("；");
     const note = `${issueDraftNote.trim()}\n\n[运行环境] ${environment}`;
+    const reproduction = {
+      layout: structuredClone(layout),
+      operbox: normalizeOperboxEntries(operbox),
+      rotation: rotationProfile,
+      fiammettaEnabled: effectiveFiammettaEnabled,
+      sourceType: boxSource,
+    };
 
     setFeedbackSaving(true);
     setApiError(null);
@@ -1017,6 +1139,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
           diagnosticId: result.diagnosticId,
           note,
           consent: true,
+          reproduction,
         });
       } else {
         const row = issueDraftRow;
@@ -1032,6 +1155,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
           },
           note,
           consent: true,
+          reproduction,
         });
       }
       setFeedbackResult(response);
@@ -1441,6 +1565,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   }
 
   async function handleRetry() {
+    if (planRetryCountdown > 0) return;
     if (apiError?.code === "AIC-PLAN-3001") {
       await runPlanForLayout(layout, true);
       return;
@@ -1452,6 +1577,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     try {
       const health = await getHealth();
       setCliReady(health.plannerReady);
+      setTaskQueueEnabled(Boolean(health.taskQueue?.enabled));
       setApiError(
         health.plannerReady
           ? null
@@ -1465,7 +1591,19 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
   const statusError = inputError && !setupOpen
     ? displayError(inputErrorCode, inputError)
     : apiError ?? storageNotice;
-  const activity = usePlanActivity({ loading, result, error: statusError });
+  const activity = usePlanActivity({
+    loading,
+    error: statusError,
+    completed: planTask.status === "done",
+    queued: loading && (
+      planTask.status === "buffered"
+      || planTask.status === "pending"
+      || planTask.pollStopped
+    ),
+    queuePosition: planTask.queuePosition,
+    etaSeconds: planTask.etaSeconds,
+    buffered: planTask.status === "buffered",
+  });
   useEffect(() => {
     if (page !== "calculator" || !result?.maa) return;
     let cancelled = false;
@@ -1500,11 +1638,22 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       sampleLoading,
       loading,
       canRun,
+      runCooldownSeconds: planRetryCountdown,
       hasBox,
       hasPersonalBox,
+      feedbackDisabledForSampleBox,
       plannerReady: cliReady,
       websiteAuthenticated: Boolean(websiteSession),
       showOnboarding: onboardingPreference === "active" && !result,
+      taskQueue: loading && planTask.taskId ? {
+        queuePosition: planTask.queuePosition,
+        etaSeconds: planTask.etaSeconds,
+        pollStopped: planTask.pollStopped,
+        error: planTask.error,
+        resumeDisabled: planTask.resumeDisabled,
+        resumeCountdown: planTask.resumeCountdown,
+        onResumePoll: planTask.resume,
+      } : null,
       animatePlanEntrance,
       animateEmptyScheduleEntrance,
       onPlanEntranceConsumed: (revision: string) => {
@@ -1604,7 +1753,9 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
           setSetupOpen(true);
         },
         onOpenCalculator: () => navigateToPage("calculator"),
-        onCopyUid: (uid: string) => void copyText(uid),
+        onCopyUid: (uid: string) => {
+          void import("./download").then(({ copyText }) => copyText(uid));
+        },
       },
     } : null,
   };
@@ -1615,6 +1766,9 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
     <div
       className="contents"
       data-workbench-hydrated={hasRestoredSession ? "true" : "false"}
+      onKeyDown={(event) => {
+        if (event.key === "Escape" && websiteAuthDialogOpen) handleWebsiteAuthDialogOpenChange(false);
+      }}
     >
     <SidebarProvider defaultOpen={false}>
       <AppSidebar page={page} onPageChange={handleAppPageChange} />
@@ -1623,8 +1777,12 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
         <LiveActivity
           activity={activity}
           onRetry={() => void handleRetry()}
+          retryCountdownSeconds={planRetryCountdown}
           onCopyDiagnostic={() => {
-            if (activity?.error) void copyText(formatSolverDiagnostic(activity.error));
+            const error = activity?.error;
+            if (!error) return;
+            void Promise.all([import("./download"), import("./solver-diagnostic")])
+              .then(([{ copyText }, { formatSolverDiagnostic }]) => copyText(formatSolverDiagnostic(error)));
           }}
         />
 
@@ -1642,39 +1800,64 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       </div>
 
       <footer className="app-content-track mt-auto flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border/70 py-5 text-xs text-muted-foreground">
-        <span>非官方、小范围测试中的排班辅助工具</span>
-        <Link prefetch={false} className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/terms">本站服务条款</Link>
-        <Link prefetch={false} className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/privacy">本站隐私政策</Link>
-        <a className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/about" data-about-link>关于我们</a>
-        <a
-          href="https://www.rainyun.com/riic_"
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label="由雨云提供计算服务（在新标签页打开雨云官网）"
-          data-rainyun-link
-          className="ml-auto inline-flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-sm px-1 text-[11px] leading-none opacity-70 outline-none transition-[opacity,transform] duration-180 ease-[var(--motion-ease-out)] hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-foreground/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.96] motion-reduce:transition-none motion-reduce:active:scale-100 max-sm:mt-1"
-        >
-          <span className="block leading-none" data-rainyun-copy>由</span>
-          <img
-            src="/images/partners/rainyun-logo.png"
-            alt=""
-            width={1120}
-            height={390}
-            loading="eager"
-            decoding="async"
-            className="block h-5 w-14 object-contain sm:h-[23px] sm:w-16"
-          />
-          <span className="block leading-none" data-rainyun-copy>提供计算服务</span>
-        </a>
+        <LanguageDemoSwitch />
+        <Link prefetch={false} className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/help" data-help-link>{locale === "en" ? "Help" : "使用帮助"}</Link>
+        <Link prefetch={false} className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/terms">{locale === "en" ? "Terms" : "本站服务条款"}</Link>
+        <Link prefetch={false} className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/privacy">{locale === "en" ? "Privacy" : "本站隐私政策"}</Link>
+        <a className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/about" data-about-link>{locale === "en" ? "About" : "关于我们"}</a>
+        <div className="ml-auto flex shrink-0 items-center gap-3 max-sm:ml-0 max-sm:w-full max-sm:justify-end">
+          <a className="whitespace-nowrap underline underline-offset-4 hover:text-foreground" href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer" data-ui-number-font>沪ICP备2026041492号</a>
+          <span className="h-4 w-px shrink-0 bg-border" aria-hidden="true" />
+          <a
+            href="https://www.rainyun.com/riic_"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={locale === "en" ? "Sponsored by Rainyun (opens in a new tab)" : "由雨云提供赞助（在新标签页打开雨云官网）"}
+            data-rainyun-link
+            className="inline-flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-sm px-1 text-[11px] leading-none opacity-70 outline-none transition-[opacity,transform] duration-180 ease-[var(--motion-ease-out)] hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-foreground/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.96] motion-reduce:transition-none motion-reduce:active:scale-100"
+          >
+            <span className="block leading-none" data-rainyun-copy>{locale === "en" ? "Sponsored by" : "由"}</span>
+            <img
+              src="/images/partners/rainyun-logo.png"
+              alt=""
+              width={1120}
+              height={390}
+              loading="eager"
+              decoding="async"
+              className="block h-5 w-14 object-contain sm:h-[23px] sm:w-16"
+            />
+            {locale === "en" ? null : <span className="block leading-none">提供赞助</span>}
+          </a>
+        </div>
       </footer>
 
       {CLIENT_ACCOUNT_CLOUD_SYNC_ENABLED ? accountCloudWorkspace.syncElement : null}
 
       {websiteAuthDialogMounted ? <Suspense fallback={(
-        <WebsiteAccountDialogLoading
-          open={websiteAuthDialogOpen}
-          onOpenChange={handleWebsiteAuthDialogOpenChange}
-        />
+        websiteAuthDialogOpen ? (
+          <div
+            className="fixed inset-0 z-50 grid place-items-center bg-black/55 p-2"
+          >
+            <div
+              className="grid min-h-72 w-full max-w-[min(880px,calc(100vw-2rem))] place-items-center bg-background px-6 py-12 text-center shadow-xl"
+              role="dialog"
+              aria-modal="true"
+              aria-label={locale === "en" ? "Website account sign-in" : "登录网站账号"}
+              aria-busy="true"
+              data-website-account-dialog
+              data-website-account-dialog-loading
+            >
+              <div className="grid justify-items-center gap-3" role="status" aria-live="polite" aria-busy="true" data-website-account-loading>
+                <span
+                  className="size-8 animate-spin rounded-full border-2 border-muted border-t-muted-foreground motion-reduce:animate-none"
+                  aria-hidden="true"
+                  data-website-account-loading-spinner
+                />
+                <p className="text-sm text-muted-foreground">{locale === "en" ? "Loading sign-in…" : "正在加载登录界面…"}</p>
+              </div>
+            </div>
+          </div>
+        ) : null
       )}><WebsiteAccountDialog
           open={websiteAuthDialogOpen}
           onOpenChange={handleWebsiteAuthDialogOpenChange}
@@ -1705,6 +1888,7 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
         resultClearWarningDismissed={resultClearWarningDismissed}
         onMaaFile={handleFile}
         onMaaPaste={handleMaaPaste}
+        onManualBox={handleManualBox}
         onRequireWebsiteAccount={requireWebsiteAccountFromSetup}
         presets={PRESETS}
         preset={preset}
@@ -1716,7 +1900,9 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
         onFiammettaEnabledChange={handleFiammettaEnabledChange}
         onPresetSelect={handlePresetSelect}
         onLayoutFile={handleLayoutFile}
-        onDownloadLayout={() => downloadJson(`layout-${layout.template}.json`, layout)}
+        onDownloadLayout={() => {
+          void import("./download").then(({ downloadJson }) => downloadJson(`layout-${layout.template}.json`, layout));
+        }}
         onRestoreResultClearWarning={restoreResultClearWarning}
         storageNotice={storageNotice}
         onClearLocalData={handleClearLocalData}
@@ -1753,6 +1939,10 @@ function WorkbenchApp({ children }: { children: ReactNode }) {
       </TooltipProvider>
     </AppMotionProvider>
   );
+}
+
+function WorkbenchApp({ children }: { children: ReactNode }) {
+  return <LanguageDemoProvider><WorkbenchAppContent>{children}</WorkbenchAppContent></LanguageDemoProvider>;
 }
 
 export default WorkbenchApp;

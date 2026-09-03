@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { requestId, diagnosticId, expectUnifiedDialogTypography, expectUnifiedDialogAction, waitForOwnAnimations, planData, authenticatedSklandSnapshot, productionHeavySklandSnapshot, primarySklandAccount, mockApis, openSklandOverview, seedPreferences, seedV4Session } from "./production-readiness.fixture";
+import { requestId, diagnosticId, expectUnifiedDialogTypography, expectUnifiedDialogAction, waitForOwnAnimations, planData, sampleData, authenticatedSklandSnapshot, productionHeavySklandSnapshot, primarySklandAccount, mockApis, openSklandOverview, seedPreferences, seedV4Session } from "./production-readiness.fixture";
 
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/auth/get-session", (route) => route.fulfill({
@@ -22,7 +22,7 @@ test("Skland login exposes both methods and starts QR only after explicit consen
         termsAccepted: true,
         privacyAccepted: true,
         termsVersion: "2026-08-21-cloud-workspace",
-        privacyVersion: "2026-08-27-detailed-telemetry",
+        privacyVersion: "2026-09-03-solver-reproduction-retention",
       },
     });
     return route.fulfill({
@@ -195,7 +195,7 @@ test("credential import explains the risk, gates consent, recovers from errors, 
         termsAccepted: true,
         privacyAccepted: true,
         termsVersion: "2026-08-21-cloud-workspace",
-        privacyVersion: "2026-08-27-detailed-telemetry",
+        privacyVersion: "2026-09-03-solver-reproduction-retention",
       },
     },
     {
@@ -204,7 +204,7 @@ test("credential import explains the risk, gates consent, recovers from errors, 
         termsAccepted: true,
         privacyAccepted: true,
         termsVersion: "2026-08-21-cloud-workspace",
-        privacyVersion: "2026-08-27-detailed-telemetry",
+        privacyVersion: "2026-09-03-solver-reproduction-retention",
       },
     },
   ]);
@@ -312,7 +312,7 @@ test("credential import can add a second Skland account from the account dialog"
       termsAccepted: true,
       privacyAccepted: true,
       termsVersion: "2026-08-21-cloud-workspace",
-      privacyVersion: "2026-08-27-detailed-telemetry",
+      privacyVersion: "2026-09-03-solver-reproduction-retention",
     },
   });
   await expect(page.locator("body")).not.toContainText(submittedCredential);
@@ -459,6 +459,74 @@ test("Skland restore waits for website authentication and then starts summary an
   await navigation;
   await expect.poll(() => fullSessionRequests).toBe(1);
   await expect.poll(() => summarySessionRequests).toBe(1);
+});
+
+test("a current Skland BOX still refreshes from the latest session snapshot", async ({ page }) => {
+  await mockApis(page, {
+    sklandConfigured: true,
+    sklandSnapshot: authenticatedSklandSnapshot,
+  });
+  await seedV4Session(page, undefined, {
+    boxSource: "skland",
+    operbox: [authenticatedSklandSnapshot.operbox[0]],
+  });
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "配置Box与布局" }).first().click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByText("森空岛同步", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("2 名干员 · 2 名可用", { exact: true })).toBeVisible();
+});
+
+test("an in-flight Skland restore cannot replace a newly imported MAA BOX", async ({ page }) => {
+  let releaseFullRestore!: () => void;
+  let markFullRestoreStarted!: () => void;
+  const fullRestoreGate = new Promise<void>((resolve) => { releaseFullRestore = resolve; });
+  const fullRestoreStarted = new Promise<void>((resolve) => { markFullRestoreStarted = resolve; });
+
+  await mockApis(page, {
+    sklandConfigured: true,
+    sklandSnapshot: authenticatedSklandSnapshot,
+  });
+  await page.route(/\/api\/skland\/accounts(?:[/?]|$)/, async (route) => {
+    const url = new URL(route.request().url());
+    const isFullRestore = route.request().method() === "GET" && !url.searchParams.has("mode");
+    if (isFullRestore) {
+      markFullRestoreStarted();
+      await fullRestoreGate;
+    }
+    await route.fallback();
+  });
+  await seedV4Session(page, undefined, {
+    boxSource: "skland",
+    operbox: [authenticatedSklandSnapshot.operbox[0]],
+  });
+  await page.goto("/");
+  await fullRestoreStarted;
+
+  await page.getByRole("button", { name: "配置Box与布局" }).first().click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "更换", exact: true }).click();
+  await dialog.getByRole("tab", { name: "MAA", exact: true }).click();
+  await dialog.getByRole("button", { name: "粘贴 JSON", exact: true }).click();
+  await dialog.getByLabel("JSON 内容").fill(JSON.stringify(sampleData));
+  await dialog.getByRole("button", { name: "导入 JSON", exact: true }).click();
+  await dialog.getByRole("button", { name: "Close" }).click();
+  await expect(dialog).toHaveCount(0);
+
+  const fullRestoreResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return response.request().method() === "GET"
+      && url.pathname === "/api/skland/accounts"
+      && !url.searchParams.has("mode");
+  });
+  releaseFullRestore();
+  await fullRestoreResponse;
+
+  await page.getByRole("button", { name: "配置Box与布局" }).first().click();
+  const reopenedDialog = page.getByRole("dialog");
+  await expect(reopenedDialog.getByText("粘贴的 Arknights_OperBox_Export.json", { exact: true })).toBeVisible();
+  await expect(reopenedDialog.getByText("1 名干员 · 1 名可用", { exact: true })).toBeVisible();
 });
 
 test("Skland status center loads full status on demand and deletion preserves non-Skland data", async ({ page }) => {

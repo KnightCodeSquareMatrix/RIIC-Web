@@ -62,6 +62,7 @@ import {
   StatusCenterPage,
 } from "@/components/pages/StatusCenterShell";
 import { cn } from "@/lib/utils";
+import { useLanguageDemo } from "@/language-demo";
 import { operatorPortraitFor, operatorProfessionFor } from "@/operatorPortraits";
 import { roomGridTone } from "@/schedule-view-presentation";
 import { SklandLoginPanel } from "@/skland-components";
@@ -429,7 +430,7 @@ function OverviewTab({
                 已同步到排班助手
               </OverviewTechnicalHeading>
               <p className="mt-4 text-2xl font-semibold tabular-nums text-[var(--room-accent)]">
-                {snapshot.operators.length}
+                {snapshot.operbox.length}
                 <span className="ml-1 text-sm font-normal text-white/60">名干员</span>
               </p>
               <p className="font-number mt-1 text-xs text-white/58">
@@ -1421,18 +1422,32 @@ export function SklandStatus({
   onOpenCalculator,
   onCopyUid,
 }: SklandStatusProps) {
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
   const [addAccountOpen, setAddAccountOpen] = useState(false);
   const [accountQuery, setAccountQuery] = useState<string | null>(null);
   const bindingState = deriveSklandBindingState(bindingSummary, accounts.length);
   if (sessionLoading) return <LoadingState />;
 
   if (!scheduleSnapshot) {
-    const loginTitle = bindingState === "renewal-due"
-      ? "七天授权期已结束，请重新授权"
-      : bindingState === "reauthorize"
-        ? "森空岛已绑定，请授权当前浏览器"
-        : "把当前罗德岛带进排班助手";
-    const loginDescription = bindingState === "renewal-due"
+    const loginTitle = en
+      ? bindingState === "renewal-due"
+        ? "Authorization expired — scan to renew"
+        : bindingState === "reauthorize"
+          ? "Skland is linked — authorize this browser"
+          : "Bring your Rhodes Island into the scheduler"
+      : bindingState === "renewal-due"
+        ? "七天授权期已结束，请重新授权"
+        : bindingState === "reauthorize"
+          ? "森空岛已绑定，请授权当前浏览器"
+          : "把当前罗德岛带进排班助手";
+    const loginDescription = en
+      ? bindingState === "renewal-due"
+        ? "Scan again to continue syncing. Existing schedule settings will be kept."
+        : bindingState === "reauthorize"
+          ? `Your website account keeps ${bindingCount} Skland link(s), but this browser needs authorization.`
+          : "Scan the QR code with the Skland app to sync operator and infrastructure data."
+      : bindingState === "renewal-due"
       ? `最近一次授权${bindingSummary.latestExpiredAt
         ? `已于 ${credentialExpiryLabel(bindingSummary.latestExpiredAt)} 到期`
         : "已经到期"}。扫码或重新导入凭证后即可继续同步，现有排班设置不会被清除。`
@@ -1446,11 +1461,11 @@ export function SklandStatus({
       >
         <div className="grid w-full max-w-4xl justify-items-center gap-7 text-center">
           <header className="grid max-w-lg gap-3" data-skland-login-copy>
-            <p className="text-xs font-medium tracking-wide text-primary">森空岛状态中心</p>
+            <p className="text-xs font-medium tracking-wide text-primary">{en ? "Skland Status" : "森空岛状态中心"}</p>
             <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">{loginTitle}</h2>
             <p className="text-pretty text-sm leading-6 text-muted-foreground">{loginDescription}</p>
             <p className="text-xs leading-5 text-muted-foreground/80">
-              登录凭证只保存在当前浏览器，7 天后失效。
+              {en ? "Credentials stay in this browser and expire after 7 days." : "登录凭证只保存在当前浏览器，7 天后失效。"}
             </p>
           </header>
           {error ? (
@@ -1477,8 +1492,8 @@ export function SklandStatus({
     return (
       <StatusCenterPage data-skland-page data-skland-status-load-error>
         <header className="max-w-2xl">
-          <p className="text-xs font-medium tracking-wide text-primary">森空岛状态中心</p>
-          <h2 className="mt-2 text-2xl font-semibold tracking-tight">完整状态暂时无法加载</h2>
+          <p className="text-xs font-medium tracking-wide text-primary">{en ? "Skland Status" : "森空岛状态中心"}</p>
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight">{en ? "Full status is temporarily unavailable" : "完整状态暂时无法加载"}</h2>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
             当前已登录{activeRole ? `“${activeRole.nickname}”` : "森空岛"}。你可以重新加载，或退出当前账号后重新授权。
           </p>
@@ -1486,15 +1501,15 @@ export function SklandStatus({
         <Alert variant="destructive"><AlertDescription>{error.message}（{error.code}）</AlertDescription></Alert>
         <Card>
           <CardHeader>
-            <CardTitle>重新加载状态中心</CardTitle>
+            <CardTitle>{en ? "Reload status" : "重新加载状态中心"}</CardTitle>
             <CardDescription className="max-w-2xl leading-6">
               登录后会按隐私政策列明的范围读取并展示完整状态；完整快照只保留在当前页面内存中。
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">
-            <Button type="button" disabled={busy} onClick={onRetryStatus}>重新加载状态中心</Button>
+            <Button type="button" disabled={busy} onClick={onRetryStatus}>{en ? "Reload status" : "重新加载状态中心"}</Button>
             <Button type="button" variant="outline" disabled={busy} onClick={() => void onLogout()}>
-              <LogOut />退出当前账号
+              <LogOut />{en ? "Sign out" : "退出当前账号"}
             </Button>
           </CardContent>
         </Card>
@@ -1560,11 +1575,11 @@ export function SklandStatus({
                   type="button"
                   className="inline-flex items-center gap-1 rounded-sm hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                   onClick={() => onCopyUid(snapshot.player.uid)}
-                  aria-label="复制完整 UID"
+                aria-label={en ? "Copy full UID" : "复制完整 UID"}
                 >
                   UID {maskedUid(snapshot.player.uid)} <Clipboard className="size-3" />
                 </button>
-                <span>同步于 {formatDateTime(snapshot.infrastructure.storeTs)}</span>
+                <span>{en ? "Synced" : "同步于"} {formatDateTime(snapshot.infrastructure.storeTs)}</span>
               </div>
             </div>
           </div>
@@ -1597,11 +1612,11 @@ export function SklandStatus({
             >
               <ComboboxInput
                 className="h-full w-full"
-                aria-label="选择账号与角色"
-                placeholder="搜索账号与角色"
+                aria-label={en ? "Select account and character" : "选择账号与角色"}
+                placeholder={en ? "Search accounts and characters" : "搜索账号与角色"}
               />
               <ComboboxContent>
-                <ComboboxEmpty>没有匹配的账号或角色</ComboboxEmpty>
+                <ComboboxEmpty>{en ? "No matching account or character" : "没有匹配的账号或角色"}</ComboboxEmpty>
                 <ComboboxList>
                   {(group, groupIndex) => (
                     <ComboboxGroup key={group.value} items={group.items}>
@@ -1629,7 +1644,7 @@ export function SklandStatus({
             onClick={() => setAddAccountOpen(true)}
             data-skland-add-account
           >
-            <UserPlus />添加账号
+            <UserPlus />{en ? "Add account" : "添加账号"}
             </Button>
             <Button
               type="button"
@@ -1639,7 +1654,7 @@ export function SklandStatus({
             onClick={() => void onLogout()}
             data-skland-logout
           >
-            <LogOut />退出
+            <LogOut />{en ? "Sign out" : "退出"}
             </Button>
           </div>
         )}
@@ -1648,7 +1663,7 @@ export function SklandStatus({
       <Dialog open={addAccountOpen} onOpenChange={setAddAccountOpen}>
         <DialogContent className="max-h-[calc(100dvh-1rem)] grid-rows-[auto_minmax(0,1fr)] sm:max-w-[min(960px,calc(100vw-2rem))]">
           <DialogHeader>
-            <DialogTitle>添加森空岛账号</DialogTitle>
+            <DialogTitle>{en ? "Add Skland account" : "添加森空岛账号"}</DialogTitle>
             <DialogDescription>
               扫码或导入凭证后会保留现有账号，并将新账号设为当前账号。最多同时登录 <span className="font-number">5</span> 个账号。
             </DialogDescription>
@@ -1696,8 +1711,8 @@ export function SklandStatus({
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-3" data-skland-view-header>
           <div className="-mx-3 min-w-0 overflow-x-auto overflow-y-hidden px-3 pb-1">
             <TabsList className="min-w-max" data-skland-view-tabs>
-              <TabsTrigger value="overview">概览</TabsTrigger>
-              <TabsTrigger value="infrastructure">基建</TabsTrigger>
+              <TabsTrigger value="overview">{en ? "Overview" : "概览"}</TabsTrigger>
+              <TabsTrigger value="infrastructure">{en ? "Infrastructure" : "基建"}</TabsTrigger>
             </TabsList>
           </div>
           <LayoutSyncControl

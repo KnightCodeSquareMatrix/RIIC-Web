@@ -64,21 +64,21 @@ test("342 preset keeps the intended power-safe room levels", () => {
   assert.deepEqual(validateLayoutJson(layout), []);
 });
 
-test("rejects originium shard production in level-one and level-two factories", () => {
+test("allows unlocked originium shard production in level-one and level-two factories", () => {
   for (const level of [1, 2]) {
     const layout = validLayout();
     layout.rooms[2].level = level;
     layout.rooms[2].product = { factory: { recipe: "originium" } };
-    assert.ok(validateLayoutJson(layout).some((message) => message.includes("仅 3 级制造站可生产源石碎片")));
+    layout.rooms.push({ id: "manu_2", kind: "factory", level: 3, product: { factory: { recipe: "gold" } } });
+    assert.deepEqual(validateLayoutJson(layout), []);
   }
 });
 
-test("allows originium shard production only in level-three factories", () => {
+test("requires one level-three factory to unlock originium shard production", () => {
   const layout = validLayout();
+  layout.rooms[2].level = 2;
   layout.rooms[2].product = { factory: { recipe: "originium" } };
-  assert.deepEqual(validateLayoutJson(layout), []);
-  assert.equal(normalizeProductForLevel(2, "originium"), "gold");
-  assert.equal(normalizeProductForLevel(3, "originium"), "originium");
+  assert.ok(validateLayoutJson(layout).some((message) => message.includes("需至少一个 3 级制造站解锁源石碎片配方")));
 });
 
 test("rejects originium orders in level-one and level-two trading posts", () => {

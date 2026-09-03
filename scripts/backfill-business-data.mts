@@ -5,6 +5,7 @@ import path from "node:path";
 import { Pool } from "pg";
 
 import { legacyFeedbackSummary, legacyPlanRunSummary } from "../src/server/business-backfill.ts";
+import { BUSINESS_DATA_TTL_MS } from "../src/server/business-config.ts";
 
 const { loadEnvConfig } = nextEnv;
 loadEnvConfig(process.cwd());
@@ -14,7 +15,7 @@ if (!databaseUrl) throw new Error("DATABASE_URL is required for business-data ba
 const storageRoot = path.resolve(process.env.BETA_STORAGE_DIR || path.join(process.cwd(), "server", "storage"));
 const runRoot = path.resolve(process.env.BETA_CLI_RUN_DIR || path.join(storageRoot, "cli-runs"));
 const feedbackRoot = path.resolve(process.env.BETA_FEEDBACK_DIR || path.join(storageRoot, "feedback"));
-const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+const cutoff = Date.now() - BUSINESS_DATA_TTL_MS;
 const pool = new Pool({ connectionString: databaseUrl, max: 1 });
 const report = { runs: { scanned: 0, inserted: 0, existing: 0 }, feedback: { scanned: 0, inserted: 0, existing: 0 }, skipped: new Map<string, number>() };
 
@@ -69,7 +70,7 @@ try {
           summary.roomCount, summary.operatorCount, summary.rotation, summary.fiammettaEnable, summary.durationMs,
           summary.solver?.solver_executable_sha256, summary.solver?.protocol_version, summary.solver?.plan_schema_version,
           summary.artifact?.key, summary.artifact?.bytes, summary.artifact?.sha256, summary.createdAt,
-          new Date(summary.createdAt!.getTime() + 30 * 24 * 60 * 60 * 1000)],
+          new Date(summary.createdAt!.getTime() + BUSINESS_DATA_TTL_MS)],
       );
       if (inserted.rowCount) report.runs.inserted += 1; else report.runs.existing += 1;
     } catch { skip("run_corrupt"); }
@@ -95,15 +96,15 @@ try {
           (id, diagnostic_id, plan_run_diagnostic_id, user_id, kind, room, note, consent_at, status,
            artifact_key, artifact_bytes, artifact_sha256, created_at, updated_at, expires_at)
          VALUES ($1,$2,CASE WHEN EXISTS (SELECT 1 FROM app.plan_run WHERE diagnostic_id=$2) THEN $2 ELSE NULL END,
-          $3,$4,$5,$6,$7,'pending',$8,$9,$10,$7,$7,$11)
+          $3,$4,$5,$6,$7,'unreviewed',$8,$9,$10,$7,$7,$11)
          ON CONFLICT (id) DO NOTHING RETURNING id`,
         [summary.feedbackId, summary.diagnosticId, linked.rows[0]?.user_id ?? null, summary.kind,
           summary.room ? JSON.stringify(summary.room) : null, summary.note, summary.savedAt,
           summary.artifact.key, summary.artifact.bytes, summary.artifact.sha256,
-          new Date(summary.savedAt.getTime() + 30 * 24 * 60 * 60 * 1000)],
+          new Date(summary.savedAt.getTime() + BUSINESS_DATA_TTL_MS)],
       );
       await pool.query(
-        "INSERT INTO app.feedback_event (id, feedback_id, status, note, created_at) VALUES ($1,$2,'pending',NULL,$3) ON CONFLICT (id) DO NOTHING",
+        "INSERT INTO app.feedback_event (id, feedback_id, status, note, created_at) VALUES ($1,$2,'unreviewed',NULL,$3) ON CONFLICT (id) DO NOTHING",
         [`${summary.feedbackId}:backfill`, summary.feedbackId, summary.savedAt],
       );
       if (inserted.rowCount) report.feedback.inserted += 1; else report.feedback.existing += 1;

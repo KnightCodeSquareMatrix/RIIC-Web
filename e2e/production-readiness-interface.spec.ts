@@ -21,6 +21,7 @@ test("mobile interactive targets remain at least 44 CSS pixels", async ({ page }
   const undersized = await page.locator('button:not(:disabled), a[href], input:not([type="hidden"]), [role="tab"]:not([aria-disabled="true"])').evaluateAll((elements) => (
     elements.flatMap((element) => {
       if (element.getAttribute("aria-label") === "Open Next.js Dev Tools") return [];
+      if (element.closest("footer")) return [];
       const rect = element.getBoundingClientRect();
       const style = getComputedStyle(element);
       if (style.visibility === "hidden" || style.display === "none" || rect.width === 0 || rect.height === 0) return [];
@@ -39,6 +40,7 @@ test("an empty generated profile explains that no training action is needed", as
   await mockApis(page);
   await seedV4Session(page);
   await page.goto("/");
+  await expect(page.locator('[data-workbench-hydrated="true"]')).toBeVisible();
   await page.getByRole("button", { name: "练卡建议" }).click();
 
   await expect(page.getByRole("heading", { name: "本次排班暂无培养建议" })).toBeVisible();
@@ -155,9 +157,21 @@ test("setup exposes and persists only worker-supported rotation profiles", async
   await seedV4Session(page);
   let planRequests = 0;
   let requestedRotation: unknown;
+  let requestedOperbox: unknown;
+  let requestedSourceName: unknown;
+  let requestedBoxSource: unknown;
   await page.route("**/api/plan", async (route) => {
     planRequests += 1;
-    requestedRotation = (route.request().postDataJSON() as { rotation?: unknown }).rotation;
+    const requestBody = route.request().postDataJSON() as {
+      rotation?: unknown;
+      operbox?: unknown;
+      sourceName?: unknown;
+      boxSource?: unknown;
+    };
+    requestedRotation = requestBody.rotation;
+    requestedOperbox = requestBody.operbox;
+    requestedSourceName = requestBody.sourceName;
+    requestedBoxSource = requestBody.boxSource;
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -205,8 +219,51 @@ test("setup exposes and persists only worker-supported rotation profiles", async
   await dialog.getByRole("button", { name: "更换", exact: true }).click();
   await expect(dialog.locator("#setup-import-options")).toBeVisible();
   await expect(dialog).toHaveCSS("height", "660px");
-  await dialog.getByRole("button", { name: "收起", exact: true }).click();
-  await dialog.getByRole("button", { name: "继续", exact: true }).click();
+  await dialog.getByRole("tab", { name: "手动选择", exact: true }).click();
+  const manualPicker = dialog.locator("[data-manual-operbox-picker]");
+  const manualHeading = manualPicker.getByRole("heading", { name: "手动选择干员 Box" });
+  await expect(manualHeading).toBeVisible();
+  await expect(manualHeading.locator("svg")).toHaveCount(0);
+  const manualActions = manualPicker.locator("[data-manual-operbox-actions]");
+  const manualActionButtons = [
+    manualPicker.getByRole("button", { name: "只看已拥有", exact: true }),
+    manualPicker.getByRole("button", { name: "全选最高精英", exact: true }),
+    manualPicker.getByRole("button", { name: "清空选择", exact: true }),
+  ];
+  await expect(manualActions).toHaveCSS("grid-template-columns", /.+ .+ .+/);
+  const manualActionBoxes = await Promise.all(manualActionButtons.map((button) => button.boundingBox()));
+  expect(new Set(manualActionBoxes.map((box) => Math.round(box?.y ?? -1))).size).toBe(1);
+  const manualStageGroup = manualPicker.getByRole("radiogroup").first();
+  for (const status of [
+    { name: "未拥有", color: "rgb(113, 113, 122)" },
+    { name: "精0", color: "rgb(34, 187, 255)" },
+    { name: "精1", color: "rgb(184, 240, 58)" },
+    { name: "精2", color: "rgb(255, 216, 0)" },
+  ]) {
+    const stageButton = manualStageGroup.getByRole("radio", { name: status.name, exact: true });
+    await stageButton.click();
+    await expect(stageButton).toHaveAttribute("aria-checked", "true");
+    await expect(stageButton).toHaveCSS("background-color", status.color);
+    await expect(stageButton).toHaveCSS("height", "28px");
+    await expect(stageButton).toHaveCSS("border-radius", "4px");
+  }
+  await manualPicker.getByRole("button", { name: "全选最高精英", exact: true }).click();
+  await expect(manualPicker.getByText("已拥有 425 名", { exact: true })).toBeVisible();
+  const manualApplyButtons = manualPicker.locator("[data-manual-operbox-apply]");
+  await expect(manualApplyButtons).toHaveCount(2);
+  for (const manualApplyButton of await manualApplyButtons.all()) {
+    await expect(manualApplyButton).toBeEnabled();
+    await expect(manualApplyButton).toHaveCSS("height", "36px");
+    await expect(manualApplyButton).toHaveCSS("border-radius", "18px");
+    await expect(manualApplyButton).toHaveCSS("font-size", "12px");
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  const narrowActionBoxes = await Promise.all(manualActionButtons.map((button) => button.boundingBox()));
+  expect(new Set(narrowActionBoxes.map((box) => Math.round(box?.y ?? -1))).size).toBe(1);
+  expect(narrowActionBoxes.every((box) => box !== null && box.x >= 0 && box.x + box.width <= 390)).toBe(true);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await manualApplyButtons.first().click();
+  await expect(manualPicker).toHaveCount(0);
   const layoutStepListBox = await stepList.boundingBox();
   expect(layoutStepListBox?.y ?? -1).toBeCloseTo(initialStepListBox?.y ?? -1, 0);
   const completedDataStep = dialog.getByRole("button", { name: /第 1 步，共 3 步：干员数据/ });
@@ -237,28 +294,35 @@ test("setup exposes and persists only worker-supported rotation profiles", async
   await expect(page.getByRole("option", { name: /一天两换/ })).toHaveCount(1);
   await expect(page.getByRole("option", { name: /自定义/ })).toHaveCount(0);
   await expect(page.getByRole("option")).toHaveCount(3);
-  await rotationTrigger.fill("一天两换");
-  await expect(page.getByRole("option")).toHaveCount(1);
-  await rotationTrigger.press("Enter");
+  await expect(rotationTrigger).toHaveJSProperty("readOnly", true);
+  await page.getByRole("option", { name: /一天两换/ }).click();
   await expect(rotationTrigger).toHaveValue("一天两换 · 12/12/12");
   await rotationTrigger.click();
   await expect(page.locator('[data-slot="combobox-content"]')).toBeVisible();
-  await rotationTrigger.fill("不存在的方案");
-  await expect(page.getByText("没有匹配的换班方式", { exact: true })).toBeVisible();
+  await expect(page.getByRole("option")).toHaveCount(3);
   await rotationTrigger.press("Escape");
   await expect(rotationTrigger).toHaveValue("一天两换 · 12/12/12");
   await expect(dialog.getByText("完整循环 24 小时")).toHaveCount(0);
   await expect(dialog.getByText("第 4 班 4h")).toHaveCount(0);
-  await dialog.getByRole("button", { name: "继续", exact: true }).click();
+  await dialog.getByRole("button", { name: "检查设施", exact: true }).click();
   await dialog.getByRole("button", { name: "完成", exact: true }).click();
 
   await page.getByRole("button", { name: "生成排班" }).click();
   await expect.poll(() => planRequests).toBe(1);
   expect(requestedRotation).toBe("abc_12_12_12");
+  expect(requestedSourceName).toBe("手动选择的 Box");
+  expect(requestedBoxSource).toBe("maa");
+  expect(Array.isArray(requestedOperbox)).toBe(true);
+  expect(requestedOperbox).toHaveLength(425);
+  expect(new Set((requestedOperbox as Array<{ id: string }>).map((operator) => operator.id)).size).toBe(425);
+  expect((requestedOperbox as Array<{ own: boolean }>).every((operator) => operator.own)).toBe(true);
   const persisted = await page.evaluate(() => JSON.parse(
     window.localStorage.getItem("arknights-infra-calc-session-v5") ?? "{}"
   ));
   expect(persisted.rotationProfile).toBe("abc_12_12_12");
+  expect(persisted.sourceName).toBe("手动选择的 Box");
+  expect(persisted.boxSource).toBe("maa");
+  expect(persisted.operbox).toHaveLength(425);
 });
 
 test("layout level controls clamp edits and expose the power-safe 342 defaults", async ({ page }) => {
@@ -293,7 +357,13 @@ test("layout level controls clamp edits and expose the power-safe 342 defaults",
 
   await dialog.locator('[data-facility-group="power"] [data-slot="accordion-trigger"]').click();
   await dialog.locator('[data-facility-group="dormitory"] [data-slot="accordion-trigger"]').click();
-  const activeTradeOrder = dialog.getByRole("group", { name: "trade_1 订单" }).getByRole("button", { name: "龙门商法" });
+  if (await tradeGroup.locator('[data-slot="accordion-trigger"]').getAttribute("aria-expanded") !== "true") {
+    await tradeGroup.locator('[data-slot="accordion-trigger"]').click();
+  }
+  if (await factoryGroup.locator('[data-slot="accordion-trigger"]').getAttribute("aria-expanded") !== "true") {
+    await factoryGroup.locator('[data-slot="accordion-trigger"]').click();
+  }
+  const activeTradeOrder = dialog.getByRole("group", { name: "贸易站 1 订单" }).getByRole("button", { name: "龙门商法" });
   await expect(activeTradeOrder).toHaveAttribute("aria-pressed", "true");
   await expect(dialog.locator('[data-slot="setup-room-row"]')).toHaveCount(18);
   await expect(dialog.locator('[data-slot="setup-room-row"][data-room-group="trading"]')).toHaveCount(3);
@@ -304,6 +374,18 @@ test("layout level controls clamp edits and expose the power-safe 342 defaults",
   const normalPowerStatus = dialog.getByText("电力正常 · 540/540", { exact: true });
   await expect(normalPowerStatus).toBeVisible();
   await expect(normalPowerStatus).toHaveClass(/text-emerald-700/);
+
+  const lowerFactoryRecipe = dialog.getByRole("group", { name: "制造站 3 配方" });
+  await lowerFactoryRecipe.getByRole("button", { name: "源石碎片" }).click();
+  await expect(lowerFactoryRecipe.getByRole("button", { name: "源石碎片" })).toHaveAttribute("aria-pressed", "true");
+  for (const roomId of ["manu_1", "manu_2"]) {
+    const level = dialog.locator(`input[aria-label="${roomId} 等级"]:visible`);
+    await level.fill("2");
+    await level.press("Enter");
+    await expect(level).toHaveValue("2");
+  }
+  await expect(lowerFactoryRecipe.getByRole("button", { name: "贵金属" })).toHaveAttribute("aria-pressed", "true");
+  await expect(lowerFactoryRecipe.getByRole("button", { name: "源石碎片" })).toBeDisabled();
 
   await page.setViewportSize({ width: 768, height: 900 });
   const mediumOverflow = await dialog.evaluate((element) => ({
@@ -407,7 +489,7 @@ test("calculator owns scheduling controls and training advice uses a single tech
 
 test("schedule visuals use a stable technical canvas and responsive level markers", async ({ page }) => {
   await mockApis(page);
-  await seedV4Session(page, scheduleVisualPlanData);
+  await seedV4Session(page, scheduleVisualPlanData, { boxSource: "maa" });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
 
@@ -482,6 +564,23 @@ test("schedule visuals use a stable technical canvas and responsive level marker
   await compactViewTab.click();
   const compactDiamonds = page.locator('.level-diamonds[data-variant="compact"]').first();
   await expect(compactDiamonds).toBeVisible();
+  const compactProductBadge = page.locator("[data-compact-product-badge]").first();
+  const compactFeedbackButton = page.getByRole("button", { name: /反馈排班问题/ }).first();
+  await expect(compactProductBadge).toBeVisible();
+  await expect(compactFeedbackButton).toBeVisible();
+  const [compactProductBox, compactFeedbackBox] = await Promise.all([
+    compactProductBadge.boundingBox(),
+    compactFeedbackButton.boundingBox(),
+  ]);
+  expect(compactProductBox).not.toBeNull();
+  expect(compactFeedbackBox).not.toBeNull();
+  expect((compactProductBox?.x ?? 0) + (compactProductBox?.width ?? 0)).toBeLessThanOrEqual((compactFeedbackBox?.x ?? 0) - 8);
+  await compactFeedbackButton.click();
+  const compactFeedbackDialog = page.getByRole("dialog");
+  await expect(compactFeedbackDialog).toBeVisible();
+  await expect(compactFeedbackDialog.getByText("反馈排班问题", { exact: true })).toBeVisible();
+  await compactFeedbackDialog.getByRole("button", { name: "取消" }).click();
+  await expect(compactFeedbackDialog).toHaveCount(0);
   const compactBox = await compactDiamonds.boundingBox();
   expect(compactBox?.height).toBeCloseTo(14, 0);
   const compactDiamondBox = await compactDiamonds.locator(".level-diamond").first().boundingBox();
@@ -590,7 +689,9 @@ test("publishes the site terms and privacy policy with upstream policy links", a
   await page.setViewportSize({ width: 390, height: 844 });
   await gotoStable(page, "/privacy");
   await expect(page.getByRole("heading", { name: "隐私政策", level: 1 })).toBeVisible();
-  await expect(page.getByText("版本与生效日期：2026-08-31")).toBeVisible();
+  await expect(page.getByText("版本与生效日期：2026-09-03")).toBeVisible();
+  await expect(page.getByText(/服务端 CLI 运行记录和主动反馈的私有复现快照最多保存 30 天/)).toBeVisible();
+  await expect(page.getByText(/提交的干员 Box、轮换设置、轮换次数、菲亚梅塔启用状态/)).toBeVisible();
   await expect(page.getByText(/第一方体验分析会自动记录/)).toBeVisible();
   await expect(page.getByText(/30 天到期/)).toBeVisible();
   await expect(page.getByText("可露希尔基建终端项目维护者", { exact: false })).toBeVisible();

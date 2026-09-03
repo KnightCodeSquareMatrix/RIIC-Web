@@ -40,13 +40,18 @@ export function roomSummary(layout: BaseBlueprint): string {
   return `${trade} 贸易 / ${manu} 制造 / ${power} 发电`;
 }
 
+export function hasUnlockedFactoryRecipes(layout: BaseBlueprint): boolean {
+  return layout.rooms.some((room) => room.kind === "factory" && room.level >= 3);
+}
+
 export function updateFactoryRecipe(layout: BaseBlueprint, roomId: string, recipe: FactoryRecipe): BaseBlueprint {
+  const recipeUnlocked = recipe !== "originium" || hasUnlockedFactoryRecipes(layout);
   return {
     ...layout,
     scenario: structuredClone(layout.scenario),
     rooms: layout.rooms.map((room) => {
       if (room.id !== roomId || room.kind !== "factory") return structuredClone(room);
-      if (normalizeProductForLevel(room.level, recipe) !== recipe) return structuredClone(room);
+      if (!recipeUnlocked) return structuredClone(room);
       return {
         ...structuredClone(room),
         product: { factory: { recipe } },
@@ -78,19 +83,24 @@ export function updateRoomLevel(layout: BaseBlueprint, roomId: string, level: nu
   const target = layout.rooms.find((room) => room.id === roomId);
   const maxLevel = target ? maxRoomLevel(target.kind) : 3;
   const nextLevel = Math.max(1, Math.min(maxLevel, Math.trunc(level)));
+  const rooms = layout.rooms.map((room) => {
+    if (room.id !== roomId) return structuredClone(room);
+    const nextRoom = { ...structuredClone(room), level: nextLevel };
+    if (nextRoom.kind === "trade_post") {
+      nextRoom.product = { trade: { order: normalizeProductForLevel(nextLevel, tradeOrderFor(nextRoom)) } };
+    }
+    return nextRoom;
+  });
+  const factoryRecipesUnlocked = rooms.some((room) => room.kind === "factory" && room.level >= 3);
+
   return {
     ...layout,
     scenario: structuredClone(layout.scenario),
-    rooms: layout.rooms.map((room) => {
-      if (room.id !== roomId) return structuredClone(room);
-      const nextRoom = { ...structuredClone(room), level: nextLevel };
-      if (nextRoom.kind === "factory") {
-        nextRoom.product = { factory: { recipe: normalizeProductForLevel(nextLevel, factoryRecipeFor(nextRoom)) } };
-      } else if (nextRoom.kind === "trade_post") {
-        nextRoom.product = { trade: { order: normalizeProductForLevel(nextLevel, tradeOrderFor(nextRoom)) } };
-      }
-      return nextRoom;
-    }),
+    rooms: factoryRecipesUnlocked
+      ? rooms
+      : rooms.map((room) => room.kind === "factory" && factoryRecipeFor(room) === "originium"
+        ? { ...room, product: { factory: { recipe: "gold" as const } } }
+        : room),
   };
 }
 

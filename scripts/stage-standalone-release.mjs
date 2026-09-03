@@ -42,6 +42,7 @@ const requiredBuildFiles = [
   ".next/standalone/src/server/business-backfill.ts",
   ".next/standalone/drizzle",
   ".next/standalone/node_modules/drizzle-orm",
+  "dist/plan-worker.cjs",
 ];
 for (const relativePath of requiredBuildFiles) {
   await lstat(path.join(repoRoot, relativePath));
@@ -77,6 +78,11 @@ await cp(path.join(repoRoot, ".next", "standalone"), path.join(outputRoot, ".nex
   recursive: true,
   force: true,
 });
+await mkdir(path.join(outputRoot, "worker"), { recursive: true });
+await copyFile(
+  path.join(repoRoot, "dist", "plan-worker.cjs"),
+  path.join(outputRoot, "worker", "plan-worker.cjs"),
+);
 await writeFile(path.join(outputRoot, ".release-artifact.json"), `${JSON.stringify({
   formatVersion: 1,
   kind: "riic-web-standalone",
@@ -85,6 +91,10 @@ await writeFile(path.join(outputRoot, ".release-artifact.json"), `${JSON.stringi
 }, null, 2)}\n`, "utf8");
 
 assert.equal(await lstat(path.join(outputRoot, ".next", "standalone", "server.js")).then((entry) => entry.isFile()), true);
+assert.equal(
+  await lstat(path.join(outputRoot, "worker", "plan-worker.cjs")).then((entry) => entry.isFile()),
+  true,
+);
 for (const forbiddenRootEntry of ["node_modules", "bin"]) {
   try {
     await lstat(path.join(outputRoot, forbiddenRootEntry));

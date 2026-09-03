@@ -1,6 +1,7 @@
 import {
   bigint,
   boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -10,6 +11,7 @@ import {
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -90,6 +92,9 @@ export const planRun = appSchema.table("plan_run", {
   rotation: text("rotation").notNull(),
   fiammettaEnable: boolean("fiammetta_enable").notNull(),
   durationMs: integer("duration_ms"),
+  executionSource: text("execution_source"),
+  solverDurationMs: integer("solver_duration_ms"),
+  workerDurationMs: integer("worker_duration_ms"),
   errorCode: text("error_code"),
   solverExecutableSha256: text("solver_executable_sha256"),
   protocolVersion: integer("protocol_version"),
@@ -97,6 +102,8 @@ export const planRun = appSchema.table("plan_run", {
   artifactKey: text("artifact_key"),
   artifactBytes: bigint("artifact_bytes", { mode: "number" }),
   artifactSha256: text("artifact_sha256"),
+  artifactStatus: text("artifact_status"),
+  artifactFinalizedAt: timestamp("artifact_finalized_at", { withTimezone: true }),
   calculationContext: jsonb("calculation_context"),
   publicResultSha256: text("public_result_sha256"),
   operboxContentHmac: text("operbox_content_hmac"),
@@ -111,6 +118,70 @@ export const planRun = appSchema.table("plan_run", {
   index("plan_run_user_created_at_idx").on(table.userId, table.createdAt),
 ]);
 
+export const planTask = appSchema.table("plan_task", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  accountClass: text("account_class").notNull(),
+  requestIpHmac: text("request_ip_hmac").notNull(),
+  status: text("status").notNull(),
+  encryptedPayload: text("encrypted_payload"),
+  payloadIv: text("payload_iv"),
+  wrappedDataKey: text("wrapped_data_key"),
+  wrappedKeyIv: text("wrapped_key_iv"),
+  keyVersion: text("key_version"),
+  schemaVersion: integer("schema_version"),
+  result: jsonb("result"),
+  error: text("error"),
+  attempts: integer("attempts").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  startedAt: timestamp("started_at", { withTimezone: true }),
+  solverStartedAt: timestamp("solver_started_at", { withTimezone: true }),
+  solverFinishedAt: timestamp("solver_finished_at", { withTimezone: true }),
+  executionSource: text("execution_source"),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+}, (table) => [
+  index("plan_task_claim_idx").on(table.status, table.createdAt),
+  index("plan_task_active_expires_idx").on(table.status, table.expiresAt).concurrently(),
+  index("plan_task_account_active_idx").on(table.accountClass, table.status, table.expiresAt).concurrently(),
+  index("plan_task_ip_active_idx").on(table.requestIpHmac, table.status, table.expiresAt).concurrently(),
+  index("plan_task_expires_at_idx").on(table.expiresAt),
+  index("plan_task_ip_created_at_idx").on(table.requestIpHmac, table.createdAt),
+  index("plan_task_user_created_at_idx").on(table.userId, table.createdAt),
+  uniqueIndex("plan_task_one_active_per_user_idx").on(table.userId)
+    .where(sql`${table.status} in ('buffered', 'pending', 'running')`),
+  check("plan_task_status_check", sql`${table.status} in ('buffered', 'pending', 'running', 'done', 'failed', 'cancelled')`),
+  check("plan_task_account_class_check", sql`${table.accountClass} in ('new', 'established')`),
+  check("plan_task_payload_lifecycle_check", sql`(
+    (${table.status} in ('buffered', 'pending', 'running')
+      and ${table.encryptedPayload} is not null
+      and ${table.payloadIv} is not null
+      and ${table.wrappedDataKey} is not null
+      and ${table.wrappedKeyIv} is not null
+      and ${table.keyVersion} is not null
+      and ${table.schemaVersion} is not null)
+    or
+    (${table.status} in ('done', 'failed', 'cancelled')
+      and ${table.encryptedPayload} is null
+      and ${table.payloadIv} is null
+      and ${table.wrappedDataKey} is null
+      and ${table.wrappedKeyIv} is null
+      and ${table.keyVersion} is null
+      and ${table.schemaVersion} is null)
+  )`),
+]);
+
+export const planWorkerHeartbeat = appSchema.table("plan_worker_heartbeat", {
+  id: text("id").primaryKey(),
+  releaseSha: text("release_sha").notNull(),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+  heartbeatAt: timestamp("heartbeat_at", { withTimezone: true }).notNull(),
+  solverLanes: integer("solver_lanes").notNull().default(4),
+  pipelineDepth: integer("pipeline_depth").notNull().default(2),
+  inFlight: integer("in_flight").notNull().default(0),
+  serviceTimeEwmaMs: integer("service_time_ewma_ms"),
+});
+
 export const feedback = appSchema.table("feedback", {
   id: text("id").primaryKey(),
   diagnosticId: text("diagnostic_id").notNull(),
@@ -120,7 +191,7 @@ export const feedback = appSchema.table("feedback", {
   room: jsonb("room"),
   note: text("note").notNull(),
   consentAt: timestamp("consent_at", { withTimezone: true }).notNull(),
-  status: text("status").default("pending").notNull(),
+  status: text("status").default("unreviewed").notNull(),
   adminNote: text("admin_note"),
   artifactKey: text("artifact_key"),
   artifactBytes: bigint("artifact_bytes", { mode: "number" }),

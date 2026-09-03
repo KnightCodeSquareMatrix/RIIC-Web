@@ -4,6 +4,7 @@ import test from "node:test";
 
 import {
   __resetRequestGuardsForTests,
+  acquireAnonymousSamplePlanSlot,
   acquirePlanSlot,
   assertEmptyBody,
   assertFiammettaEnableCompatible,
@@ -14,7 +15,9 @@ import {
   failureResponse,
   healthHttpStatus,
   MAX_CONCURRENT_AUTHENTICATED_PLAN_ADMISSIONS,
+  MAX_CONCURRENT_ANONYMOUS_SAMPLE_PLAN_ADMISSIONS,
   MAX_CONCURRENT_NEW_ACCOUNT_PLAN_ADMISSIONS,
+  MAX_ANONYMOUS_SAMPLE_PLAN_STARTS_PER_IP,
   MAX_CONCURRENT_PLAN_ACCOUNTS_PER_IP,
   MAX_PLAN_STARTS_PER_ACCOUNT,
   MAX_PLAN_STARTS_PER_IP,
@@ -44,6 +47,10 @@ test("error catalog keeps the required HTTP status mapping", () => {
   assert.equal(ERROR_DEFINITIONS["AIC-PLAN-3002"].status, 429);
   assert.equal(ERROR_DEFINITIONS["AIC-PLAN-3003"].status, 504);
   assert.equal(ERROR_DEFINITIONS["AIC-PLAN-3004"].status, 502);
+  assert.equal(ERROR_DEFINITIONS["AIC-PLAN-3005"].status, 409);
+  assert.equal(ERROR_DEFINITIONS["AIC-PLAN-3006"].status, 429);
+  assert.equal(ERROR_DEFINITIONS["AIC-PLAN-3007"].status, 429);
+  assert.equal(ERROR_DEFINITIONS["AIC-PLAN-3008"].status, 503);
   assert.equal(ERROR_DEFINITIONS["AIC-FEEDBACK-4001"].status, 422);
   assert.equal(ERROR_DEFINITIONS["AIC-FEEDBACK-4002"].status, 500);
   assert.equal(ERROR_DEFINITIONS["AIC-SYS-5000"].status, 500);
@@ -76,6 +83,26 @@ test("success and failure responses include the request id", async () => {
   const body = await failure.json();
   assert.equal(body.error.requestId, "request-2");
   assert.equal(body.error.code, "AIC-RATE-6001");
+  assert.equal(body.error.retryAfterSeconds, 7);
+});
+
+test("persistent plan admission errors expose Retry-After in both response boundaries", async () => {
+  for (const [code, retryAfter] of [
+    ["AIC-PLAN-3006", 45],
+    ["AIC-PLAN-3007", 60],
+    ["AIC-PLAN-3008", 30],
+  ] as const) {
+    const response = failureResponse(
+      new PublicApiError(code, { retryAfter }),
+      `request-${code}`,
+      "/api/tasks",
+      performance.now(),
+    );
+    assert.equal(response.headers.get("Retry-After"), String(retryAfter));
+    const body = await response.json();
+    assert.equal(body.error.code, code);
+    assert.equal(body.error.retryAfterSeconds, retryAfter);
+  }
 });
 
 test("health returns 503 while the planner is unavailable", () => {
@@ -175,12 +202,36 @@ test("same-origin protection uses Host instead of the wildcard listen address", 
   }
 });
 
-test("feedback validation separates room and performance feedback while keeping notes minimal", () => {
+test("feedback validation separates issue kinds and requires a complete private reproduction snapshot", () => {
+  const reproduction = {
+    layout: {
+      template: "243",
+      drone_cap: 200,
+      scenario: {},
+      rooms: [
+        { id: "control", kind: "control_center", level: 5 },
+        { id: "power", kind: "power_plant", level: 3 },
+      ],
+    },
+    operbox: [{
+      id: "char_002_amiya",
+      name: "阿米娅",
+      own: true,
+      level: 80,
+      elite: 2,
+      potential: 6,
+      rarity: 5,
+    }],
+    rotation: "abc_12_6_6",
+    fiammettaEnabled: false,
+    sourceType: "maa",
+  };
   const valid = {
     diagnosticId: "diag",
     room: { id: "trade_1", title: "贸易站 1", group: "trading", operators: ["能天使"] },
     note: "站位不符合预期",
     consent: true as const,
+    reproduction,
   };
   assert.doesNotThrow(() => validateFeedbackRequest(valid));
   assert.doesNotThrow(() => validateFeedbackRequest({
@@ -188,7 +239,20 @@ test("feedback validation separates room and performance feedback while keeping 
     diagnosticId: "diag",
     note: "运行耗时明显偏长",
     consent: true,
+    reproduction,
   }));
+  assert.throws(
+    () => validateFeedbackRequest({ ...valid, reproduction: undefined }),
+    (error: unknown) => error instanceof PublicApiError && error.code === "AIC-FEEDBACK-4001"
+  );
+  assert.throws(
+    () => validateFeedbackRequest({ ...valid, reproduction: { ...reproduction, operbox: [] } }),
+    (error: unknown) => error instanceof PublicApiError && error.code === "AIC-FEEDBACK-4001"
+  );
+  assert.throws(
+    () => validateFeedbackRequest({ ...valid, reproduction: { ...reproduction, rotation: "fiammetta_8_8_4_4", fiammettaEnabled: false } }),
+    (error: unknown) => error instanceof PublicApiError && error.code === "AIC-FEEDBACK-4001"
+  );
   assert.throws(
     () => validateFeedbackRequest({ ...valid, consent: false }),
     (error: unknown) => error instanceof PublicApiError && error.code === "AIC-FEEDBACK-4001"
@@ -202,11 +266,11 @@ test("feedback validation separates room and performance feedback while keeping 
     (error: unknown) => error instanceof PublicApiError && error.code === "AIC-FEEDBACK-4001"
   );
   assert.throws(
-    () => validateFeedbackRequest({ kind: "room_issue", diagnosticId: "diag", note: "缺少房间", consent: true }),
+    () => validateFeedbackRequest({ kind: "room_issue", diagnosticId: "diag", note: "缺少房间", consent: true, reproduction }),
     (error: unknown) => error instanceof PublicApiError && error.code === "AIC-FEEDBACK-4001"
   );
   assert.throws(
-    () => validateFeedbackRequest({ kind: "future", diagnosticId: "diag", note: "未知类型", consent: true }),
+    () => validateFeedbackRequest({ kind: "future", diagnosticId: "diag", note: "未知类型", consent: true, reproduction }),
     (error: unknown) => error instanceof PublicApiError && error.code === "AIC-FEEDBACK-4001"
   );
 });
@@ -268,23 +332,30 @@ test("rate limiting returns retryable 429 errors", () => {
 test("authenticated plan admission is account-primary and IP-secondary", () => {
   __resetRequestGuardsForTests();
   try {
-    assert.equal(MAX_CONCURRENT_AUTHENTICATED_PLAN_ADMISSIONS, 5);
-    assert.equal(MAX_CONCURRENT_NEW_ACCOUNT_PLAN_ADMISSIONS, 3);
-    assert.equal(MAX_CONCURRENT_PLAN_ACCOUNTS_PER_IP, 2);
+    assert.equal(MAX_CONCURRENT_AUTHENTICATED_PLAN_ADMISSIONS, 1_000);
+    assert.equal(MAX_CONCURRENT_NEW_ACCOUNT_PLAN_ADMISSIONS, 600);
+    assert.equal(MAX_CONCURRENT_PLAN_ACCOUNTS_PER_IP, 100);
 
     const releaseFirst = acquirePlanSlot({ ip: "shared-ip", accountId: "account-a", accountClass: "established" });
     assert.throws(
       () => acquirePlanSlot({ ip: "other-ip", accountId: "account-a", accountClass: "established" }),
-      (error: unknown) => error instanceof PublicApiError && error.code === "AIC-PLAN-3002"
+      (error: unknown) => error instanceof PublicApiError && error.code === "AIC-PLAN-3005"
     );
 
-    const releaseSecond = acquirePlanSlot({ ip: "shared-ip", accountId: "account-b", accountClass: "established" });
+    const sharedIpReleases = Array.from(
+      { length: MAX_CONCURRENT_PLAN_ACCOUNTS_PER_IP - 1 },
+      (_, index) => acquirePlanSlot({
+        ip: "shared-ip",
+        accountId: `shared-account-${index}`,
+        accountClass: "established",
+      }),
+    );
     assert.throws(
       () => acquirePlanSlot({ ip: "shared-ip", accountId: "account-c", accountClass: "established" }),
-      (error: unknown) => error instanceof PublicApiError && error.code === "AIC-PLAN-3002"
+      (error: unknown) => error instanceof PublicApiError && error.code === "AIC-PLAN-3007"
     );
 
-    releaseSecond();
+    sharedIpReleases.forEach((release) => release());
     releaseFirst();
   } finally {
     __resetRequestGuardsForTests();
@@ -327,6 +398,82 @@ test("established accounts can use reserved capacity without opening it to fresh
   }
 });
 
+test("anonymous trusted samples use one bounded slot while preserving signed-in capacity", () => {
+  __resetRequestGuardsForTests();
+  try {
+    assert.equal(MAX_CONCURRENT_ANONYMOUS_SAMPLE_PLAN_ADMISSIONS, 1);
+    const releaseSample = acquireAnonymousSamplePlanSlot({ ip: "sample-ip" });
+    assert.throws(
+      () => acquireAnonymousSamplePlanSlot({ ip: "other-sample-ip" }),
+      (error: unknown) => error instanceof PublicApiError && error.code === "AIC-PLAN-3002",
+    );
+
+    const authenticatedReleases = Array.from(
+      { length: MAX_CONCURRENT_AUTHENTICATED_PLAN_ADMISSIONS - 1 },
+      (_, index) => acquirePlanSlot({
+        ip: `authenticated-ip-${index}`,
+        accountId: `established-account-${index}`,
+        accountClass: "established",
+      }),
+    );
+    assert.throws(
+      () => acquirePlanSlot({
+        ip: "authenticated-ip-rejected",
+        accountId: "established-account-rejected",
+        accountClass: "established",
+      }),
+      (error: unknown) => error instanceof PublicApiError && error.code === "AIC-PLAN-3002",
+    );
+
+    authenticatedReleases.forEach((release) => release());
+    releaseSample();
+
+    const priorityReleases = Array.from(
+      { length: MAX_CONCURRENT_AUTHENTICATED_PLAN_ADMISSIONS - 1 },
+      (_, index) => acquirePlanSlot({
+        ip: `priority-ip-${index}`,
+        accountId: `priority-account-${index}`,
+        accountClass: "established",
+      }),
+    );
+    assert.throws(
+      () => acquireAnonymousSamplePlanSlot({ ip: "sample-priority-ip" }),
+      (error: unknown) => error instanceof PublicApiError && error.code === "AIC-PLAN-3002",
+    );
+    const releasePriorityAccount = acquirePlanSlot({
+      ip: "priority-final-ip",
+      accountId: "priority-final-account",
+      accountClass: "established",
+    });
+    releasePriorityAccount();
+    priorityReleases.forEach((release) => release());
+  } finally {
+    __resetRequestGuardsForTests();
+  }
+});
+
+test("anonymous trusted sample starts allow one retry per IP without charging rejections", () => {
+  __resetRequestGuardsForTests();
+  try {
+    assert.equal(MAX_ANONYMOUS_SAMPLE_PLAN_STARTS_PER_IP, 2);
+    const releaseFirst = acquireAnonymousSamplePlanSlot({ ip: "sample-ip" });
+    assert.throws(
+      () => acquireAnonymousSamplePlanSlot({ ip: "sample-ip" }),
+      (error: unknown) => error instanceof PublicApiError && error.code === "AIC-PLAN-3002",
+    );
+    releaseFirst();
+    acquireAnonymousSamplePlanSlot({ ip: "sample-ip" })();
+    assert.throws(
+      () => acquireAnonymousSamplePlanSlot({ ip: "sample-ip" }),
+      (error: unknown) => error instanceof PublicApiError
+        && error.code === "AIC-PLAN-3002"
+        && Boolean(error.retryAfter),
+    );
+  } finally {
+    __resetRequestGuardsForTests();
+  }
+});
+
 test("plan account admission class requires verified email and a server-observed 24 hour age", () => {
   const now = Date.parse("2026-08-31T00:00:00.000Z");
   assert.equal(PLAN_ESTABLISHED_ACCOUNT_AGE_MS, 24 * 60 * 60_000);
@@ -351,26 +498,26 @@ test("plan account admission class requires verified email and a server-observed
 test("plan start windows limit accounts and shared IPs without charging rejected attempts", () => {
   __resetRequestGuardsForTests();
   try {
-    assert.equal(MAX_PLAN_STARTS_PER_ACCOUNT, 3);
+    assert.equal(MAX_PLAN_STARTS_PER_ACCOUNT, 10);
     for (let index = 0; index < MAX_PLAN_STARTS_PER_ACCOUNT; index += 1) {
       acquirePlanSlot({ ip: "account-ip", accountId: "account-a", accountClass: "established" })();
     }
     assert.throws(
       () => acquirePlanSlot({ ip: "account-ip", accountId: "account-a", accountClass: "established" }),
       (error: unknown) => error instanceof PublicApiError
-        && error.code === "AIC-PLAN-3002"
+        && error.code === "AIC-PLAN-3006"
         && Boolean(error.retryAfter)
     );
 
     __resetRequestGuardsForTests();
-    assert.equal(MAX_PLAN_STARTS_PER_IP, 8);
+    assert.equal(MAX_PLAN_STARTS_PER_IP, 200);
     for (let index = 0; index < MAX_PLAN_STARTS_PER_IP; index += 1) {
       acquirePlanSlot({ ip: "shared-ip", accountId: `account-${index}`, accountClass: "established" })();
     }
     assert.throws(
       () => acquirePlanSlot({ ip: "shared-ip", accountId: "account-rejected", accountClass: "established" }),
       (error: unknown) => error instanceof PublicApiError
-        && error.code === "AIC-PLAN-3002"
+        && error.code === "AIC-PLAN-3007"
         && Boolean(error.retryAfter)
     );
   } finally {
@@ -378,14 +525,15 @@ test("plan start windows limit accounts and shared IPs without charging rejected
   }
 });
 
-test("authenticated sample requests retain admission after a cache miss while anonymous samples stay cache-only", async () => {
+test("trusted anonymous samples receive bounded admission after a cache miss", async () => {
   const source = await readFile(new URL("../app/api/plan/route.ts", import.meta.url), "utf8");
   const sampleBranch = source.indexOf('=== "trusted-sample"');
   const authenticatedBranch = source.indexOf("} else {", sampleBranch);
   const optionalSession = source.indexOf("await readWebsiteSession(request).catch(() => null)", sampleBranch);
   const sampleUserId = source.indexOf("websiteUserId = optionalSession.user.id", optionalSession);
   const sampleAccountClass = source.indexOf("websiteAccountClass = planAccountAdmissionClass(optionalSession.user)", optionalSession);
-  const anonymousGuard = source.indexOf("if (!websiteUserId || !websiteAccountClass)");
+  const anonymousGuard = source.indexOf('if (accessMode !== "trusted-sample" || includeDebug)');
+  const anonymousAdmission = source.indexOf("release = acquireAnonymousSamplePlanSlot({ ip })");
   const admission = source.indexOf("release = acquirePlanSlot({ ip, accountId: websiteUserId, accountClass: websiteAccountClass })");
   const anonymousSampleReference = 'const cacheReferenceUserId = sourceType === "sample" ? null : websiteUserId';
   assert.equal(optionalSession > sampleBranch, true);
@@ -395,8 +543,76 @@ test("authenticated sample requests retain admission after a cache miss while an
   assert.equal(source.includes(anonymousSampleReference), true);
   assert.equal(source.match(/userId: cacheReferenceUserId/g)?.length, 2);
   assert.equal(anonymousGuard > source.indexOf("await resolvePlanCache"), true);
-  assert.equal(anonymousGuard < admission, true);
+  assert.equal(anonymousGuard < anonymousAdmission, true);
+  assert.equal(anonymousAdmission < admission, true);
   assert.equal(admission > source.indexOf("await readJsonBody"), true);
   assert.equal(admission > source.indexOf("await resolvePlanCache"), true);
   assert.equal(admission < source.indexOf("runResult = await runPlan"), true);
+});
+
+test("task queue keeps anonymous samples cache-only and applies persistent authenticated admission", async () => {
+  const source = await readFile(new URL("../app/api/tasks/route.ts", import.meta.url), "utf8");
+  const cacheResolution = source.indexOf("await lookupPlanCache");
+  const anonymousGuard = source.indexOf("if (!session?.user?.id)");
+  const taskCreation = source.indexOf("await createPlanTask");
+  assert.equal(cacheResolution > 0, true);
+  assert.equal(anonymousGuard > cacheResolution, true);
+  assert.equal(taskCreation > anonymousGuard, true);
+  assert.equal(source.includes("accountClass: planAccountAdmissionClass(session.user)"), true);
+  assert.equal(source.includes("requestIpHmac: planTaskIpHmac(ip, planCacheHmacKey())"), true);
+  assert.equal(source.includes("cacheReferenceUserId = sourceType === \"sample\" ? null : userId"), true);
+});
+
+test("task queue keeps only the trusted sample on the bounded synchronous endpoint", async () => {
+  const source = await readFile(new URL("../app/api/plan/route.ts", import.meta.url), "utf8");
+  const originGuard = source.indexOf("assertSameOrigin(request)");
+  const accessMode = source.indexOf("const accessMode = planAccessMode");
+  const queueGuard = source.indexOf('if (taskQueueEnabled && accessMode !== "trusted-sample")');
+  const solverCall = source.indexOf("runResult = await runPlan");
+  assert.equal(source.includes('throw new PublicApiError("AIC-PLAN-3001")'), true);
+  assert.equal(queueGuard > originGuard, true);
+  assert.equal(queueGuard > accessMode, true);
+  assert.equal(queueGuard < solverCall, true);
+});
+
+test("worker finalization records saved-plan bindings and cache ownership before publication", async () => {
+  const source = await readFile(new URL("../../scripts/plan-worker-runtime.mts", import.meta.url), "utf8");
+  const runRecord = source.indexOf("await dependencies.recordRun");
+  const cacheReference = source.indexOf("await dependencies.recordCacheReference", runRecord);
+  const cachePublication = source.indexOf("await dependencies.completeCache", cacheReference);
+  const deferredRun = source.indexOf("deferArtifacts: true");
+  const solverRunRecord = source.indexOf("await dependencies.recordRun", deferredRun);
+  const taskPublication = source.indexOf('await dependencies.completeTask(id, { status: "done"', solverRunRecord);
+  const artifactPublication = source.indexOf("dependencies.enqueueArtifact", taskPublication);
+  assert.equal(source.includes("calculationContext: savedPlanContext"), true);
+  assert.equal(source.includes("publicResultSha256"), true);
+  assert.equal(source.includes("operboxContentHmac"), true);
+  assert.equal(runRecord > 0, true);
+  assert.equal(cacheReference > runRecord, true);
+  assert.equal(cachePublication > cacheReference, true);
+  assert.equal(deferredRun > 0, true);
+  assert.equal(solverRunRecord > deferredRun, true);
+  assert.equal(taskPublication > solverRunRecord, true);
+  assert.equal(artifactPublication > taskPublication, true);
+});
+
+test("worker loads the sealed release environment before evaluating runtime modules", async () => {
+  const source = await readFile(new URL("../../scripts/plan-worker.mts", import.meta.url), "utf8");
+  const envLoad = source.indexOf("loadEnvConfig(process.cwd())");
+  const runtimeImport = source.indexOf('await import("./plan-worker-runtime.mts")');
+  assert.equal(envLoad > 0, true);
+  assert.equal(runtimeImport > envLoad, true);
+  assert.equal(source.includes('from "./plan-worker-runtime.mts"'), false);
+});
+
+test("the client keeps trusted samples synchronous while personal plans follow queue health", async () => {
+  const source = await readFile(new URL("../../src/App.tsx", import.meta.url), "utf8");
+  const healthFlag = source.indexOf("setTaskQueueEnabled(Boolean(health.taskQueue?.enabled))");
+  const fallback = source.indexOf('if (!taskQueueEnabled || payload.boxSource === "sample")');
+  const synchronousCall = source.indexOf("await computePlan(payload)", fallback);
+  const queueCall = source.indexOf("await submitPlanTask(payload)", synchronousCall);
+  assert.equal(healthFlag > 0, true);
+  assert.equal(fallback > healthFlag, true);
+  assert.equal(synchronousCall > fallback, true);
+  assert.equal(queueCall > synchronousCall, true);
 });

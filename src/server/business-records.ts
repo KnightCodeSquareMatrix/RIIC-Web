@@ -1,12 +1,17 @@
-import "server-only";
-
 import { randomUUID } from "node:crypto";
 
-import { and, desc, eq, gte, lte, lt, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, gt, gte, inArray, lte, lt, notInArray, or, sql, type SQL } from "drizzle-orm";
 
 import { PRIVACY_VERSION, TERMS_VERSION } from "@/legal-policy";
-import type { AppErrorCode, FeedbackRequest, SavedPlanCalculationContext, SolverObservation } from "@/types";
-import { BUSINESS_DATA_TTL_MS, isBusinessDatabaseEnabled } from "./business-config";
+import {
+  ADMIN_SOLVER_ERROR_WINDOW_MINUTES,
+  ADMIN_SOLVER_TREND_BUCKET_MINUTES,
+  ADMIN_SOLVER_TREND_WINDOW_MINUTES,
+} from "@/solver-metrics-config";
+import { buildAdminSolverMetricsData } from "@/solver-metrics";
+import type { AdminFeedbackFacility, AdminFeedbackStatus, AppErrorCode, FeedbackRequest, SavedPlanCalculationContext, SolverObservation } from "@/types";
+import { buildAdminSolverTrendQuery } from "./admin-solver-metrics-trend";
+import { BUSINESS_DATA_TTL_MS, isBusinessDatabaseEnabled, isPlanCacheEnabled } from "./business-config";
 import { getDatabase } from "./db";
 import {
   feedback,
@@ -14,6 +19,7 @@ import {
   operboxSnapshot,
   planCache,
   planRun,
+  planTask,
   policyConsent,
   savedPlan,
   telemetryEvent,
@@ -40,9 +46,14 @@ export type PlanRunSummaryInput = {
   rotation: string;
   fiammettaEnable: boolean;
   durationMs?: number | null;
+  executionSource?: "cache" | "solver" | null;
+  solverDurationMs?: number | null;
+  workerDurationMs?: number | null;
   errorCode?: AppErrorCode | null;
   solver?: SolverObservation | null;
   artifact?: PrivateArtifactDescriptor | null;
+  artifactStatus?: "pending" | "complete" | "failed" | "none" | null;
+  artifactFinalizedAt?: Date | null;
   calculationContext?: SavedPlanCalculationContext | null;
   publicResultSha256?: string | null;
   operboxContentHmac?: string | null;
@@ -66,6 +77,7 @@ function hasSavedPlanBinding(input: PlanRunSummaryInput): boolean {
 function planRunValues(input: PlanRunSummaryInput, allowSavedPlanBinding = true) {
   const createdAt = input.createdAt ?? new Date();
   const includeSavedPlanBinding = allowSavedPlanBinding && hasSavedPlanBinding(input);
+  const artifactStatus = input.artifactStatus ?? (input.artifact ? "complete" : "none");
   return {
     diagnosticId: input.diagnosticId,
     userId: input.userId ?? null,
@@ -78,6 +90,9 @@ function planRunValues(input: PlanRunSummaryInput, allowSavedPlanBinding = true)
     rotation: input.rotation.slice(0, 80),
     fiammettaEnable: input.fiammettaEnable,
     durationMs: input.durationMs == null ? null : Math.max(0, Math.round(input.durationMs)),
+    executionSource: input.executionSource ?? null,
+    solverDurationMs: input.solverDurationMs == null ? null : Math.max(0, Math.round(input.solverDurationMs)),
+    workerDurationMs: input.workerDurationMs == null ? null : Math.max(0, Math.round(input.workerDurationMs)),
     errorCode: input.errorCode ?? null,
     solverExecutableSha256: input.solver?.solver_executable_sha256 ?? null,
     protocolVersion: input.solver?.protocol_version ?? null,
@@ -85,6 +100,8 @@ function planRunValues(input: PlanRunSummaryInput, allowSavedPlanBinding = true)
     artifactKey: input.artifact?.key ?? null,
     artifactBytes: input.artifact?.bytes ?? null,
     artifactSha256: input.artifact?.sha256 ?? null,
+    artifactStatus,
+    artifactFinalizedAt: input.artifactFinalizedAt ?? (artifactStatus === "complete" ? createdAt : null),
     calculationContext: includeSavedPlanBinding ? input.calculationContext ?? null : null,
     publicResultSha256: includeSavedPlanBinding ? input.publicResultSha256 ?? null : null,
     operboxContentHmac: includeSavedPlanBinding ? input.operboxContentHmac ?? null : null,
@@ -142,10 +159,50 @@ export async function recordPlanRunBestEffort(input: PlanRunSummaryInput): Promi
   }
 }
 
+export async function updatePlanRunExecutionBestEffort(input: {
+  diagnosticId: string;
+  executionSource: "cache" | "solver" | "failed";
+  solverDurationMs?: number | null;
+  workerDurationMs: number;
+}): Promise<void> {
+  if (!isBusinessDatabaseEnabled()) return;
+  await getDatabase().update(planRun).set({
+    executionSource: input.executionSource === "failed" ? null : input.executionSource,
+    solverDurationMs: input.solverDurationMs == null ? null : Math.max(0, Math.round(input.solverDurationMs)),
+    workerDurationMs: Math.max(0, Math.round(input.workerDurationMs)),
+  }).where(eq(planRun.diagnosticId, input.diagnosticId)).catch(() => {
+    console.error(JSON.stringify({ level: "error", event: "plan_run_timing_update_failed", diagnosticId: input.diagnosticId }));
+  });
+}
+
+export async function updatePlanRunArtifactBestEffort(input: {
+  diagnosticId: string;
+  status: "complete" | "failed";
+  artifact?: PrivateArtifactDescriptor | null;
+  finalizedAt?: Date;
+}): Promise<"updated" | "missing" | "unavailable"> {
+  if (!isBusinessDatabaseEnabled()) return "updated";
+  try {
+    const updated = await getDatabase().update(planRun).set({
+      artifactKey: input.artifact?.key ?? null,
+      artifactBytes: input.artifact?.bytes ?? null,
+      artifactSha256: input.artifact?.sha256 ?? null,
+      artifactStatus: input.status,
+      artifactFinalizedAt: input.status === "complete" ? input.finalizedAt ?? new Date() : null,
+    }).where(eq(planRun.diagnosticId, input.diagnosticId))
+      .returning({ diagnosticId: planRun.diagnosticId });
+    return updated.length === 1 ? "updated" : "missing";
+  } catch {
+    console.error(JSON.stringify({ level: "error", event: "plan_run_artifact_update_failed", diagnosticId: input.diagnosticId }));
+    return "unavailable";
+  }
+}
+
 export type FeedbackSummaryInput = {
   feedbackId: string;
   savedAt: Date;
   body: FeedbackRequest;
+  userId?: string | null;
   artifact?: PrivateArtifactDescriptor | null;
 };
 
@@ -161,12 +218,12 @@ export async function recordFeedbackStrict(input: FeedbackSummaryInput): Promise
       id: input.feedbackId,
       diagnosticId: input.body.diagnosticId,
       planRunDiagnosticId: linked[0]?.diagnosticId ?? null,
-      userId: linked[0]?.userId ?? null,
+      userId: input.userId ?? linked[0]?.userId ?? null,
       kind: input.body.kind ?? "room_issue",
       room: "room" in issue ? issue.room : null,
       note: issue.note,
       consentAt: input.savedAt,
-      status: "pending",
+      status: "unreviewed",
       artifactKey: input.artifact?.key ?? null,
       artifactBytes: input.artifact?.bytes ?? null,
       artifactSha256: input.artifact?.sha256 ?? null,
@@ -178,7 +235,7 @@ export async function recordFeedbackStrict(input: FeedbackSummaryInput): Promise
     await tx.insert(feedbackEvent).values({
       id: randomUUID(),
       feedbackId: input.feedbackId,
-      status: "pending",
+      status: "unreviewed",
       note: null,
       createdAt: input.savedAt,
     });
@@ -198,9 +255,22 @@ export type BusinessRecordQuery = {
   from?: Date;
   to?: Date;
   status?: string;
+  facility?: AdminFeedbackFacility;
   errorCode?: string;
   solverExecutableSha256?: string;
 };
+
+const ROOM_FEEDBACK_FACILITIES: Exclude<AdminFeedbackFacility, "solver" | "unknown">[] = [
+  "trading",
+  "manufacture",
+  "power",
+  "control",
+  "dormitory",
+  "meeting",
+  "hire",
+  "processing",
+  "training",
+];
 
 export async function queryBusinessRecords(query: BusinessRecordQuery) {
   const requestedLimit = Number(query.limit ?? 50);
@@ -245,11 +315,23 @@ export async function queryBusinessRecords(query: BusinessRecordQuery) {
   if (query.from) conditions.push(gte(feedback.createdAt, query.from));
   if (query.to) conditions.push(lte(feedback.createdAt, query.to));
   if (query.status) conditions.push(eq(feedback.status, query.status));
+  if (query.facility === "solver") {
+    conditions.push(eq(feedback.kind, "performance_issue"));
+  } else if (query.facility) {
+    conditions.push(eq(feedback.kind, "room_issue"));
+    const group = sql<string>`${feedback.room} ->> 'group'`;
+    if (query.facility === "unknown") {
+      conditions.push(or(sql`${group} is null`, notInArray(group, ROOM_FEEDBACK_FACILITIES))!);
+    } else {
+      conditions.push(eq(group, query.facility));
+    }
+  }
   const where = conditions.length ? and(...conditions) : undefined;
   const [items, total] = await Promise.all([
     getDatabase().select({
       id: feedback.id,
       diagnosticId: feedback.diagnosticId,
+      planRunDiagnosticId: feedback.planRunDiagnosticId,
       kind: feedback.kind,
       room: feedback.room,
       note: feedback.note,
@@ -268,9 +350,75 @@ export async function queryBusinessRecords(query: BusinessRecordQuery) {
   return { items, total: total[0]?.count ?? 0, limit, offset };
 }
 
+export async function queryAdminSolverMetrics(now = new Date()) {
+  const windowStartedAt = new Date(now.getTime() - ADMIN_SOLVER_ERROR_WINDOW_MINUTES * 60_000);
+  const trendStartedAt = new Date(now.getTime() - ADMIN_SOLVER_TREND_WINDOW_MINUTES * 60_000);
+  const trendBucketSeconds = ADMIN_SOLVER_TREND_BUCKET_MINUTES * 60;
+  const database = getDatabase();
+  const [solverRows, trendRows, taskRows, cacheRows] = await Promise.all([
+    database.select({
+      successCount: sql<number>`count(*) filter (where ${planRun.status} = 'success')::int`,
+      failureCount: sql<number>`count(*) filter (where ${planRun.status} = 'failed')::int`,
+      averageDurationMs: sql<number | null>`round(avg(${planRun.durationMs}) filter (where ${planRun.status} = 'success' and ${planRun.durationMs} is not null))::int`,
+      p95DurationMs: sql<number | null>`round(percentile_cont(0.95) within group (order by ${planRun.durationMs}) filter (where ${planRun.status} = 'success' and ${planRun.durationMs} is not null))::int`,
+      averageSolverDurationMs: sql<number | null>`round(avg(${planRun.solverDurationMs}) filter (where ${planRun.status} = 'success' and ${planRun.solverDurationMs} is not null))::int`,
+      p95SolverDurationMs: sql<number | null>`round(percentile_cont(0.95) within group (order by ${planRun.solverDurationMs}) filter (where ${planRun.status} = 'success' and ${planRun.solverDurationMs} is not null))::int`,
+      averageWorkerDurationMs: sql<number | null>`round(avg(${planRun.workerDurationMs}) filter (where ${planRun.status} = 'success' and ${planRun.workerDurationMs} is not null))::int`,
+      cacheHitCount: sql<number>`count(*) filter (where ${planRun.executionSource} = 'cache')::int`,
+      cacheMissCount: sql<number>`count(*) filter (where ${planRun.executionSource} = 'solver' and ${planRun.sourceType} <> 'skland')::int`,
+      maaCount: sql<number>`count(*) filter (where ${planRun.sourceType} = 'maa')::int`,
+      sklandCount: sql<number>`count(*) filter (where ${planRun.sourceType} = 'skland')::int`,
+      sampleCount: sql<number>`count(*) filter (where ${planRun.sourceType} = 'sample')::int`,
+    }).from(planRun).where(and(
+      gte(planRun.createdAt, windowStartedAt),
+      lte(planRun.createdAt, now),
+    )),
+    buildAdminSolverTrendQuery(database, trendStartedAt, now, trendBucketSeconds),
+    database.select({
+      bufferedCount: sql<number>`count(*) filter (where ${planTask.status} = 'buffered')::int`,
+      pendingCount: sql<number>`count(*) filter (where ${planTask.status} = 'pending')::int`,
+      runningCount: sql<number>`count(*) filter (where ${planTask.status} = 'running')::int`,
+      averageWaitMs: sql<number | null>`round(avg(extract(epoch from (${planTask.startedAt} - ${planTask.createdAt})) * 1000) filter (where ${planTask.startedAt} is not null and ${planTask.createdAt} >= ${windowStartedAt}))::int`,
+      p95WaitMs: sql<number | null>`round(percentile_cont(0.95) within group (order by extract(epoch from (${planTask.startedAt} - ${planTask.createdAt})) * 1000) filter (where ${planTask.startedAt} is not null and ${planTask.createdAt} >= ${windowStartedAt}))::int`,
+    }).from(planTask).where(or(
+      inArray(planTask.status, ["buffered", "pending", "running"]),
+      and(gte(planTask.createdAt, windowStartedAt), lte(planTask.createdAt, now)),
+    )),
+    database.select({
+      readyEntryCount: sql<number>`count(*) filter (where ${planCache.publicResult} is not null)::int`,
+      fillingEntryCount: sql<number>`count(*) filter (where ${planCache.publicResult} is null and ${planCache.leaseExpiresAt} > ${now})::int`,
+    }).from(planCache).where(gt(planCache.expiresAt, now)),
+  ]);
+
+  return buildAdminSolverMetricsData({
+    generatedAt: now,
+    cacheEnabled: isPlanCacheEnabled(),
+    successCount: solverRows[0]?.successCount ?? 0,
+    failureCount: solverRows[0]?.failureCount ?? 0,
+    averageDurationMs: solverRows[0]?.averageDurationMs ?? null,
+    p95DurationMs: solverRows[0]?.p95DurationMs ?? null,
+    averageSolverDurationMs: solverRows[0]?.averageSolverDurationMs ?? null,
+    p95SolverDurationMs: solverRows[0]?.p95SolverDurationMs ?? null,
+    averageWorkerDurationMs: solverRows[0]?.averageWorkerDurationMs ?? null,
+    maaCount: solverRows[0]?.maaCount ?? 0,
+    sklandCount: solverRows[0]?.sklandCount ?? 0,
+    sampleCount: solverRows[0]?.sampleCount ?? 0,
+    bufferedTaskCount: taskRows[0]?.bufferedCount ?? 0,
+    pendingTaskCount: taskRows[0]?.pendingCount ?? 0,
+    runningTaskCount: taskRows[0]?.runningCount ?? 0,
+    averageWaitMs: taskRows[0]?.averageWaitMs ?? null,
+    p95WaitMs: taskRows[0]?.p95WaitMs ?? null,
+    trend: trendRows,
+    cacheHitCount: solverRows[0]?.cacheHitCount ?? 0,
+    cacheMissCount: solverRows[0]?.cacheMissCount ?? 0,
+    readyCacheEntryCount: cacheRows[0]?.readyEntryCount ?? 0,
+    fillingCacheEntryCount: cacheRows[0]?.fillingEntryCount ?? 0,
+  });
+}
+
 export async function updateFeedbackRecord(input: {
   feedbackId: string;
-  status: "pending" | "working" | "resolved";
+  status: AdminFeedbackStatus;
   note: string;
   actorUserId?: string | null;
 }) {
@@ -293,6 +441,76 @@ export async function updateFeedbackRecord(input: {
     });
     return { status: input.status, note, updatedAt: now.toISOString() };
   });
+}
+
+export async function findFeedbackRecord(feedbackId: string) {
+  const [item] = await getDatabase().select({
+    id: feedback.id,
+    diagnosticId: feedback.diagnosticId,
+    planRunDiagnosticId: feedback.planRunDiagnosticId,
+    kind: feedback.kind,
+    room: feedback.room,
+    note: feedback.note,
+    status: feedback.status,
+    adminNote: feedback.adminNote,
+    createdAt: feedback.createdAt,
+    updatedAt: feedback.updatedAt,
+    expiresAt: feedback.expiresAt,
+  }).from(feedback).where(eq(feedback.id, feedbackId)).limit(1);
+  return item ?? null;
+}
+
+export async function findPlanRunRecord(diagnosticId: string) {
+  const [item] = await getDatabase().select({
+    diagnosticId: planRun.diagnosticId,
+    sourceType: planRun.sourceType,
+    status: planRun.status,
+    layoutTemplate: planRun.layoutTemplate,
+    roomCount: planRun.roomCount,
+    operatorCount: planRun.operatorCount,
+    rotation: planRun.rotation,
+    fiammettaEnable: planRun.fiammettaEnable,
+    durationMs: planRun.durationMs,
+    errorCode: planRun.errorCode,
+    solverExecutableSha256: planRun.solverExecutableSha256,
+    protocolVersion: planRun.protocolVersion,
+    planSchemaVersion: planRun.planSchemaVersion,
+    artifactKey: planRun.artifactKey,
+    artifactStatus: planRun.artifactStatus,
+    executionSource: planRun.executionSource,
+    createdAt: planRun.createdAt,
+    expiresAt: planRun.expiresAt,
+  }).from(planRun).where(eq(planRun.diagnosticId, diagnosticId)).limit(1);
+  return item ?? null;
+}
+
+export async function accountPrivateArtifactReferences(userId: string): Promise<{
+  diagnosticIds: string[];
+  feedbackIds: string[];
+}> {
+  const runs = await getDatabase().select({ diagnosticId: planRun.diagnosticId })
+    .from(planRun)
+    .where(eq(planRun.userId, userId));
+  const diagnosticIds = runs.map((item) => item.diagnosticId);
+  const feedbackCondition = diagnosticIds.length
+    ? or(eq(feedback.userId, userId), inArray(feedback.planRunDiagnosticId, diagnosticIds))
+    : eq(feedback.userId, userId);
+  const feedbackItems = await getDatabase().select({ id: feedback.id })
+    .from(feedback)
+    .where(feedbackCondition);
+  return {
+    diagnosticIds,
+    feedbackIds: feedbackItems.map((item) => item.id),
+  };
+}
+
+export async function deleteFeedbackRecords(feedbackIds: string[]): Promise<string[]> {
+  if (!feedbackIds.length) return [];
+  const deleted = await getDatabase().delete(feedback)
+    .where(inArray(feedback.id, feedbackIds))
+    .returning({ id: feedback.id });
+  const deletedSet = new Set(deleted.map((item) => item.id));
+  return feedbackIds.filter((id) => deletedSet.has(id));
 }
 
 export async function deleteExpiredBusinessRecords(now = new Date()): Promise<void> {

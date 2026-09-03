@@ -1,0 +1,1 @@
+CREATE INDEX "plan_task_user_created_at_idx" ON "app"."plan_task" USING btree ("user_id","created_at");

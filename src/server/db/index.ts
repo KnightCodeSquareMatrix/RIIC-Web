@@ -1,8 +1,6 @@
-import "server-only";
-
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import * as schema from "./schema";
+import * as schema from "./schema.ts";
 
 type Database = NodePgDatabase<typeof schema>;
 const state = globalThis as typeof globalThis & { __aicPool?: Pool; __aicDb?: Database };
@@ -29,4 +27,10 @@ export function getDatabase(): Database {
   state.__aicPool = pool;
   state.__aicDb = drizzle({ client: pool, schema });
   return state.__aicDb;
+}
+
+export function getDatabasePool(): Pool {
+  getDatabase();
+  if (!state.__aicPool) throw new Error("Database pool was not initialized.");
+  return state.__aicPool;
 }

@@ -3,7 +3,7 @@ import test from "node:test";
 
 import * as XLSX from "xlsx";
 
-import { readOperboxFile } from "./operbox.ts";
+import { readOperboxFile, readOperboxText } from "./operbox.ts";
 
 const entry = {
   id: "char_test",
@@ -25,6 +25,25 @@ test("JSON imports do not load the XLSX parser", async () => {
 
   assert.equal(xlsxRequested, false);
   assert.deepEqual(result, [entry]);
+});
+
+test("localized MAA JSON names are converted to Simplified Chinese during import", async () => {
+  const localizedEntries = [
+    { ...entry, id: "char_002_amiya", name: "アーミヤ" },
+    { ...entry, id: "char_003_kalts", name: "凱爾希" },
+    { ...entry, id: "char_010_chen", name: "Ch'en" },
+    { ...entry, id: "char_017_huang", name: "煌" },
+  ];
+
+  assert.deepEqual(
+    (await readOperboxText(JSON.stringify(localizedEntries))).map(({ id, name }) => ({ id, name })),
+    [
+      { id: "char_002_amiya", name: "阿米娅" },
+      { id: "char_003_kalts", name: "凯尔希" },
+      { id: "char_010_chen", name: "陈" },
+      { id: "char_017_huang", name: "煌" },
+    ],
+  );
 });
 
 test("Excel imports still parse compatible operator rows", async () => {

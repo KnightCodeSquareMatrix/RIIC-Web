@@ -30,7 +30,6 @@ export function LegalDocument({
         </div>
       </article>
       <footer className="mx-auto mt-10 flex max-w-3xl flex-wrap items-center gap-x-4 border-t border-border pt-5 text-xs text-muted-foreground">
-        <span>非官方、小范围测试中的排班辅助工具</span>
         <Link className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/terms">
           本站服务条款
         </Link>

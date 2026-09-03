@@ -3,6 +3,7 @@ import test from "node:test";
 
 import type { BaseBlueprint, OperBoxEntry } from "../types.ts";
 import { stablePlanCacheHmac, type StablePlanCacheKeyInput } from "./plan-cache-key.ts";
+import { normalizeSolverOperbox } from "./plan-solver-input.ts";
 
 const key = Buffer.alloc(32, 3);
 const layout = {
@@ -43,4 +44,14 @@ test("every solver or planning input dimension invalidates the shared cache key"
     { ...base, planSchemaVersion: 4 },
   ];
   for (const variant of variants) assert.notEqual(stablePlanCacheHmac(key, variant), original);
+});
+
+test("solver-effective input removes unowned, duplicate, and unsupported Amiya variants deterministically", () => {
+  const entries = [
+    ...operbox,
+    { ...operbox[0], id: "duplicate" },
+    { ...operbox[0], id: "unowned", name: "银灰", own: false },
+    { ...operbox[0], id: "amiya", name: "阿米娅（近卫）" },
+  ] as OperBoxEntry[];
+  assert.deepEqual(normalizeSolverOperbox(entries), operbox);
 });

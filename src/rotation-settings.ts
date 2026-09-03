@@ -21,6 +21,11 @@ export const LEGACY_ROTATION_PROFILES: RotationProfile[] = [
   "abyssal_7_5_7_5",
 ];
 
+const LEGACY_ROTATION_OPTIONS: Record<Extract<RotationProfile, "fiammetta_8_8_4_4" | "abyssal_7_5_7_5">, Omit<RotationOption, "profile">> = {
+  fiammetta_8_8_4_4: { label: "菲亚梅塔轮换", durations: [8, 8, 4, 4] },
+  abyssal_7_5_7_5: { label: "深海猎人轮换", durations: [7, 5, 7, 5] },
+};
+
 const SUPPORTED_ROTATION_PROFILES: RotationProfile[] = [
   ...ROTATION_OPTIONS.map(({ profile }) => profile),
   ...LEGACY_ROTATION_PROFILES,
@@ -36,4 +41,15 @@ export function normalizeRotationProfile(value: unknown): RotationProfile {
 
 export function rotationOption(profile: RotationProfile): RotationOption {
   return ROTATION_OPTIONS.find((option) => option.profile === profile) ?? ROTATION_OPTIONS[0];
+}
+
+export function rotationDescription(profile: RotationProfile): string {
+  const current = ROTATION_OPTIONS.find((option) => option.profile === profile);
+  const option = current ?? LEGACY_ROTATION_OPTIONS[profile as keyof typeof LEGACY_ROTATION_OPTIONS];
+  return `${option.label} · ${option.durations.join("/")} 小时`;
+}
+
+export function rotationShiftCount(profile: RotationProfile): number {
+  const current = ROTATION_OPTIONS.find((option) => option.profile === profile);
+  return (current?.durations ?? LEGACY_ROTATION_OPTIONS[profile as keyof typeof LEGACY_ROTATION_OPTIONS].durations).length;
 }
