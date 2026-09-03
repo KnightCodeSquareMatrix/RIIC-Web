@@ -25,6 +25,7 @@ import {
   type SklandSessionPayload,
 } from "./session";
 import {
+  findOwnedScan,
   findReusableScan,
   hasScanStartCapacity,
   scanActorKey,
@@ -396,17 +397,17 @@ function completedScanResult(completed: CompletedSklandAuthentication): {
   };
 }
 
-export function consumeScan(scanId: string): void {
-  pendingScans.delete(scanId);
+export function consumeScan(scanId: string, websiteUserId: string): void {
+  if (findOwnedScan(pendingScans, scanId, websiteUserId)) pendingScans.delete(scanId);
 }
 
-export async function pollScan(scanId: string, signal?: AbortSignal): Promise<{
+export async function pollScan(scanId: string, websiteUserId: string, signal?: AbortSignal): Promise<{
   response: SklandQrStatusResponse;
   session?: SklandSessionPayload;
 }> {
   cleanupScans();
   throwIfAborted(signal);
-  const pending = pendingScans.get(scanId);
+  const pending = findOwnedScan(pendingScans, scanId, websiteUserId);
   if (!pending) return { response: { success: false, status: "expired", error: "二维码已失效，请刷新后重试。", code: "AUTH_EXPIRED" } };
   if (pending.completed) return completedScanResult(pending.completed);
   const now = Date.now();

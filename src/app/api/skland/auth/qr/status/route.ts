@@ -1,7 +1,6 @@
 import {
   assertSameOrigin,
   createRequestId,
-  enforceRateLimit,
   PublicApiError,
   readJsonBody,
   requestClientIp,
@@ -16,6 +15,7 @@ import {
 } from "@/server/skland/http";
 import { requireWebsiteSession } from "@/server/auth/authorization";
 import { finalizeSklandAuthentication } from "@/server/skland/auth-completion";
+import { enforceSklandPollRateLimit } from "@/server/skland/poll-rate-limit";
 
 export const runtime = "nodejs";
 
@@ -27,13 +27,13 @@ export async function POST(request: Request) {
     const website = await requireWebsiteSession(request);
     assertSklandAvailable(request);
     assertSameOrigin(request);
-    enforceRateLimit("skland-poll", requestClientIp(request), 120, 10 * 60_000);
+    enforceSklandPollRateLimit(website.user.id, requestClientIp(request));
     const body = await readJsonBody(request, 16 * 1024) as { scanId?: unknown } | null;
     if (typeof body?.scanId !== "string" || !body.scanId.trim()) {
       throw new PublicApiError("AIC-REQ-1001");
     }
     const scanId = body.scanId.trim();
-    const result = await pollScan(scanId, request.signal);
+    const result = await pollScan(scanId, website.user.id, request.signal);
     if (result.session && result.response.scheduleSnapshot && result.response.statusSnapshot) {
       request.signal.throwIfAborted();
       const completed = await finalizeSklandAuthentication(website.user.id, {
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
       }, requestId);
       setSklandAccountStoreCookies(response, request, completed.next, completed.previous);
       request.signal.throwIfAborted();
-      consumeScan(scanId);
+      consumeScan(scanId, website.user.id);
       return response;
     }
     const response = successResponse({
