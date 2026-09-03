@@ -1,0 +1,47 @@
+name: Main release policy
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: main-release-policy-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  release_lane:
+    name: Release branch only
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout release ancestry
+        if: contains(github.event.pull_request.labels.*.name, 'direct-main-release') == false
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Enforce the main release lane
+        shell: bash
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          EXPECTED_REPOSITORY: KnightCodeSquareMatrix/RIIC-Web
+          DIRECT_MAIN_RELEASE: ${{ contains(github.event.pull_request.labels.*.name, 'direct-main-release') && '1' || '0' }}
+        run: |
+          set -euo pipefail
+          test "$HEAD_REPOSITORY" = "$EXPECTED_REPOSITORY"
+          [[ "$HEAD_REF" == release/* ]]
+          [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$DIRECT_MAIN_RELEASE" =~ ^[01]$ ]]
+          if [[ "$DIRECT_MAIN_RELEASE" == "1" ]]; then
+            echo "Maintainer-authorized direct main release; develop ancestry is intentionally skipped."
+          else
+            git fetch --no-tags origin develop:refs/remotes/origin/develop
+            git merge-base --is-ancestor refs/remotes/origin/develop "$HEAD_SHA"
+          fi

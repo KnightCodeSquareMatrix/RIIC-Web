@@ -15,14 +15,15 @@ Only the personal-repository owner, `KnightCodeSquareMatrix`, can complete the a
 ## Branch and Actions policy
 
 - [ ] Set `main` as the default branch.
-- [ ] Protect both `main` and `develop`: require the `quality` status, at least one approval, resolved conversations, and block force pushes and deletion.
+- [ ] Protect both `main` and `develop`: require at least one approval, resolved conversations, and block force pushes and deletion. Do not require post-merge `quality` as a PR status.
+- [ ] On `main` only, require the lightweight `Release branch only` status so ordinary feature PRs cannot bypass the release lane.
 - [ ] Require CODEOWNER review for the sensitive paths listed in `.github/CODEOWNERS`.
 - [ ] Do not routinely bypass protection as repository owner.
 - [ ] Keep the default `GITHUB_TOKEN` permission read-only.
 - [ ] Allow GitHub Actions to create pull requests so the narrowly scoped asset-sync workflow can update `develop`.
 - [ ] Enable private vulnerability reporting and the relevant GitHub security checks.
 
-The `quality` workflow also rejects every pull request to `main` unless its head is a `release/**` branch in this same repository. By default, that head commit must already be reachable from `develop`; a maintainer-applied `direct-main-release` label may explicitly waive only the ancestry check while preserving all remaining quality jobs. External and ordinary feature PRs target `develop`.
+Ordinary pull requests do not run the post-merge quality workflow. A separate lightweight policy rejects every pull request to `main` unless its head is a `release/**` branch in this same repository. By default, that head commit must already be reachable from `develop`; a maintainer-applied `direct-main-release` label may explicitly waive only the ancestry check. External and ordinary feature PRs target `develop`. Every push produced by a merge into `develop` or `main` runs the full parallel quality gate before deployment.
 
 ## Deployment configuration
 
@@ -65,6 +66,6 @@ Set `DEPLOY_APPROVED_SOLVER_SHA256` to the independently verified digest of the 
 - [ ] Disable automatic deployment in the old private repository before setting the public repository variable to `1`.
 - [ ] Change `deploy/PUBLIC_DEPLOYMENT_SOURCE` in a PR to `public-automation-v1` and merge it to `develop`. This path is intentionally classified as deploy-required.
 - [ ] Complete development acceptance, then create a same-repository `release/develop-to-main-YYYYMMDD` PR.
-- [ ] Approve the production Environment only after the release PR has passed `quality`.
+- [ ] After merging the reviewed release PR, approve the production Environment only when the post-merge `quality` job has passed.
 
 Do not delete old releases, helper binaries, or Git-cache backups until both environments have been stable for at least seven days.

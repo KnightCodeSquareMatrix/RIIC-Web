@@ -6,10 +6,10 @@ const webServerPort = new URL(baseURL).port || "80";
 export default defineConfig({
   testDir: "./e2e",
   testIgnore: "production-profile.spec.ts",
-  fullyParallel: false,
+  fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
-  workers: process.env.CI ? 3 : undefined,
+  workers: process.env.CI ? 4 : undefined,
   expect: {
     timeout: process.env.CI ? 10_000 : 5_000,
   },
