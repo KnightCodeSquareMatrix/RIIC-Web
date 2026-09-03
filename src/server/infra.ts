@@ -613,12 +613,14 @@ async function lookupPrivateRun(diagnosticId: string): Promise<PrivateRunLookup>
   const directory = (await runDirectories())
     .find((candidate) => path.basename(candidate).endsWith(suffix));
   if (!directory) return { status: "missing" };
-  let result = await readJsonIfExists(path.join(directory, "result.json"));
-  if (!isObject(result)) {
-    const envelope = await readJsonIfExists(path.join(directory, "run-envelope.json"));
-    result = isObject(envelope) ? envelope.result : null;
-  }
-  return isObject(result) && result.runId === diagnosticId
+  const [storedResult, envelope, failureResult] = await Promise.all([
+    readJsonIfExists(path.join(directory, "result.json")),
+    readJsonIfExists(path.join(directory, "run-envelope.json")),
+    readJsonIfExists(path.join(directory, "task-reproduction", "result.json")),
+  ]);
+  const result = [storedResult, isObject(envelope) ? envelope.result : null, failureResult]
+    .find((candidate): candidate is JsonRecord => isObject(candidate) && candidate.runId === diagnosticId);
+  return result
     ? { status: "found", directory, result }
     : { status: "invalid", directory };
 }
@@ -1216,41 +1218,60 @@ export async function savePlanFailureArtifact(input: PlanRequestBody & {
   const existingDir = (await runDirectories())
     .find((candidate) => path.basename(candidate).endsWith(suffix));
   if (existingDir) {
-    const existing = await lookupPrivateRun(input.diagnosticId);
-    if (existing.status !== "found") throw new Error("Existing plan failure artifact is invalid.");
-    const existingArtifact = existsSync(path.join(existingDir, "run-envelope.json"))
-      ? path.join(existingDir, "run-envelope.json")
-      : path.join(existingDir, "result.json");
+    const envelopePath = path.join(existingDir, "run-envelope.json");
+    const resultPath = path.join(existingDir, "result.json");
+    const existingArtifact = existsSync(envelopePath)
+      ? envelopePath
+      : existsSync(resultPath) ? resultPath : null;
     const snapshotDir = path.join(existingDir, "task-reproduction");
     const snapshotPaths = [
       path.join(snapshotDir, "layout.json"),
       path.join(snapshotDir, "operbox.json"),
       path.join(snapshotDir, "reproduction.json"),
+      path.join(snapshotDir, "result.json"),
     ];
     if (snapshotPaths.every((filePath) => existsSync(filePath))) {
-      return artifactDescriptor(input.diagnosticId, [existingArtifact, ...snapshotPaths]);
+      return artifactDescriptor(input.diagnosticId, [
+        ...(existingArtifact ? [existingArtifact] : []),
+        ...snapshotPaths,
+      ]);
     }
 
-    const stagingSnapshotDir = `${snapshotDir}.pending-${randomUUID()}`;
-    await mkdir(stagingSnapshotDir);
-    try {
-      await Promise.all([
-        writeJsonAtomic(path.join(stagingSnapshotDir, "layout.json"), input.layout),
-        writeJsonAtomic(path.join(stagingSnapshotDir, "operbox.json"), input.operbox),
-        writeJsonAtomic(path.join(stagingSnapshotDir, "reproduction.json"), {
-          version: 1,
-          diagnosticId: input.diagnosticId,
-          sourceName: input.sourceName ?? null,
-          rotation: input.rotation,
-          fiammettaEnabled: input.fiammettaEnable ?? true,
-        }),
-      ]);
-      await rename(stagingSnapshotDir, snapshotDir);
-    } catch (error) {
-      await rm(stagingSnapshotDir, { recursive: true, force: true }).catch(() => undefined);
-      throw error;
+    const writeSnapshot = async (target: string) => Promise.all([
+      writeJsonAtomic(path.join(target, "layout.json"), input.layout),
+      writeJsonAtomic(path.join(target, "operbox.json"), input.operbox),
+      writeJsonAtomic(path.join(target, "reproduction.json"), {
+        version: 1,
+        diagnosticId: input.diagnosticId,
+        sourceName: input.sourceName ?? null,
+        rotation: input.rotation,
+        fiammettaEnabled: input.fiammettaEnable ?? true,
+      }),
+      writeJsonAtomic(path.join(target, "result.json"), {
+        success: false,
+        startedAt,
+        durationMs: 0,
+        error: input.errorCode,
+        runId: input.diagnosticId,
+      } satisfies PlanApiResponse),
+    ]);
+    if (existsSync(snapshotDir)) {
+      await writeSnapshot(snapshotDir);
+    } else {
+      const stagingSnapshotDir = `${snapshotDir}.pending-${randomUUID()}`;
+      await mkdir(stagingSnapshotDir);
+      try {
+        await writeSnapshot(stagingSnapshotDir);
+        await rename(stagingSnapshotDir, snapshotDir);
+      } catch (error) {
+        await rm(stagingSnapshotDir, { recursive: true, force: true }).catch(() => undefined);
+        throw error;
+      }
     }
-    return artifactDescriptor(input.diagnosticId, [existingArtifact, ...snapshotPaths]);
+    return artifactDescriptor(input.diagnosticId, [
+      ...(existingArtifact ? [existingArtifact] : []),
+      ...snapshotPaths,
+    ]);
   }
 
   const runDir = path.join(

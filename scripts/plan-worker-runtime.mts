@@ -198,8 +198,10 @@ export async function executePlanTask(
     taskSource = "solver";
     await dependencies.markExecutionStarted(id, "solver");
     artifactResult = await dependencies.runPlan({
-      layout: payload.layout,
-      operbox: payload.operbox,
+      // runPlan normalizes its input in place. Keep the encrypted task payload intact
+      // so a later failure snapshot still contains the user's complete reproduction.
+      layout: structuredClone(payload.layout),
+      operbox: structuredClone(payload.operbox),
       sourceName: payload.sourceName,
       rotation: payload.rotation,
       fiammettaEnable: payload.fiammettaEnable,
