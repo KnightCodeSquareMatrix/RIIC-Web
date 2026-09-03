@@ -156,7 +156,7 @@ npm run db:generate
 npm run db:migrate
 ```
 
-所有普通功能和修复 PR 都应提交到 `develop`；`main` 只接收维护者从同仓库 `release/**` 分支发起的发布 PR。特批的直接发布还必须带有维护者设置的 `direct-main-release` 标签，并通过其余全部质量门禁。完整流程见 [CONTRIBUTING.md](./CONTRIBUTING.md)。不要把本地环境文件、求解器二进制、运行记录、用户数据或浏览器自动化产物加入提交。
+所有普通功能、修复和人工资源 PR 都应提交到 `develop`；`main` 只接收维护者从同仓库 `release/**` 分支发起的发布 PR。仓库内置的 arkntools 受管资源同步是严格白名单化的例外：隔离生成和本地质量门禁通过后，它会从固定 release 分支创建带 `direct-main-release` 标签的审计 PR，自动合并、触发完整 main 发布，并将同一批资源对齐回 `develop`。其他特批直接发布仍必须由维护者设置该标签并通过其余全部质量门禁。完整流程见 [CONTRIBUTING.md](./CONTRIBUTING.md)。不要把本地环境文件、求解器二进制、运行记录、用户数据或浏览器自动化产物加入提交。
 
 ## 第三方素材
 
