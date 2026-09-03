@@ -311,9 +311,11 @@ test("normalizes the complete public Skland dashboard without leaking raw respon
   assert.equal(snapshot.progress.activities?.[0]?.clearedStages, 8);
 
   const trading = snapshot.infrastructure.rooms.find((room) => room.group === "trading" && room.product === "gold");
-  assert.equal(trading?.orders[0]?.reward.count, 1_500);
+  if (trading?.group !== "trading") assert.fail("gold trading room was not normalized");
+  assert.equal(trading.orders[0]?.reward.count, 1_500);
   const originiumTrading = snapshot.infrastructure.rooms.find((room) => room.group === "trading" && room.product === "originium");
-  assert.deepEqual(originiumTrading?.orders[0], {
+  if (originiumTrading?.group !== "trading") assert.fail("originium trading room was not normalized");
+  assert.deepEqual(originiumTrading.orders[0], {
     delivery: [{ type: "originium_shard", count: 2 }],
     reward: { type: "orundum", count: 20 },
   });
