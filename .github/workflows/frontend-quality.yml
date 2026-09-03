@@ -8,6 +8,16 @@ on:
         required: false
         default: true
         type: boolean
+      deploy:
+        description: Deploy the verified main or develop ref after all required checks pass
+        required: false
+        default: false
+        type: boolean
+      expected_sha:
+        description: Exact ref commit required when deploy is requested by workflow dispatch
+        required: false
+        default: ""
+        type: string
   push:
     branches: [main, develop]
   schedule:
@@ -51,6 +61,17 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Validate requested deployment identity
+        if: github.event_name == 'workflow_dispatch' && inputs.deploy
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$GITHUB_SHA" = "$EXPECTED_SHA"
+          [[ "$GITHUB_REF_NAME" == "main" || "$GITHUB_REF_NAME" == "develop" ]]
 
       - name: Classify changed paths
         id: scope
@@ -324,7 +345,10 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload release for deployment
-        if: github.event_name == 'push' && needs.changes.outputs.deploy_required == 'true'
+        if: >-
+          needs.changes.outputs.deploy_required == 'true' &&
+          (github.event_name == 'push' ||
+          (github.event_name == 'workflow_dispatch' && inputs.deploy))
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: riic-web-release-${{ github.sha }}
@@ -524,8 +548,9 @@ jobs:
   deploy:
     needs: [changes, quality, release_artifact]
     if: >-
-      github.event_name == 'push' &&
       (github.ref_name == 'main' || github.ref_name == 'develop') &&
+      (github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' && inputs.deploy)) &&
       needs.quality.result == 'success' &&
       needs.release_artifact.result == 'success' &&
       needs.changes.outputs.deploy_required == 'true' &&
@@ -534,4 +559,5 @@ jobs:
     uses: ./.github/workflows/deploy.yml
     with:
       artifact_name: riic-web-release-${{ github.sha }}
+      allow_workflow_dispatch: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy }}
     secrets: inherit
