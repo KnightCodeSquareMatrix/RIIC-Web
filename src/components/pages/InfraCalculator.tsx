@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, Ellipsis, FlaskConical, HeartPulse, Keyboard, Loader2, Play, RefreshCw, Search, Settings2, X } from "lucide-react";
+import { Download, Ellipsis, FlaskConical, HeartPulse, Keyboard, Loader2, PencilLine, Play, RefreshCw, Search, Settings2, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { ScheduleBoard, ShiftTabs } from "@/components";
@@ -369,6 +369,7 @@ export interface InfraCalculatorProps {
   onPerformanceIssue: () => void;
   onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
+  onEditManualSchedule: () => void;
   onDownloadMaa: () => void;
   onClearResultNotice: () => void;
   onDismissResultClearWarning: () => void;
@@ -386,7 +387,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     onRunSampleTrial, onStartPersonalFlow, onDismissOnboarding, onOpenSetup, onRun, onSimulateUpgrades, upgradeComparison, scheduleVariant, onScheduleVariantChange, onUpgradeTrialReady, onCancelRun,
     onSetActiveShift, onMarkIssue, onPerformanceIssue,
     onFactoryRecipeChange, onTradeOrderChange,
-    onDownloadMaa,
+    onEditManualSchedule, onDownloadMaa,
     onClearResultNotice, onDismissResultClearWarning,
   } = props;
   const { locale } = useLanguageDemo();
@@ -422,6 +423,18 @@ export function InfraCalculator(props: InfraCalculatorProps) {
         : "flex min-w-0 items-center justify-end gap-2"}
       data-calculator-export-actions={placement}
     >
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        aria-label={en ? "Edit manually" : "手动修改排班"}
+        onClick={onEditManualSchedule}
+      >
+        <PencilLine />
+        <span className={placement === "mobile" ? "sr-only sm:not-sr-only" : undefined}>
+          {en ? "Edit manually" : "手动修改排班"}
+        </span>
+      </Button>
       <Button type="button" size="sm" variant="outline" disabled={!result?.maa} onClick={onDownloadMaa}>
         <Download />{en ? "Export to MAA" : "导出到 MAA"}
       </Button>

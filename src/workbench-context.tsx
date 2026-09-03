@@ -5,10 +5,12 @@ import { createContext, useContext } from "react";
 import type { AccountStatusCenterProps } from "@/components/pages/AccountStatusCenter";
 import type { DevelopmentSklandStatusCenterProps } from "@/components/pages/DevelopmentSklandStatusCenter";
 import type { InfraCalculatorProps } from "@/components/pages/InfraCalculator";
+import type { ManualSchedulePageProps } from "@/components/pages/ManualSchedulePage";
 import type { TrainingAdviceProps } from "@/components/pages/TrainingAdvice";
 
 export interface WorkbenchContextValue {
   calculator: InfraCalculatorProps;
+  manual: ManualSchedulePageProps;
   training: TrainingAdviceProps;
   account: AccountStatusCenterProps & {
     authenticated: boolean;

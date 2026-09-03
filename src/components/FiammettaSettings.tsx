@@ -10,9 +10,10 @@ type FiammettaSettingsProps = {
   operbox: OperBoxEntry[] | null;
   rotation: RotationProfile;
   onEnabledChange: (enabled: boolean) => void;
+  mode?: "calculator" | "manual";
 };
 
-export function FiammettaSettings({ enabled, operbox, rotation, onEnabledChange }: FiammettaSettingsProps) {
+export function FiammettaSettings({ enabled, operbox, rotation, onEnabledChange, mode = "calculator" }: FiammettaSettingsProps) {
   const { locale } = useLanguageDemo();
   const en = locale === "en";
   const ownsFiammetta = Boolean(operbox?.some((operator) => operator.own && operator.name === "菲亚梅塔"));
@@ -24,7 +25,9 @@ export function FiammettaSettings({ enabled, operbox, rotation, onEnabledChange 
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
           <h3 id="fiammetta-settings-title" className="text-sm font-semibold">{en ? "Fiammetta morale recovery" : "菲亚梅塔恢复心情"}</h3>
-          <p className="mt-1 text-xs text-muted-foreground">{en ? "When enabled, schedule requests use Fiammetta for morale recovery." : "启用后，排班请求将开启菲亚梅塔恢复心情。"}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{mode === "manual"
+            ? en ? "Choose a morale recovery target separately for every manual shift." : "启用后，需要为每个手动班次分别选择换心情目标。"
+            : en ? "When enabled, schedule requests use Fiammetta for morale recovery." : "启用后，排班请求将开启菲亚梅塔恢复心情。"}</p>
         </div>
         <button
           type="button"

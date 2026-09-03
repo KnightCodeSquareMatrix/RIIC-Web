@@ -43,6 +43,11 @@ export function rotationOption(profile: RotationProfile): RotationOption {
   return ROTATION_OPTIONS.find((option) => option.profile === profile) ?? ROTATION_OPTIONS[0];
 }
 
+export function rotationDurations(profile: RotationProfile): number[] {
+  const current = ROTATION_OPTIONS.find((option) => option.profile === profile);
+  return [...(current?.durations ?? LEGACY_ROTATION_OPTIONS[profile as keyof typeof LEGACY_ROTATION_OPTIONS].durations)];
+}
+
 export function rotationDescription(profile: RotationProfile, en = false): string {
   const current = ROTATION_OPTIONS.find((option) => option.profile === profile);
   const option = current ?? LEGACY_ROTATION_OPTIONS[profile as keyof typeof LEGACY_ROTATION_OPTIONS];
@@ -57,6 +62,5 @@ export function rotationDescription(profile: RotationProfile, en = false): strin
 }
 
 export function rotationShiftCount(profile: RotationProfile): number {
-  const current = ROTATION_OPTIONS.find((option) => option.profile === profile);
-  return (current?.durations ?? LEGACY_ROTATION_OPTIONS[profile as keyof typeof LEGACY_ROTATION_OPTIONS].durations).length;
+  return rotationDurations(profile).length;
 }

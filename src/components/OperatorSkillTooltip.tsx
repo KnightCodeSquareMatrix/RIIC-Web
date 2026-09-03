@@ -1,6 +1,6 @@
 "use client";
 
-import { cloneElement, useState, type KeyboardEventHandler, type MouseEventHandler, type ReactElement } from "react";
+import { cloneElement, useEffect, useState, type KeyboardEventHandler, type MouseEventHandler, type ReactElement } from "react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { RichTextHoverTerms } from "@/components/RichTextInteractive";
@@ -24,15 +24,22 @@ export function OperatorSkillTooltip({
   trigger,
   highlightedSkillIds = [],
   contextLabel,
+  delay,
+  disabled,
 }: {
   name: string;
   trigger: ReactElement;
   highlightedSkillIds?: readonly string[];
   contextLabel?: string;
+  delay?: number;
+  disabled?: boolean;
 }) {
   const { locale } = useLanguageDemo();
   const [open, setOpen] = useState(false);
   const skills = operatorBuildingSkillList(name);
+  useEffect(() => {
+    if (disabled) setOpen(false);
+  }, [disabled]);
   if (skills.length === 0) return trigger; // 未知干员：原样渲染，不包 Tooltip
   const highlighted = new Set(highlightedSkillIds);
   const sourceProps = trigger.props as {
@@ -53,28 +60,41 @@ export function OperatorSkillTooltip({
     }) as KeyboardEventHandler<HTMLElement>,
   });
 
+  const content = (
+    <TooltipContent
+      side="top"
+      align="center"
+      className="max-w-[calc(100vw-2rem)] flex-col items-start gap-2 whitespace-normal px-3 py-2.5 text-left leading-relaxed sm:max-w-md"
+    >
+      {contextLabel ? (
+        <span className="border-b border-background/15 pb-1 text-[11px] font-semibold tracking-wide text-background/60">
+          {contextLabel}
+        </span>
+      ) : null}
+      {skills.map((sourceSkill) => (
+        <SkillBlock
+          key={sourceSkill.id}
+          locale={locale}
+          skill={demoBuildingSkill(sourceSkill.id, locale, sourceSkill) as BuildingSkillPresentation}
+          highlighted={highlighted.has(sourceSkill.id)}
+        />
+      ))}
+    </TooltipContent>
+  );
+
+  if (disabled !== undefined) {
+    return (
+      <Tooltip open={open} onOpenChange={setOpen}>
+        <TooltipTrigger render={trigger} delay={delay} disabled={disabled} />
+        {content}
+      </Tooltip>
+    );
+  }
+
   return (
     <Tooltip open={open} onOpenChange={setOpen}>
       <TooltipTrigger closeOnClick={false} render={interactiveTrigger} />
-      <TooltipContent
-        side="top"
-        align="center"
-        className="max-w-[calc(100vw-2rem)] flex-col items-start gap-2 whitespace-normal px-3 py-2.5 text-left leading-relaxed sm:max-w-md"
-      >
-        {contextLabel ? (
-          <span className="border-b border-background/15 pb-1 text-[11px] font-semibold tracking-wide text-background/60">
-            {contextLabel}
-          </span>
-        ) : null}
-        {skills.map((sourceSkill) => (
-          <SkillBlock
-            key={sourceSkill.id}
-            locale={locale}
-            skill={demoBuildingSkill(sourceSkill.id, locale, sourceSkill) as BuildingSkillPresentation}
-            highlighted={highlighted.has(sourceSkill.id)}
-          />
-        ))}
-      </TooltipContent>
+      {content}
     </Tooltip>
   );
 }

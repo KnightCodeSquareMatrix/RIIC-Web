@@ -621,8 +621,12 @@ test("calculator owns scheduling controls and training advice uses a single tech
   expect(controlOrder.at(-1)).toContain("生成排班");
   expect(controlOrder.some((label) => label.includes("全角色导入"))).toBe(false);
   const exportOrder = await page.locator("[data-calculator-export-actions]").locator("button").allTextContents();
-  expect(exportOrder).toHaveLength(2);
-  expect(exportOrder.every((label) => label.includes("导出到 MAA"))).toBe(true);
+  expect(exportOrder).toEqual([
+    expect.stringContaining("手动修改排班"),
+    expect.stringContaining("导出到 MAA"),
+    expect.stringContaining("手动修改排班"),
+    expect.stringContaining("导出到 MAA"),
+  ]);
 
   await page.getByRole("button", { name: "练卡建议" }).click();
   await expect(calculatorControls).toHaveCount(0);

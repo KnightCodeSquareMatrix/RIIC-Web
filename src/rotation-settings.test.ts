@@ -6,6 +6,7 @@ import {
   ROTATION_OPTIONS,
   isRotationProfile,
   normalizeRotationProfile,
+  rotationDurations,
   rotationOption,
 } from "./rotation-settings.ts";
 
@@ -26,6 +27,7 @@ test("keeps the worker-defined durations for every supported profile", () => {
   assert.deepEqual(rotationOption("abc_12_6_6").durations, [12, 6, 6]);
   assert.deepEqual(rotationOption("main_backup_12_12").durations, [12, 12]);
   assert.deepEqual(rotationOption("abc_12_12_12").durations, [12, 12, 12]);
+  assert.deepEqual(rotationDurations("fiammetta_8_8_4_4"), [8, 8, 4, 4]);
 });
 
 test("invalid persisted values fall back to the existing default profile", () => {
