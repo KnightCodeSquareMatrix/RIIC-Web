@@ -339,6 +339,32 @@ test("Skland owned-data deletion removes only matching runs and feedback without
   assert.equal(workerFailureReproduction.fiammettaEnabled, false);
   assert.equal(workerFailureReproduction.error, "AIC-SYS-5000");
 
+  const incompleteFailureDiagnosticId = "13131313-1313-4313-8313-131313131313";
+  const incompleteFailureDir = path.join(
+    runsRoot,
+    `2026-09-03T00-00-00-000Z_incomplete_${incompleteFailureDiagnosticId}`,
+  );
+  await mkdir(incompleteFailureDir);
+  await writeFile(path.join(incompleteFailureDir, "pre-error-marker.txt"), "preserve me", "utf8");
+  const repairedFailureArtifact = await savePlanFailureArtifact({
+    diagnosticId: incompleteFailureDiagnosticId,
+    layout: planInput.layout as BaseBlueprint,
+    operbox: workerFailureOperbox,
+    sourceName: "incomplete worker failure fixture",
+    rotation: "main_backup_12_12",
+    fiammettaEnable: false,
+    dataOwnerTag: targetOwnerTag,
+    errorCode: "AIC-BOX-1101",
+  });
+  assert.equal(repairedFailureArtifact?.key, incompleteFailureDiagnosticId);
+  assert.equal(await readFile(path.join(incompleteFailureDir, "pre-error-marker.txt"), "utf8"), "preserve me");
+  const repairedFailureReproduction = await readPlanReproduction(incompleteFailureDiagnosticId);
+  assert.equal(repairedFailureReproduction.available, true);
+  assert.equal(repairedFailureReproduction.operbox?.length, workerFailureOperbox.length);
+  assert.equal(repairedFailureReproduction.rotationCount, 2);
+  assert.equal(repairedFailureReproduction.fiammettaEnabled, false);
+  assert.equal(repairedFailureReproduction.error, "AIC-BOX-1101");
+
   const reproduction = await readPlanReproduction(reproductionDiagnosticId);
   assert.equal(reproduction.available, true);
   assert.equal(reproduction.rotation, "abc_12_6_6");

@@ -146,6 +146,11 @@ test("a solver lease is cached and the artifact is queued only after task public
 test("a failed solver releases its cache lease before recording the terminal task", async () => {
   const lease = { kind: "lease", keyHmac: "cache-key", leaseOwner: "lease-owner" };
   const task = claimedTask();
+  task.payload.operbox = [
+    { id: "owned", name: "Owned", own: true, level: 80, elite: 2, potential: 6, rarity: 6 },
+    { id: "unowned", name: "Unowned", own: false, level: 1, elite: 0, potential: 1, rarity: 5 },
+  ];
+  const expectedFailureOperbox = task.payload.operbox.map((operator) => ({ ...operator }));
   const recorded = [];
   const failureArtifacts = [];
   const { calls, dependencies } = executionHarness({
@@ -156,7 +161,10 @@ test("a failed solver releases its cache lease before recording the terminal tas
       observed_at: "2026-09-02T00:00:00.000Z",
     }),
     resolveCache: async () => lease,
-    runPlan: async () => { throw new Error("solver unavailable"); },
+    runPlan: async (input) => {
+      input.operbox.splice(0, input.operbox.length, input.operbox[0]);
+      throw new Error("solver unavailable");
+    },
     saveFailureArtifact: async (input) => {
       calls.push("failure-artifact");
       failureArtifacts.push(input);
@@ -170,13 +178,14 @@ test("a failed solver releases its cache lease before recording the terminal tas
   assert.deepEqual(failureArtifacts, [{
     diagnosticId: task.id,
     layout: task.payload.layout,
-    operbox: task.payload.operbox,
+    operbox: expectedFailureOperbox,
     sourceName: task.payload.sourceName,
     rotation: task.payload.rotation,
     fiammettaEnable: task.payload.fiammettaEnable,
     dataOwnerTag: task.payload.dataOwnerTag,
     errorCode: "AIC-SYS-5000",
   }]);
+  assert.deepEqual(task.payload.operbox, expectedFailureOperbox);
   assert.equal(recorded[0].artifact.key, task.id);
   assert.equal(recorded[0].artifactStatus, "complete");
   assert.deepEqual(calls, [
