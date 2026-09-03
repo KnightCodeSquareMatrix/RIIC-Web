@@ -268,9 +268,10 @@ test("public deployment automation is repository-bound, opt-in, and secret-safe"
   assert.match(qualityWorkflow, /Upload release for deployment[\s\S]+github\.event_name == 'workflow_dispatch'[\s\S]+inputs\.deploy/);
   assert.match(qualityWorkflow, /deploy:[\s\S]+github\.event_name == 'workflow_dispatch'[\s\S]+inputs\.deploy/);
   assert.match(qualityWorkflow, /github\.event_name == 'push'[\s\S]+needs\.quality\.result == 'success'[\s\S]+needs\.changes\.outputs\.deploy_required == 'true'[\s\S]+vars\.DEPLOY_AUTOMATION_ENABLED == '1'[\s\S]+github\.repository == 'KnightCodeSquareMatrix\/RIIC-Web'/);
-  assert.match(deployWorkflow, /allow_workflow_dispatch:[\s\S]+type: boolean/);
-  assert.match(deployWorkflow, /github\.event_name == 'workflow_dispatch' && inputs\.allow_workflow_dispatch/);
-  assert.match(deployWorkflow, /github\.event_name == 'push'[\s\S]+vars\.DEPLOY_AUTOMATION_ENABLED == '1'[\s\S]+github\.repository == 'KnightCodeSquareMatrix\/RIIC-Web'/);
+  assert.match(deployWorkflow, /^on:\r?\n {2}workflow_call:/m);
+  assert.doesNotMatch(deployWorkflow, /^ {2}(?:push|workflow_dispatch):/m);
+  assert.doesNotMatch(deployWorkflow, /allow_workflow_dispatch|github\.event_name/);
+  assert.match(deployWorkflow, /github\.ref_name == 'main'[\s\S]+vars\.DEPLOY_AUTOMATION_ENABLED == '1'[\s\S]+github\.repository == 'KnightCodeSquareMatrix\/RIIC-Web'/);
   assert.match(deployWorkflow, /DEPLOY_APPROVED_SOLVER_SHA256: \$\{\{ vars\.DEPLOY_APPROVED_SOLVER_SHA256 \}\}[\s\S]+DEPLOY_EXPECTED_REPOSITORY: KnightCodeSquareMatrix\/RIIC-Web[\s\S]+DEPLOY_RELEASE_HELPER_CONTRACT: "6"/);
   assert.doesNotMatch(deployWorkflow, /DEPLOY_PREPARE_HELPER_CONTRACT|arknights-infra-prepare-release/);
   assert.match(deployWorkflow, /DEPLOY_PUBLIC_HEALTH_URL: \$\{\{ secrets\.DEPLOY_PUBLIC_HEALTH_URL \}\}/);
