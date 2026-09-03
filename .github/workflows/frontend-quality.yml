@@ -55,6 +55,7 @@ jobs:
       run_core: ${{ steps.scope.outputs.run_core }}
       run_browser: ${{ steps.scope.outputs.run_browser }}
       deploy_required: ${{ steps.scope.outputs.deploy_required }}
+      deployment_authorized: ${{ steps.deploy_authorization.outputs.authorized }}
     steps:
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -62,16 +63,25 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Validate requested deployment identity
-        if: github.event_name == 'workflow_dispatch' && inputs.deploy
+      - name: Authorize deployment trigger
+        id: deploy_authorization
         shell: bash
         env:
+          EVENT_NAME: ${{ github.event_name }}
+          DEPLOY_REQUESTED: ${{ inputs.deploy }}
           EXPECTED_SHA: ${{ inputs.expected_sha }}
         run: |
           set -euo pipefail
-          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
-          test "$GITHUB_SHA" = "$EXPECTED_SHA"
-          [[ "$GITHUB_REF_NAME" == "main" || "$GITHUB_REF_NAME" == "develop" ]]
+          authorized=false
+          if [[ "$EVENT_NAME" == "push" ]]; then
+            authorized=true
+          elif [[ "$EVENT_NAME" == "workflow_dispatch" && "$DEPLOY_REQUESTED" == "true" ]]; then
+            [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+            test "$GITHUB_SHA" = "$EXPECTED_SHA"
+            [[ "$GITHUB_REF_NAME" == "main" || "$GITHUB_REF_NAME" == "develop" ]]
+            authorized=true
+          fi
+          printf 'authorized=%s\n' "$authorized" >> "$GITHUB_OUTPUT"
 
       - name: Classify changed paths
         id: scope
@@ -347,8 +357,7 @@ jobs:
       - name: Upload release for deployment
         if: >-
           needs.changes.outputs.deploy_required == 'true' &&
-          (github.event_name == 'push' ||
-          (github.event_name == 'workflow_dispatch' && inputs.deploy))
+          needs.changes.outputs.deployment_authorized == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: riic-web-release-${{ github.sha }}
@@ -549,8 +558,7 @@ jobs:
     needs: [changes, quality, release_artifact]
     if: >-
       (github.ref_name == 'main' || github.ref_name == 'develop') &&
-      (github.event_name == 'push' ||
-      (github.event_name == 'workflow_dispatch' && inputs.deploy)) &&
+      needs.changes.outputs.deployment_authorized == 'true' &&
       needs.quality.result == 'success' &&
       needs.release_artifact.result == 'success' &&
       needs.changes.outputs.deploy_required == 'true' &&
