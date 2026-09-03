@@ -167,6 +167,7 @@ export function ManualOperboxPicker({
   title,
   description,
   applyLabel,
+  applyDisabled = false,
   scheduledOperatorNames,
 }: {
   operbox: OperBoxEntry[] | null;
@@ -174,6 +175,7 @@ export function ManualOperboxPicker({
   title?: string;
   description?: string;
   applyLabel?: string;
+  applyDisabled?: boolean;
   scheduledOperatorNames?: readonly string[];
 }) {
   const { locale } = useLanguageDemo();
@@ -214,7 +216,7 @@ export function ManualOperboxPicker({
   }
 
   function applySelection() {
-    if (!ownedCount) return;
+    if (!ownedCount || applyDisabled) return;
     onApply(buildManualOperbox(MANUAL_ROSTER, stages));
   }
 
@@ -235,7 +237,7 @@ export function ManualOperboxPicker({
           className={APPLY_BUTTON_CLASS}
           style={APPLY_BUTTON_STYLE}
           data-manual-operbox-apply
-          disabled={!ownedCount}
+          disabled={!ownedCount || applyDisabled}
           onClick={applySelection}
         >
           <Check />{applyLabel ?? (en ? "Use this Box" : "使用这份 Box")}
@@ -355,7 +357,7 @@ export function ManualOperboxPicker({
               className={APPLY_BUTTON_CLASS}
               style={APPLY_BUTTON_STYLE}
               data-manual-operbox-apply
-              disabled={!ownedCount}
+              disabled={!ownedCount || applyDisabled}
               onClick={applySelection}
             >
               <Check />{applyLabel ?? (en ? `Use this Box (${ownedCount})` : `使用这份 Box（${ownedCount} 名）`)}

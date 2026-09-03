@@ -1051,13 +1051,13 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   }
 
   async function handleSimulateUpgrades(trialOperbox: OperBoxEntry[]): Promise<PublicPlanData> {
-    if (!operbox) throw new Error("请先导入干员数据。");
-    if (!trialOperbox.some((entry) => entry.own)) throw new Error("请至少选择一名干员进行试算。");
+    if (!operbox) throw new Error(locale === "en" ? "Import operator data first." : "请先导入干员数据。");
+    if (!trialOperbox.some((entry) => entry.own)) throw new Error(locale === "en" ? "Select at least one operator for the simulation." : "请至少选择一名干员进行试算。");
     trackTelemetry({ type: "interaction", name: "upgrade_simulation_submit", page: "calculator" });
     const response = await computePlan({
       layout,
       operbox: normalizeOperboxEntries(trialOperbox),
-      sourceName: "升级试算 Box.json",
+      sourceName: locale === "en" ? "Upgrade simulation Box.json" : "升级试算 Box.json",
       // 试算始终提交完整替代 BOX，不能沿用 sample，否则 API 会用服务端示例覆盖它。
       boxSource: "maa",
       rotation: rotationProfile,
