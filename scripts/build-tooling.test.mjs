@@ -264,10 +264,10 @@ test("public deployment automation is repository-bound, opt-in, and secret-safe"
   assert.match(policyWorkflow, /DIRECT_MAIN_RELEASE: \$\{\{ contains\(github\.event\.pull_request\.labels\.\*\.name, 'direct-main-release'\)[\s\S]+"\$DIRECT_MAIN_RELEASE" == "1"[\s\S]+develop ancestry is intentionally skipped/);
   assert.match(policyWorkflow, /git merge-base --is-ancestor refs\/remotes\/origin\/develop "\$HEAD_SHA"/);
   assert.match(qualityWorkflow, /workflow_dispatch:[\s\S]+deploy:[\s\S]+expected_sha:[\s\S]+type: string/);
-  assert.match(qualityWorkflow, /Validate requested deployment identity[\s\S]+test "\$GITHUB_SHA" = "\$EXPECTED_SHA"/);
-  assert.match(qualityWorkflow, /Upload release for deployment[\s\S]+github\.event_name == 'workflow_dispatch'[\s\S]+inputs\.deploy/);
-  assert.match(qualityWorkflow, /deploy:[\s\S]+github\.event_name == 'workflow_dispatch'[\s\S]+inputs\.deploy/);
-  assert.match(qualityWorkflow, /github\.event_name == 'push'[\s\S]+needs\.quality\.result == 'success'[\s\S]+needs\.changes\.outputs\.deploy_required == 'true'[\s\S]+vars\.DEPLOY_AUTOMATION_ENABLED == '1'[\s\S]+github\.repository == 'KnightCodeSquareMatrix\/RIIC-Web'/);
+  assert.match(qualityWorkflow, /deployment_authorized: \$\{\{ steps\.deploy_authorization\.outputs\.authorized \}\}/);
+  assert.match(qualityWorkflow, /Authorize deployment trigger[\s\S]+EVENT_NAME: \$\{\{ github\.event_name \}\}[\s\S]+DEPLOY_REQUESTED: \$\{\{ inputs\.deploy \}\}[\s\S]+test "\$GITHUB_SHA" = "\$EXPECTED_SHA"[\s\S]+authorized=true[\s\S]+printf 'authorized=%s\\n'/);
+  assert.match(qualityWorkflow, /Upload release for deployment[\s\S]+needs\.changes\.outputs\.deployment_authorized == 'true'/);
+  assert.match(qualityWorkflow, /deploy:[\s\S]+needs\.changes\.outputs\.deployment_authorized == 'true'[\s\S]+needs\.quality\.result == 'success'[\s\S]+needs\.changes\.outputs\.deploy_required == 'true'[\s\S]+vars\.DEPLOY_AUTOMATION_ENABLED == '1'[\s\S]+github\.repository == 'KnightCodeSquareMatrix\/RIIC-Web'/);
   assert.match(deployWorkflow, /^on:\r?\n {2}workflow_call:/m);
   assert.doesNotMatch(deployWorkflow, /^ {2}(?:push|workflow_dispatch):/m);
   assert.doesNotMatch(deployWorkflow, /allow_workflow_dispatch|github\.event_name/);
