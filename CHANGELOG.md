@@ -2,6 +2,29 @@
 
 All notable changes to RIIC-Web are documented in this file.
 
+## [0.4.4] - 2026-09-04
+
+### Added
+
+- The calculator can re-solve the current base layout with adjusted operator ownership and elite stages, then switch between the current and adjusted schedules with animated production values.
+- The Help section includes a localized, accessible back-to-top control.
+
+### Changed
+
+- Progression adjustment and manual Box editing share one compact roster editor, distinguish the first three shifts, and keep long operator lists inside the dialog scroll area.
+- Schedule setup uses consistent compact action buttons, a larger desktop dialog, and mobile-specific control sizing.
+- The sidebar starts expanded at widths of at least 1280px and collapsed below that breakpoint.
+- Skland manufacture rooms follow the displayed in-game order 3, 1, 4, 2.
+
+### Fixed
+
+- Progression re-solving now surfaces Live Activity feedback and closes the adjustment dialog after a successful result.
+
+### For contributors
+
+- Browser coverage verifies shared Box state, responsive setup controls, schedule variant tabs, production-value animation, and the Skland manufacture mapping.
+- `package.json` and `package-lock.json` record release `0.4.4`.
+
 ## [0.4.3] - 2026-09-03
 
 ### Added
