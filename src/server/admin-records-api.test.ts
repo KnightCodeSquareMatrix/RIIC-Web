@@ -13,11 +13,13 @@ test("admin record responses are private and non-cacheable on success and failur
 
 test("admin issue details and deletion retain their privacy boundaries", async () => {
   const source = await readFile(new URL("./admin-records-api.ts", import.meta.url), "utf8");
+  const feedbackDetail = source.indexOf("await readFeedbackReproduction(item.id, item.diagnosticId");
   const failedRunGuard = source.indexOf('item.status !== "failed"');
   const readReproduction = source.indexOf("await readPlanReproduction(item.diagnosticId", failedRunGuard);
   const deleteArtifacts = source.indexOf("await deleteFeedbackArtifacts(ids)");
   const deleteRows = source.indexOf("await deleteFeedbackRecords(ids)");
 
+  assert.equal(feedbackDetail > 0, true);
   assert.equal(failedRunGuard > 0, true);
   assert.equal(readReproduction > failedRunGuard, true);
   assert.equal(deleteArtifacts > 0, true);
