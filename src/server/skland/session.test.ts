@@ -168,6 +168,15 @@ test("QR consent requires both current policy versions", () => {
   assert.equal(isCurrentPolicyConsent(valid), true);
   assert.equal(isCurrentPolicyConsent({ ...valid, privacyAccepted: false }), false);
   assert.equal(isCurrentPolicyConsent({ ...valid, termsVersion: "old" }), false);
+  assert.equal(isCurrentPolicyConsent({ ...valid, privacyVersion: "2026-08-27-detailed-telemetry" }), false);
+  const oldPolicySession = {
+    ...sessionFor("old-policy"),
+    policyConsent: {
+      ...sessionFor("old-policy").policyConsent,
+      privacyVersion: "2026-08-27-detailed-telemetry",
+    },
+  } as unknown as SklandSessionPayload;
+  assert.equal(unsealSklandSession(sealSklandSession(oldPolicySession, secret), secret, now), null);
 });
 
 test("enforces the five-account limit while still allowing an existing account to refresh", () => {

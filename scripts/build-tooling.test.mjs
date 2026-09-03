@@ -26,6 +26,15 @@ test("PostgreSQL integration tests register the TypeScript path alias loader", a
   assert.match(packageJson.scripts["test:auth-integration"], /--import \.\/scripts\/register-hooks\.mjs/);
 });
 
+test("business backfill shares the 30-day retention constant for scanning and expiry", async () => {
+  const source = await readRepoFile("scripts/backfill-business-data.mts");
+
+  assert.match(source, /import \{ BUSINESS_DATA_TTL_MS \}/);
+  assert.match(source, /const cutoff = Date\.now\(\) - BUSINESS_DATA_TTL_MS/);
+  assert.equal((source.match(/\+ BUSINESS_DATA_TTL_MS/g) ?? []).length, 2);
+  assert.doesNotMatch(source, /30 \* 24 \* 60 \* 60 \* 1000/);
+});
+
 test("production builds prepare a solver-free standalone runtime with static assets", async () => {
   const packageJson = JSON.parse(await readRepoFile("package.json"));
   const nextConfig = await readRepoFile("next.config.ts");
@@ -175,7 +184,8 @@ test("Next and the verified deployment keep real public GET responses compressed
   assert.doesNotMatch(deployWorkflow, /verify-public-compression\.mjs "\$DEPLOY_PUBLIC_HEALTH_URL"/);
 });
 
-test("CI gates releases on Chromium and schedules the full WebKit suite", async () => {
+test("CI gates releases on Chromium and a WebKit Skland smoke test, then schedules the full WebKit suite", async () => {
+  const packageJson = JSON.parse(await readRepoFile("package.json"));
   const workflow = await readRepoFile(".github/workflows/frontend-quality.yml");
   const playwrightConfig = await readRepoFile("playwright.config.ts");
   const e2eFiles = await readdir(new URL("../e2e/", import.meta.url));
@@ -183,14 +193,18 @@ test("CI gates releases on Chromium and schedules the full WebKit suite", async 
   const readinessTestCount = (await Promise.all(readinessSpecs.map((file) => readRepoFile(`e2e/${file}`))))
     .reduce((count, source) => count + (source.match(/^test\(/gm)?.length ?? 0), 0);
 
-  assert.match(workflow, /browser_e2e:[\s\S]+npm run test:e2e[\s\S]+npm run test:e2e:production-profile/);
+  assert.equal(
+    packageJson.scripts["test:e2e:webkit:skland-qr"],
+    "playwright test e2e/production-readiness-skland.spec.ts --project=webkit --grep \"Skland login exposes both methods\"",
+  );
+  assert.match(workflow, /browser_e2e:[\s\S]+npm run test:e2e[\s\S]+npm run test:e2e:webkit:skland-qr[\s\S]+npm run test:e2e:production-profile/);
   assert.match(workflow, /webkit_e2e:[\s\S]+github\.event_name == 'schedule'[\s\S]+npm run test:e2e:webkit/);
   assert.match(workflow, /quality:[\s\S]+needs: \[pull_request_policy, changes, repository_hygiene, checks, browser_e2e\]/);
   assert.doesNotMatch(workflow, /quality:[\s\S]+needs: \[[^\]]*webkit_e2e/);
   assert.match(workflow, /deploy:[\s\S]+needs: \[changes, quality\]/);
   assert.match(workflow, /cancel-in-progress: \$\{\{ github\.event_name == 'pull_request' \}\}/);
   assert.equal(readinessSpecs.length, 4);
-  assert.equal(readinessTestCount, 91);
+  assert.equal(readinessTestCount, 94);
   assert.equal(e2eFiles.includes("production-readiness.spec.ts"), false);
   assert.match(playwrightConfig, /fullyParallel: false/);
   assert.match(playwrightConfig, /workers: process\.env\.CI \? 3 : undefined/);

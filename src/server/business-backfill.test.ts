@@ -13,7 +13,11 @@ test("legacy plan backfill extracts only the run summary whitelist", () => {
       durationMs: 123,
       command: "must-not-survive",
       stdout: "must-not-survive",
-      debugBundle: { inputSummary: { sourceName: "box.json" }, operbox: [{ token: "must-not-survive" }] },
+      debugBundle: {
+        inputSummary: { sourceName: "box.json" },
+        operbox: [{ token: "must-not-survive" }],
+        serveRequest: { params: { options: { fiammetta_enable: false } } },
+      },
       solver: { protocol_version: 1, plan_schema_version: 3, solver_executable_sha256: "b".repeat(64), observed_at: "2026-08-21T00:00:00.000Z" },
     },
     owner: null,
@@ -23,6 +27,7 @@ test("legacy plan backfill extracts only the run summary whitelist", () => {
     directoryCreatedAt: new Date("2026-08-21T00:00:00.000Z"),
   });
   assert.ok(summary);
+  assert.equal(summary.fiammettaEnable, false);
   const serialized = JSON.stringify(summary);
   for (const forbidden of ["command", "stdout", "token", "debugBundle", "box.json"]) assert.equal(serialized.includes(forbidden), false);
 });

@@ -489,7 +489,9 @@ test("resource-oriented admin APIs keep authentication and method boundaries", a
   const reads = [
     "/api/admin/users/user_test/sessions",
     "/api/admin/plan-runs",
+    "/api/admin/plan-runs/run_test",
     "/api/admin/feedback",
+    "/api/admin/feedback/feedback_test",
     "/api/admin/solver-metrics",
   ];
   for (const path of reads) {
@@ -505,7 +507,10 @@ test("resource-oriented admin APIs keep authentication and method boundaries", a
   })).status()).toBe(401);
   expect((await request.delete("/api/admin/users/user_test/sessions")).status()).toBe(401);
   expect((await request.patch("/api/admin/feedback/feedback_test", {
-    data: { status: "working", note: "test" },
+    data: { status: "reproduced", note: "test" },
+  })).status()).toBe(401);
+  expect((await request.delete("/api/admin/feedback", {
+    data: { ids: ["feedback_test"] },
   })).status()).toBe(401);
 });
 
@@ -864,6 +869,7 @@ test("server auth boundaries reject anonymous planning and every development Skl
   const nativeAdmin = await request.post("/api/auth/admin/list-users", { data: {} });
   expect(nativeAdmin.status()).toBe(404);
   expect((await request.get("/admin")).status()).toBe(404);
+  expect((await request.get("/admin/issues")).status()).toBe(404);
   expect((await request.get("/admin/users")).status()).toBe(404);
 });
 
@@ -1445,7 +1451,12 @@ for (const viewport of [
     await page.route("**/api/account/data-consent", async (route) => {
       if (route.request().method() === "POST") {
         const body = route.request().postDataJSON() as Record<string, unknown>;
-        expect(body).toMatchObject({ termsAccepted: true, privacyAccepted: true });
+        expect(body).toMatchObject({
+          termsAccepted: true,
+          privacyAccepted: true,
+          termsVersion: "2026-08-21-cloud-workspace",
+          privacyVersion: "2026-09-03-solver-reproduction-retention",
+        });
         consentCurrent = true;
       } else if (route.request().method() === "DELETE") {
         consentCurrent = false;
@@ -1455,7 +1466,7 @@ for (const viewport of [
       return fulfill(route, {
         current: consentCurrent,
         termsVersion: "2026-08-21-cloud-workspace",
-        privacyVersion: "2026-08-27-detailed-telemetry",
+        privacyVersion: "2026-09-03-solver-reproduction-retention",
         acceptedAt: consentCurrent ? timestamp : null,
         revokedAt: null,
         cloudSyncEnabled: true,

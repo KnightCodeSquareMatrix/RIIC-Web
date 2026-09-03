@@ -1119,10 +1119,19 @@ export interface FeedbackRoom {
 
 export type FeedbackKind = "room_issue" | "performance_issue";
 
+export interface FeedbackReproductionSnapshot {
+  layout: BaseBlueprint;
+  operbox: OperBoxEntry[];
+  rotation: RotationProfile;
+  fiammettaEnabled: boolean;
+  sourceType: Exclude<BoxSource, "sample">;
+}
+
 type FeedbackRequestBase = {
   diagnosticId: string;
   note: string;
   consent: true;
+  reproduction: FeedbackReproductionSnapshot;
 };
 
 export type FeedbackRequest = FeedbackRequestBase & (
@@ -1255,6 +1264,118 @@ export interface AdminSessionsData {
 export interface AdminUserUpdateData {
   updated: true;
 }
+
+export type AdminFeedbackStatus = "unreviewed" | "reproduced" | "fixed";
+
+export type AdminFeedbackFacility =
+  | "trading"
+  | "manufacture"
+  | "power"
+  | "control"
+  | "dormitory"
+  | "meeting"
+  | "hire"
+  | "processing"
+  | "training"
+  | "solver"
+  | "unknown";
+
+export interface AdminFeedbackRecordData {
+  id: string;
+  diagnosticId: string;
+  kind: FeedbackKind;
+  facility: AdminFeedbackFacility;
+  room: FeedbackRoom | null;
+  note: string;
+  status: AdminFeedbackStatus;
+  adminNote: string | null;
+  hasLinkedRun: boolean;
+  createdAt: string;
+  updatedAt: string;
+  expiresAt: string;
+}
+
+export interface AdminPlanRunRecordData {
+  diagnosticId: string;
+  sourceType: "sample" | "maa" | "skland";
+  status: "success" | "failed";
+  layoutTemplate: string;
+  roomCount: number;
+  operatorCount: number;
+  rotation: string;
+  fiammettaEnable: boolean;
+  durationMs: number | null;
+  errorCode: AppErrorCode | null;
+  solverExecutableSha256: string | null;
+  protocolVersion: number | null;
+  planSchemaVersion: number | null;
+  hasReproduction: boolean;
+  createdAt: string;
+  expiresAt: string;
+}
+
+export interface AdminRecordListData<T> {
+  items: T[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export type AdminFeedbackListData = AdminRecordListData<AdminFeedbackRecordData>;
+export type AdminPlanRunListData = AdminRecordListData<AdminPlanRunRecordData>;
+
+export type AdminReproductionUnavailableReason =
+  | "expired"
+  | "cache_hit"
+  | "finalizing"
+  | "finalization_failed"
+  | "not_recorded"
+  | "missing"
+  | "invalid"
+  | "incomplete";
+
+interface AdminReproductionDataBase {
+  diagnosticId: string;
+  sourceName: string | null;
+  error: string | null;
+  stderrExcerpt: string | null;
+  stdoutExcerpt: string | null;
+}
+
+export type AdminReproductionData = AdminReproductionDataBase & ({
+  available: true;
+  unavailableReason: null;
+  layout: BaseBlueprint;
+  operbox: OperBoxEntry[];
+  rotation: RotationProfile;
+  rotationCount: number;
+  fiammettaEnabled: boolean;
+} | {
+  available: false;
+  unavailableReason: AdminReproductionUnavailableReason;
+  layout: BaseBlueprint | null;
+  operbox: OperBoxEntry[] | null;
+  rotation: RotationProfile | null;
+  rotationCount: number | null;
+  fiammettaEnabled: boolean | null;
+});
+
+export interface AdminFeedbackDetailData {
+  feedback: AdminFeedbackRecordData;
+  reproduction: AdminReproductionData;
+}
+
+export interface AdminPlanRunDetailData {
+  run: AdminPlanRunRecordData;
+  reproduction: AdminReproductionData;
+}
+
+export interface AdminFeedbackDeleteData {
+  deletedIds: string[];
+  deletedCount: number;
+  privateArtifactsDeleted: number;
+}
+
 
 export interface AdminSolverMetricsData {
   generatedAt: string;

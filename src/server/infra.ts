@@ -1,10 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
-import { chmod, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, open, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 
 import type {
+  AdminReproductionData,
+  AdminReproductionUnavailableReason,
   BaseBlueprint,
   CliCandidate,
   DebugBundle,
@@ -16,6 +18,7 @@ import type {
   RotationProfile,
   SolverObservation,
 } from "@/types";
+import { legacyAdminFeedbackStatus, toAdminReproductionData } from "./admin-record-dto";
 import { isSklandConfigured, sklandDisabledReason } from "@/server/skland/session";
 import { PublicApiError } from "./api-contract";
 import { feedbackDirectoryGroup, toStoredFeedbackIssue } from "./feedback-record";
@@ -48,7 +51,7 @@ import {
   updateFeedbackRecord,
   type PrivateArtifactDescriptor,
 } from "./business-records";
-import { isBusinessDatabaseReadEnabled, isBusinessFileFallbackEnabled } from "./business-config";
+import { BUSINESS_DATA_TTL_MS, isBusinessDatabaseReadEnabled, isBusinessFileFallbackEnabled } from "./business-config";
 import {
   InfraCliServeClient,
   type JsonRecord,
@@ -56,6 +59,7 @@ import {
 } from "./serve-client";
 import { registerProcessCleanup } from "./process-cleanup";
 import { normalizeSolverOperbox } from "./plan-solver-input";
+import { legacyPlanReproductionContext } from "./business-backfill";
 
 type PlanRequestBody = {
   layout: BaseBlueprint;
@@ -77,7 +81,7 @@ const cliRunRoot = path.resolve(/* turbopackIgnore: true */ process.env.BETA_CLI
 const cliReleaseRoot = path.resolve(/* turbopackIgnore: true */ process.env.BETA_CLI_RELEASE_DIR || path.join(storageRoot, "cli-releases"));
 const activeCliPath = path.join(storageRoot, "active-cli.json");
 const timeoutMs = Number(process.env.BETA_CLI_TIMEOUT_MS || 180_000);
-const PRIVATE_RECORD_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+export const PRIVATE_RECORD_TTL_MS = BUSINESS_DATA_TTL_MS;
 const PRIVATE_MAINTENANCE_INTERVAL_MS = 60 * 60 * 1000;
 const PLAN_CACHE_SOLVER_IDENTITY_TTL_MS = 60_000;
 const PLAN_CACHE_SOLVER_IDENTITY_RETRY_MS = 5_000;
@@ -322,6 +326,21 @@ async function readJsonIfExists(filePath: string) {
   }
 }
 
+async function readTextTail(filePath: string, maxBytes = 16 * 1024): Promise<string | null> {
+  const details = await stat(filePath).catch(() => null);
+  if (!details?.isFile() || details.size <= 0) return null;
+  const bytesToRead = Math.min(details.size, maxBytes);
+  const handle = await open(filePath, "r").catch(() => null);
+  if (!handle) return null;
+  try {
+    const buffer = Buffer.alloc(bytesToRead);
+    const { bytesRead } = await handle.read(buffer, 0, bytesToRead, details.size - bytesToRead);
+    return buffer.subarray(0, bytesRead).toString("utf-8").trim() || null;
+  } finally {
+    await handle.close();
+  }
+}
+
 async function artifactDescriptor(
   key: string,
   filePaths: string[],
@@ -414,7 +433,59 @@ async function feedbackDirectories() {
   return privateDirectories(feedbackRoot);
 }
 
-async function ownerMetadata(directory: string): Promise<{ ownerTag?: unknown; diagnosticId?: unknown; sourceName?: unknown } | null> {
+export async function deleteFeedbackArtifacts(feedbackIds: string[]): Promise<number> {
+  const wanted = new Set(feedbackIds);
+  if (!wanted.size) return 0;
+  await ensurePrivateStorageBoundaries();
+  let deleted = 0;
+  for (const directory of await feedbackDirectories()) {
+    const meta = await readJsonIfExists(path.join(directory, "meta.json"));
+    const directoryId = path.basename(directory).match(/(?:^|_)([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i)?.[1];
+    const feedbackId = isObject(meta) && typeof meta.feedbackId === "string"
+      ? meta.feedbackId
+      : directoryId;
+    if (!feedbackId || !wanted.has(feedbackId)) continue;
+    await removePrivateDirectory(feedbackRoot, directory);
+    deleted += 1;
+  }
+  return deleted;
+}
+
+export async function deletePlanRunArtifacts(diagnosticIds: string[]): Promise<number> {
+  const wanted = new Set(diagnosticIds.filter((value) => /^[a-f0-9-]{36}$/i.test(value)));
+  if (!wanted.size) return 0;
+  await ensurePrivateStorageBoundaries();
+  let deleted = 0;
+  for (const directory of await runDirectories()) {
+    const directoryId = path.basename(directory).match(/(?:^|_)([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i)?.[1];
+    const metadata = directoryId && wanted.has(directoryId) ? null : await ownerMetadata(directory);
+    const diagnosticId = directoryId ?? (typeof metadata?.diagnosticId === "string" ? metadata.diagnosticId : null);
+    if (!diagnosticId || !wanted.has(diagnosticId)) continue;
+    await removePrivateDirectory(cliRunRoot, directory);
+    deleted += 1;
+  }
+  return deleted;
+}
+
+type PrivateRunMetadata = {
+  ownerTag?: unknown;
+  diagnosticId?: unknown;
+  sourceName?: unknown;
+  createdAt?: unknown;
+};
+
+function timestampMs(value: unknown): number | null {
+  const parsed = value instanceof Date
+    ? value.getTime()
+    : typeof value === "string" || typeof value === "number" ? new Date(value).getTime() : Number.NaN;
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function filesystemCreatedAtMs(details: { birthtimeMs: number; mtimeMs: number }): number {
+  return details.birthtimeMs > 0 ? Math.min(details.birthtimeMs, details.mtimeMs) : details.mtimeMs;
+}
+
+async function ownerMetadata(directory: string): Promise<PrivateRunMetadata | null> {
   const value = await readJsonIfExists(path.join(directory, "owner.json"));
   if (isObject(value)) return value;
   const envelope = await readJsonIfExists(path.join(directory, "run-envelope.json"));
@@ -426,7 +497,20 @@ async function ownerMetadata(directory: string): Promise<{ ownerTag?: unknown; d
     ownerTag: envelope.dataOwnerTag,
     diagnosticId: envelope.diagnosticId,
     sourceName: inputSummary?.sourceName,
+    createdAt: result?.startedAt,
   };
+}
+
+async function privateRunCreatedAtMs(
+  directory: string,
+  metadata: PrivateRunMetadata | null,
+  details: { birthtimeMs: number; mtimeMs: number },
+): Promise<number> {
+  const metadataCreatedAt = timestampMs(metadata?.createdAt);
+  if (metadataCreatedAt !== null) return metadataCreatedAt;
+  const result = await readJsonIfExists(path.join(directory, "result.json"));
+  const resultCreatedAt = isObject(result) ? timestampMs(result.startedAt) : null;
+  return resultCreatedAt ?? filesystemCreatedAtMs(details);
 }
 
 export async function maintainPrivateRecords(now = Date.now()): Promise<void> {
@@ -436,7 +520,8 @@ export async function maintainPrivateRecords(now = Date.now()): Promise<void> {
   for (const directory of await runDirectories()) {
     const metadata = await ownerMetadata(directory);
     const details = await stat(directory).catch(() => null);
-    const expired = Boolean(details && now - details.mtimeMs >= PRIVATE_RECORD_TTL_MS);
+    const createdAt = details ? await privateRunCreatedAtMs(directory, metadata, details) : null;
+    const expired = createdAt !== null && now - createdAt >= PRIVATE_RECORD_TTL_MS;
     const legacySkland = !legacyPurgeCompleted
       && !metadata?.ownerTag
       && isLegacySklandRunDirectoryName(path.basename(directory));
@@ -503,20 +588,217 @@ export async function deleteSklandOwnedData(ownerTags: string[]): Promise<{ runs
   return { runs, feedback };
 }
 
-async function privateRunForDiagnostic(
-  diagnosticId: string
-): Promise<{ directory: string; result: JsonRecord } | null> {
-  if (!/^[a-f0-9-]{36}$/i.test(diagnosticId)) return null;
+type PrivateRunLookup =
+  | { status: "missing" }
+  | { status: "invalid"; directory: string }
+  | { status: "found"; directory: string; result: JsonRecord };
+
+type PrivateFeedbackLookup =
+  | { status: "missing" }
+  | { status: "invalid"; directory: string }
+  | { status: "found"; directory: string };
+
+type PlanReproductionFallback = {
+  rotation?: unknown;
+  fiammettaEnabled?: unknown;
+  artifactKey?: unknown;
+  artifactStatus?: unknown;
+  executionSource?: unknown;
+  expiresAt?: unknown;
+};
+
+async function lookupPrivateRun(diagnosticId: string): Promise<PrivateRunLookup> {
+  if (!/^[a-f0-9-]{36}$/i.test(diagnosticId)) return { status: "missing" };
   const suffix = `_${diagnosticId}`;
   const directory = (await runDirectories())
     .find((candidate) => path.basename(candidate).endsWith(suffix));
-  if (!directory) return null;
-  let result = await readJsonIfExists(path.join(directory, "result.json"));
-  if (!isObject(result)) {
-    const envelope = await readJsonIfExists(path.join(directory, "run-envelope.json"));
-    result = isObject(envelope) ? envelope.result : null;
+  if (!directory) return { status: "missing" };
+  const [storedResult, envelope, failureResult] = await Promise.all([
+    readJsonIfExists(path.join(directory, "result.json")),
+    readJsonIfExists(path.join(directory, "run-envelope.json")),
+    readJsonIfExists(path.join(directory, "task-reproduction", "result.json")),
+  ]);
+  const result = [storedResult, isObject(envelope) ? envelope.result : null, failureResult]
+    .find((candidate): candidate is JsonRecord => isObject(candidate) && candidate.runId === diagnosticId);
+  return result
+    ? { status: "found", directory, result }
+    : { status: "invalid", directory };
+}
+
+async function privateRunForDiagnostic(
+  diagnosticId: string
+): Promise<{ directory: string; result: JsonRecord } | null> {
+  const lookup = await lookupPrivateRun(diagnosticId);
+  return lookup.status === "found" ? lookup : null;
+}
+
+async function lookupPrivateFeedback(feedbackId: string): Promise<PrivateFeedbackLookup> {
+  if (!/^[a-f0-9-]{36}$/i.test(feedbackId)) return { status: "missing" };
+  const suffix = `_${feedbackId}`;
+  const directory = (await feedbackDirectories())
+    .find((candidate) => path.basename(candidate).endsWith(suffix));
+  if (!directory) return { status: "missing" };
+  const meta = await readJsonIfExists(path.join(directory, "meta.json"));
+  return isObject(meta) && meta.feedbackId === feedbackId
+    ? { status: "found", directory }
+    : { status: "invalid", directory };
+}
+
+function textTail(value: unknown, maxBytes = 16 * 1024): string | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const bytes = Buffer.from(value, "utf-8");
+  return bytes.subarray(Math.max(0, bytes.byteLength - maxBytes)).toString("utf-8").trim() || null;
+}
+
+function missingReproductionReason(fallback: {
+  artifactKey?: unknown;
+  artifactStatus?: unknown;
+  executionSource?: unknown;
+  expiresAt?: unknown;
+}): AdminReproductionUnavailableReason {
+  const expiresAt = fallback.expiresAt instanceof Date
+    ? fallback.expiresAt.getTime()
+    : typeof fallback.expiresAt === "string" ? new Date(fallback.expiresAt).getTime() : Number.NaN;
+  if (Number.isFinite(expiresAt) && expiresAt <= Date.now()) return "expired";
+  if (fallback.executionSource === "cache") return "cache_hit";
+  if (fallback.artifactStatus === "pending") return "finalizing";
+  if (fallback.artifactStatus === "failed") return "finalization_failed";
+  if (fallback.artifactStatus === "none" || typeof fallback.artifactKey !== "string" || !fallback.artifactKey) {
+    return "not_recorded";
   }
-  return isObject(result) && result.runId === diagnosticId ? { directory, result } : null;
+  return "missing";
+}
+
+function reproductionExpired(expiresAt: unknown): boolean {
+  const value = expiresAt instanceof Date
+    ? expiresAt.getTime()
+    : typeof expiresAt === "string" ? new Date(expiresAt).getTime() : Number.NaN;
+  return Number.isFinite(value) && value <= Date.now();
+}
+
+export async function readPlanReproduction(
+  diagnosticId: string,
+  fallback: PlanReproductionFallback = {},
+): Promise<AdminReproductionData> {
+  if (reproductionExpired(fallback.expiresAt)) {
+    return toAdminReproductionData({
+      diagnosticId,
+      layout: null,
+      operbox: null,
+      context: null,
+      result: null,
+      fallbackRotation: fallback.rotation,
+      fallbackFiammettaEnabled: fallback.fiammettaEnabled,
+      unavailableReason: "expired",
+    });
+  }
+  const lookup = await lookupPrivateRun(diagnosticId);
+  if (lookup.status !== "found") {
+    return toAdminReproductionData({
+      diagnosticId,
+      layout: null,
+      operbox: null,
+      context: null,
+      result: null,
+      fallbackRotation: fallback.rotation,
+      fallbackFiammettaEnabled: fallback.fiammettaEnabled,
+      unavailableReason: lookup.status === "invalid" ? "invalid" : missingReproductionReason(fallback),
+    });
+  }
+  const taskSnapshotDir = path.join(lookup.directory, "task-reproduction");
+  const [layout, operbox, context, stderrExcerpt, stdoutExcerpt] = await Promise.all([
+    readJsonIfExists(path.join(taskSnapshotDir, "layout.json"))
+      .then((value) => value ?? readJsonIfExists(path.join(lookup.directory, "layout.json"))),
+    readJsonIfExists(path.join(taskSnapshotDir, "operbox.json"))
+      .then((value) => value ?? readJsonIfExists(path.join(lookup.directory, "operbox.json"))),
+    readJsonIfExists(path.join(taskSnapshotDir, "reproduction.json"))
+      .then((value) => value ?? readJsonIfExists(path.join(lookup.directory, "reproduction.json"))),
+    readTextTail(path.join(lookup.directory, "stderr.txt")),
+    readTextTail(path.join(lookup.directory, "stdout.txt")),
+  ]);
+  let debug = isObject(lookup.result.debugBundle) ? lookup.result.debugBundle : null;
+  if (!debug && (!layout || !operbox || !context || !stderrExcerpt || !stdoutExcerpt)) {
+    const storedDebug = await readJsonIfExists(path.join(lookup.directory, "debug-bundle.json"));
+    debug = isObject(storedDebug) ? storedDebug : null;
+  }
+  const legacyContext = legacyPlanReproductionContext(debug);
+  const legacyBackfillWithoutExactFiammetta = !context
+    && Boolean(debug)
+    && fallback.executionSource == null
+    && typeof legacyContext?.fiammettaEnabled !== "boolean";
+  return toAdminReproductionData({
+    diagnosticId,
+    layout: layout ?? debug?.layout,
+    operbox: operbox ?? debug?.operbox,
+    context: context ?? legacyContext,
+    result: lookup.result,
+    stderrExcerpt: stderrExcerpt ?? textTail(debug?.stderr),
+    stdoutExcerpt: stdoutExcerpt ?? textTail(debug?.stdout),
+    fallbackRotation: fallback.rotation,
+    fallbackFiammettaEnabled: legacyBackfillWithoutExactFiammetta ? undefined : fallback.fiammettaEnabled,
+  });
+}
+
+export async function readFeedbackReproduction(
+  feedbackId: string,
+  diagnosticId: string,
+  options: {
+    expiresAt?: unknown;
+    plan?: PlanReproductionFallback;
+  } = {},
+): Promise<AdminReproductionData> {
+  if (reproductionExpired(options.expiresAt)) {
+    return toAdminReproductionData({
+      diagnosticId,
+      layout: null,
+      operbox: null,
+      context: null,
+      result: null,
+      fallbackRotation: options.plan?.rotation,
+      fallbackFiammettaEnabled: options.plan?.fiammettaEnabled,
+      unavailableReason: "expired",
+    });
+  }
+
+  const [lookup, linkedRun] = await Promise.all([
+    lookupPrivateFeedback(feedbackId),
+    readPlanReproduction(diagnosticId, options.plan),
+  ]);
+  if (lookup.status === "missing") return linkedRun;
+  if (lookup.status === "invalid") {
+    if (linkedRun.available) return linkedRun;
+    return toAdminReproductionData({
+      diagnosticId,
+      layout: null,
+      operbox: null,
+      context: null,
+      result: { error: linkedRun.error },
+      stderrExcerpt: linkedRun.stderrExcerpt,
+      stdoutExcerpt: linkedRun.stdoutExcerpt,
+      fallbackRotation: options.plan?.rotation,
+      fallbackFiammettaEnabled: options.plan?.fiammettaEnabled,
+      unavailableReason: "invalid",
+    });
+  }
+
+  const [layout, operbox, context] = await Promise.all([
+    readJsonIfExists(path.join(lookup.directory, "layout.json")),
+    readJsonIfExists(path.join(lookup.directory, "operbox.json")),
+    readJsonIfExists(path.join(lookup.directory, "reproduction.json")),
+  ]);
+  const reproduction = toAdminReproductionData({
+    diagnosticId,
+    layout,
+    operbox,
+    context,
+    result: { error: linkedRun.error },
+    stderrExcerpt: linkedRun.stderrExcerpt,
+    stdoutExcerpt: linkedRun.stdoutExcerpt,
+    fallbackRotation: options.plan?.rotation,
+    fallbackFiammettaEnabled: options.plan?.fiammettaEnabled,
+  });
+  if (reproduction.available) return reproduction;
+  return linkedRun.available ? linkedRun : reproduction;
 }
 
 async function readShiftFiles(outputDir: string) {
@@ -841,7 +1123,10 @@ export async function getSampleOperbox() {
   };
 }
 
-export async function saveFeedback(body: FeedbackRequest): Promise<FeedbackData> {
+export async function saveFeedback(
+  body: FeedbackRequest,
+  options: { userId?: string | null; dataOwnerTag?: string | null } = {},
+): Promise<FeedbackData> {
   const savedAt = new Date().toISOString();
   const feedbackId = randomUUID();
   const kind = body.kind ?? "room_issue";
@@ -849,15 +1134,32 @@ export async function saveFeedback(body: FeedbackRequest): Promise<FeedbackData>
   const feedbackDir = path.join(feedbackRoot, dirName);
   const metaPath = path.join(feedbackDir, "meta.json");
   const issuePath = path.join(feedbackDir, "issue.json");
+  const layoutPath = path.join(feedbackDir, "layout.json");
+  const operboxPath = path.join(feedbackDir, "operbox.json");
+  const reproductionPath = path.join(feedbackDir, "reproduction.json");
+
+  const reproduction = toAdminReproductionData({
+    diagnosticId: body.diagnosticId,
+    layout: body.reproduction.layout,
+    operbox: body.reproduction.operbox,
+    context: {
+      ...body.reproduction,
+      sourceName: body.reproduction.sourceType === "skland" ? "森空岛同步" : "MAA 导入",
+    },
+    result: null,
+  });
+  if (!reproduction.available) throw new PublicApiError("AIC-FEEDBACK-4001");
   await mkdir(feedbackDir, { recursive: true });
 
   const linkedRun = await privateRunForDiagnostic(body.diagnosticId);
   const owner = linkedRun ? await ownerMetadata(linkedRun.directory) : null;
-  const dataOwnerTag = owner?.diagnosticId === body.diagnosticId && typeof owner.ownerTag === "string"
+  const linkedDataOwnerTag = owner?.diagnosticId === body.diagnosticId && typeof owner.ownerTag === "string"
     ? owner.ownerTag
     : null;
+  const dataOwnerTag = options.dataOwnerTag ?? linkedDataOwnerTag;
   const solver = solverObservationFromPlanRecord(linkedRun?.result);
   const meta = {
+    version: "feedback-record-v2",
     feedbackId,
     savedAt,
     diagnosticId: body.diagnosticId,
@@ -872,19 +1174,158 @@ export async function saveFeedback(body: FeedbackRequest): Promise<FeedbackData>
     ...(dataOwnerTag ? { dataOwnerTag } : {}),
   };
 
-  await writeJson(metaPath, meta);
-  await writeJson(issuePath, toStoredFeedbackIssue(body));
+  await Promise.all([
+    writeJson(metaPath, meta),
+    writeJson(issuePath, toStoredFeedbackIssue(body)),
+    writeJson(layoutPath, reproduction.layout),
+    writeJson(operboxPath, reproduction.operbox),
+    writeJson(reproductionPath, {
+      version: 1,
+      diagnosticId: body.diagnosticId,
+      sourceName: reproduction.sourceName,
+      sourceType: body.reproduction.sourceType,
+      rotation: reproduction.rotation,
+      rotationCount: reproduction.rotationCount,
+      fiammettaEnabled: reproduction.fiammettaEnabled,
+    }),
+  ]);
   await recordFeedbackIfEnabled({
     feedbackId,
     savedAt: new Date(savedAt),
     body,
-    artifact: await artifactDescriptor(feedbackId, [metaPath, issuePath]),
+    userId: options.userId ?? null,
+    artifact: await artifactDescriptor(feedbackId, [metaPath, issuePath, layoutPath, operboxPath, reproductionPath]),
   });
 
   return {
     feedbackId,
     savedAt,
   };
+}
+
+export async function savePlanFailureArtifact(input: PlanRequestBody & {
+  diagnosticId: string;
+  errorCode: string;
+}): Promise<PrivateArtifactDescriptor | null> {
+  assertPlanBody(input);
+  if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(input.diagnosticId)) {
+    throw new Error("Plan failure diagnostic ID is invalid.");
+  }
+
+  await ensurePrivateStorageBoundaries();
+  const startedAt = new Date().toISOString();
+  const suffix = `_${input.diagnosticId}`;
+  const existingDir = (await runDirectories())
+    .find((candidate) => path.basename(candidate).endsWith(suffix));
+  if (existingDir) {
+    const envelopePath = path.join(existingDir, "run-envelope.json");
+    const resultPath = path.join(existingDir, "result.json");
+    const existingArtifact = existsSync(envelopePath)
+      ? envelopePath
+      : existsSync(resultPath) ? resultPath : null;
+    const snapshotDir = path.join(existingDir, "task-reproduction");
+    const snapshotPaths = [
+      path.join(snapshotDir, "layout.json"),
+      path.join(snapshotDir, "operbox.json"),
+      path.join(snapshotDir, "reproduction.json"),
+      path.join(snapshotDir, "result.json"),
+    ];
+    if (snapshotPaths.every((filePath) => existsSync(filePath))) {
+      return artifactDescriptor(input.diagnosticId, [
+        ...(existingArtifact ? [existingArtifact] : []),
+        ...snapshotPaths,
+      ]);
+    }
+
+    const writeSnapshot = async (target: string) => Promise.all([
+      writeJsonAtomic(path.join(target, "layout.json"), input.layout),
+      writeJsonAtomic(path.join(target, "operbox.json"), input.operbox),
+      writeJsonAtomic(path.join(target, "reproduction.json"), {
+        version: 1,
+        diagnosticId: input.diagnosticId,
+        sourceName: input.sourceName ?? null,
+        rotation: input.rotation,
+        fiammettaEnabled: input.fiammettaEnable ?? true,
+      }),
+      writeJsonAtomic(path.join(target, "result.json"), {
+        success: false,
+        startedAt,
+        durationMs: 0,
+        error: input.errorCode,
+        runId: input.diagnosticId,
+      } satisfies PlanApiResponse),
+    ]);
+    if (existsSync(snapshotDir)) {
+      await writeSnapshot(snapshotDir);
+    } else {
+      const stagingSnapshotDir = `${snapshotDir}.pending-${randomUUID()}`;
+      await mkdir(stagingSnapshotDir);
+      try {
+        await writeSnapshot(stagingSnapshotDir);
+        await rename(stagingSnapshotDir, snapshotDir);
+      } catch (error) {
+        await rm(stagingSnapshotDir, { recursive: true, force: true }).catch(() => undefined);
+        throw error;
+      }
+    }
+    return artifactDescriptor(input.diagnosticId, [
+      ...(existingArtifact ? [existingArtifact] : []),
+      ...snapshotPaths,
+    ]);
+  }
+
+  const runDir = path.join(
+    cliRunRoot,
+    makeStampedDirName(startedAt, input.sourceName, input.diagnosticId),
+  );
+  const stagingDir = `${runDir}.pending-${randomUUID()}`;
+  const layoutPath = path.join(stagingDir, "layout.json");
+  const operboxPath = path.join(stagingDir, "operbox.json");
+  const reproductionPath = path.join(stagingDir, "reproduction.json");
+  const resultPath = path.join(stagingDir, "result.json");
+  const ownerPath = path.join(stagingDir, "owner.json");
+  const artifactPaths = [layoutPath, operboxPath, reproductionPath, resultPath];
+
+  await mkdir(stagingDir);
+  try {
+    await Promise.all([
+      writeJsonAtomic(layoutPath, input.layout),
+      writeJsonAtomic(operboxPath, input.operbox),
+      writeJsonAtomic(reproductionPath, {
+        version: 1,
+        diagnosticId: input.diagnosticId,
+        sourceName: input.sourceName ?? null,
+        rotation: input.rotation,
+        fiammettaEnabled: input.fiammettaEnable ?? true,
+      }),
+      writeJsonAtomic(resultPath, {
+        success: false,
+        startedAt,
+        durationMs: 0,
+        error: input.errorCode,
+        runId: input.diagnosticId,
+      } satisfies PlanApiResponse),
+      ...(input.dataOwnerTag ? [
+        writeJsonAtomic(ownerPath, {
+          version: 1,
+          ownerTag: input.dataOwnerTag,
+          diagnosticId: input.diagnosticId,
+          sourceName: input.sourceName ?? null,
+          createdAt: startedAt,
+        }, true),
+      ] : []),
+    ]);
+    if (input.dataOwnerTag) artifactPaths.push(ownerPath);
+    await rename(stagingDir, runDir);
+  } catch (error) {
+    await rm(stagingDir, { recursive: true, force: true }).catch(() => undefined);
+    throw error;
+  }
+
+  return artifactDescriptor(
+    input.diagnosticId,
+    artifactPaths.map((filePath) => path.join(runDir, path.basename(filePath))),
+  );
 }
 
 export async function describePlanArtifact(result: PlanApiResponse): Promise<PrivateArtifactDescriptor | null> {
@@ -1046,7 +1487,9 @@ function pumpArtifactFinalizers() {
         }
         let envelopeAgeMs: number;
         try {
-          envelopeAgeMs = Math.max(0, dependencies.now() - (await stat(envelopePath)).mtimeMs);
+          const details = await stat(envelopePath);
+          const createdAt = timestampMs(envelope.result.startedAt) ?? filesystemCreatedAtMs(details);
+          envelopeAgeMs = Math.max(0, dependencies.now() - createdAt);
         } catch {
           retryScheduled = false;
           return;
@@ -1209,7 +1652,6 @@ export async function runPlan(
     assertPlanBody(body);
     runDataOwnerTag = body.dataOwnerTag ?? null;
 
-    const cliPath = resolveCliPath();
     runId = randomUUID();
     runDir = path.join(cliRunRoot, makeStampedDirName(startedAt, body.sourceName, runId));
     try {
@@ -1245,6 +1687,7 @@ export async function runPlan(
     const serveRequestPath = path.join(runDir, "serve-request.json");
     const serveRequestLinePath = path.join(runDir, "serve-request.jsonl");
     const serveResponsePath = path.join(runDir, "serve-response.json");
+    const reproductionPath = path.join(runDir, "reproduction.json");
     resultPath = path.join(runDir, "result.json");
     artifactEnvelopePath = path.join(runDir, "run-envelope.json");
 
@@ -1260,13 +1703,20 @@ export async function runPlan(
       });
     }
 
+    await writeJson(layoutPath, body.layout);
+    await writeJson(operboxPath, body.operbox);
+    await writeJson(reproductionPath, {
+      version: 1,
+      diagnosticId: runId,
+      sourceName: body.sourceName ?? null,
+      rotation: body.rotation,
+      fiammettaEnabled: body.fiammettaEnable ?? true,
+    });
+
+    const cliPath = resolveCliPath();
     const serveLane = options.serveLane ?? 0;
     const serveClient = getPlanServeClient(serveLane);
     const planCompute = await getPlanServeCapability(serveLane, serveClient);
-    if (!deferArtifacts || !planCompute.supported) {
-      await writeJson(layoutPath, body.layout);
-      await writeJson(operboxPath, body.operbox);
-    }
     solver = createSolverObservation(planCompute, new Date().toISOString());
     let serveResult: ServeResult;
     let profileJson: unknown;
@@ -1468,6 +1918,7 @@ export async function runPlan(
     const errorPayload: PlanApiResponse = {
       success: false,
       startedAt,
+      durationMs: Math.max(0, Math.round(performance.now() - start)),
       solverStartedAt,
       solverFinishedAt,
       solver,
@@ -1571,11 +2022,12 @@ async function getOpsStorageStats() {
 
 export async function updateFeedbackOps(id: string, status: string, note: string) {
   if (!/^[\w.-]+$/.test(id)) throw new Error("记录 ID 非法。");
-  if (!["pending", "working", "resolved"].includes(status)) throw new Error("状态非法。");
+  const normalizedStatus = legacyAdminFeedbackStatus(status);
+  if (!normalizedStatus) throw new Error("状态非法。");
   if (isBusinessDatabaseReadEnabled()) {
     const updated = await updateFeedbackRecord({
       feedbackId: id,
-      status: status as "pending" | "working" | "resolved",
+      status: normalizedStatus,
       note,
     });
     if (updated || !isBusinessFileFallbackEnabled()) {
@@ -1585,7 +2037,7 @@ export async function updateFeedbackOps(id: string, status: string, note: string
   }
   const dir = path.join(feedbackRoot, id);
   await stat(dir);
-  const value = { status, note: note.trim().slice(0, 2000), updatedAt: new Date().toISOString() };
+  const value = { status: normalizedStatus, note: note.trim().slice(0, 2000), updatedAt: new Date().toISOString() };
   await writeJson(path.join(dir, "ops.json"), value);
   return value;
 }

@@ -2,6 +2,38 @@
 
 All notable changes to RIIC-Web are documented in this file.
 
+## [0.4.1] - 2026-09-03
+
+### Fixed
+
+- Administrator reproduction details recover compatible legacy layout, Box, and output-tail fields through the existing response whitelist.
+- Private solver artifacts now follow the same 30-day retention window as their database summaries, and unavailable details report a specific reason.
+- Website account deletion removes the account's referenced private feedback and solver-run artifacts before deleting the database account.
+
+### Changed
+
+- The privacy policy discloses the 30-day solver-reproduction retention window and uses a new consent version.
+
+## [0.4.0] - 2026-09-02
+
+### Added
+
+- Administrators can review solver feedback by facility, mark it as unreviewed, reproduced, or fixed, and delete selected feedback records in batches.
+- A dedicated solver-error view exposes failed runs with the layout, operator Box, rotation profile, shift count, and Fiammetta setting needed to reproduce them.
+- Feedback and failed-run details can download a whitelisted reproduction JSON; retained CLI output tails are shown when available.
+
+### Changed
+
+- Administration now uses separate overview, solver-issue, and user-management pages.
+- Sensitive administrator record responses are non-cacheable, redact server paths from diagnostic text, and keep successful runs inaccessible through the failed-run detail endpoint.
+- Feedback filtering now runs in PostgreSQL before pagination, and private feedback artifacts are removed before their database records so failed cleanup remains retryable.
+
+### For contributors
+
+- Migration `0013_sudden_talon.sql` converts legacy feedback states to the new review workflow and changes the default to `unreviewed`.
+- API, private-artifact, failed-plan reproduction, migration, and PostgreSQL workflow coverage protect the new administrator boundaries.
+- `package.json` and `package-lock.json` record release `0.4.0`.
+
 ## [0.3.0] - 2026-09-02
 
 ### Added
