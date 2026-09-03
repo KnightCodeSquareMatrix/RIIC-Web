@@ -356,6 +356,7 @@ test("asset synchronization isolates untrusted generation from repository write 
   const generate = workflow.slice(workflow.indexOf("  generate:"), workflow.indexOf("  publish:"));
   const publish = workflow.slice(workflow.indexOf("  publish:"));
 
+  assert.match(workflow, /schedule:\n {4}# 00:00 UTC = 08:00 Asia\/Shanghai \(UTC\+8\)\.\n {4}- cron: "0 0 \* \* \*"/);
   assert.match(workflow, /^permissions:\n {2}contents: read$/m);
   assert.match(generate, /persist-credentials: false/);
   assert.doesNotMatch(generate, /contents: write|pull-requests: write|actions: write|GH_TOKEN:/);
