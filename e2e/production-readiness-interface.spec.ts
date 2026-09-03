@@ -167,7 +167,7 @@ test("setup with an empty BOX starts on operator data", async ({ page }) => {
 });
 
 test("progression adjustments sync back to the schedule settings manual BOX", async ({ page }) => {
-  await mockApis(page);
+  await mockApis(page, { taskQueueEnabled: true });
   const adjustedPlanData = {
     ...planData,
     rotation: {
@@ -186,12 +186,33 @@ test("progression adjustments sync back to the schedule settings manual BOX", as
   const adjustmentGate = new Promise<void>((resolve) => {
     releaseAdjustment = resolve;
   });
+  const taskId = "11111111-1111-4111-8111-111111111113";
+  let directPlanRequests = 0;
+  let taskSubmissions = 0;
+  let taskPolls = 0;
   await page.route("**/api/plan", async (route) => {
-    await adjustmentGate;
+    directPlanRequests += 1;
     await route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({ success: false, error: { code: "AIC-PLAN-3001", message: "排班服务暂不可用，请稍后重试。", retryable: true }, requestId }),
+    });
+  });
+  await page.route(/\/api\/tasks(?:\/[^/?]+)?$/, async (route) => {
+    if (route.request().method() === "POST") {
+      taskSubmissions += 1;
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ success: true, data: { taskId, status: "pending", queuePosition: 1, etaSeconds: 3 }, requestId }),
+      });
+    }
+    taskPolls += 1;
+    await adjustmentGate;
+    return route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ success: true, data: adjustedPlanData, requestId }),
+      body: JSON.stringify({ success: true, data: { taskId, status: "done", result: adjustedPlanData }, requestId }),
     });
   });
   await seedV4Session(page, planData, { boxSource: "maa" });
@@ -213,9 +234,12 @@ test("progression adjustments sync back to the schedule settings manual BOX", as
   await adjustmentStage.getByRole("radio", { name: "精1", exact: true }).click();
   await adjustmentDialog.getByRole("button", { name: "按调整重新试算", exact: true }).click();
   const activity = page.locator('[data-slot="live-activity"]');
-  await expect(activity).toHaveAttribute("data-activity-phase", "running");
+  await expect(activity).toHaveAttribute("data-activity-phase", "queued");
   await expect(activity).toBeVisible();
-  await expect(activity).toContainText("正在调整练度");
+  await expect(activity).toContainText("正在排队");
+  await expect(adjustmentDialog).toBeVisible();
+  await expect(adjustmentDialog.getByRole("button", { name: "正在重新求解…", exact: true })).toBeDisabled();
+  await expect.poll(() => ({ directPlanRequests, taskSubmissions, taskPolls })).toEqual({ directPlanRequests: 0, taskSubmissions: 1, taskPolls: 1 });
   releaseAdjustment();
   await expect(activity).toHaveAttribute("data-activity-phase", "success");
   await expect(activity).toContainText("调整练度已完成");

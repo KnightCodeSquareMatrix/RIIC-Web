@@ -2,6 +2,18 @@
 
 All notable changes to RIIC-Web are documented in this file.
 
+## [0.4.5] - 2026-09-04
+
+### Fixed
+
+- Progression adjustment now submits to the asynchronous planning queue when production queueing is enabled, keeps Live Activity visible through queue polling, and closes the dialog only after a real result arrives.
+- Queue failures and interrupted polling remain visible in Live Activity instead of flashing for less than a second and silently ending the re-solve.
+
+### For contributors
+
+- Production-mode browser coverage rejects direct `/api/plan` calls and verifies task submission, queue feedback, polling, result handling, and shared manual Box synchronization.
+- `package.json` and `package-lock.json` record release `0.4.5`.
+
 ## [0.4.4] - 2026-09-04
 
 ### Added
