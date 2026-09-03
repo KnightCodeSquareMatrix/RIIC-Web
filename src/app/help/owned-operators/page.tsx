@@ -1,63 +1,63 @@
-import type { Metadata } from "next";
+"use client";
+
 import Link from "next/link";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 
 import { IssueSolutionPicker } from "@/components/help/IssueSolutionPicker";
-
-export const metadata: Metadata = {
-  title: "切换已有干员 · 使用帮助",
-  description: "把全角色示例切换为自己的森空岛或 MAA 干员 Box。",
-};
+import { useLanguageDemo } from "@/language-demo";
 
 const steps = [
   {
-    title: "打开排班设置",
-    description: "回到基建计算器。电脑端点顶部「配置Box与布局」；手机端先点「更多工具」，再点同名按钮。",
+    zh: ["打开排班设置", "回到基建计算器。电脑端点顶部「配置Box与布局」；手机端先点「更多工具」，再点同名按钮。"],
+    en: ["Open schedule setup", "Return to the Infrastructure Calculator. On desktop, select “Configure BOX & base” at the top. On mobile, open “More tools” first."],
   },
   {
-    title: "回到第 1 步「干员数据」",
-    description: "如果弹窗直接显示布局或设施，不用关闭。点顶部进度条最左侧的「干员数据」。",
+    zh: ["回到第 1 步「干员数据」", "如果弹窗直接显示布局或设施，不用关闭。点顶部进度条最左侧的「干员数据」。"],
+    en: ["Return to step 1, “Operator Data”", "If the dialog opens on layout or facilities, leave it open and select “Operator Data” at the left of the progress bar."],
   },
   {
-    title: "点当前数据右侧的「更换」",
-    description: "展开数据来源选项。不要点页面外面的「全角色导入」，它只会载入体验用的全精二示例。",
+    zh: ["点当前数据右侧的「更换」", "展开数据来源选项。不要点页面外面的「全角色导入」，它只会载入体验用的全精二示例。"],
+    en: ["Select “Change” beside the current data", "Expand the data-source choices. Do not use “Import all operators” outside the dialog; it loads a max-level sample for demonstration."],
   },
   {
-    title: "导入你自己的 Box",
-    description: "选择森空岛同步，或上传 MAA 导出的 Arknights_OperBox_Export.json。两种方式选一种即可。",
+    zh: ["导入你自己的 Box", "选择森空岛同步，或上传 MAA 导出的 Arknights_OperBox_Export.json。两种方式选一种即可。"],
+    en: ["Import your own Box", "Either sync with Skland or upload Arknights_OperBox_Export.json exported by MAA."],
   },
   {
-    title: "完成设置并重新生成",
-    description: "按界面提示点「继续」或「检查设施」，核对布局与设施，再点「完成」。回到计算器后重新生成排班。",
+    zh: ["完成设置并重新生成", "按界面提示点「继续」或「检查设施」，核对布局与设施，再点「完成」。回到计算器后重新生成排班。"],
+    en: ["Finish setup and generate again", "Follow the prompts to continue or check facilities, verify the layout and facilities, then select “Finish”. Return to the calculator and generate a new schedule."],
   },
 ];
 
 export default function OwnedOperatorsHelpPage() {
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
   return (
     <article className="flex w-full flex-col gap-5 pt-5">
       <header>
         <Link className="inline-flex min-h-10 items-center gap-2 text-xs text-muted-foreground underline-offset-4 outline-none hover:underline hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring" href="/help">
-          <ArrowLeft className="size-3.5" aria-hidden="true" />返回帮助首页
+          <ArrowLeft className="size-3.5" aria-hidden="true" />{en ? "Back to Help" : "返回帮助首页"}
         </Link>
         <div className="mt-2 flex min-w-0 items-center gap-2.5">
           <span className="h-7 w-1.5 shrink-0 bg-[#FFD501]" aria-hidden="true" />
-          <h1 className="truncate text-[21px] font-medium leading-none text-[#313131]">切换成自己已有的干员</h1>
+          <h1 className="truncate text-[21px] font-medium leading-none text-[#313131]">{en ? "Use the operators you own" : "切换成自己已有的干员"}</h1>
         </div>
-        <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">适用于误点「全角色导入」、方案出现未拥有干员，或练完新干员后想更新 Box 的情况。</p>
+        <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">{en ? "Use this guide if you loaded the all-operator sample, see operators you do not own, or need to update your Box after training operators." : "适用于误点「全角色导入」、方案出现未拥有干员，或练完新干员后想更新 Box 的情况。"}</p>
       </header>
 
       <IssueSolutionPicker>
       <div className="grid gap-7 rounded-[4px] border border-border bg-background p-4 sm:p-5">
         <section className="rounded-[4px] border border-amber-300 bg-amber-50 p-4 text-amber-950" aria-labelledby="sample-warning-title">
-          <h2 id="sample-warning-title" className="text-lg font-semibold">先看当前来源是不是「243 全精二示例」</h2>
-          <p className="mt-2 text-sm leading-6 text-amber-900">如果是，排出你没有的干员属于预期现象。无需清浏览器缓存，也不用删除账号；按下面步骤更换即可。</p>
+          <h2 id="sample-warning-title" className="text-lg font-semibold">{en ? "First check whether the source is “243 max-level sample”" : "先看当前来源是不是「243 全精二示例」"}</h2>
+          <p className="mt-2 text-sm leading-6 text-amber-900">{en ? "If so, seeing operators you do not own is expected. Do not clear browser data or delete your account; just replace the source below." : "如果是，排出你没有的干员属于预期现象。无需清浏览器缓存，也不用删除账号；按下面步骤更换即可。"}</p>
         </section>
 
         <section aria-labelledby="switch-steps-title">
-          <h2 id="switch-steps-title" className="text-lg font-semibold">逐步切换</h2>
+          <h2 id="switch-steps-title" className="text-lg font-semibold">{en ? "Switch step by step" : "逐步切换"}</h2>
           <ol className="mt-3 divide-y divide-border border-y border-border">
-            {steps.map(({ title, description }, index) => (
-              <li key={title} className="grid gap-3 py-4 sm:grid-cols-[2.5rem_minmax(0,1fr)]">
+            {steps.map((step, index) => {
+              const [title, description] = en ? step.en : step.zh;
+              return <li key={index} className="grid gap-3 py-4 sm:grid-cols-[2.5rem_minmax(0,1fr)]">
                 <span className="font-number text-sm text-[#313131]/38" aria-hidden="true">
                   {String(index + 1).padStart(2, "0")}
                 </span>
@@ -65,8 +65,8 @@ export default function OwnedOperatorsHelpPage() {
                   <h3 className="text-sm font-semibold">{title}</h3>
                   <p className="mt-1 text-sm leading-6 text-muted-foreground">{description}</p>
                 </div>
-              </li>
-            ))}
+              </li>;
+            })}
           </ol>
         </section>
 

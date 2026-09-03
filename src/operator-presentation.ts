@@ -11,6 +11,17 @@ export function buildingSkillUnlockLabel(elite: number, level: number, enhanced 
   return `${buildingSkillUnlockPrefix(elite, level)}${enhanced ? BUILDING_SKILL_ENHANCED_WORD : "解锁"}`;
 }
 
+export function buildingSkillUnlockLabelEnglish(elite: number, level: number, enhanced = false): string {
+  const requirement = elite === 0 && level === 1
+    ? "Initial"
+    : elite === 0
+      ? `Level ${level}`
+      : level === 1
+        ? `Elite ${elite}`
+        : `Elite ${elite} · Level ${level}`;
+  return `${requirement} ${enhanced ? "upgrade" : "unlock"}`;
+}
+
 export const PROFESSION_LABELS: Readonly<Record<number, string>> = {
   1: "近卫",
   2: "狙击",
@@ -21,6 +32,21 @@ export const PROFESSION_LABELS: Readonly<Record<number, string>> = {
   7: "特种",
   8: "先锋",
 };
+
+export const PROFESSION_LABELS_ENGLISH: Readonly<Record<number, string>> = {
+  1: "Guard",
+  2: "Sniper",
+  3: "Defender",
+  4: "Medic",
+  5: "Supporter",
+  6: "Caster",
+  7: "Specialist",
+  8: "Vanguard",
+};
+
+export function operatorProfessionLabelEnglishForCode(profession: number | undefined): string | undefined {
+  return profession === undefined ? undefined : PROFESSION_LABELS_ENGLISH[profession];
+}
 
 export function operatorProfessionPresentationForCode(
   profession: number | undefined,

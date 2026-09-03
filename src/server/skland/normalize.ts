@@ -207,16 +207,21 @@ function infrastructureFromPlayerInfo(
       remaining: null,
       completeWorkTime: value.completeWorkTime || null,
     },
-    orders: value.stock.map((order) => ({
-      delivery: order.delivery.map((item) => ({
-        type: item.type === "DIAMOND_SHD" ? "originium_shard" : "material",
-        count: nonNegative(item.count),
-      })),
-      reward: {
-        type: order.gain.type === "DIAMOND" ? "orundum" : "lmd",
-        count: nonNegative(order.gain.count),
-      },
-    })),
+    orders: value.stock.map((order) => {
+      const isOrundumOrder = order.type === "O_DIAMOND"
+        || order.gain.type === "DIAMOND"
+        || order.delivery.some((item) => item.type === "DIAMOND_SHD");
+      return {
+        delivery: order.delivery.map((item) => ({
+          type: item.type === "DIAMOND_SHD" ? "originium_shard" as const : "material" as const,
+          count: nonNegative(item.count),
+        })),
+        reward: {
+          type: isOrundumOrder ? "orundum" as const : "lmd" as const,
+          count: nonNegative(order.gain.count),
+        },
+      };
+    }),
     lastUpdateTime: nonNegative(value.lastUpdateTime),
   }));
   const manufactures: SklandManufactureRoom[] = manufacturesInGameOrder(building.manufactures).map((value, index) => ({
