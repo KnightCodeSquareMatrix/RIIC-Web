@@ -309,10 +309,16 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   const [upgradeComparison, setUpgradeComparison] = useState<{ baseline: PublicPlanData; trial: PublicPlanData } | null>(null);
   const [scheduleVariant, setScheduleVariant] = useState<"baseline" | "trial">("baseline");
   const [loading, setLoading] = useState(false);
-  const [progressionAdjustmentActivity, setProgressionAdjustmentActivity] = useState({
+  const [progressionAdjustmentActivity, setProgressionAdjustmentActivity] = useState<{
+    active: boolean;
+    loading: boolean;
+    completed: boolean;
+    error: DisplayError | null;
+  }>({
     active: false,
     loading: false,
     completed: false,
+    error: null,
   });
   const [cliReady, setCliReady] = useState(false);
   const [taskQueueEnabled, setTaskQueueEnabled] = useState(false);
@@ -378,6 +384,12 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       setLoading(false);
       setApiError(displayError("AIC-PLAN-3004", message));
     },
+  });
+  const progressionAdjustmentTask = usePlanTask({
+    // 调整练度依赖尚未同步的本地 BOX，刷新后缺少上下文，不能冒充普通排班恢复。
+    storageKey: null,
+    onDone: () => undefined,
+    onFailed: () => undefined,
   });
 
   useEffect(() => {
@@ -999,7 +1011,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       boxSource,
     },
   ): Promise<boolean> {
-    setProgressionAdjustmentActivity({ active: false, loading: false, completed: false });
+    setProgressionAdjustmentActivity({ active: false, loading: false, completed: false, error: null });
     if (!planInput.operbox) return false;
     if (planRetryCountdown > 0) return false;
     planClickAtRef.current = performance.now();
@@ -1061,10 +1073,10 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     if (!operbox) throw new Error(locale === "en" ? "Import operator data first." : "请先导入干员数据。");
     if (!trialOperbox.some((entry) => entry.own)) throw new Error(locale === "en" ? "Select at least one operator for the simulation." : "请至少选择一名干员进行试算。");
     const normalizedTrialOperbox = normalizeOperboxEntries(trialOperbox);
-    setProgressionAdjustmentActivity({ active: true, loading: true, completed: false });
+    setProgressionAdjustmentActivity({ active: true, loading: true, completed: false, error: null });
     trackTelemetry({ type: "interaction", name: "upgrade_simulation_submit", page: "calculator" });
     try {
-      const response = await computePlan({
+      const payload = {
         layout,
         operbox: normalizedTrialOperbox,
         sourceName: locale === "en" ? "Progression adjustment Box.json" : "调整练度 Box.json",
@@ -1072,16 +1084,26 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
         boxSource: upgradeSimulationBoxSource(boxSource),
         rotation: rotationProfile,
         fiammetta_enable: effectiveFiammettaSetting(trialOperbox, rotationProfile, fiammettaEnabled),
-      });
+      };
+      const response = taskQueueEnabled
+        ? await progressionAdjustmentTask.run(await submitPlanTask(payload))
+        : await computePlan(payload);
       // 求解成功后再同步，避免失败的试算覆盖用户当前 BOX。
       setOperbox(normalizedTrialOperbox);
       setFileName(locale === "en" ? "Progression-adjusted Box" : "调整练度后的 Box");
       setInputMode("manual");
-      setProgressionAdjustmentActivity({ active: true, loading: false, completed: true });
+      setProgressionAdjustmentActivity({ active: true, loading: false, completed: true, error: null });
       trackTelemetry({ type: "interaction", name: "upgrade_simulation_response", page: "calculator" });
       return response;
     } catch (error) {
-      setProgressionAdjustmentActivity({ active: true, loading: false, completed: false });
+      const normalized = toDisplayError(error, locale === "en" ? "Progression adjustment failed. Please try again later." : "调整练度试算失败，请稍后重试。");
+      setProgressionAdjustmentActivity({
+        active: true,
+        loading: false,
+        completed: false,
+        // 弹窗保留原始错误并允许重新提交；Live Activity 不触发普通排班的重试入口。
+        error: { ...normalized, retryable: false },
+      });
       throw error;
     }
   }
@@ -1623,6 +1645,11 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
 
   async function handleRetry() {
     if (planRetryCountdown > 0) return;
+    if (progressionAdjustmentActivity.active && progressionAdjustmentTask.pollStopped) {
+      setProgressionAdjustmentActivity((current) => ({ ...current, loading: true, error: null }));
+      progressionAdjustmentTask.resume();
+      return;
+    }
     if (apiError?.code === "AIC-PLAN-3001") {
       await runPlanForLayout(layout, true);
       return;
@@ -1648,21 +1675,33 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   const statusError = inputError && !setupOpen
     ? displayError(inputErrorCode, inputError)
     : apiError ?? storageNotice;
+  const progressionAdjustmentPollError = progressionAdjustmentActivity.active
+    && progressionAdjustmentTask.pollStopped
+    && progressionAdjustmentTask.error
+    ? displayError("AIC-PLAN-3004", progressionAdjustmentTask.error, true)
+    : null;
   const activity = usePlanActivity({
-    loading: progressionAdjustmentActivity.active ? progressionAdjustmentActivity.loading : loading,
-    error: progressionAdjustmentActivity.active ? null : statusError,
+    loading: progressionAdjustmentActivity.active
+      ? progressionAdjustmentActivity.loading && !progressionAdjustmentTask.pollStopped
+      : loading,
+    error: progressionAdjustmentActivity.active
+      ? progressionAdjustmentPollError ?? progressionAdjustmentActivity.error
+      : statusError,
     completed: progressionAdjustmentActivity.active ? progressionAdjustmentActivity.completed : planTask.status === "done",
     kind: progressionAdjustmentActivity.active ? "progression-adjustment" : "schedule",
-    queued: loading && (
-      !progressionAdjustmentActivity.active && (
+    queued: progressionAdjustmentActivity.active
+      ? progressionAdjustmentActivity.loading && (
+          progressionAdjustmentTask.status === "buffered"
+          || progressionAdjustmentTask.status === "pending"
+        )
+      : loading && (
         planTask.status === "buffered"
         || planTask.status === "pending"
         || planTask.pollStopped
-      )
-    ),
-    queuePosition: planTask.queuePosition,
-    etaSeconds: planTask.etaSeconds,
-    buffered: planTask.status === "buffered",
+      ),
+    queuePosition: progressionAdjustmentActivity.active ? progressionAdjustmentTask.queuePosition : planTask.queuePosition,
+    etaSeconds: progressionAdjustmentActivity.active ? progressionAdjustmentTask.etaSeconds : planTask.etaSeconds,
+    buffered: progressionAdjustmentActivity.active ? progressionAdjustmentTask.status === "buffered" : planTask.status === "buffered",
   });
   useEffect(() => {
     if (page !== "calculator" || !result?.maa) return;
