@@ -7,11 +7,6 @@ on:
         description: Immutable release artifact produced by the post-merge build job
         required: true
         type: string
-      allow_workflow_dispatch:
-        description: Allow an explicitly requested post-merge workflow dispatch to deploy
-        required: false
-        default: false
-        type: boolean
 
 permissions:
   contents: read
@@ -19,8 +14,6 @@ permissions:
 jobs:
   deploy:
     if: >-
-      (github.event_name == 'push' ||
-      (github.event_name == 'workflow_dispatch' && inputs.allow_workflow_dispatch)) &&
       (github.ref_name == 'main' || github.ref_name == 'develop') &&
       vars.DEPLOY_AUTOMATION_ENABLED == '1' &&
       github.repository == 'KnightCodeSquareMatrix/RIIC-Web'
