@@ -235,7 +235,7 @@ test("Skland owned-data deletion removes only matching runs and feedback without
     else process.env.BETA_BUSINESS_DB_ENABLED = previousBusinessDbEnabled;
   });
 
-  const { deleteFeedbackArtifacts, deletePlanRunArtifacts, deleteSklandOwnedData, maintainPrivateRecords, readFeedbackReproduction, readPlanReproduction, runPlan, saveFeedback } = await import("./infra.ts");
+  const { deleteFeedbackArtifacts, deletePlanRunArtifacts, deleteSklandOwnedData, maintainPrivateRecords, readFeedbackReproduction, readPlanReproduction, runPlan, saveFeedback, savePlanFailureArtifact } = await import("./infra.ts");
 
   const planInput = {
     layout: {
@@ -281,7 +281,64 @@ test("Skland owned-data deletion removes only matching runs and feedback without
     assert.ok(files.includes(deferArtifacts ? "run-envelope.json" : "result.json"));
     const storedOperbox = JSON.parse(await readFile(path.join(runsRoot, runName!, "operbox.json"), "utf8"));
     assert.equal(storedOperbox[0].name, "阿米娅");
+    if (deferArtifacts) {
+      const fullTaskOperbox = [
+        ...planInput.operbox,
+        {
+          id: "char_unowned_deferred_fixture",
+          name: "Unowned deferred fixture operator",
+          own: false,
+          level: 1,
+          elite: 0,
+          potential: 1,
+          rarity: 4,
+        },
+      ];
+      await savePlanFailureArtifact({
+        ...planInput,
+        diagnosticId: failed.runId!,
+        layout: planInput.layout as BaseBlueprint,
+        operbox: fullTaskOperbox,
+        rotation: "abc_12_6_6",
+        errorCode: "AIC-PLAN-3004",
+      });
+      const taskSnapshot = await readPlanReproduction(failed.runId!);
+      assert.equal(taskSnapshot.operbox?.length, fullTaskOperbox.length);
+      assert.equal(taskSnapshot.operbox?.[1]?.own, false);
+    }
   }
+  const workerFailureDiagnosticId = "12121212-1212-4212-8212-121212121212";
+  const workerFailureOperbox = [
+    ...planInput.operbox,
+    {
+      id: "char_unowned_fixture",
+      name: "Unowned fixture operator",
+      own: false,
+      level: 1,
+      elite: 0,
+      potential: 1,
+      rarity: 4,
+    },
+  ];
+  const workerFailureArtifact = await savePlanFailureArtifact({
+    diagnosticId: workerFailureDiagnosticId,
+    layout: planInput.layout as BaseBlueprint,
+    operbox: workerFailureOperbox,
+    sourceName: "worker failure fixture",
+    rotation: "main_backup_12_12",
+    fiammettaEnable: false,
+    dataOwnerTag: targetOwnerTag,
+    errorCode: "AIC-SYS-5000",
+  });
+  assert.equal(workerFailureArtifact?.key, workerFailureDiagnosticId);
+  const workerFailureReproduction = await readPlanReproduction(workerFailureDiagnosticId);
+  assert.equal(workerFailureReproduction.available, true);
+  assert.equal(workerFailureReproduction.operbox?.length, workerFailureOperbox.length);
+  assert.equal(workerFailureReproduction.operbox?.[1]?.own, false);
+  assert.equal(workerFailureReproduction.rotationCount, 2);
+  assert.equal(workerFailureReproduction.fiammettaEnabled, false);
+  assert.equal(workerFailureReproduction.error, "AIC-SYS-5000");
+
   const reproduction = await readPlanReproduction(reproductionDiagnosticId);
   assert.equal(reproduction.available, true);
   assert.equal(reproduction.rotation, "abc_12_6_6");
@@ -418,7 +475,7 @@ test("Skland owned-data deletion removes only matching runs and feedback without
   await utimes(unrelatedRun, retainedAt, retainedAt);
   await maintainPrivateRecords();
   await rm(legacyPurgeMarker, { force: true });
-  assert.deepEqual(await deleteSklandOwnedData([targetOwnerTag]), { runs: 1, feedback: 3 });
+  assert.deepEqual(await deleteSklandOwnedData([targetOwnerTag]), { runs: 2, feedback: 3 });
   await assert.rejects(stat(targetRun), { code: "ENOENT" });
   await assert.rejects(stat(linkedFeedback), { code: "ENOENT" });
   await assert.rejects(stat(ownedFeedback), { code: "ENOENT" });
