@@ -2,6 +2,23 @@
 
 All notable changes to RIIC-Web are documented in this file.
 
+## [0.4.3] - 2026-09-03
+
+### Added
+
+- English localization now covers the workbench, help, account, administration, legal, and Skland status interfaces.
+- Training advice cards show the infrastructure skills associated with each recommended operator, including keyboard-accessible tooltips and target-skill highlighting.
+
+### Fixed
+
+- The desktop sidebar preserves its expanded state across workbench navigation and hard reloads without causing a hydration mismatch.
+- English Skland status labels retain the corrected Orundum display for Originium Shard trading orders.
+
+### For contributors
+
+- Chromium, WebKit, production-profile, PostgreSQL, build-output, and bilingual bundle-budget coverage gate the release.
+- `package.json` and `package-lock.json` record release `0.4.3`.
+
 ## [0.4.1] - 2026-09-03
 
 ### Fixed

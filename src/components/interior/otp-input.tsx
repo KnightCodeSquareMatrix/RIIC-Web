@@ -18,6 +18,7 @@ import {
   type Ref,
 } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { useLanguageDemo } from "@/language-demo";
 
 export type OtpStatus = "idle" | "error" | "success";
 export type OtpInputHandle = { clear: () => void; focus: () => void };
@@ -170,7 +171,7 @@ export function OtpInput({
   errorMessage = "",
   successMessage = "",
   hint = "",
-  label = "邮箱验证码",
+  label,
   disabled = false,
   autoFocus = false,
   className = "",
@@ -190,6 +191,8 @@ export function OtpInput({
   ref?: Ref<OtpInputHandle>;
 }) {
   const reduced = useReducedMotion();
+  const { locale } = useLanguageDemo();
+  const resolvedLabel = label ?? (locale === "en" ? "Email verification code" : "邮箱验证码");
   const statusId = useId();
   const { chars, focusedIndex, focusAt, clear, getCellProps } = useOtpInput(length, disabled, onChange, onComplete);
   const error = status === "error";
@@ -203,7 +206,7 @@ export function OtpInput({
     <div className={`flex min-w-0 flex-col ${className}`}>
       <motion.div
         role="group"
-        aria-label={label}
+        aria-label={resolvedLabel}
         className="flex justify-center gap-1.5 sm:gap-2"
         initial={false}
         variants={{ idle: { x: 0 }, wrong: { x: [0, -5, 4, -3, 0] } }}
@@ -216,7 +219,7 @@ export function OtpInput({
             <div key={index} className={`relative size-11 shrink min-[420px]:size-12 ${index === 3 ? "ml-1.5 sm:ml-3" : ""}`}>
               <input
                 {...getCellProps(index)}
-                aria-label={`${label}第 ${index + 1} 位，共 ${length} 位`}
+                aria-label={locale === "en" ? `${resolvedLabel}, digit ${index + 1} of ${length}` : `${resolvedLabel}第 ${index + 1} 位，共 ${length} 位`}
                 aria-invalid={error || undefined}
                 aria-describedby={message ? statusId : undefined}
                 className={`font-number size-11 rounded-lg border-2 text-center text-base text-transparent caret-transparent outline-none transition-[background-color,border-color,box-shadow] duration-150 min-[420px]:size-12 focus-visible:ring-3 focus-visible:ring-ring/30 disabled:opacity-50 ${

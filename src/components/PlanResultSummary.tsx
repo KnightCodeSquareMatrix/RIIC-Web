@@ -14,7 +14,7 @@ import { estimateDailyProduction, type DailyProductionUnavailableReason } from "
 import { dailyProductionGroups, type DailyProductionGroup, type ProductionDetailProduct } from "@/daily-production-presentation";
 import { manufacturePoolReady } from "@/efficiency";
 import { cn } from "@/lib/utils";
-import { useLanguageDemo } from "@/language-demo";
+import { demoOperatorName, useLanguageDemo } from "@/language-demo";
 
 const EN_PRODUCT_LABELS: Record<string, string> = { experience: "Experience", "lmd-orders": "LMD", gold: "Pure Gold", orundum: "Orundum", shards: "Originium Shards" };
 function productLabel(product: { id: string; label: string }, en: boolean) { return en ? EN_PRODUCT_LABELS[product.id] ?? product.label : product.label; }
@@ -271,12 +271,12 @@ export function PlanResultSummary({
               className="h-11 justify-start px-0 text-xs font-medium text-[#313131]/58 hover:text-[#313131]"
               data-plan-performance-feedback
               disabled={feedbackDisabled}
-              title={feedbackDisabled ? "全角色导入为体验数据，不能提交反馈" : undefined}
+              title={feedbackDisabled ? (en ? "The full-roster sample cannot submit feedback" : "全角色导入为体验数据，不能提交反馈") : undefined}
               onClick={requestPerformanceFeedback}
             >
               {en ? "Report solve performance" : "反馈本次求解速度"}
             </Button>
-            {feedbackDisabled ? <p className="mt-1 text-xs text-[#313131]/55">全角色导入为体验数据，不能提交反馈。</p> : null}
+            {feedbackDisabled ? <p className="mt-1 text-xs text-[#313131]/55">{en ? "The full-roster sample cannot submit feedback." : "全角色导入为体验数据，不能提交反馈。"}</p> : null}
           </div>
         </div>
       </Drawer>
@@ -342,6 +342,7 @@ function ProductionDetails({ productGroups, en }: { productGroups: DailyProducti
 
 function EfficiencyDetails({ profile, rotation, layout, metrics, productGroups, en }: { profile?: UserProfile; rotation?: RotationJson; layout: BaseBlueprint; metrics: Array<{ kind: RotationMetricKind; label: string; value: number; baseline: number | undefined }>; productGroups: DailyProductionGroup[]; en: boolean }) {
   const shouldReduceMotion = useReducedMotion();
+  const { locale } = useLanguageDemo();
   const summary = profile?.summary;
   const domains = profile?.domains ?? [];
   return (
@@ -358,7 +359,7 @@ function EfficiencyDetails({ profile, rotation, layout, metrics, productGroups, 
         })}
       </div>
       {summary ? <dl className="mt-4 flex flex-wrap gap-x-4 gap-y-1 border-y border-border/70 py-2 text-xs" aria-label={en ? "Account readiness" : "账号准备度"}><div className="flex gap-1"><dt className="text-muted-foreground">{en ? "Candidates" : "候选干员"}</dt><dd className="font-number font-semibold">{en ? "Trade" : "贸易"} {summary.trade_pool_ready} · {en ? "Factory" : "制造"} {manufacturePoolReady(summary) ?? "—"}</dd></div><div className="flex gap-1"><dt className="text-muted-foreground">{en ? "Control" : "中枢"}</dt><dd className="font-number font-semibold">Lv.{layout.rooms.find((room) => room.kind === "control_center")?.level ?? "—"}</dd></div><div className="flex gap-1"><dt className="text-muted-foreground">{en ? "Shifts" : "班次"}</dt><dd className="font-number font-semibold">{rotation?.shifts.length ?? 0}</dd></div><div className="flex gap-1"><dt className="text-muted-foreground">{en ? "Available" : "可用干员"}</dt><dd className="font-number font-semibold">{summary.owned} / {en ? "upgrade" : "进阶"} {summary.tier_up_owned}</dd></div></dl> : null}
-      {domains.length ? <div className="mt-5 border-t border-border/70 pt-4"><h3 className="text-sm font-semibold">{en ? "Facility team improvements" : "设施组合提升空间"}</h3><div className="mt-2 grid gap-1">{[...domains].sort((a, b) => ({ critical: 0, warn: 1, ok: 2 })[a.severity] - ({ critical: 0, warn: 1, ok: 2 })[b.severity]).map((domain) => <div key={domain.id} className="grid gap-2 border-b border-border/60 py-3 text-xs sm:grid-cols-[minmax(0,1fr)_auto]" data-domain-state={domain.severity}><div className="min-w-0"><strong className="block truncate">{domain.label}</strong><span className="mt-0.5 block text-muted-foreground">{en ? "Current operators: " : "当前干员："}{domain.current.operators.length ? domain.current.operators.join(" / ") : (en ? "No available team" : "暂无可用组合")}</span></div><div className="flex items-center justify-between gap-2 sm:block sm:text-right"><span className="tabular-nums">{domainComparison(domain.gap_ratio, en)}</span><span className={cn("ml-2 px-1.5 py-0.5 font-semibold", severityClass(domain.severity))}>{domainStatus(domain.severity, en)}</span></div></div>)}</div></div> : null}
+      {domains.length ? <div className="mt-5 border-t border-border/70 pt-4"><h3 className="text-sm font-semibold">{en ? "Facility team improvements" : "设施组合提升空间"}</h3><div className="mt-2 grid gap-1">{[...domains].sort((a, b) => ({ critical: 0, warn: 1, ok: 2 })[a.severity] - ({ critical: 0, warn: 1, ok: 2 })[b.severity]).map((domain) => <div key={domain.id} className="grid gap-2 border-b border-border/60 py-3 text-xs sm:grid-cols-[minmax(0,1fr)_auto]" data-domain-state={domain.severity}><div className="min-w-0"><strong className="block truncate">{domain.label}</strong><span className="mt-0.5 block text-muted-foreground">{en ? "Current operators: " : "当前干员："}{domain.current.operators.length ? domain.current.operators.map((name) => demoOperatorName(name, locale)).join(" / ") : (en ? "No available team" : "暂无可用组合")}</span></div><div className="flex items-center justify-between gap-2 sm:block sm:text-right"><span className="tabular-nums">{domainComparison(domain.gap_ratio, en)}</span><span className={cn("ml-2 px-1.5 py-0.5 font-semibold", severityClass(domain.severity))}>{domainStatus(domain.severity, en)}</span></div></div>)}</div></div> : null}
       {profile?.flags.length || profile?.narration_hints.length ? <div className="mt-5 flex flex-wrap gap-1.5 border-t border-border/70 pt-4">{[...(profile?.flags ?? []), ...(profile?.narration_hints ?? [])].map((flag) => <span key={flag} className="bg-muted px-2 py-1 text-xs text-muted-foreground">{flag}</span>)}</div> : null}
     </section>
   );

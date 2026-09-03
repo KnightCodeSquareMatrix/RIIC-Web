@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useLanguageDemo } from "@/language-demo";
 
 interface PaginationProps {
   page: number;
@@ -14,6 +15,8 @@ interface PaginationProps {
 }
 
 export function Pagination({ page, pageCount, onPageChange }: PaginationProps) {
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
   const [draft, setDraft] = useState(String(page));
 
   useEffect(() => setDraft(String(page)), [page]);
@@ -32,7 +35,7 @@ export function Pagination({ page, pageCount, onPageChange }: PaginationProps) {
   return (
     <div
       className="mx-auto flex w-full max-w-md items-center justify-between gap-2 sm:w-auto sm:max-w-none sm:justify-center"
-      aria-label="分页"
+      aria-label={en ? "Pagination" : "分页"}
     >
       <Button
         type="button"
@@ -40,11 +43,11 @@ export function Pagination({ page, pageCount, onPageChange }: PaginationProps) {
         size="sm"
         disabled={page <= 1}
         onClick={() => onPageChange(page - 1)}
-        aria-label="上一页"
+        aria-label={en ? "Previous page" : "上一页"}
         className="shrink-0"
       >
         <ChevronLeft aria-hidden="true" />
-        上一页
+        {en ? "Previous" : "上一页"}
       </Button>
       <div className="flex min-w-0 items-center justify-center gap-1">
         <Input
@@ -60,7 +63,7 @@ export function Pagination({ page, pageCount, onPageChange }: PaginationProps) {
               event.currentTarget.blur();
             }
           }}
-          aria-label="当前页，可输入页码跳转"
+          aria-label={en ? "Current page. Enter a page number to jump" : "当前页，可输入页码跳转"}
           className="w-12 px-0 text-center [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
         />
         <span className="shrink-0 text-sm text-muted-foreground">
@@ -73,10 +76,10 @@ export function Pagination({ page, pageCount, onPageChange }: PaginationProps) {
         size="sm"
         disabled={page >= pageCount}
         onClick={() => onPageChange(page + 1)}
-        aria-label="下一页"
+        aria-label={en ? "Next page" : "下一页"}
         className="shrink-0"
       >
-        下一页
+        {en ? "Next" : "下一页"}
         <ChevronRight aria-hidden="true" />
       </Button>
     </div>

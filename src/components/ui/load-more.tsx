@@ -11,6 +11,7 @@ import { motion, useReducedMotion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
+import { useLanguageDemo } from "@/language-demo";
 
 type LoadMoreStatus = "idle" | "loading" | "error" | "end";
 
@@ -37,6 +38,8 @@ export function LoadMore({
   const autoRunsRef = useRef(0);
   const mountedRef = useRef(true);
   const reducedMotion = useReducedMotion();
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
   const status: LoadMoreStatus = hasMore ? phase : "end";
 
   useEffect(() => {
@@ -76,10 +79,10 @@ export function LoadMore({
   }, [auto, hasMore, load, rootMargin]);
 
   const defaultLabels: Record<LoadMoreStatus, string> = {
-    idle: "加载更多",
-    loading: "正在加载",
-    error: "加载失败，点击重试",
-    end: "已显示全部结果",
+    idle: en ? "Load more" : "加载更多",
+    loading: en ? "Loading" : "正在加载",
+    error: en ? "Load failed. Select to retry" : "加载失败，点击重试",
+    end: en ? "All results shown" : "已显示全部结果",
   };
   const presentation = {
     idle: { label: labels?.idle ?? defaultLabels.idle, icon: ChevronDown },

@@ -6,6 +6,7 @@ import { RichTextStatic } from "@/components/RichTextStatic";
 import { parseRichText, type RichTextNode } from "@/components/skill-query/rich-text";
 import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import termCatalogJson from "@/generated/arkntools/term-catalog.json" with { type: "json" };
+import { useLanguageDemo } from "@/language-demo";
 
 type TermRecord = { id: string; name: string; desc: string; descText: string };
 const TERM_CATALOG = termCatalogJson as Record<string, TermRecord>;
@@ -69,7 +70,9 @@ function renderHoverNodes(nodes: readonly RichTextNode[]): ReactNode {
 
 /** 仅用于紧凑 tooltip：悬停或聚焦彩色词条时就地显示详情。 */
 export function RichTextHoverTerms({ text }: { text: string }) {
+  const { locale } = useLanguageDemo();
   const nodes = useMemo(() => parseRichText(text), [text]);
+  if (locale === "en") return <RichTextStatic text={text} />;
   return <span className="whitespace-pre-line">{renderHoverNodes(nodes)}</span>;
 }
 
@@ -82,11 +85,12 @@ function BuildingTermDialog({
   onTermOpen: (id: string) => void;
   onClose: () => void;
 }) {
+  const { locale } = useLanguageDemo();
   return (
     <Dialog open={termStack.length > 0} onOpenChange={(next) => { if (!next) onClose(); }}>
       <DialogContent>
         <DialogHeader className="pb-0 sm:pb-0">
-          <DialogTitle>基建词条</DialogTitle>
+          <DialogTitle>{locale === "en" ? "Infrastructure terms" : "基建词条"}</DialogTitle>
         </DialogHeader>
         <DialogBody className="gap-3">
           {termStack.map((id) => {
@@ -113,8 +117,11 @@ export function RichTextInteractive({
   text: string;
   onTermOpen?: (id: string) => void;
 }) {
+  const { locale } = useLanguageDemo();
   const [termStack, setTermStack] = useState<string[]>([]);
   const nodes = useMemo(() => parseRichText(text), [text]);
+
+  if (locale === "en") return <RichTextStatic text={text} />;
 
   const openTerm = (id: string) => {
     if (onTermOpen) {

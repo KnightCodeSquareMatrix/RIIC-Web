@@ -1,8 +1,11 @@
+"use client";
+
 import { ChevronLeft, ChevronRight, MoreHorizontal } from "lucide-react";
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
+import { useLanguageDemo } from "@/language-demo";
 
 function Pagination({ className, ...props }: React.ComponentProps<"nav">) {
   return (
@@ -46,6 +49,7 @@ function PaginationLink({ className, isActive, size = "icon", ...props }: Pagina
 }
 
 function PaginationPrevious({ className, ...props }: React.ComponentProps<typeof PaginationLink>) {
+  const { locale } = useLanguageDemo();
   return (
     <PaginationLink
       aria-label="Go to previous page"
@@ -54,12 +58,13 @@ function PaginationPrevious({ className, ...props }: React.ComponentProps<typeof
       {...props}
     >
       <ChevronLeft aria-hidden="true" />
-      <span>上一页</span>
+      <span>{locale === "en" ? "Previous" : "上一页"}</span>
     </PaginationLink>
   );
 }
 
 function PaginationNext({ className, ...props }: React.ComponentProps<typeof PaginationLink>) {
+  const { locale } = useLanguageDemo();
   return (
     <PaginationLink
       aria-label="Go to next page"
@@ -67,13 +72,14 @@ function PaginationNext({ className, ...props }: React.ComponentProps<typeof Pag
       className={cn("gap-1 pr-2.5", className)}
       {...props}
     >
-      <span>下一页</span>
+      <span>{locale === "en" ? "Next" : "下一页"}</span>
       <ChevronRight aria-hidden="true" />
     </PaginationLink>
   );
 }
 
 function PaginationEllipsis({ className, ...props }: React.ComponentProps<"span">) {
+  const { locale } = useLanguageDemo();
   return (
     <span
       aria-hidden
@@ -81,7 +87,7 @@ function PaginationEllipsis({ className, ...props }: React.ComponentProps<"span"
       {...props}
     >
       <MoreHorizontal className="size-4" />
-      <span className="sr-only">更多页面</span>
+      <span className="sr-only">{locale === "en" ? "More pages" : "更多页面"}</span>
     </span>
   );
 }
