@@ -1,5 +1,29 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator } from "@playwright/test";
 import { requestId, diagnosticId, expectUnifiedDialogTypography, expectUnifiedDialogAction, waitForOwnAnimations, planData, sampleData, authenticatedSklandSnapshot, productionHeavySklandSnapshot, primarySklandAccount, mockApis, openSklandOverview, seedPreferences, seedV4Session } from "./production-readiness.fixture";
+
+function relativeLuminance(cssColor: string) {
+  const channels = cssColor.match(/[\d.]+/g)?.slice(0, 3).map(Number);
+  if (!channels || channels.length !== 3) throw new Error(`Unsupported computed color: ${cssColor}`);
+  const [red, green, blue] = channels.map((channel) => {
+    const normalized = channel / 255;
+    return normalized <= 0.04045
+      ? normalized / 12.92
+      : ((normalized + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+}
+
+async function expectNonTextContrast(foreground: Locator, background: Locator) {
+  await expect.poll(async () => {
+    const [foregroundColor, backgroundColor] = await Promise.all([
+      foreground.evaluate((element) => getComputedStyle(element).color),
+      background.evaluate((element) => getComputedStyle(element).backgroundColor),
+    ]);
+    const brighter = Math.max(relativeLuminance(foregroundColor), relativeLuminance(backgroundColor));
+    const darker = Math.min(relativeLuminance(foregroundColor), relativeLuminance(backgroundColor));
+    return (brighter + 0.05) / (darker + 0.05);
+  }).toBeGreaterThanOrEqual(3);
+}
 
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/auth/get-session", (route) => route.fulfill({
@@ -10,6 +34,84 @@ test.beforeEach(async ({ page }) => {
       user: { id: "test-user", name: "测试用户", email: "test@example.com", emailVerified: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
     }),
   }));
+});
+
+test("mobile dark mode keeps every non-QR Skland state legible from first paint", async ({ page }) => {
+  test.slow();
+  await page.addInitScript(() => {
+    const enableDarkMode = () => {
+      const root = document.documentElement;
+      if (!root) return false;
+      root.classList.add("dark");
+      return true;
+    };
+    if (!enableDarkMode()) {
+      const observer = new MutationObserver(() => {
+        if (!enableDarkMode()) return;
+        observer.disconnect();
+      });
+      observer.observe(document, { childList: true });
+    }
+  });
+  await page.emulateMedia({ colorScheme: "dark", forcedColors: "none" });
+  await page.setViewportSize({ width: 375, height: 812 });
+  await mockApis(page, { sklandConfigured: true });
+
+  let releaseQr!: () => void;
+  const qrGate = new Promise<void>((resolve) => {
+    releaseQr = resolve;
+  });
+  await page.route("**/api/skland/auth/qr", async (route) => {
+    await qrGate;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        data: {
+          scanId: "scan-login-dark-mobile",
+          scanUrl: "hypergryph://scan_login?scanId=scan-login-dark-mobile",
+          expiresInSeconds: 600,
+        },
+        requestId,
+      }),
+    });
+  });
+  await page.route("**/api/skland/auth/qr/status", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      success: true,
+      data: { status: "scanned" },
+      requestId,
+    }),
+  }));
+  await seedPreferences(page);
+  await page.goto("/skland");
+
+  await expect(page.locator("html")).toHaveClass(/dark/);
+  expect(page.viewportSize()).toEqual({ width: 375, height: 812 });
+  await expect(page.locator("[data-skland-page]")).toBeVisible();
+
+  const qrSurface = page.locator("[data-skland-qr-visual]");
+  await expect(qrSurface).toBeVisible({ timeout: 45_000 });
+  const expectStateContrast = async (state: "idle" | "loading" | "scanned") => {
+    const icon = qrSurface.locator(`[data-skland-login-status-icon="${state}"]`);
+    await expect(icon).toBeVisible({ timeout: state === "scanned" ? 10_000 : 5_000 });
+    await expectNonTextContrast(icon, qrSurface);
+    await page.emulateMedia({ colorScheme: "dark", forcedColors: "active" });
+    await expectNonTextContrast(icon, qrSurface);
+    await page.emulateMedia({ colorScheme: "dark", forcedColors: "none" });
+  };
+
+  await expectStateContrast("idle");
+  await page.getByRole("checkbox").nth(0).check();
+  await page.getByRole("checkbox").nth(1).check();
+  await expectStateContrast("loading");
+
+  releaseQr();
+  await expect(page.getByRole("img", { name: "森空岛登录二维码" })).toBeVisible();
+  await expectStateContrast("scanned");
 });
 
 test("Skland login exposes both methods and starts QR only after explicit consent", async ({ page }) => {
@@ -49,6 +151,7 @@ test("Skland login exposes both methods and starts QR only after explicit consen
     }),
   }));
   await seedPreferences(page);
+  await page.addInitScript(() => window.localStorage.setItem("infra-demo-locale", "zh"));
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
   await expect(page.locator("[data-skland-account-control]")).toHaveCount(0);
@@ -84,6 +187,16 @@ test("Skland login exposes both methods and starts QR only after explicit consen
   await expect(page.getByRole("link", { name: "本站隐私政策" }).first()).toHaveAttribute("href", "/privacy");
   await expect(page.getByText(/skland-kit/i)).toHaveCount(0);
 
+  await page.evaluate(() => document.documentElement.classList.add("dark"));
+  const qrVisual = page.locator("[data-skland-qr-visual]");
+  const qrImage = page.getByRole("img", { name: "森空岛登录二维码" });
+  await expect(qrVisual).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  await expect(qrVisual).toHaveCSS("forced-color-adjust", "none");
+  expect(await qrVisual.evaluate((element) => getComputedStyle(element).colorScheme)).toMatch(/\bonly\b.*\blight\b|\blight\b.*\bonly\b/);
+  await expect(qrImage.locator("path").nth(0)).toHaveAttribute("fill", "#FFFFFF");
+  await expect(qrImage.locator("path").nth(1)).toHaveAttribute("fill", "#000000");
+  await expect(qrImage).toBeVisible();
+
   for (const viewport of [
     { width: 390, height: 844 },
     { width: 768, height: 900 },
@@ -97,6 +210,101 @@ test("Skland login exposes both methods and starts QR only after explicit consen
     expect(qrBox?.width).toBeLessThanOrEqual(224);
   }
   expect(qrStartRequests).toBe(1);
+});
+
+test("Skland QR polling pauses while hidden or offline and resumes immediately", async ({ page, context }) => {
+  await mockApis(page, { sklandConfigured: true });
+  let pollRequests = 0;
+  await page.route("**/api/skland/auth/qr", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      success: true,
+      data: {
+        scanId: "scan-login-offline",
+        scanUrl: "hypergryph://scan_login?scanId=scan-login-offline",
+        expiresInSeconds: 600,
+      },
+      requestId,
+    }),
+  }));
+  await page.route("**/api/skland/auth/qr/status", (route) => {
+    pollRequests += 1;
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ success: true, data: { status: "waiting" }, requestId }),
+    });
+  });
+  await seedPreferences(page);
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Toggle Sidebar" }).click();
+  await openSklandOverview(page);
+  await page.getByRole("checkbox").nth(0).check();
+  await page.getByRole("checkbox").nth(1).check();
+  await expect(page.getByRole("img", { name: "森空岛登录二维码" })).toBeVisible();
+
+  await page.evaluate(() => {
+    Object.defineProperty(document, "hidden", { configurable: true, value: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await page.waitForTimeout(6_500);
+  expect(pollRequests).toBe(0);
+  await page.evaluate(() => {
+    Object.defineProperty(document, "hidden", { configurable: true, value: false });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await expect.poll(() => pollRequests, { timeout: 2_000 }).toBe(1);
+
+  await context.setOffline(true);
+  await page.waitForTimeout(6_500);
+  expect(pollRequests).toBe(1);
+
+  await context.setOffline(false);
+  await expect.poll(() => pollRequests, { timeout: 2_000 }).toBe(2);
+});
+
+test("Skland QR expires locally without polling after its deadline", async ({ page }) => {
+  await mockApis(page, { sklandConfigured: true });
+  let qrStartRequests = 0;
+  let pollRequests = 0;
+  await page.route("**/api/skland/auth/qr", (route) => {
+    qrStartRequests += 1;
+    const scanId = `scan-login-expiry-${qrStartRequests}`;
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        data: {
+          scanId,
+          scanUrl: `hypergryph://scan_login?scanId=${scanId}`,
+          expiresInSeconds: qrStartRequests === 1 ? 0.2 : 600,
+        },
+        requestId,
+      }),
+    });
+  });
+  await page.route("**/api/skland/auth/qr/status", (route) => {
+    pollRequests += 1;
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ success: true, data: { status: "waiting" }, requestId }),
+    });
+  });
+  await seedPreferences(page);
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Toggle Sidebar" }).click();
+  await openSklandOverview(page);
+  await page.getByRole("checkbox").nth(0).check();
+  await page.getByRole("checkbox").nth(1).check();
+
+  await expect.poll(() => qrStartRequests).toBe(2);
+  expect(pollRequests).toBe(0);
+  await expect(page.getByRole("img", { name: "森空岛登录二维码" })).toBeVisible();
 });
 
 test("credential import explains the risk, gates consent, recovers from errors, and clears secrets on success", async ({ page, context }) => {

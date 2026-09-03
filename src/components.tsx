@@ -1952,8 +1952,8 @@ export function IssueNoteModal({
         <DialogBody>
           <p className="text-[13px] leading-5 text-muted-foreground">
             {isPerformance
-              ? (en ? "This submits the diagnostic ID, solve time, rotation, layout, and your note. It does not include arbitrary rooms or the complete operator roster." : "将提交本次排班的诊断编号、求解耗时、换班方式、布局和你的说明；不会附带任意房间或完整干员数据。")
-              : (en ? "This submits the diagnostic ID, room name, current operators, and your note. It does not upload the complete roster or debug bundle again." : "将提交本次排班的诊断编号、房间名称、当前干员和你的说明；不会重复上传完整干员数据或调试包。")}
+              ? (en ? "This submits your note plus a private reproduction snapshot containing the diagnostic ID, solve time, base layout, operator BOX submitted for the plan, rotation setting, and Fiammetta setting. Only administrators can access it, and it is retained for up to 30 days." : "将提交你的说明，以及包含诊断编号、求解耗时、基建布局、本次排班提交的干员 Box、轮换设置和菲亚梅塔状态的私有复现快照；仅管理员可访问，最长保留 30 天。")
+              : (en ? "This submits the room issue and a private reproduction snapshot containing the base layout, operator BOX submitted for the plan, rotation setting, and Fiammetta setting. Only administrators can access it, and it is retained for up to 30 days." : "将提交房间问题，以及包含基建布局、本次排班提交的干员 Box、轮换设置和菲亚梅塔状态的私有复现快照；仅管理员可访问，最长保留 30 天。")}
           </p>
           <Textarea
             autoFocus
@@ -1970,7 +1970,7 @@ export function IssueNoteModal({
               onChange={(event) => setConsented(event.target.checked)}
               className="size-4"
             />
-            <span>{en ? `I confirm submitting the ${isPerformance ? "performance" : "schedule issue"} information above.` : <>我确认提交以上{isPerformance ? "性能" : "排班问题"}信息。</>}</span>
+            <span>{en ? `I consent to submitting the ${isPerformance ? "performance" : "schedule issue"} information and private reproduction snapshot described above.` : <>我同意提交以上{isPerformance ? "性能" : "排班问题"}信息和私有复现快照。</>}</span>
           </label>
         </DialogBody>
         <DialogFooter>
