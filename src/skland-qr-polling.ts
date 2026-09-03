@@ -8,6 +8,12 @@ interface SklandQrPollDelayOptions {
   retryAfterSeconds?: number;
 }
 
+interface RemainingSklandQrPollDelayOptions {
+  nextPollAt: number | null;
+  expiresAt: number;
+  now?: number;
+}
+
 export function nextSklandQrPollDelay({
   failedAttempts,
   expiresAt,
@@ -28,4 +34,17 @@ export function nextSklandQrPollDelay({
   const delayMs = Math.max(backoffMs, retryAfterMs);
 
   return delayMs < remainingMs ? delayMs : null;
+}
+
+export function remainingSklandQrPollDelay({
+  nextPollAt,
+  expiresAt,
+  now = Date.now(),
+}: RemainingSklandQrPollDelayOptions): number | null {
+  const remainingLifetimeMs = expiresAt - now;
+  if (remainingLifetimeMs <= 0) return null;
+  if (nextPollAt === null) return 0;
+
+  const remainingDelayMs = Math.max(0, nextPollAt - now);
+  return remainingDelayMs < remainingLifetimeMs ? remainingDelayMs : null;
 }

@@ -67,6 +67,16 @@ test("the ten-minute global quota that caused cross-account lockouts cannot retu
   assert.match(route, /enforceRateLimit\("skland-qr-account", website\.user\.id/);
 });
 
+test("QR status completion follows request cancellation before consuming the scan", async () => {
+  const route = await readFile(
+    new URL("../../app/api/skland/auth/qr/status/route.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(route, /pollScan\(scanId, request\.signal\)/);
+  assert.match(route, /finalizeSklandAuthentication\([\s\S]+request\.signal\)/);
+  assert.match(route, /setSklandAccountStoreCookies[\s\S]+request\.signal\.throwIfAborted\(\)[\s\S]+consumeScan\(scanId\)/);
+});
+
 test("skland-kit response messages identify expired stored credentials", () => {
   const error = new Error("【skland-kit】获取游戏绑定信息错误", {
     cause: { code: 10001, message: "用户未登录" },

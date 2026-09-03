@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useEffectEvent, useId, useRef, useState, type KeyboardEvent } from "react";
 import {
   ExternalLink,
   KeyRound,
@@ -18,7 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { buildSklandAppOpenUrl } from "@/skland-auth-url";
-import { nextSklandQrPollDelay } from "@/skland-qr-polling";
+import { nextSklandQrPollDelay, remainingSklandQrPollDelay } from "@/skland-qr-polling";
 import {
   currentSklandPolicyConsent,
   SklandPolicyConsent,
@@ -69,6 +69,7 @@ export function SklandLoginPanel({
   const createQrPromiseRef = useRef<Promise<void> | null>(null);
   const mountedRef = useRef(true);
   const consentReady = termsAccepted && privacyAccepted;
+  const notifyAuthenticated = useEffectEvent(onAuthenticated);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -136,6 +137,8 @@ export function SklandLoginPanel({
     let timer: number | null = null;
     let pollInFlight = false;
     let failedAttempts = 0;
+    let nextPollAt: number | null = null;
+    let activePollController: AbortController | null = null;
 
     const clearTimer = () => {
       if (timer === null) return;
@@ -145,26 +148,42 @@ export function SklandLoginPanel({
 
     const canPoll = () => !document.hidden && navigator.onLine && Date.now() < scanExpiresAt;
 
+    const armTimer = (delayMs: number) => {
+      clearTimer();
+      timer = window.setTimeout(() => {
+        timer = null;
+        nextPollAt = null;
+        void poll();
+      }, delayMs);
+    };
+
     const scheduleNext = (retryAfterSeconds?: number) => {
       clearTimer();
-      if (cancelled || !canPoll()) return;
+      if (cancelled || Date.now() >= scanExpiresAt) return;
       const delay = nextSklandQrPollDelay({
         failedAttempts,
         expiresAt: scanExpiresAt,
         retryAfterSeconds,
       });
-      if (delay === null) return;
-      timer = window.setTimeout(() => void poll(), delay);
+      if (delay === null) {
+        nextPollAt = null;
+        return;
+      }
+      nextPollAt = Date.now() + delay;
+      if (!canPoll()) return;
+      armTimer(delay);
     };
 
     const poll = async () => {
       clearTimer();
       if (cancelled || pollInFlight || !canPoll()) return;
       pollInFlight = true;
+      const controller = new AbortController();
+      activePollController = controller;
       let shouldContinue = true;
       let retryAfterSeconds: number | undefined;
       try {
-        const result = await pollSklandQr(scanId);
+        const result = await pollSklandQr(scanId, controller.signal);
         if (cancelled) return;
         failedAttempts = 0;
         if (
@@ -173,7 +192,8 @@ export function SklandLoginPanel({
           && result.accounts
           && result.activeAccountId
         ) {
-          onAuthenticated({
+          shouldContinue = false;
+          notifyAuthenticated({
             authenticated: true,
             configured: true,
             authMethods: { qr: true, credential: true },
@@ -189,7 +209,6 @@ export function SklandLoginPanel({
           setScanExpiresAt(null);
           setScanState("idle");
           setScanError(null);
-          shouldContinue = false;
           return;
         }
         if (result.status === "expired") {
@@ -202,13 +221,14 @@ export function SklandLoginPanel({
         setScanState(result.status === "scanned" ? "scanned" : "waiting");
         setScanError(null);
       } catch (error) {
-        if (cancelled) return;
+        if (cancelled || controller.signal.aborted) return;
         const detail = toDisplayError(error, "登录状态查询失败，将继续重试。");
         setScanError(`${detail.message}（${detail.code}${detail.requestId ? ` · ${detail.requestId}` : ""}）`);
         failedAttempts += 1;
         retryAfterSeconds = detail.retryAfterSeconds;
         shouldContinue = detail.retryable;
       } finally {
+        if (activePollController === controller) activePollController = null;
         pollInFlight = false;
         if (!cancelled && shouldContinue) scheduleNext(retryAfterSeconds);
       }
@@ -222,7 +242,16 @@ export function SklandLoginPanel({
         setScanState("expired");
         return;
       }
-      void poll();
+      const delay = remainingSklandQrPollDelay({ nextPollAt, expiresAt: scanExpiresAt });
+      if (delay === null) {
+        setScanId(null);
+        setScanState("expired");
+      } else if (delay === 0) {
+        nextPollAt = null;
+        void poll();
+      } else {
+        armTimer(delay);
+      }
     };
     const handleVisibilityChange = () => {
       if (document.hidden) clearTimer();
@@ -237,11 +266,12 @@ export function SklandLoginPanel({
     return () => {
       cancelled = true;
       clearTimer();
+      activePollController?.abort();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("online", resumePolling);
       window.removeEventListener("offline", handleOffline);
     };
-  }, [authMethod, onAuthenticated, scanExpiresAt, scanId]);
+  }, [authMethod, scanExpiresAt, scanId]);
 
   useEffect(() => {
     if (
