@@ -37,7 +37,6 @@ jobs:
       DEPLOY_APPROVED_SOLVER_SHA256: ${{ vars.DEPLOY_APPROVED_SOLVER_SHA256 }}
       DEPLOY_EXPECTED_REPOSITORY: KnightCodeSquareMatrix/RIIC-Web
       DEPLOY_RELEASE_HELPER_CONTRACT: "6"
-      DEPLOY_ARTIFACT_PARENT: ${{ runner.temp }}/riic-web-release-${{ github.run_id }}-${{ github.run_attempt }}
 
     steps:
       - name: Checkout verified commit
@@ -64,6 +63,7 @@ jobs:
           {
             printf 'DEPLOY_TREE_SHA=%s\n' "$deploy_tree_sha"
             printf 'SOURCE_DATE_EPOCH=%s\n' "$source_date_epoch"
+            printf 'DEPLOY_ARTIFACT_PARENT=%s\n' "$RUNNER_TEMP/riic-web-release-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           } >> "$GITHUB_ENV"
 
       - name: Validate deployment configuration
@@ -114,7 +114,7 @@ jobs:
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: ${{ inputs.artifact_name }}
-          path: ${{ env.DEPLOY_ARTIFACT_PARENT }}/download
+          path: ${{ runner.temp }}/riic-web-release-${{ github.run_id }}-${{ github.run_attempt }}/download
 
       - name: Validate and extract release artifact
         shell: bash
