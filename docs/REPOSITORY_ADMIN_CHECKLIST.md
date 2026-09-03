@@ -25,6 +25,8 @@ Only the personal-repository owner, `KnightCodeSquareMatrix`, can complete the a
 
 Ordinary pull requests do not run the post-merge quality workflow. A separate lightweight policy rejects every pull request to `main` unless its head is a `release/**` branch in this same repository. By default, that head commit must already be reachable from `develop`; a maintainer-applied `direct-main-release` label may explicitly waive only the ancestry check. External and ordinary feature PRs target `develop`. Every push produced by a merge into `develop` or `main` runs the full parallel quality gate before deployment.
 
+Roll this policy out in order so branch protection never waits for a status that the new workflow no longer emits: first remove the old PR-required `quality` status from `develop` (or use the repository-owner bypass for the migration PR), merge the workflow change to `develop`, and promote it to `main`. Only after `Main release policy` exists on `main` and has emitted `Release branch only` at least once should that lightweight status become required on `main`.
+
 ## Deployment configuration
 
 Create repository variable:
