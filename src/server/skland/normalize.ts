@@ -41,10 +41,11 @@ const CLUE_NAMES: Record<string, string> = {
 
 type FactoryProduct = SklandManufactureRoom["product"];
 
-// Skland's manufacture array reports rooms 3 and 4 opposite to the numbering shown in-game.
+// Match the in-game manufacture labels after swapping 4↔2, then 1↔2.
+// The first four upstream entries therefore map to displayed rooms as 3, 1, 4, 2.
 export function manufacturesInGameOrder<T>(rooms: readonly T[]): T[] {
   if (rooms.length < 4) return [...rooms];
-  return [rooms[0]!, rooms[1]!, rooms[3]!, rooms[2]!, ...rooms.slice(4)];
+  return [rooms[2]!, rooms[0]!, rooms[3]!, rooms[1]!, ...rooms.slice(4)];
 }
 
 function clamp(value: number, min: number, max: number): number {

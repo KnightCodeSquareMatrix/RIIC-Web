@@ -356,6 +356,37 @@ test("desktop sidebar state survives navigation and a hard reload without hydrat
   expect(hydrationErrors).toEqual([]);
 });
 
+test("desktop sidebar defaults open at 1280px and collapsed below it", async ({ page, context }) => {
+  await mockApis(page);
+  await seedPreferences(page);
+  await context.clearCookies();
+  const hydrationErrors: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error" && /hydration|server rendered html/i.test(message.text())) {
+      hydrationErrors.push(message.text());
+    }
+  });
+
+  const sidebar = page.locator('[data-slot="sidebar"]:not([data-mobile="true"])');
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/");
+  await expect(sidebar).toHaveAttribute("data-state", "expanded");
+
+  await page.setViewportSize({ width: 1279, height: 900 });
+  await page.reload();
+  await expect(sidebar).toHaveAttribute("data-state", "collapsed");
+
+  await context.addCookies([{ name: "sidebar_state", value: "true", domain: "127.0.0.1", path: "/" }]);
+  await page.reload();
+  await expect(sidebar).toHaveAttribute("data-state", "expanded");
+
+  await context.addCookies([{ name: "sidebar_state", value: "false", domain: "127.0.0.1", path: "/" }]);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.reload();
+  await expect(sidebar).toHaveAttribute("data-state", "collapsed");
+  expect(hydrationErrors).toEqual([]);
+});
+
 test("100% Skland match does not count fatigue-only notices as adjustments", async ({ page }) => {
   await mockApis(page, {
     sklandConfigured: true,
@@ -896,9 +927,10 @@ test("shared action buttons keep their geometry after WebKit interactions", asyn
   await expectButtonGeometryStable(planButton);
 });
 
-test("tooltips wait once and then open adjacent help instantly within the provider window", async ({ page, browserName }) => {
+test("tooltips wait once and then open adjacent help instantly within the provider window", async ({ page, browserName, context }) => {
   await mockApis(page);
   await seedPreferences(page);
+  await context.addCookies([{ name: "sidebar_state", value: "false", domain: "127.0.0.1", path: "/" }]);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
 

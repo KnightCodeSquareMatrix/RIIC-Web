@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PlanResultSummarySkeleton } from "@/components/PlanResultSummarySkeleton";
 
 import type { FactoryRecipe, TradeOrder } from "@/blueprint";
@@ -27,12 +28,14 @@ import type {
   BaseBlueprint,
   FeedbackData,
   MaaPlan,
+  OperBoxEntry,
   PublicPlanData,
   ShiftComparison,
 } from "@/types";
 
 const PlanResultSummary = lazy(() => loadClientFeature("planResultSummary").then((module) => ({ default: module.PlanResultSummary })));
 const ShortcutGuideDialog = lazy(() => loadClientFeature("sharedComponents").then((module) => ({ default: module.ShortcutGuideDialog })));
+const UpgradeSimulationDialog = lazy(() => import("@/components/UpgradeSimulationDialog").then((module) => ({ default: module.UpgradeSimulationDialog })));
 
 function DeferredResultLoading() {
   return <PlanResultSummarySkeleton />;
@@ -325,6 +328,7 @@ export interface InfraCalculatorProps {
   closestComparison: ShiftComparison | null;
   resultClearNotice: string | null;
   feedbackResult: FeedbackData | null;
+  operbox: OperBoxEntry[] | null;
   sampleLoading: boolean;
   loading: boolean;
   canRun: boolean;
@@ -354,6 +358,11 @@ export interface InfraCalculatorProps {
   onDismissOnboarding: () => void;
   onOpenSetup: () => void;
   onRun: () => void;
+  onSimulateUpgrades: (trialOperbox: OperBoxEntry[]) => Promise<PublicPlanData>;
+  upgradeComparison: { trial: PublicPlanData } | null;
+  scheduleVariant: "baseline" | "trial";
+  onScheduleVariantChange: (variant: "baseline" | "trial") => void;
+  onUpgradeTrialReady: (trial: PublicPlanData) => void;
   onCancelRun: () => void;
   onSetActiveShift: (shift: number) => void;
   onMarkIssue: (row: RoomRow) => void;
@@ -372,8 +381,9 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     activePlan, closestComparison,
     resultClearNotice,
     feedbackResult,
+    operbox,
     sampleLoading, loading, canRun, runCooldownSeconds, hasBox, hasPersonalBox, feedbackDisabledForSampleBox, plannerReady, websiteAuthenticated, showOnboarding, taskQueue, animatePlanEntrance, animateEmptyScheduleEntrance, onPlanEntranceConsumed, requiresAccount = false, accountControl,
-    onRunSampleTrial, onStartPersonalFlow, onDismissOnboarding, onOpenSetup, onRun, onCancelRun,
+    onRunSampleTrial, onStartPersonalFlow, onDismissOnboarding, onOpenSetup, onRun, onSimulateUpgrades, upgradeComparison, scheduleVariant, onScheduleVariantChange, onUpgradeTrialReady, onCancelRun,
     onSetActiveShift, onMarkIssue, onPerformanceIssue,
     onFactoryRecipeChange, onTradeOrderChange,
     onDownloadMaa,
@@ -550,7 +560,16 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                       {en ? "Cancel task" : "取消任务"}
                     </Button>
                   </div>
-                ) : <RunButton canRun={canRun} hasBox={hasBox} plannerReady={plannerReady} requiresAccount={requiresAccount} runCooldownSeconds={runCooldownSeconds} onRun={onRun} />}
+                ) : (
+                  <div className="flex min-w-0 items-center justify-end gap-2 max-sm:justify-self-end">
+                    {operbox && scheduleResult ? (
+                      <Suspense fallback={<Button type="button" variant="outline" size="sm" className="h-9 min-h-0 max-sm:h-11" disabled><FlaskConical />{en ? "Adjust progression" : "调整练度"}</Button>}>
+                        <UpgradeSimulationDialog operbox={operbox} baseline={result ?? scheduleResult} onSimulate={onSimulateUpgrades} onTrialReady={onUpgradeTrialReady} />
+                      </Suspense>
+                    ) : null}
+                    <RunButton canRun={canRun} hasBox={hasBox} plannerReady={plannerReady} requiresAccount={requiresAccount} runCooldownSeconds={runCooldownSeconds} onRun={onRun} />
+                  </div>
+                )}
               </div>
             ) : null}
           >
@@ -566,6 +585,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                     comparison={closestComparison}
                     durationMs={scheduleResult.durationMs}
                     planRevision={scheduleResult.diagnosticId}
+                    animationRevision={result?.diagnosticId ?? scheduleResult.diagnosticId}
                     animateEntrance={animatePlanEntrance}
                     onEntranceConsumed={onPlanEntranceConsumed}
                     onPerformanceIssue={onPerformanceIssue}
@@ -592,13 +612,25 @@ export function InfraCalculator(props: InfraCalculatorProps) {
             ) : rows.length > 0 ? <ScheduleBoard
               rows={rows}
               layout={layout}
-              planRevision={result?.diagnosticId}
+              planRevision={scheduleResult?.diagnosticId}
               currentMoraleByOperator={currentMoraleByOperator}
               activeShift={activeShift}
               shiftDirection={shiftDirection}
               activePlan={activePlan}
               searchQuery={operatorQuery}
               animateInitialView={!scheduleResult && animateEmptyScheduleEntrance}
+              viewControlsSlot={upgradeComparison ? (
+                <Tabs
+                  className="w-full sm:w-auto"
+                  value={scheduleVariant}
+                  onValueChange={(value) => onScheduleVariantChange(value as "baseline" | "trial")}
+                >
+                  <TabsList className="grid w-full grid-cols-2 sm:inline-flex sm:w-fit" aria-label={en ? "Schedule variant" : "排班方案切换"}>
+                    <TabsTrigger value="baseline">{en ? "Current plan" : "当前方案"}</TabsTrigger>
+                    <TabsTrigger value="trial">{en ? "Adjusted progression" : "调整练度方案"}</TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              ) : undefined}
               mobileActionsSlot={renderExportActions("mobile")}
               shiftInfoSlot={(
                 <div className="flex flex-wrap items-center justify-end gap-2 max-sm:w-full max-sm:justify-between" data-shift-actions>
@@ -611,8 +643,8 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                     </span>
                   ) : null}
                   <ShiftTabs
-                    maaJson={result?.maa}
-                    rotation={result?.rotation}
+                    maaJson={scheduleResult?.maa}
+                    rotation={scheduleResult?.rotation}
                     active={activeShift}
                     closest={closestComparison?.planIndex}
                     onChange={handleSetActiveShift}

@@ -15,9 +15,11 @@ import { useLanguageDemo } from "@/language-demo";
 const SUCCESS_SWEEP_COLOR = roomVisualFor("power").accent;
 
 export type ActivityPhase = "running" | "queued" | "success" | "error";
+export type ActivityKind = "schedule" | "progression-adjustment";
 
 export interface Activity {
   id: number;
+  kind: ActivityKind;
   phase: ActivityPhase;
   error: DisplayError | null;
   queuePosition?: number | null;
@@ -40,6 +42,7 @@ export function usePlanActivity({
   queuePosition = null,
   etaSeconds = null,
   buffered = false,
+  kind = "schedule",
 }: {
   loading: boolean;
   error: DisplayError | null;
@@ -49,6 +52,7 @@ export function usePlanActivity({
   queuePosition?: number | null;
   etaSeconds?: number | null;
   buffered?: boolean;
+  kind?: ActivityKind;
 }) {
   const [activity, setActivity] = useState<Activity | null>(null);
   const wasLoading = useRef(false);
@@ -59,6 +63,7 @@ export function usePlanActivity({
       sequence.current += 1;
       setActivity({
         id: sequence.current,
+        kind,
         phase: queued ? "queued" : "running",
         error: null,
         queuePosition,
@@ -75,13 +80,13 @@ export function usePlanActivity({
     } else if (!loading && wasLoading.current) {
       const id = sequence.current;
       setActivity(error
-        ? { id, phase: "error", error }
+        ? { id, kind, phase: "error", error }
         : completed
-          ? { id, phase: "success", error: null, queuePosition: null, etaSeconds: null }
+          ? { id, kind, phase: "success", error: null, queuePosition: null, etaSeconds: null }
           : null);
     }
     wasLoading.current = loading;
-  }, [buffered, completed, error, etaSeconds, loading, queued, queuePosition]);
+  }, [buffered, completed, error, etaSeconds, kind, loading, queued, queuePosition]);
 
   return activity;
 }
@@ -116,12 +121,17 @@ export function LiveActivity({ activity, onRetry, onCopyDiagnostic, retryCountdo
   }, [activity]);
 
   const diagnostic = activity?.error ? solverDiagnosticFor(activity.error, en) : null;
+  const progressionAdjustment = activity?.kind === "progression-adjustment";
   const label = activity?.phase === "running"
-    ? (en ? "Generating schedule" : "正在生成排班")
+    ? progressionAdjustment
+      ? (en ? "Adjusting progression" : "正在调整练度")
+      : (en ? "Generating schedule" : "正在生成排班")
     : activity?.phase === "queued"
       ? (en ? "Queued" : "正在排队")
     : activity?.phase === "success"
-      ? (en ? "Schedule generated" : "排班已生成")
+      ? progressionAdjustment
+        ? (en ? "Progression adjustment complete" : "调整练度已完成")
+        : (en ? "Schedule generated" : "排班已生成")
       : diagnostic?.title ?? activity?.error?.message ?? (en ? "Schedule generation failed" : "排班生成失败");
   const hidden = Boolean(
     activity && dismissed && dismissed.id === activity.id && dismissed.phase === activity.phase,
@@ -133,6 +143,7 @@ export function LiveActivity({ activity, onRetry, onCopyDiagnostic, retryCountdo
         <motion.aside
           key={activity.id}
           data-slot="live-activity"
+          data-activity-kind={activity.kind}
           data-activity-phase={activity.phase}
           data-activity-view="expanded"
           className={cn(
@@ -195,7 +206,9 @@ export function LiveActivity({ activity, onRetry, onCopyDiagnostic, retryCountdo
                   </span>
                 ) : activity.phase === "running" ? (
                   <span className="text-sm text-[#313131]/70">
-                    {en ? "Calling the scheduling service. Please wait." : "正在调用排班服务，请稍候。"}
+                    {progressionAdjustment
+                      ? (en ? "Re-solving with the adjusted operator roster. Please wait." : "正在使用调整后的干员练度重新求解，请稍候。")
+                      : (en ? "Calling the scheduling service. Please wait." : "正在调用排班服务，请稍候。")}
                     {activity.queuePosition != null ? (
                       <>
                         {en ? " Queue position: " : " 当前排队第 "}<strong className="font-semibold">{activity.queuePosition}</strong>{en ? ". Estimated wait: " : " 位，预计 "}<strong className="font-semibold">{formatDuration(activity.etaSeconds, en)}</strong>
@@ -204,7 +217,11 @@ export function LiveActivity({ activity, onRetry, onCopyDiagnostic, retryCountdo
                   </span>
                 ) : (
                   <span className={cn("text-xs", activity.phase === "error" ? "text-red-800/70" : "text-[#313131]/58")}>
-                    {activity.phase === "success" ? (en ? "The three-shift result is ready to view or export." : "三班结果已更新，可以查看或导出。") : `${activity.error?.code ?? "AIC-PLAN"}${activity.error?.requestId ? ` · ${activity.error.requestId}` : ""}`}
+                    {activity.phase === "success"
+                      ? progressionAdjustment
+                        ? (en ? "The adjusted schedule is ready for comparison." : "调整后的排班已生成，可以切换对比。")
+                        : (en ? "The three-shift result is ready to view or export." : "三班结果已更新，可以查看或导出。")
+                      : `${activity.error?.code ?? "AIC-PLAN"}${activity.error?.requestId ? ` · ${activity.error.requestId}` : ""}`}
                   </span>
                 )}
               </span>

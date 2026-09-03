@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { HelpBackToTop } from "@/components/help/HelpBackToTop";
 import { HelpFloatingNav } from "@/components/help/HelpFloatingNav";
 import { LanguageDemoSwitch, useLanguageDemo } from "@/language-demo";
 
@@ -44,6 +45,7 @@ export default function HelpLayout({ children }: { children: ReactNode }) {
         <a className="ml-auto whitespace-nowrap underline underline-offset-4 hover:text-foreground max-sm:ml-0 max-sm:w-full" href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">沪ICP备2026041492号</a>
       </footer>
 
+      <HelpBackToTop />
       <HelpFloatingNav />
     </main>
   );

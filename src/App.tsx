@@ -65,6 +65,7 @@ import {
   type OnboardingPreference,
 } from "./onboarding";
 import { normalizeOperboxEntries } from "./operbox-normalization";
+import { upgradeSimulationBoxSource } from "./upgrade-simulation";
 import { effectiveFiammettaSetting, resolvePlanPresentationLayout } from "./plan-presentation";
 import {
   applyLocalLayoutPatch,
@@ -305,7 +306,14 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   const [sampleLoading, setSampleLoading] = useState(false);
   const sampleTrialInFlightRef = useRef(false);
   const [result, setResult] = useState<PublicPlanData | null>(null);
+  const [upgradeComparison, setUpgradeComparison] = useState<{ baseline: PublicPlanData; trial: PublicPlanData } | null>(null);
+  const [scheduleVariant, setScheduleVariant] = useState<"baseline" | "trial">("baseline");
   const [loading, setLoading] = useState(false);
+  const [progressionAdjustmentActivity, setProgressionAdjustmentActivity] = useState({
+    active: false,
+    loading: false,
+    completed: false,
+  });
   const [cliReady, setCliReady] = useState(false);
   const [taskQueueEnabled, setTaskQueueEnabled] = useState(false);
   const [apiError, setApiError] = useState<DisplayError | null>(null);
@@ -380,11 +388,19 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     setLoading(Boolean(planTask.taskId));
   }, [planTask.taskId]);
 
-  // 公开排班结果只包含产品页面需要的效率、MAA 与轮换数据。
-  const scheduleResult = result;
+  // 调整练度试算不覆盖原求解结果；两份完整班表在此处切换展示。
+  const scheduleResult = scheduleVariant === "trial" && upgradeComparison?.baseline === result
+    ? upgradeComparison.trial
+    : result;
+  useEffect(() => {
+    if (upgradeComparison && upgradeComparison.baseline !== result) {
+      setUpgradeComparison(null);
+      setScheduleVariant("baseline");
+    }
+  }, [result, upgradeComparison]);
   const activePlan = scheduleResult?.maa.plans?.[activeShift];
   const activeRotationShift = scheduleResult?.rotation.shifts?.[activeShift];
-  const activeTrainingRoomShift = result?.trainingRoom?.shifts[activeShift];
+  const activeTrainingRoomShift = scheduleResult?.trainingRoom?.shifts[activeShift];
   const [baseRows, setBaseRows] = useState<RoomRow[]>([]);
   useEffect(() => {
     let cancelled = false;
@@ -983,6 +999,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       boxSource,
     },
   ): Promise<boolean> {
+    setProgressionAdjustmentActivity({ active: false, loading: false, completed: false });
     if (!planInput.operbox) return false;
     if (planRetryCountdown > 0) return false;
     planClickAtRef.current = performance.now();
@@ -1038,6 +1055,35 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
 
   async function handleRun() {
     await runPlanForLayout(layout);
+  }
+
+  async function handleSimulateUpgrades(trialOperbox: OperBoxEntry[]): Promise<PublicPlanData> {
+    if (!operbox) throw new Error(locale === "en" ? "Import operator data first." : "请先导入干员数据。");
+    if (!trialOperbox.some((entry) => entry.own)) throw new Error(locale === "en" ? "Select at least one operator for the simulation." : "请至少选择一名干员进行试算。");
+    const normalizedTrialOperbox = normalizeOperboxEntries(trialOperbox);
+    setProgressionAdjustmentActivity({ active: true, loading: true, completed: false });
+    trackTelemetry({ type: "interaction", name: "upgrade_simulation_submit", page: "calculator" });
+    try {
+      const response = await computePlan({
+        layout,
+        operbox: normalizedTrialOperbox,
+        sourceName: locale === "en" ? "Progression adjustment Box.json" : "调整练度 Box.json",
+        // 示例数据的替代 BOX 不能沿用 sample；森空岛来源则保留其数据归属标签。
+        boxSource: upgradeSimulationBoxSource(boxSource),
+        rotation: rotationProfile,
+        fiammetta_enable: effectiveFiammettaSetting(trialOperbox, rotationProfile, fiammettaEnabled),
+      });
+      // 求解成功后再同步，避免失败的试算覆盖用户当前 BOX。
+      setOperbox(normalizedTrialOperbox);
+      setFileName(locale === "en" ? "Progression-adjusted Box" : "调整练度后的 Box");
+      setInputMode("manual");
+      setProgressionAdjustmentActivity({ active: true, loading: false, completed: true });
+      trackTelemetry({ type: "interaction", name: "upgrade_simulation_response", page: "calculator" });
+      return response;
+    } catch (error) {
+      setProgressionAdjustmentActivity({ active: true, loading: false, completed: false });
+      throw error;
+    }
   }
 
   async function handleRunSampleTrial(): Promise<boolean> {
@@ -1603,13 +1649,16 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     ? displayError(inputErrorCode, inputError)
     : apiError ?? storageNotice;
   const activity = usePlanActivity({
-    loading,
-    error: statusError,
-    completed: planTask.status === "done",
+    loading: progressionAdjustmentActivity.active ? progressionAdjustmentActivity.loading : loading,
+    error: progressionAdjustmentActivity.active ? null : statusError,
+    completed: progressionAdjustmentActivity.active ? progressionAdjustmentActivity.completed : planTask.status === "done",
+    kind: progressionAdjustmentActivity.active ? "progression-adjustment" : "schedule",
     queued: loading && (
-      planTask.status === "buffered"
-      || planTask.status === "pending"
-      || planTask.pollStopped
+      !progressionAdjustmentActivity.active && (
+        planTask.status === "buffered"
+        || planTask.status === "pending"
+        || planTask.pollStopped
+      )
     ),
     queuePosition: planTask.queuePosition,
     etaSeconds: planTask.etaSeconds,
@@ -1646,6 +1695,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       closestComparison,
       resultClearNotice,
       feedbackResult,
+      operbox,
       sampleLoading,
       loading,
       canRun,
@@ -1693,6 +1743,16 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       onDismissOnboarding: dismissOnboarding,
       onOpenSetup: handleProtectedSetup,
       onRun: handleProtectedRun,
+      onSimulateUpgrades: handleSimulateUpgrades,
+      upgradeComparison: upgradeComparison?.baseline === result ? { trial: upgradeComparison.trial } : null,
+      scheduleVariant,
+      onScheduleVariantChange: setScheduleVariant,
+      onUpgradeTrialReady: (trial: PublicPlanData) => {
+        if (!result) return;
+        setUpgradeComparison({ baseline: result, trial });
+        setScheduleVariant("trial");
+        setActiveShift(0);
+      },
       onCancelRun: handleCancelRun,
       onSetActiveShift: setActiveShift,
       onMarkIssue: handleMarkIssue,
@@ -1781,7 +1841,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
         if (event.key === "Escape" && websiteAuthDialogOpen) handleWebsiteAuthDialogOpenChange(false);
       }}
     >
-    <SidebarProvider defaultOpen={false}>
+    <SidebarProvider defaultOpen defaultOpenBreakpoint={1280}>
       <AppSidebar page={page} onPageChange={handleAppPageChange} />
       <SidebarInset>
         <AppTopBar />

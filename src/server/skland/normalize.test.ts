@@ -350,7 +350,7 @@ test("normalizes the complete public Skland dashboard without leaking raw respon
   }
 });
 
-test("maps Skland manufacture entries 3 and 4 to their in-game room numbers", () => {
+test("maps Skland manufacture entries to displayed rooms as 3, 1, 4, 2", () => {
   const info = playerInfo();
   const template = info.building.manufactures[0]!;
   info.building.manufactures = ["slot_14", "slot_5", "slot_6", "slot_7"].map((slotId) => ({
@@ -364,10 +364,10 @@ test("maps Skland manufacture entries 3 and 4 to their in-game room numbers", ()
   assert.deepEqual(
     manufactureRooms.map((room) => ({ key: room.key, index: room.index })),
     [
-      { key: "slot_14", index: 0 },
-      { key: "slot_5", index: 1 },
+      { key: "slot_6", index: 0 },
+      { key: "slot_14", index: 1 },
       { key: "slot_7", index: 2 },
-      { key: "slot_6", index: 3 },
+      { key: "slot_5", index: 3 },
     ]
   );
 });
