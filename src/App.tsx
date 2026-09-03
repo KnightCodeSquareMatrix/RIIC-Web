@@ -1136,6 +1136,10 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       setApiError(displayError("AIC-FEEDBACK-4001", "请先生成排班，再提交问题。"));
       return;
     }
+    if (!operbox || boxSource === "sample") {
+      setApiError(displayError("AIC-FEEDBACK-4001", "当前排班缺少可提交的个人干员 Box，请重新导入后生成排班。"));
+      return;
+    }
 
     const environment = [
       `求解耗时：${Math.round(result.durationMs)} ms`,
@@ -1144,6 +1148,13 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       `布局：${preset.label}`,
     ].join("；");
     const note = `${issueDraftNote.trim()}\n\n[运行环境] ${environment}`;
+    const reproduction = {
+      layout: structuredClone(layout),
+      operbox: normalizeOperboxEntries(operbox),
+      rotation: rotationProfile,
+      fiammettaEnabled: effectiveFiammettaEnabled,
+      sourceType: boxSource,
+    };
 
     setFeedbackSaving(true);
     setApiError(null);
@@ -1155,6 +1166,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
           diagnosticId: result.diagnosticId,
           note,
           consent: true,
+          reproduction,
         });
       } else {
         const row = issueDraftRow;
@@ -1170,6 +1182,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
           },
           note,
           consent: true,
+          reproduction,
         });
       }
       setFeedbackResult(response);

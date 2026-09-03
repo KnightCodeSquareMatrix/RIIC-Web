@@ -26,7 +26,7 @@ import {
   queryBusinessRecords,
   updateFeedbackRecord,
 } from "./business-records";
-import { deleteFeedbackArtifacts, readPlanReproduction } from "./infra";
+import { deleteFeedbackArtifacts, readFeedbackReproduction, readPlanReproduction } from "./infra";
 
 type AdminRecordKind = "runs" | "feedback";
 type AdminRecordRoute =
@@ -190,13 +190,16 @@ export async function handleGetAdminFeedbackDetail(request: Request, feedbackId:
     const item = await findFeedbackRecord(recordId(feedbackId));
     if (!item) throw new PublicApiError("AIC-DATA-8004");
     const run = await findPlanRunRecord(item.diagnosticId);
-    const reproduction = await readPlanReproduction(item.diagnosticId, {
-      rotation: run?.rotation,
-      fiammettaEnabled: run?.fiammettaEnable,
-      artifactKey: run?.artifactKey,
-      artifactStatus: run?.artifactStatus,
-      executionSource: run?.executionSource,
-      expiresAt: run?.expiresAt,
+    const reproduction = await readFeedbackReproduction(item.id, item.diagnosticId, {
+      expiresAt: item.expiresAt,
+      plan: {
+        rotation: run?.rotation,
+        fiammettaEnabled: run?.fiammettaEnable,
+        artifactKey: run?.artifactKey,
+        artifactStatus: run?.artifactStatus,
+        executionSource: run?.executionSource,
+        expiresAt: run?.expiresAt,
+      },
     });
     return noStore(successResponse({
       feedback: toAdminFeedbackRecordData(item as unknown as Record<string, unknown>),
