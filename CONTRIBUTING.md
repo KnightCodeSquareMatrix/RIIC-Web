@@ -5,7 +5,7 @@
 ## 分支与 PR
 
 1. 从最新的 `develop` 创建功能分支。
-2. 将功能、修复、文档和资源同步 PR 的 base branch 设为 `develop`。
+2. 将功能、修复、文档和人工资源变更 PR 的 base branch 设为 `develop`。唯一例外是仓库内置的 arkntools 受管资源同步：它在隔离生成、路径白名单、完整检查和构建全部通过后，从固定的 `release/automation/arkntools-assets` 分支创建带 `direct-main-release` 标签的审计 PR，自动合并到 `main` 并触发完整发布流程，随后用独立 PR 对齐 `develop`。
 3. 不要向 `main` 直接提交普通 PR。`main` 只接受维护者从本仓库 `release/**` 分支发起的发布 PR；确需跳过 `develop` 的特批发布，必须由维护者添加 `direct-main-release` 标签。
 4. 普通 PR 不运行远程质量检查；PR 合并到 `develop` 或 `main` 后，目标分支才并行执行质量检查、生成一次发布产物，并在全部检查通过后部署。通过 development 验收的变更再经 release PR 晋级 `main`。
 

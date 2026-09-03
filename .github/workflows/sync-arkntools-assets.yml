@@ -29,7 +29,7 @@ jobs:
       - name: Checkout frontend without credentials
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: develop
+          ref: main
           fetch-depth: 0
           persist-credentials: false
 
@@ -160,20 +160,23 @@ jobs:
     needs: generate
     if: needs.generate.result == 'success' && needs.generate.outputs.changed == 'true' && github.repository == 'KnightCodeSquareMatrix/RIIC-Web'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
+    outputs:
+      merged_sha: ${{ steps.merge.outputs.merged_sha }}
     permissions:
       actions: write
       contents: write
+      issues: write
       pull-requests: write
     env:
-      BASE_BRANCH: develop
-      UPDATE_BRANCH: automation/arkntools-assets
+      BASE_BRANCH: main
+      UPDATE_BRANCH: release/automation/arkntools-assets
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout publication base
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: develop
+          ref: main
           fetch-depth: 0
 
       - name: Download reviewed publication artifact
@@ -215,19 +218,25 @@ jobs:
           fi
 
       - name: Commit and push managed update branch
+        id: commit
         shell: bash
         run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin "$BASE_BRANCH:refs/remotes/origin/$BASE_BRANCH"
+          test "$(git rev-parse HEAD)" = "$(git rev-parse "refs/remotes/origin/$BASE_BRANCH")"
           git fetch origin "$UPDATE_BRANCH:refs/remotes/origin/$UPDATE_BRANCH" || true
           git switch -C "$UPDATE_BRANCH"
           git commit -m "chore: 同步 arkntools 干员资源"
           git push --force-with-lease origin "HEAD:$UPDATE_BRANCH"
+          echo "head_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-      - name: Create or refresh pull request
+      - name: Create or refresh direct main pull request
         id: pull-request
         shell: bash
         run: |
+          set -euo pipefail
           body="$RUNNER_TEMP/arkntools-publication/pull-request-body.md"
           number="$(gh pr list --base "$BASE_BRANCH" --head "$UPDATE_BRANCH" --state open --json number --jq '.[0].number // empty')"
           if [[ -z "$number" ]]; then
@@ -235,16 +244,236 @@ jobs:
               --base "$BASE_BRANCH" \
               --head "$UPDATE_BRANCH" \
               --title "chore: 同步 arkntools 干员素材与基建技能" \
-              --body-file "$body"
+              --body-file "$body" \
+              --label "direct-main-release"
+            number="$(gh pr list --base "$BASE_BRANCH" --head "$UPDATE_BRANCH" --state open --json number --jq '.[0].number // empty')"
           else
             gh pr edit "$number" \
               --title "chore: 同步 arkntools 干员素材与基建技能" \
-              --body-file "$body"
+              --body-file "$body" \
+              --add-label "direct-main-release"
           fi
+          [[ "$number" =~ ^[1-9][0-9]*$ ]]
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+
+      - name: Validate and merge reviewed resource pull request
+        id: merge
+        shell: bash
+        env:
+          EXPECTED_HEAD_SHA: ${{ steps.commit.outputs.head_sha }}
+          PR_NUMBER: ${{ steps.pull-request.outputs.number }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]]
+
+          pr_json="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER")"
+          test "$(jq -r '.state' <<< "$pr_json")" = "open"
+          test "$(jq -r '.draft' <<< "$pr_json")" = "false"
+          test "$(jq -r '.base.ref' <<< "$pr_json")" = "$BASE_BRANCH"
+          test "$(jq -r '.head.ref' <<< "$pr_json")" = "$UPDATE_BRANCH"
+          test "$(jq -r '.head.repo.full_name' <<< "$pr_json")" = "$GITHUB_REPOSITORY"
+          test "$(jq -r '.head.sha' <<< "$pr_json")" = "$EXPECTED_HEAD_SHA"
+          test "$(jq '[.labels[].name | select(. == "direct-main-release")] | length' <<< "$pr_json")" = "1"
+
+          changed_count=0
+          while IFS= read -r changed_path; do
+            case "$changed_path" in
+              public/images/operator-portraits/*|public/images/building-skills/*|public/images/products/*|src/generated/arkntools/*) ;;
+              *) echo "Resource pull request changed a forbidden path: $changed_path" >&2; exit 1 ;;
+            esac
+            changed_count=$((changed_count + 1))
+          done < <(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files?per_page=100" --jq '.[].filename')
+          (( changed_count > 0 ))
+
+          pull_request_base_sha="$(jq -r '.base.sha' <<< "$pr_json")"
+          remote_base_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$BASE_BRANCH" --jq '.object.sha')"
+          test "$pull_request_base_sha" = "$remote_base_sha"
+
+          merge_json="$(gh api --method PUT "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/merge" \
+            -f merge_method=squash \
+            -f sha="$EXPECTED_HEAD_SHA" \
+            -f commit_title="chore: 同步 arkntools 干员资源" \
+            -f commit_message="Automated managed-resource release after isolated generation and validation.")"
+          test "$(jq -r '.merged' <<< "$merge_json")" = "true"
+          merged_sha="$(jq -r '.sha' <<< "$merge_json")"
+          [[ "$merged_sha" =~ ^[0-9a-f]{40}$ ]]
+          echo "merged_sha=$merged_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Trigger verified main release
+        shell: bash
+        env:
+          MERGED_SHA: ${{ steps.merge.outputs.merged_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$MERGED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          remote_main_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$BASE_BRANCH" --jq '.object.sha')"
+          test "$remote_main_sha" = "$MERGED_SHA"
+          gh workflow run frontend-quality.yml \
+            --ref "$BASE_BRANCH" \
+            -f run_webkit=false \
+            -f deploy=true \
+            -f expected_sha="$MERGED_SHA"
+          {
+            echo "## arkntools 资源已自动合并"
+            echo
+            echo "- PR: #${{ steps.pull-request.outputs.number }}"
+            echo "- main: \`$MERGED_SHA\`"
+            echo "- 已触发完整 main 质量门禁和 production 部署；生产环境审批规则保持生效。"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Report publication failure
         if: failure()
         shell: bash
         run: |
           echo "## arkntools 资源发布失败" >> "$GITHUB_STEP_SUMMARY"
-          echo "未创建或刷新自动资源 PR；develop 中最后一次已验证资源保持不变。" >> "$GITHUB_STEP_SUMMARY"
+          echo "自动 main 资源 PR 未完成合并或发布；production 保持上一个已验证 release。" >> "$GITHUB_STEP_SUMMARY"
+
+  develop_parity:
+    needs: publish
+    if: needs.publish.result == 'success' && github.repository == 'KnightCodeSquareMatrix/RIIC-Web'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+    env:
+      BASE_BRANCH: develop
+      SOURCE_BRANCH: main
+      UPDATE_BRANCH: automation/arkntools-assets
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout development branch
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: develop
+          fetch-depth: 0
+
+      - name: Copy the released managed resources into develop
+        id: changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin "$SOURCE_BRANCH:refs/remotes/origin/$SOURCE_BRANCH"
+          git fetch origin "$BASE_BRANCH:refs/remotes/origin/$BASE_BRANCH"
+          git fetch origin "$UPDATE_BRANCH:refs/remotes/origin/$UPDATE_BRANCH" || true
+          git switch -C "$UPDATE_BRANCH" "refs/remotes/origin/$BASE_BRANCH"
+          git restore --source "refs/remotes/origin/$SOURCE_BRANCH" --staged --worktree -- \
+            public/images/operator-portraits \
+            public/images/building-skills \
+            public/images/products \
+            src/generated/arkntools
+
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "develop already contains the released arkntools resources." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          changed_count=0
+          while IFS= read -r -d '' changed_path; do
+            case "$changed_path" in
+              public/images/operator-portraits/*|public/images/building-skills/*|public/images/products/*|src/generated/arkntools/*) ;;
+              *) echo "Resource pull request changed a forbidden path: $changed_path" >&2; exit 1 ;;
+            esac
+            changed_count=$((changed_count + 1))
+          done < <(git diff --cached --name-only -z)
+          (( changed_count > 0 ))
+          if git ls-files -s -- public/images/operator-portraits public/images/building-skills public/images/products src/generated/arkntools \
+            | awk '$1 != "100644" { found = 1 } END { exit found ? 0 : 1 }'; then
+            echo "Managed asset paths must contain only regular non-executable files." >&2
+            exit 1
+          fi
+
+          git commit -m "chore: 同步 main 的 arkntools 干员资源"
+          git push --force-with-lease origin "HEAD:$UPDATE_BRANCH"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Create or refresh develop parity pull request
+        if: steps.changes.outputs.changed == 'true'
+        id: pull-request
+        shell: bash
+        run: |
+          set -euo pipefail
+          number="$(gh pr list --base "$BASE_BRANCH" --head "$UPDATE_BRANCH" --state open --json number --jq '.[0].number // empty')"
+          if [[ -z "$number" ]]; then
+            gh pr create \
+              --base "$BASE_BRANCH" \
+              --head "$UPDATE_BRANCH" \
+              --title "chore: 同步 main 的 arkntools 干员资源" \
+              --body "自动保持 develop 与已发布 main 的受管 arkntools 资源一致。"
+            number="$(gh pr list --base "$BASE_BRANCH" --head "$UPDATE_BRANCH" --state open --json number --jq '.[0].number // empty')"
+          else
+            gh pr edit "$number" \
+              --title "chore: 同步 main 的 arkntools 干员资源" \
+              --body "自动保持 develop 与已发布 main 的受管 arkntools 资源一致。"
+          fi
+          [[ "$number" =~ ^[1-9][0-9]*$ ]]
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+
+      - name: Validate and merge develop parity pull request
+        if: steps.changes.outputs.changed == 'true'
+        id: merge
+        shell: bash
+        env:
+          EXPECTED_HEAD_SHA: ${{ steps.changes.outputs.head_sha }}
+          PR_NUMBER: ${{ steps.pull-request.outputs.number }}
+        run: |
+          set -euo pipefail
+          pr_json="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER")"
+          test "$(jq -r '.state' <<< "$pr_json")" = "open"
+          test "$(jq -r '.draft' <<< "$pr_json")" = "false"
+          test "$(jq -r '.base.ref' <<< "$pr_json")" = "$BASE_BRANCH"
+          test "$(jq -r '.head.ref' <<< "$pr_json")" = "$UPDATE_BRANCH"
+          test "$(jq -r '.head.repo.full_name' <<< "$pr_json")" = "$GITHUB_REPOSITORY"
+          test "$(jq -r '.head.sha' <<< "$pr_json")" = "$EXPECTED_HEAD_SHA"
+
+          changed_count=0
+          while IFS= read -r changed_path; do
+            case "$changed_path" in
+              public/images/operator-portraits/*|public/images/building-skills/*|public/images/products/*|src/generated/arkntools/*) ;;
+              *) echo "Resource pull request changed a forbidden path: $changed_path" >&2; exit 1 ;;
+            esac
+            changed_count=$((changed_count + 1))
+          done < <(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files?per_page=100" --jq '.[].filename')
+          (( changed_count > 0 ))
+
+          pull_request_base_sha="$(jq -r '.base.sha' <<< "$pr_json")"
+          remote_base_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$BASE_BRANCH" --jq '.object.sha')"
+          test "$pull_request_base_sha" = "$remote_base_sha"
+          merge_json="$(gh api --method PUT "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/merge" \
+            -f merge_method=squash \
+            -f sha="$EXPECTED_HEAD_SHA" \
+            -f commit_title="chore: 同步 main 的 arkntools 干员资源" \
+            -f commit_message="Automated develop parity for the released managed resources.")"
+          test "$(jq -r '.merged' <<< "$merge_json")" = "true"
+          merged_sha="$(jq -r '.sha' <<< "$merge_json")"
+          [[ "$merged_sha" =~ ^[0-9a-f]{40}$ ]]
+          echo "merged_sha=$merged_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Trigger verified development release
+        if: steps.changes.outputs.changed == 'true'
+        shell: bash
+        env:
+          MERGED_SHA: ${{ steps.merge.outputs.merged_sha }}
+        run: |
+          set -euo pipefail
+          remote_develop_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$BASE_BRANCH" --jq '.object.sha')"
+          test "$remote_develop_sha" = "$MERGED_SHA"
+          gh workflow run frontend-quality.yml \
+            --ref "$BASE_BRANCH" \
+            -f run_webkit=false \
+            -f deploy=true \
+            -f expected_sha="$MERGED_SHA"
+          echo "develop parity PR #${{ steps.pull-request.outputs.number }} merged at \`$MERGED_SHA\`." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Report develop parity failure
+        if: failure()
+        shell: bash
+        run: |
+          echo "## develop 资源对齐失败" >> "$GITHUB_STEP_SUMMARY"
+          echo "main 的已验证资源不受影响；请处理本次 workflow failure 后重新运行同步。" >> "$GITHUB_STEP_SUMMARY"
