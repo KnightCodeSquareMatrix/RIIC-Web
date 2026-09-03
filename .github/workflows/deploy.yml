@@ -2,6 +2,11 @@ name: Deploy verified branch
 
 on:
   workflow_call:
+    inputs:
+      artifact_name:
+        description: Immutable release artifact produced by the post-merge build job
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -45,7 +50,6 @@ jobs:
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 22
-          cache: npm
 
       - name: Resolve verified release identity
         shell: bash
@@ -59,6 +63,7 @@ jobs:
           {
             printf 'DEPLOY_TREE_SHA=%s\n' "$deploy_tree_sha"
             printf 'SOURCE_DATE_EPOCH=%s\n' "$source_date_epoch"
+            printf 'DEPLOY_ARTIFACT_PARENT=%s\n' "$RUNNER_TEMP/riic-web-release-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           } >> "$GITHUB_ENV"
 
       - name: Validate deployment configuration
@@ -105,61 +110,70 @@ jobs:
             echo "DEPLOY_PUBLIC_HEALTH_CHECK_ENABLED=0" >> "$GITHUB_ENV"
           fi
 
-      - name: Install verified build dependencies
-        run: npm ci
+      - name: Download verified release artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: ${{ runner.temp }}/riic-web-release-${{ github.run_id }}-${{ github.run_attempt }}/download
 
-      - name: Build standalone release
-        env:
-          APP_BUILD_ID: ${{ env.DEPLOY_SHA }}
-          APP_DEPLOYMENT_ENV: ${{ env.DEPLOYMENT_ENV }}
-          SKLAND_FEATURE_ENABLED: "1"
-          ACCOUNT_CLOUD_SYNC_ENABLED: "1"
-          DATABASE_URL: ""
-          DATABASE_MIGRATION_URL: ""
-          BETTER_AUTH_SECRET: ""
-          BETTER_AUTH_URL: ""
-          RESEND_API_KEY: ""
-          AUTH_EMAIL_FROM: ""
-        run: npm run build && npm run worker:build
-
-      - name: Stage and archive standalone release
+      - name: Validate and extract release artifact
         shell: bash
         run: |
           set -euo pipefail
-          artifact_parent="$(mktemp -d "$RUNNER_TEMP/riic-web-release.XXXXXX")"
-          artifact_root="$artifact_parent/release"
-          local_archive="$RUNNER_TEMP/arknights-infra-${DEPLOYMENT_ENV}-${DEPLOY_SHA}.tar.gz"
-          {
-            printf 'DEPLOY_ARTIFACT_PARENT=%s\n' "$artifact_parent"
-            printf 'DEPLOY_ARTIFACT_ROOT=%s\n' "$artifact_root"
-            printf 'DEPLOY_LOCAL_ARCHIVE=%s\n' "$local_archive"
-          } >> "$GITHUB_ENV"
-
-          RELEASE_SHA="$DEPLOY_SHA" RELEASE_TREE_SHA="$DEPLOY_TREE_SHA" \
-            npm run release:stage -- --output "$artifact_root"
-          tar --sort=name \
-            --mtime="@$SOURCE_DATE_EPOCH" \
-            --owner=0 \
-            --group=0 \
-            --numeric-owner \
-            --mode='u+rwX,go+rX,go-w' \
-            --format=gnu \
-            -cf - \
-            -C "$artifact_root" . \
-            | gzip --best --no-name --rsyncable > "$local_archive"
+          download_root="$DEPLOY_ARTIFACT_PARENT/download"
+          artifact_root="$DEPLOY_ARTIFACT_PARENT/release"
+          local_archive="$download_root/arknights-infra-${DEPLOYMENT_ENV}-${DEPLOY_SHA}.tar.gz"
+          checksum_file="$download_root/SHA256SUMS"
+          test -d "$download_root"
+          test ! -L "$download_root"
+          test -f "$local_archive"
+          test ! -L "$local_archive"
+          test -f "$checksum_file"
+          test ! -L "$checksum_file"
+          test "$(find "$download_root" -mindepth 1 -maxdepth 1 -type f | wc -l)" = "2"
+          test -z "$(find "$download_root" -mindepth 1 -maxdepth 1 ! -type f -print -quit)"
+          (cd "$download_root" && sha256sum --check --strict SHA256SUMS)
           gzip -t "$local_archive"
+
+          install -d -m 700 "$artifact_root"
+          while IFS= read -r archive_entry; do
+            case "$archive_entry" in
+              /*|../*|*/../*|*/..) echo "Unsafe release archive entry: $archive_entry" >&2; exit 1 ;;
+            esac
+          done < <(tar -tzf "$local_archive")
+          tar --extract --gzip --file "$local_archive" --directory "$artifact_root" \
+            --no-same-owner --no-same-permissions
+
+          node --input-type=module - "$artifact_root/.release-artifact.json" "$DEPLOY_SHA" "$DEPLOY_TREE_SHA" <<'NODE'
+          import assert from "node:assert/strict";
+          import { readFile } from "node:fs/promises";
+          const [metadataPath, expectedSha, expectedTree] = process.argv.slice(2);
+          const metadata = JSON.parse(await readFile(metadataPath, "utf8"));
+          assert.equal(metadata.formatVersion, 1);
+          assert.equal(metadata.kind, "riic-web-standalone");
+          assert.equal(metadata.releaseSha, expectedSha);
+          assert.equal(metadata.releaseTreeSha, expectedTree);
+          NODE
+
+          unsupported_local_entry="$(find "$artifact_root" -mindepth 1 ! -type f ! -type d -print -quit)"
+          if [[ -n "$unsupported_local_entry" ]]; then
+            echo "Standalone release tree contains unsupported filesystem entries: $unsupported_local_entry" >&2
+            exit 1
+          fi
 
           archive_bytes="$(stat -c '%s' "$local_archive")"
           archive_sha256="$(sha256sum "$local_archive" | cut -d ' ' -f 1)"
           [[ "$archive_bytes" =~ ^[1-9][0-9]*$ ]]
           [[ "$archive_sha256" =~ ^[0-9a-f]{64}$ ]]
           {
+            printf 'DEPLOY_ARTIFACT_ROOT=%s\n' "$artifact_root"
+            printf 'DEPLOY_LOCAL_ARCHIVE=%s\n' "$local_archive"
             printf 'DEPLOY_ARCHIVE_BYTES=%s\n' "$archive_bytes"
             printf 'DEPLOY_ARCHIVE_SHA256=%s\n' "$archive_sha256"
           } >> "$GITHUB_ENV"
 
           {
-            echo "### Standalone release artifact"
+            echo "### Downloaded release artifact"
             echo
             echo "| Environment | Commit | Tree | Bytes | SHA-256 |"
             echo "| --- | --- | --- | ---: | --- |"
@@ -373,14 +387,8 @@ jobs:
           set -euo pipefail
           if [[ -n "${DEPLOY_ARTIFACT_PARENT:-}" ]]; then
             case "$DEPLOY_ARTIFACT_PARENT" in
-              "$RUNNER_TEMP"/riic-web-release.*) rm -rf -- "$DEPLOY_ARTIFACT_PARENT" ;;
+              "$RUNNER_TEMP"/riic-web-release-[0-9]*-[0-9]*) rm -rf -- "$DEPLOY_ARTIFACT_PARENT" ;;
               *) echo "Refusing to remove unexpected artifact path: $DEPLOY_ARTIFACT_PARENT" >&2; exit 1 ;;
-            esac
-          fi
-          if [[ -n "${DEPLOY_LOCAL_ARCHIVE:-}" ]]; then
-            case "$DEPLOY_LOCAL_ARCHIVE" in
-              "$RUNNER_TEMP"/arknights-infra-*.tar.gz) rm -f -- "$DEPLOY_LOCAL_ARCHIVE" ;;
-              *) echo "Refusing to remove unexpected archive path: $DEPLOY_LOCAL_ARCHIVE" >&2; exit 1 ;;
             esac
           fi
 
