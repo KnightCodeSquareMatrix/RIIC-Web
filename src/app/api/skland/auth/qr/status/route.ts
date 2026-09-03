@@ -32,7 +32,8 @@ export async function POST(request: Request) {
     if (typeof body?.scanId !== "string" || !body.scanId.trim()) {
       throw new PublicApiError("AIC-REQ-1001");
     }
-    const result = await pollScan(body.scanId.trim());
+    const scanId = body.scanId.trim();
+    const result = await pollScan(scanId, website.user.id);
     if (result.session && result.response.scheduleSnapshot && result.response.statusSnapshot) {
       const completed = await finalizeSklandAuthentication(website.user.id, {
         session: result.session,

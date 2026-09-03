@@ -26,6 +26,15 @@ export function scanActorKey(websiteUserId: string): string {
     .digest("hex");
 }
 
+export function findOwnedScan<T extends Pick<ReusableScanRecord, "actorKey">>(
+  scans: ReadonlyMap<string, T>,
+  scanId: string,
+  websiteUserId: string,
+): T | null {
+  const scan = scans.get(scanId);
+  return scan?.actorKey === scanActorKey(websiteUserId) ? scan : null;
+}
+
 export function findReusableScan(
   scans: Iterable<readonly [string, ReusableScanRecord]>,
   actorKey: string,
