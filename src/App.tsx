@@ -65,6 +65,7 @@ import {
   type OnboardingPreference,
 } from "./onboarding";
 import { normalizeOperboxEntries } from "./operbox-normalization";
+import { upgradeSimulationBoxSource } from "./upgrade-simulation";
 import { effectiveFiammettaSetting, resolvePlanPresentationLayout } from "./plan-presentation";
 import {
   applyLocalLayoutPatch,
@@ -1058,8 +1059,8 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       layout,
       operbox: normalizeOperboxEntries(trialOperbox),
       sourceName: locale === "en" ? "Upgrade simulation Box.json" : "升级试算 Box.json",
-      // 试算始终提交完整替代 BOX，不能沿用 sample，否则 API 会用服务端示例覆盖它。
-      boxSource: "maa",
+      // 示例数据的替代 BOX 不能沿用 sample；森空岛来源则保留其数据归属标签。
+      boxSource: upgradeSimulationBoxSource(boxSource),
       rotation: rotationProfile,
       fiammetta_enable: effectiveFiammettaSetting(trialOperbox, rotationProfile, fiammettaEnabled),
     });

@@ -1,4 +1,8 @@
-import type { OperBoxEntry } from "./types";
+import type { BoxSource, OperBoxEntry } from "./types";
+
+export function upgradeSimulationBoxSource(source: BoxSource): "skland" | "maa" {
+  return source === "skland" ? "skland" : "maa";
+}
 
 function eliteState(entry: OperBoxEntry | undefined): number {
   return entry?.own ? entry.elite : -1;

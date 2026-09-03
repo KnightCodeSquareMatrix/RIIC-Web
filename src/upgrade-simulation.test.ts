@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { OperBoxEntry } from "./types.ts";
-import { hasOperboxEliteStateChange } from "./upgrade-simulation.ts";
+import { hasOperboxEliteStateChange, upgradeSimulationBoxSource } from "./upgrade-simulation.ts";
 
 function operator(overrides: Partial<OperBoxEntry> = {}): OperBoxEntry {
   return {
@@ -28,4 +28,10 @@ test("未拥有与已拥有之间的变化也属于精英化状态变化", () =>
 
 test("只有等级变化时不允许试算", () => {
   assert.equal(hasOperboxEliteStateChange([operator()], [operator({ level: 80 })]), false);
+});
+
+test("试算保留森空岛数据归属，只有示例 Box 转为 MAA 来源", () => {
+  assert.equal(upgradeSimulationBoxSource("skland"), "skland");
+  assert.equal(upgradeSimulationBoxSource("maa"), "maa");
+  assert.equal(upgradeSimulationBoxSource("sample"), "maa");
 });
