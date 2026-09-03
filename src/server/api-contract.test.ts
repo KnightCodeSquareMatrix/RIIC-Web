@@ -202,12 +202,36 @@ test("same-origin protection uses Host instead of the wildcard listen address", 
   }
 });
 
-test("feedback validation separates room and performance feedback while keeping notes minimal", () => {
+test("feedback validation separates issue kinds and requires a complete private reproduction snapshot", () => {
+  const reproduction = {
+    layout: {
+      template: "243",
+      drone_cap: 200,
+      scenario: {},
+      rooms: [
+        { id: "control", kind: "control_center", level: 5 },
+        { id: "power", kind: "power_plant", level: 3 },
+      ],
+    },
+    operbox: [{
+      id: "char_002_amiya",
+      name: "阿米娅",
+      own: true,
+      level: 80,
+      elite: 2,
+      potential: 6,
+      rarity: 5,
+    }],
+    rotation: "abc_12_6_6",
+    fiammettaEnabled: false,
+    sourceType: "maa",
+  };
   const valid = {
     diagnosticId: "diag",
     room: { id: "trade_1", title: "贸易站 1", group: "trading", operators: ["能天使"] },
     note: "站位不符合预期",
     consent: true as const,
+    reproduction,
   };
   assert.doesNotThrow(() => validateFeedbackRequest(valid));
   assert.doesNotThrow(() => validateFeedbackRequest({
@@ -215,7 +239,20 @@ test("feedback validation separates room and performance feedback while keeping 
     diagnosticId: "diag",
     note: "运行耗时明显偏长",
     consent: true,
+    reproduction,
   }));
+  assert.throws(
+    () => validateFeedbackRequest({ ...valid, reproduction: undefined }),
+    (error: unknown) => error instanceof PublicApiError && error.code === "AIC-FEEDBACK-4001"
+  );
+  assert.throws(
+    () => validateFeedbackRequest({ ...valid, reproduction: { ...reproduction, operbox: [] } }),
+    (error: unknown) => error instanceof PublicApiError && error.code === "AIC-FEEDBACK-4001"
+  );
+  assert.throws(
+    () => validateFeedbackRequest({ ...valid, reproduction: { ...reproduction, rotation: "fiammetta_8_8_4_4", fiammettaEnabled: false } }),
+    (error: unknown) => error instanceof PublicApiError && error.code === "AIC-FEEDBACK-4001"
+  );
   assert.throws(
     () => validateFeedbackRequest({ ...valid, consent: false }),
     (error: unknown) => error instanceof PublicApiError && error.code === "AIC-FEEDBACK-4001"
@@ -229,11 +266,11 @@ test("feedback validation separates room and performance feedback while keeping 
     (error: unknown) => error instanceof PublicApiError && error.code === "AIC-FEEDBACK-4001"
   );
   assert.throws(
-    () => validateFeedbackRequest({ kind: "room_issue", diagnosticId: "diag", note: "缺少房间", consent: true }),
+    () => validateFeedbackRequest({ kind: "room_issue", diagnosticId: "diag", note: "缺少房间", consent: true, reproduction }),
     (error: unknown) => error instanceof PublicApiError && error.code === "AIC-FEEDBACK-4001"
   );
   assert.throws(
-    () => validateFeedbackRequest({ kind: "future", diagnosticId: "diag", note: "未知类型", consent: true }),
+    () => validateFeedbackRequest({ kind: "future", diagnosticId: "diag", note: "未知类型", consent: true, reproduction }),
     (error: unknown) => error instanceof PublicApiError && error.code === "AIC-FEEDBACK-4001"
   );
 });

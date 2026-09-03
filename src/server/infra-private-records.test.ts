@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import type { BaseBlueprint } from "../types.ts";
 import {
   isLegacySklandRunDirectoryName,
   isPrivateStorageChild,
@@ -213,10 +214,12 @@ test("Skland owned-data deletion removes only matching runs and feedback without
   const previousRunsDir = process.env.BETA_CLI_RUN_DIR;
   const previousFeedbackDir = process.env.BETA_FEEDBACK_DIR;
   const previousExpectedCliSha256 = process.env.INFRA_CLI_EXPECTED_SHA256;
+  const previousBusinessDbEnabled = process.env.BETA_BUSINESS_DB_ENABLED;
   process.env.BETA_STORAGE_DIR = storageRoot;
   process.env.BETA_CLI_RUN_DIR = runsRoot;
   process.env.BETA_FEEDBACK_DIR = feedbackRoot;
   process.env.INFRA_CLI_EXPECTED_SHA256 = "0".repeat(64);
+  process.env.BETA_BUSINESS_DB_ENABLED = "0";
   const legacyPurgeMarker = path.join(storageRoot, ".skland-legacy-purge-v1.json");
   await writeFile(legacyPurgeMarker, JSON.stringify({ version: 1 }), "utf-8");
   context.after(() => {
@@ -228,9 +231,11 @@ test("Skland owned-data deletion removes only matching runs and feedback without
     else process.env.BETA_FEEDBACK_DIR = previousFeedbackDir;
     if (previousExpectedCliSha256 === undefined) delete process.env.INFRA_CLI_EXPECTED_SHA256;
     else process.env.INFRA_CLI_EXPECTED_SHA256 = previousExpectedCliSha256;
+    if (previousBusinessDbEnabled === undefined) delete process.env.BETA_BUSINESS_DB_ENABLED;
+    else process.env.BETA_BUSINESS_DB_ENABLED = previousBusinessDbEnabled;
   });
 
-  const { deleteFeedbackArtifacts, deletePlanRunArtifacts, deleteSklandOwnedData, maintainPrivateRecords, readPlanReproduction, runPlan } = await import("./infra.ts");
+  const { deleteFeedbackArtifacts, deletePlanRunArtifacts, deleteSklandOwnedData, maintainPrivateRecords, readFeedbackReproduction, readPlanReproduction, runPlan, saveFeedback } = await import("./infra.ts");
 
   const planInput = {
     layout: {
@@ -284,6 +289,44 @@ test("Skland owned-data deletion removes only matching runs and feedback without
   assert.equal(reproduction.fiammettaEnabled, false);
   assert.equal(reproduction.error, "solver exited");
   assert.equal(reproduction.stderrExcerpt, "debug tail");
+
+  const feedbackDiagnosticId = "abababab-abab-4bab-8bab-abababababab";
+  const savedFeedback = await saveFeedback({
+    kind: "performance_issue",
+    diagnosticId: feedbackDiagnosticId,
+    note: "独立反馈快照测试",
+    consent: true,
+    reproduction: {
+      layout: planInput.layout as BaseBlueprint,
+      operbox: planInput.operbox,
+      rotation: "main_backup_12_12",
+      fiammettaEnabled: false,
+      sourceType: "maa",
+    },
+  }, {
+    userId: "user-feedback-test",
+    dataOwnerTag: targetOwnerTag,
+  });
+  assert.deepEqual(Object.keys(savedFeedback).sort(), ["feedbackId", "savedAt"]);
+  const feedbackDirectory = (await readdir(feedbackRoot))
+    .find((name) => name.endsWith(`_${savedFeedback.feedbackId}`));
+  assert.ok(feedbackDirectory);
+  const feedbackFiles = await readdir(path.join(feedbackRoot, feedbackDirectory!));
+  assert.deepEqual(feedbackFiles.sort(), ["issue.json", "layout.json", "meta.json", "operbox.json", "reproduction.json"]);
+  const feedbackMeta = JSON.parse(await readFile(path.join(feedbackRoot, feedbackDirectory!, "meta.json"), "utf8"));
+  assert.equal(feedbackMeta.dataOwnerTag, targetOwnerTag);
+  const feedbackContext = JSON.parse(await readFile(path.join(feedbackRoot, feedbackDirectory!, "reproduction.json"), "utf8"));
+  assert.equal(feedbackContext.rotationCount, 2);
+  const feedbackReproduction = await readFeedbackReproduction(
+    savedFeedback.feedbackId,
+    feedbackDiagnosticId,
+  );
+  assert.equal(feedbackReproduction.available, true);
+  assert.equal(feedbackReproduction.layout?.template, "243");
+  assert.equal(feedbackReproduction.operbox?.[0]?.name, "阿米娅");
+  assert.equal(feedbackReproduction.rotation, "main_backup_12_12");
+  assert.equal(feedbackReproduction.rotationCount, 2);
+  assert.equal(feedbackReproduction.fiammettaEnabled, false);
 
   const legacyReproduction = await readPlanReproduction(legacyDiagnosticId, {
     rotation: "abc_12_6_6",
@@ -375,10 +418,11 @@ test("Skland owned-data deletion removes only matching runs and feedback without
   await utimes(unrelatedRun, retainedAt, retainedAt);
   await maintainPrivateRecords();
   await rm(legacyPurgeMarker, { force: true });
-  assert.deepEqual(await deleteSklandOwnedData([targetOwnerTag]), { runs: 1, feedback: 2 });
+  assert.deepEqual(await deleteSklandOwnedData([targetOwnerTag]), { runs: 1, feedback: 3 });
   await assert.rejects(stat(targetRun), { code: "ENOENT" });
   await assert.rejects(stat(linkedFeedback), { code: "ENOENT" });
   await assert.rejects(stat(ownedFeedback), { code: "ENOENT" });
+  await assert.rejects(stat(path.join(feedbackRoot, feedbackDirectory!)), { code: "ENOENT" });
   await assert.doesNotReject(stat(unrelatedRun));
   await assert.doesNotReject(stat(unrelatedFeedback));
   await assert.rejects(stat(legacyPurgeMarker), { code: "ENOENT" });
