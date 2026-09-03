@@ -331,6 +331,31 @@ test("Skland calculator keeps the schedule visible before and after sidebar navi
   await returnToCalculator("森空岛状态中心", "[data-skland-view-tabs]", "calculator-return-skland-reduced");
 });
 
+test("desktop sidebar state survives navigation and a hard reload without hydration errors", async ({ page, context }) => {
+  await mockApis(page);
+  await seedPreferences(page);
+  await context.addCookies([{ name: "sidebar_state", value: "true", domain: "127.0.0.1", path: "/" }]);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const hydrationErrors: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error" && /hydration|server rendered html/i.test(message.text())) {
+      hydrationErrors.push(message.text());
+    }
+  });
+
+  await page.goto("/");
+  const sidebar = page.locator('[data-slot="sidebar"]:not([data-mobile="true"])');
+  await expect(sidebar).toHaveAttribute("data-state", "expanded");
+
+  await page.getByRole("button", { name: "练卡建议", exact: true }).click();
+  await expect(page).toHaveURL(/\/training$/);
+  await expect(sidebar).toHaveAttribute("data-state", "expanded");
+
+  await page.reload();
+  await expect(sidebar).toHaveAttribute("data-state", "expanded");
+  expect(hydrationErrors).toEqual([]);
+});
+
 test("100% Skland match does not count fatigue-only notices as adjustments", async ({ page }) => {
   await mockApis(page, {
     sklandConfigured: true,
