@@ -1781,7 +1781,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
         if (event.key === "Escape" && websiteAuthDialogOpen) handleWebsiteAuthDialogOpenChange(false);
       }}
     >
-    <SidebarProvider defaultOpen={false}>
+    <SidebarProvider defaultOpen defaultOpenBreakpoint={1280}>
       <AppSidebar page={page} onPageChange={handleAppPageChange} />
       <SidebarInset>
         <AppTopBar />
