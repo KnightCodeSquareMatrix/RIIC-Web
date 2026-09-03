@@ -13,6 +13,7 @@ import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useLanguageDemo } from "@/language-demo";
 
 const DRAWER_SPRING = { type: "spring", stiffness: 150, damping: 27, mass: 1 } as const;
 const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
@@ -43,6 +44,7 @@ export function Drawer({
   const [mounted, setMounted] = useState(open);
   const [dragging, setDragging] = useState(false);
   const reducedMotion = useReducedMotion();
+  const { locale } = useLanguageDemo();
   const controls = useDragControls();
   const shellRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -241,10 +243,10 @@ export function Drawer({
         >
           <span className="mt-0.5 h-8 w-1 shrink-0 bg-primary" aria-hidden="true" />
           <div className="min-w-0 flex-1"><h2 id={titleId} className="truncate font-heading text-base font-semibold">{title}</h2>{description ? <p className="mt-0.5 truncate text-xs text-[#313131]/58">{description}</p> : null}</div>
-          <Button type="button" variant="ghost" size="icon" className="-mr-2 size-10" aria-label="关闭详情" onPointerDown={(event) => event.stopPropagation()} onClick={close}><XIcon /><span className="sr-only">关闭详情</span></Button>
+          <Button type="button" variant="ghost" size="icon" className="-mr-2 size-10" aria-label={locale === "en" ? "Close details" : "关闭详情"} onPointerDown={(event) => event.stopPropagation()} onClick={close}><XIcon /><span className="sr-only">{locale === "en" ? "Close details" : "关闭详情"}</span></Button>
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain" data-slot="drawer-body">{children}</div>
-        <span id={hintId} className="sr-only">按 Esc 关闭面板，或将标题栏向右拖向屏幕边缘。</span>
+        <span id={hintId} className="sr-only">{locale === "en" ? "Press Escape to close the panel, or drag the title bar toward the right edge of the screen." : "按 Esc 关闭面板，或将标题栏向右拖向屏幕边缘。"}</span>
       </motion.div>
     </div>,
     host,

@@ -11,34 +11,24 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart";
 import type { AdminSolverMetricsData } from "@/types";
+import { useLanguageDemo } from "@/language-demo";
 
-const chartConfig = {
+function chartConfig(en: boolean): ChartConfig { return {
   successCount: {
-    label: "成功",
+    label: en ? "Success" : "成功",
     theme: {
       light: "oklch(0.58 0.14 166)",
       dark: "oklch(0.72 0.13 166)",
     },
   },
   failureCount: {
-    label: "失败",
+    label: en ? "Failure" : "失败",
     theme: {
       light: "oklch(0.62 0.2 24)",
       dark: "oklch(0.72 0.16 24)",
     },
   },
-} satisfies ChartConfig;
-
-const AXIS_TIME_FORMATTER = new Intl.DateTimeFormat("zh-CN", {
-  hour: "2-digit",
-  minute: "2-digit",
-});
-const TOOLTIP_TIME_FORMATTER = new Intl.DateTimeFormat("zh-CN", {
-  month: "numeric",
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-});
+}; }
 
 function formatTime(value: string, formatter: Intl.DateTimeFormat): string {
   const date = new Date(value);
@@ -50,9 +40,13 @@ export function AdminSolverMetricsChart({
 }: {
   trend: AdminSolverMetricsData["solver"]["trend"];
 }) {
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
+  const axisTimeFormatter = new Intl.DateTimeFormat(en ? "en-US" : "zh-CN", { hour: "2-digit", minute: "2-digit" });
+  const tooltipTimeFormatter = new Intl.DateTimeFormat(en ? "en-US" : "zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
   return (
     <ChartContainer
-      config={chartConfig}
+      config={chartConfig(en)}
       className="h-[280px] min-h-[280px] w-full sm:h-[320px]"
       data-admin-solver-trend-chart
     >
@@ -64,7 +58,7 @@ export function AdminSolverMetricsChart({
           tickLine={false}
           tickMargin={10}
           minTickGap={28}
-          tickFormatter={(value: string) => formatTime(value, AXIS_TIME_FORMATTER)}
+          tickFormatter={(value: string) => formatTime(value, axisTimeFormatter)}
         />
         <YAxis allowDecimals={false} axisLine={false} tickLine={false} tickMargin={8} width={28} />
         <ChartTooltip
@@ -72,7 +66,7 @@ export function AdminSolverMetricsChart({
           content={(
             <ChartTooltipContent
               indicator="line"
-              labelFormatter={(value) => formatTime(String(value), TOOLTIP_TIME_FORMATTER)}
+              labelFormatter={(value) => formatTime(String(value), tooltipTimeFormatter)}
             />
           )}
         />

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 import { LegalDocument } from "@/components/legal/LegalDocument";
 import { isSklandFeatureEnabled } from "@/deployment";
-import { legalIdentity } from "@/legal";
+import { DEFAULT_LEGAL_OPERATOR_NAME, legalIdentity } from "@/legal";
 import { LEGAL_EFFECTIVE_DATE } from "@/legal-policy";
 
 export const metadata: Metadata = {
@@ -12,9 +12,46 @@ export const metadata: Metadata = {
 
 export default function TermsPage() {
   const identity = legalIdentity();
+  const englishOperatorName = identity.operatorName === DEFAULT_LEGAL_OPERATOR_NAME ? "Closure Infrastructure Terminal maintainers" : identity.operatorName;
   const sklandEnabled = isSklandFeatureEnabled();
+  const englishContent = <>
+    <section>
+      <h2>Website account</h2>
+      <ul>
+        <li>You may register a website account using an email address you are authorized to use. You must verify the address before signing in.</li>
+        <li>Keep your password and signed-in devices secure. Do not share or transfer the account or use it to evade access restrictions.</li>
+        <li>We may suspend an account and revoke all sessions in response to API abuse, a security risk, or a breach of these terms. You may appeal through the contact channel on this page.</li>
+        <li>You may sign out other devices or permanently delete the account in Account settings. Deletion cannot be undone and does not delete or affect any official game account.</li>
+        <li>Signing in alone does not upload an existing workspace. Automatic synchronization of the MAA Box, layout, settings, and limited schedule history begins only after you accept the current Terms and Privacy Policy.</li>
+        <li>You may refuse or withdraw synchronization consent and keep using local-only mode. Withdrawal deletes the account’s cloud workspace and cache references.</li>
+      </ul>
+    </section>
+    {sklandEnabled ? <>
+      <section><h2 className="font-number">1. Service</h2><p>This site is maintained by {englishOperatorName} for Arknights players and provides infrastructure scheduling, training advice, Skland data synchronization, and MAA export. It is an unofficial, non-commercial tool in limited testing and is not affiliated with, represented by, or endorsed by Hypergryph, Skland, or the MAA project.</p></section>
+      <section><h2 className="font-number">2. Acceptance</h2><p>You may continue to use local import features without accepting these terms. Before authorizing a Skland import by QR code or credential, you must separately accept these Terms and the Privacy Policy. Material policy updates require renewed consent.</p></section>
+      <section><h2 className="font-number">3. Accounts and authorization</h2><ul>
+        <li>You may synchronize only Skland accounts and game characters you are authorized to use.</li>
+        <li>The site supports authorization through a Skland app QR code or credential import. Neither method asks for your Hypergryph account password or SMS verification code.</li>
+        <li>A credential grants Skland sign-in access. Submit it only in this site’s credential field, never through chat, issues, logs, or another public channel.</li>
+        <li>Protect credentials, devices, and browser sessions. Sign out or delete all Skland data on shared devices.</li>
+        <li>After you accept the current Privacy Policy and sign in, the status center reads and displays the full status described there. If you decline, MAA import and local configuration remain available.</li>
+      </ul></section>
+      <section><h2 className="font-number">4. Acceptable use</h2><p>Do not use this site to access another person’s account, bypass official authorization, abuse APIs at scale, disrupt service, distribute illegal content, or infringe another person’s rights. We may restrict features in response to abuse, security risk, or upstream rule changes.</p></section>
+      <section><h2 className="font-number">5. Third-party services</h2><p>Skland sign-in and synchronization depend on third-party networks and APIs and are also governed by the <a href="https://assets.skland.com/protocols/agreement.html">Skland License and Service Agreement</a> and <a href="https://assets.skland.com/protocols/privacy.html">Skland Personal Information Protection Policy</a>. Changes to upstream APIs, rules, or availability may interrupt synchronization; continuous availability is not guaranteed.</p></section>
+      <section><h2 className="font-number">6. Schedule results and limitation of liability</h2><p>Schedules, efficiency figures, and training advice are generated from submitted data and the solver and are for game-assistance purposes only. Verify results before importing them into MAA or changing facilities in the game. To the extent permitted by law, the site is not liable beyond a reasonable scope for indirect loss caused by test-feature outages, upstream data errors, device failures, or actions taken from generated advice.</p></section>
+      <section><h2 className="font-number">7. Changes and termination</h2><p>Features may change to address security issues, adapt to upstream changes, or end testing. A material change to data-processing purposes or authorization scope takes effect only after a policy version update and renewed consent. You may stop using the site and delete all Skland data at any time.</p></section>
+      <section><h2 className="font-number">8. Contact and disputes</h2><p>Questions may be sent through the <a href={identity.contactUrl}>project issue tracker</a>{identity.contactEmail ? <> or <a href={`mailto:${identity.contactEmail}`}>{identity.contactEmail}</a></> : null}. The parties should first try to resolve disputes amicably; otherwise applicable law governs.</p></section>
+    </> : <>
+      <section><h2 className="font-number">1. Service</h2><p>This site is maintained by {englishOperatorName} for Arknights players and provides infrastructure scheduling, training advice, file import, and MAA export. It is an unofficial, non-commercial tool and is not affiliated with, represented by, or endorsed by Hypergryph or the MAA project.</p></section>
+      <section><h2 className="font-number">2. Acceptance</h2><p>You may use the site after reading and accepting these terms. If you disagree, stop submitting data or using the scheduling service.</p></section>
+      <section><h2 className="font-number">3. Acceptable use</h2><p>Do not disrupt the service, abuse APIs at scale, distribute illegal content, or infringe another person’s rights. We may restrict features in response to clear abuse or security risk.</p></section>
+      <section><h2 className="font-number">4. Schedule results and limitation of liability</h2><p>Schedules, efficiency figures, and training advice are generated from submitted data and the solver and are for game-assistance purposes only. Verify results before importing them into MAA or changing facilities in the game. To the extent permitted by law, the site is not liable beyond a reasonable scope for indirect loss caused by test-feature outages, input errors, device failures, or actions taken from generated advice.</p></section>
+      <section><h2 className="font-number">5. Changes and termination</h2><p>Features may change to address security issues, improve scheduling, or end testing. You may stop using the site and clear local browser data at any time.</p></section>
+      <section><h2 className="font-number">6. Contact and disputes</h2><p>Questions may be sent through the <a href={identity.contactUrl}>project issue tracker</a>{identity.contactEmail ? <> or <a href={`mailto:${identity.contactEmail}`}>{identity.contactEmail}</a></> : null}. The parties should first try to resolve disputes amicably; otherwise applicable law governs.</p></section>
+    </>}
+  </>;
   return (
-    <LegalDocument eyebrow="可露希尔基建终端" title="服务条款" effectiveDate={LEGAL_EFFECTIVE_DATE}>
+    <LegalDocument eyebrow="可露希尔基建终端" title="服务条款" effectiveDate={LEGAL_EFFECTIVE_DATE} englishEyebrow="Closure Infrastructure Terminal" englishTitle="Terms of Service" englishChildren={englishContent}>
       <section>
         <h2>网站账号</h2>
         <ul>

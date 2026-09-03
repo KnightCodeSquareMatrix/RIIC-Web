@@ -7,6 +7,7 @@ import { RichTextHoverTerms } from "@/components/RichTextInteractive";
 import {
   BUILDING_SKILL_ENHANCED_WORD,
   buildingSkillUnlockLabel,
+  buildingSkillUnlockLabelEnglish,
   buildingSkillUnlockPrefix,
   operatorBuildingSkillList,
   type BuildingSkillPresentation,
@@ -91,7 +92,9 @@ function SkillBlock({ skill, locale, highlighted }: { skill: BuildingSkillPresen
         ) : null}
       </span>
       <span className="mt-1 block text-background/72">
-        {skill.enhanced ? (
+        {locale === "en" ? (
+          <>{skill.enhanced ? <>{buildingSkillUnlockLabelEnglish(skill.elite, skill.level).replace(/unlock$/, "")}<span className="text-[#22BBFF]">upgrade</span></> : buildingSkillUnlockLabelEnglish(skill.elite, skill.level)}</>
+        ) : skill.enhanced ? (
           <>
             <span>{buildingSkillUnlockPrefix(skill.elite, skill.level)}</span>
             <span className="text-[#22BBFF]">{BUILDING_SKILL_ENHANCED_WORD}</span>
