@@ -64,12 +64,14 @@ test("QR polling cannot read or consume another website account's scan", () => {
   assert.equal(findOwnedScan(scans, "scan-a", "website-user-a"), record);
 });
 
-test("the QR status route scopes polling to the authenticated website account", async () => {
+test("the QR status route scopes polling and consumption to the authenticated website account", async () => {
   const route = await readFile(
     new URL("../../app/api/skland/auth/qr/status/route.ts", import.meta.url),
     "utf8",
   );
-  assert.match(route, /pollScan\(scanId, website\.user\.id\)/);
+  assert.match(route, /pollScan\(scanId, website\.user\.id, request\.signal\)/);
+  assert.match(route, /finalizeSklandAuthentication\([\s\S]+request\.signal\)/);
+  assert.match(route, /setSklandAccountStoreCookies[\s\S]+request\.signal\.throwIfAborted\(\)[\s\S]+consumeScan\(scanId, website\.user\.id\)/);
 });
 
 test("global QR protection limits only concurrent upstream starts", () => {

@@ -6,7 +6,7 @@ import {
   requestClientIp,
   successResponse,
 } from "@/server/api-contract";
-import { pollScan } from "@/server/skland/adapter";
+import { consumeScan, pollScan } from "@/server/skland/adapter";
 import {
   assertSklandAvailable,
   assertSklandFeatureEnabled,
@@ -33,13 +33,15 @@ export async function POST(request: Request) {
       throw new PublicApiError("AIC-REQ-1001");
     }
     const scanId = body.scanId.trim();
-    const result = await pollScan(scanId, website.user.id);
+    const result = await pollScan(scanId, website.user.id, request.signal);
     if (result.session && result.response.scheduleSnapshot && result.response.statusSnapshot) {
+      request.signal.throwIfAborted();
       const completed = await finalizeSklandAuthentication(website.user.id, {
         session: result.session,
         snapshot: result.response.scheduleSnapshot,
         statusSnapshot: result.response.statusSnapshot,
-      });
+      }, request.signal);
+      request.signal.throwIfAborted();
       const response = successResponse({
         status: result.response.status,
         scheduleSnapshot: completed.data.scheduleSnapshot,
@@ -50,6 +52,8 @@ export async function POST(request: Request) {
         bindingSummary: completed.data.bindingSummary,
       }, requestId);
       setSklandAccountStoreCookies(response, request, completed.next, completed.previous);
+      request.signal.throwIfAborted();
+      consumeScan(scanId, website.user.id);
       return response;
     }
     const response = successResponse({

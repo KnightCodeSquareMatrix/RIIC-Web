@@ -99,6 +99,101 @@ test("Skland login exposes both methods and starts QR only after explicit consen
   expect(qrStartRequests).toBe(1);
 });
 
+test("Skland QR polling pauses while hidden or offline and resumes immediately", async ({ page, context }) => {
+  await mockApis(page, { sklandConfigured: true });
+  let pollRequests = 0;
+  await page.route("**/api/skland/auth/qr", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      success: true,
+      data: {
+        scanId: "scan-login-offline",
+        scanUrl: "hypergryph://scan_login?scanId=scan-login-offline",
+        expiresInSeconds: 600,
+      },
+      requestId,
+    }),
+  }));
+  await page.route("**/api/skland/auth/qr/status", (route) => {
+    pollRequests += 1;
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ success: true, data: { status: "waiting" }, requestId }),
+    });
+  });
+  await seedPreferences(page);
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Toggle Sidebar" }).click();
+  await openSklandOverview(page);
+  await page.getByRole("checkbox").nth(0).check();
+  await page.getByRole("checkbox").nth(1).check();
+  await expect(page.getByRole("img", { name: "森空岛登录二维码" })).toBeVisible();
+
+  await page.evaluate(() => {
+    Object.defineProperty(document, "hidden", { configurable: true, value: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await page.waitForTimeout(6_500);
+  expect(pollRequests).toBe(0);
+  await page.evaluate(() => {
+    Object.defineProperty(document, "hidden", { configurable: true, value: false });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await expect.poll(() => pollRequests, { timeout: 2_000 }).toBe(1);
+
+  await context.setOffline(true);
+  await page.waitForTimeout(6_500);
+  expect(pollRequests).toBe(1);
+
+  await context.setOffline(false);
+  await expect.poll(() => pollRequests, { timeout: 2_000 }).toBe(2);
+});
+
+test("Skland QR expires locally without polling after its deadline", async ({ page }) => {
+  await mockApis(page, { sklandConfigured: true });
+  let qrStartRequests = 0;
+  let pollRequests = 0;
+  await page.route("**/api/skland/auth/qr", (route) => {
+    qrStartRequests += 1;
+    const scanId = `scan-login-expiry-${qrStartRequests}`;
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        data: {
+          scanId,
+          scanUrl: `hypergryph://scan_login?scanId=${scanId}`,
+          expiresInSeconds: qrStartRequests === 1 ? 0.2 : 600,
+        },
+        requestId,
+      }),
+    });
+  });
+  await page.route("**/api/skland/auth/qr/status", (route) => {
+    pollRequests += 1;
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ success: true, data: { status: "waiting" }, requestId }),
+    });
+  });
+  await seedPreferences(page);
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Toggle Sidebar" }).click();
+  await openSklandOverview(page);
+  await page.getByRole("checkbox").nth(0).check();
+  await page.getByRole("checkbox").nth(1).check();
+
+  await expect.poll(() => qrStartRequests).toBe(2);
+  expect(pollRequests).toBe(0);
+  await expect(page.getByRole("img", { name: "森空岛登录二维码" })).toBeVisible();
+});
+
 test("credential import explains the risk, gates consent, recovers from errors, and clears secrets on success", async ({ page, context }) => {
   await mockApis(page, { sklandConfigured: true });
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
