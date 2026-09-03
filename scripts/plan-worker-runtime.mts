@@ -11,6 +11,7 @@ import {
   getPlanCacheSolverIdentity,
   resumePendingPlanArtifactFinalizations,
   runPlan,
+  savePlanFailureArtifact,
   stopInfraServeClients,
   waitForPlanArtifactFinalizers,
   warmPlanServeLane,
@@ -65,6 +66,7 @@ type PlanTaskExecutionDependencies = {
   markSolverFinished: typeof markPlanTaskSolverFinished;
   toPublicPlanData: typeof toPublicPlanData;
   describeArtifact: typeof describePlanArtifact;
+  saveFailureArtifact: typeof savePlanFailureArtifact;
   releaseCacheLease: typeof releasePlanCacheLease;
   completeCache: typeof completePlanCache;
   updateRunExecution: typeof updatePlanRunExecutionBestEffort;
@@ -86,6 +88,7 @@ const productionTaskExecutionDependencies: PlanTaskExecutionDependencies = {
   markSolverFinished: markPlanTaskSolverFinished,
   toPublicPlanData,
   describeArtifact: describePlanArtifact,
+  saveFailureArtifact: savePlanFailureArtifact,
   releaseCacheLease: releasePlanCacheLease,
   completeCache: completePlanCache,
   updateRunExecution: updatePlanRunExecutionBestEffort,
@@ -195,8 +198,10 @@ export async function executePlanTask(
     taskSource = "solver";
     await dependencies.markExecutionStarted(id, "solver");
     artifactResult = await dependencies.runPlan({
-      layout: payload.layout,
-      operbox: payload.operbox,
+      // runPlan normalizes its input in place. Keep the encrypted task payload intact
+      // so a later failure snapshot still contains the user's complete reproduction.
+      layout: structuredClone(payload.layout),
+      operbox: structuredClone(payload.operbox),
       sourceName: payload.sourceName,
       rotation: payload.rotation,
       fiammettaEnable: payload.fiammettaEnable,
@@ -265,6 +270,27 @@ export async function executePlanTask(
     return solverDurationMs === null ? null : Math.max(1, solverDurationMs);
   } catch (error) {
     if (lease) await dependencies.releaseCacheLease(lease).catch(() => undefined);
+    const errorCode = errorCodeOf(error);
+    const deferredArtifact = artifactResult ? await dependencies.describeArtifact(artifactResult) : null;
+    const fallbackArtifact = await dependencies.saveFailureArtifact({
+      diagnosticId,
+      layout: payload.layout,
+      operbox: payload.operbox,
+      sourceName: payload.sourceName,
+      rotation: payload.rotation,
+      fiammettaEnable: payload.fiammettaEnable,
+      dataOwnerTag: payload.dataOwnerTag,
+      errorCode,
+    }).catch((artifactError) => {
+      console.error(JSON.stringify({
+        level: "error",
+        event: "plan_failure_artifact_write_failed",
+        taskId: id,
+        errorType: artifactError instanceof Error ? artifactError.name : typeof artifactError,
+      }));
+      return null;
+    });
+    const artifact = fallbackArtifact ?? deferredArtifact;
     await dependencies.recordRun({
       diagnosticId,
       userId: task.userId,
@@ -276,11 +302,13 @@ export async function executePlanTask(
       operatorCount: payload.operatorCount,
       rotation: payload.rotation,
       fiammettaEnable: payload.fiammettaEnable,
-      errorCode: errorCodeOf(error),
+      errorCode,
       executionSource: taskSource === "failed" ? null : taskSource,
       solverDurationMs,
-      artifact: artifactResult ? await dependencies.describeArtifact(artifactResult) : null,
-      artifactStatus: artifactResult?.artifactEnvelopePath ? "pending" : "none",
+      artifact,
+      artifactStatus: deferredArtifact && artifactResult?.artifactEnvelopePath
+        ? "pending"
+        : artifact ? "complete" : "none",
       createdAt: new Date(),
     });
     await dependencies.completeTask(id, { status: "failed", error: "排班失败，请重试。" });
@@ -288,7 +316,7 @@ export async function executePlanTask(
       level: "error",
       event: "plan_task_failed",
       taskId: id,
-      errorCode: errorCodeOf(error),
+      errorCode,
       errorType: error instanceof Error ? error.name : typeof error,
     }));
     return solverDurationMs === null ? null : Math.max(1, solverDurationMs);

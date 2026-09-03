@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { MOTION_DURATION, MOTION_EASE_OUT } from "@/motion";
 import { operatorPortraitFor, operatorProfessionFor } from "@/operatorPortraits";
 import type { OperBoxEntry, UserProfileAction } from "@/types";
+import { legacyTrainingTarget, trainingAdviceSkillSummary } from "@/components/training-advice/skill-selection";
 import { demoOperatorName, useLanguageDemo } from "@/language-demo";
 
 const DOMAIN_LABELS: Record<string, string> = { trade: "贸易站", trading: "贸易站", manufacture: "制造站", manu: "制造站", power: "发电站", control: "控制中枢", general: "综合" };
@@ -35,6 +36,13 @@ export function RecommendationCard({ action, entry, variant = "full", index = 0,
   const priority = action.priority || (en ? "Unranked" : "未分级");
   const operatorName = demoOperatorName(action.operator, locale) || (en ? "Unknown operator" : "未知干员");
   const isHighPriority = /高|urgent|critical|p0|p1/i.test(priority);
+  const skillSummary = trainingAdviceSkillSummary(
+    action.operator,
+    action.current_elite !== undefined || entry
+      ? { elite: action.current_elite ?? entry?.elite, level: entry?.level }
+      : undefined,
+    legacyTrainingTarget(action.tier_up_requirement),
+  );
   const content = variant === "compact" ? (
     <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-border/60 py-3 last:border-0" data-recommendation-card="compact">
       <div className="min-w-0">
@@ -58,6 +66,11 @@ export function RecommendationCard({ action, entry, variant = "full", index = 0,
           }}
           portraitSize={80}
           showSkillTooltip={showSkillTooltip}
+          skillTooltipFocusable={showSkillTooltip && skillSummary.skills.length > 0}
+          skillTooltipHighlightIds={skillSummary.highlightedSkillIds}
+          skillTooltipContextLabel={skillSummary.highlightedSkillIds.length
+            ? (en ? "Operator base skills · target highlighted" : "干员基建技能 · 已标出本次目标")
+            : (en ? "Operator base skills" : "该干员的基建技能")}
         />
         <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
           <div className="min-w-0"><div className="flex flex-wrap items-center gap-2 text-xs text-white/55"><span className="font-medium text-[var(--room-accent)]">{recommendationDomainLabel(action.domain_id, en)}</span><span aria-hidden="true">·</span><span>{recommendationKindLabel(action.kind, en)}</span></div><p className="font-number mt-2 max-w-[72ch] text-pretty text-sm leading-6 text-white/82">{action.message || (en ? "No details available" : "暂无具体说明")}</p></div>

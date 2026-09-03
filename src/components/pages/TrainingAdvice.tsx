@@ -360,7 +360,7 @@ export function TrainingAdvice({
             <div className="grid min-w-0 gap-3" data-training-advice-list>
               <Suspense fallback={<p className="py-4 text-sm text-white/62" role="status">{en ? "Loading training recommendations…" : "正在加载培养建议…"}</p>}>
                 {actions.map((action, index) => (
-                  <RecommendationCard key={actionKey(action, index)} action={action} entry={ownedByName.get(action.operator)} index={index} showSkillTooltip={false} />
+                  <RecommendationCard key={actionKey(action, index)} action={action} entry={ownedByName.get(action.operator)} index={index} />
                 ))}
               </Suspense>
             </div>

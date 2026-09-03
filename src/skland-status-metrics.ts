@@ -2,6 +2,7 @@ import type {
   SklandInfrastructureRoom,
   SklandManufactureRoom,
   SklandStatusSnapshot,
+  SklandTradingOrder,
   SklandTradingRoom,
 } from "./types.ts";
 
@@ -16,6 +17,16 @@ export interface SklandStatusMetric {
   hint: string;
   tone: SklandMetricTone;
   visual: SklandMetricVisual;
+}
+
+export function sklandTradingOrderRewardLabel(
+  order: SklandTradingOrder,
+  en = false
+): "合成玉" | "龙门币" | "Orundum" | "LMD" {
+  const isOrundum = order.reward.type === "orundum"
+    || order.delivery.some((item) => item.type === "originium_shard");
+  if (en) return isOrundum ? "Orundum" : "LMD";
+  return isOrundum ? "合成玉" : "龙门币";
 }
 
 export function formatDashboardDuration(seconds: number, en = false): string {
