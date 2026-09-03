@@ -927,9 +927,10 @@ test("shared action buttons keep their geometry after WebKit interactions", asyn
   await expectButtonGeometryStable(planButton);
 });
 
-test("tooltips wait once and then open adjacent help instantly within the provider window", async ({ page, browserName }) => {
+test("tooltips wait once and then open adjacent help instantly within the provider window", async ({ page, browserName, context }) => {
   await mockApis(page);
   await seedPreferences(page);
+  await context.addCookies([{ name: "sidebar_state", value: "false", domain: "127.0.0.1", path: "/" }]);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
 
