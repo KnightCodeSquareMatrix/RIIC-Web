@@ -690,7 +690,8 @@ test("publishes the site terms and privacy policy with upstream policy links", a
   await gotoStable(page, "/privacy");
   await expect(page.getByRole("heading", { name: "隐私政策", level: 1 })).toBeVisible();
   await expect(page.getByText("版本与生效日期：2026-09-03")).toBeVisible();
-  await expect(page.getByText(/服务端 CLI 运行记录最多保存 30 天/)).toBeVisible();
+  await expect(page.getByText(/服务端 CLI 运行记录和主动反馈的私有复现快照最多保存 30 天/)).toBeVisible();
+  await expect(page.getByText(/提交的干员 Box、轮换设置、轮换次数、菲亚梅塔启用状态/)).toBeVisible();
   await expect(page.getByText(/第一方体验分析会自动记录/)).toBeVisible();
   await expect(page.getByText(/30 天到期/)).toBeVisible();
   await expect(page.getByText("可露希尔基建终端项目维护者", { exact: false })).toBeVisible();

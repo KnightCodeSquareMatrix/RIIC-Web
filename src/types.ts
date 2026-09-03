@@ -1119,10 +1119,19 @@ export interface FeedbackRoom {
 
 export type FeedbackKind = "room_issue" | "performance_issue";
 
+export interface FeedbackReproductionSnapshot {
+  layout: BaseBlueprint;
+  operbox: OperBoxEntry[];
+  rotation: RotationProfile;
+  fiammettaEnabled: boolean;
+  sourceType: Exclude<BoxSource, "sample">;
+}
+
 type FeedbackRequestBase = {
   diagnosticId: string;
   note: string;
   consent: true;
+  reproduction: FeedbackReproductionSnapshot;
 };
 
 export type FeedbackRequest = FeedbackRequestBase & (
