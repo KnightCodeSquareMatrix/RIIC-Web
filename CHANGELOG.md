@@ -2,6 +2,18 @@
 
 All notable changes to RIIC-Web are documented in this file.
 
+## [0.4.6] - 2026-09-04
+
+### Fixed
+
+- Current-state comparison now treats operators assigned to different rooms of the same facility type as matched, so no unnecessary placement adjustment is suggested.
+- Fatigue warnings remain visible for same-facility matches, while assignments to a different facility type still require relocation.
+
+### For contributors
+
+- Shift-comparison regression coverage verifies same-facility matches, fatigue-only warnings, and cross-facility relocation behavior.
+- `package.json` and `package-lock.json` record release `0.4.6`.
+
 ## [0.4.5] - 2026-09-04
 
 ### Fixed
