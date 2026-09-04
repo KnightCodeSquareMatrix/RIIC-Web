@@ -1261,6 +1261,34 @@ export interface AdminSessionsData {
   sessions: AdminSessionData[];
 }
 
+export interface SkillAnnotationData {
+  id: string;
+  operatorId: string;
+  skillId: string;
+  note: string;
+  updatedAt: string;
+}
+
+export interface SkillAnnotationListData {
+  annotations: SkillAnnotationData[];
+}
+
+export interface AdminSkillAnnotationData extends SkillAnnotationData {
+  createdAt: string;
+}
+
+export interface AdminSkillAnnotationListData {
+  annotations: AdminSkillAnnotationData[];
+}
+
+export interface AdminSkillAnnotationMutationData {
+  annotation: AdminSkillAnnotationData;
+}
+
+export interface AdminSkillAnnotationDeleteData {
+  deleted: true;
+}
+
 export interface AdminUserUpdateData {
   updated: true;
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Bug, Gauge, House, UsersRound } from "lucide-react";
+import { Bug, Gauge, House, MessageSquareText, UsersRound } from "lucide-react";
 import { usePathname } from "next/navigation";
 
 import { buttonVariants } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { useLanguageDemo } from "@/language-demo";
 
 const ITEMS = [
   { href: "/admin", zh: "运行概览", en: "Overview", icon: Gauge },
+  { href: "/admin/skills", zh: "技能注释", en: "Skill notes", icon: MessageSquareText },
   { href: "/admin/issues", zh: "求解器问题", en: "Solver issues", icon: Bug },
   { href: "/admin/users", zh: "用户管理", en: "Users", icon: UsersRound },
 ] as const;

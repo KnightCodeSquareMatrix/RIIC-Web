@@ -80,6 +80,25 @@ export const sklandBinding = pgTable("skland_binding", {
 
 export const appSchema = pgSchema("app");
 
+/**
+ * 人工维护的基建技能补充说明。
+ *
+ * 这里只保存稳定 ID 与人工文本，不属于 arkntools 自动生成资源，所以上游资源同步不会覆盖它。
+ */
+export const skillAnnotation = appSchema.table("skill_annotation", {
+  id: text("id").primaryKey(),
+  operatorId: text("operator_id").notNull(),
+  skillId: text("skill_id").notNull(),
+  note: text("note").notNull(),
+  createdByUserId: text("created_by_user_id").references(() => user.id, { onDelete: "set null" }),
+  updatedByUserId: text("updated_by_user_id").references(() => user.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("skill_annotation_operator_skill_uidx").on(table.operatorId, table.skillId),
+  index("skill_annotation_updated_at_idx").on(table.updatedAt),
+]);
+
 export const planRun = appSchema.table("plan_run", {
   diagnosticId: text("diagnostic_id").primaryKey(),
   userId: text("user_id").references(() => user.id, { onDelete: "cascade" }),

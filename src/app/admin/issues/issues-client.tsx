@@ -476,8 +476,7 @@ export function AdminIssues() {
     <main id="admin-content" className="mx-auto grid max-w-7xl gap-6 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="font-technical text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">SOLVER TRIAGE</p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-[-0.012em]">{en ? "Solver issues" : "求解器问题"}</h1>
+          <h1 className="text-2xl font-semibold tracking-[-0.012em]">{en ? "Solver issues" : "求解器问题"}</h1>
           <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">{en ? "Review user feedback by facility, track failed solves, and download layouts, Boxes, and rotation settings for reproduction." : "按设施审阅用户反馈，追踪求解失败，并下载足够复现的布局、Box 与轮换配置。"}</p>
         </div>
         <Button type="button" variant="outline" disabled={loadingFeedback || loadingRuns} onClick={() => { setDetails({}); setExpanded(null); void loadFeedback(); void loadRuns(); }}>
