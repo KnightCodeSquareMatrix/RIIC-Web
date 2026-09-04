@@ -2,6 +2,24 @@
 
 All notable changes to RIIC-Web are documented in this file.
 
+## [0.5.0] - 2026-09-05
+
+### Added
+
+- Administrators can create, search, edit, and delete operator-specific infrastructure skill notes from `/admin/skills`.
+- The Skills catalog displays each published clarification on its exact operator skill card as a separate asterisk-prefixed line on desktop and mobile.
+
+### Changed
+
+- Manual skill notes are stored independently from generated arkntools assets, so routine upstream synchronization cannot overwrite editorial clarifications.
+- The administration interface removes decorative product labels and numbered section prefixes, and improves search, responsive layout, feedback, and editor states.
+
+### For contributors
+
+- A dedicated database migration, administrator and same-origin API boundaries, public DTO filtering, and annotation identity tests cover the new workflow.
+- Release `0.5.0` preserves the latest 429-operator arkntools catalog already published on `main`.
+- `package.json` and `package-lock.json` record release `0.5.0`.
+
 ## [0.4.9] - 2026-09-04
 
 ### Changed
