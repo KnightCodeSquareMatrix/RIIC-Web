@@ -608,6 +608,15 @@
     ],
     "icon": "/images/building-skills/bskill_ctrl_p_spd.png"
   },
+  "control_prod_spd_999": {
+    "id": "control_prod_spd_999",
+    "name": "领袖魅力",
+    "descriptionRich": "进驻控制中枢时，所有制造站生产力<@cc.vup>+2%</>（同种效果取最高）",
+    "tags": [
+      "生产力"
+    ],
+    "icon": "/images/building-skills/bskill_ctrl_p_spd_p3r.png"
+  },
   "control_prod_tra_spd_000": {
     "id": "control_prod_tra_spd_000",
     "name": "权变",
@@ -976,6 +985,15 @@
       "群体恢复"
     ],
     "icon": "/images/building-skills/bskill_dorm_all2.png"
+  },
+  "dorm_rec_all_999": {
+    "id": "dorm_rec_all_999",
+    "name": "毛茸茸的抚慰",
+    "descriptionRich": "进驻宿舍时，该宿舍内所有干员的心情每小时恢复<@cc.vup>+0.1</>（同种效果取最高）",
+    "tags": [
+      "群体恢复"
+    ],
+    "icon": "/images/building-skills/bskill_dorm_p3r.png"
   },
   "dorm_rec_all&bd_000": {
     "id": "dorm_rec_all&bd_000",
@@ -1784,6 +1802,15 @@
       "联络速度"
     ],
     "icon": "/images/building-skills/bskill_hire_skgoat4.png"
+  },
+  "hire_spd_cost_999": {
+    "id": "hire_spd_cost_999",
+    "name": "独立调查",
+    "descriptionRich": "进驻人力办公室时，人脉资源的联络速度<@cc.vup>+30%</>，心情每小时消耗<@cc.vup>-0.25</>",
+    "tags": [
+      "联络速度"
+    ],
+    "icon": "/images/building-skills/bskill_hire_p3r.png"
   },
   "hire_spd_cost&char_000": {
     "id": "hire_spd_cost&char_000",
@@ -2690,6 +2717,15 @@
     ],
     "icon": "/images/building-skills/bskill_man_spd_variable31.png"
   },
+  "manu_prod_spd&bd_000": {
+    "id": "manu_prod_spd&bd_000",
+    "name": "社群的意义",
+    "descriptionRich": "进驻制造站时，生产力<@cc.vup>+20%</>，基建内（不包含副手）每有1名<$cc.tag.sees><@cc.kw>S.E.E.S.</></>干员（最多<@cc.kw>4</>名），生产力额外<@cc.vup>+5%</>",
+    "tags": [
+      "通用生产"
+    ],
+    "icon": "/images/building-skills/bskill_man_p3r.png"
+  },
   "manu_prod_spd&fraction_000": {
     "id": "manu_prod_spd&fraction_000",
     "name": "重聚时光",
@@ -3269,6 +3305,16 @@
     ],
     "icon": "/images/building-skills/bskill_meet_spd&bd2.png"
   },
+  "meet_spd&bd_999": {
+    "id": "meet_spd&bd_999",
+    "name": "跨领域交流",
+    "descriptionRich": "进驻会客室时，线索搜集速度提升<@cc.vup>10%</>，当与<@cc.kw>虎狼丸</>进驻会客室一起工作时，更容易获得线索板上尚未拥有的线索",
+    "tags": [
+      "无特别加成",
+      "未拥有加成"
+    ],
+    "icon": "/images/building-skills/bskill_meet_p3r_bd.png"
+  },
   "meet_spd&clue_000": {
     "id": "meet_spd&clue_000",
     "name": "广交义友",
@@ -3385,6 +3431,15 @@
       "无特别加成"
     ],
     "icon": "/images/building-skills/bskill_meet_exchange2.png"
+  },
+  "meet_spd&exchange_999": {
+    "id": "meet_spd&exchange_999",
+    "name": "虎狼丸的报恩",
+    "descriptionRich": "进驻会客室时，处于线索交流时线索搜集速度提升<@cc.vup>30%</>",
+    "tags": [
+      "无特别加成"
+    ],
+    "icon": "/images/building-skills/bskill_meet_koromaru.png"
   },
   "meet_spd&sami_000": {
     "id": "meet_spd&sami_000",
@@ -3829,6 +3884,13 @@
     "descriptionRich": "进驻发电站时，如果<@cc.kw>逻各斯</>进驻在训练室协助位，则无人机充能速度<@cc.vup>+5%</>",
     "tags": [],
     "icon": "/images/building-skills/bskill_pow_spd_P1.png"
+  },
+  "power_rec_spd_P2_999": {
+    "id": "power_rec_spd_P2_999",
+    "name": "机械工学",
+    "descriptionRich": "进驻发电站时，无人机每小时充能速度<@cc.vup>+15%</>，如果<@cc.kw>结城理</>进驻在制造站，则无人机充能速度额外<@cc.vup>+5%</>",
+    "tags": [],
+    "icon": "/images/building-skills/bskill_pow_spd_p3r.png"
   },
   "power_rec_spd&addition_000": {
     "id": "power_rec_spd&addition_000",
@@ -4932,6 +4994,16 @@
       "近卫"
     ],
     "icon": "/images/building-skills/bskill_train_mh2_guard&sniper2.png"
+  },
+  "train_spd_doubleProf3_999": {
+    "id": "train_spd_doubleProf3_999",
+    "name": "合理兼职",
+    "descriptionRich": "进驻训练室协助位时，<@cc.kw>狙击</>与<@cc.kw>医疗</>干员的专精技能训练速度<@cc.vup>+45%</>",
+    "tags": [
+      "狙击",
+      "医疗"
+    ],
+    "icon": "/images/building-skills/bskill_train_p3r.png"
   },
   "train_spd_power_000": {
     "id": "train_spd_power_000",
