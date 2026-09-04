@@ -43,8 +43,9 @@ export interface CompactScheduleViewProps {
   activeShift: number;
   activePlan?: MaaPlan;
   shiftDirection: ShiftDirection;
-  onIssue: (row: RoomRow) => void;
+  onIssue?: (row: RoomRow) => void;
   feedbackDisabled?: boolean;
+  onSlotClick?: (row: RoomRow, slotIndex: number) => void;
 }
 
 /** 布局宽度百分比，自己改数值 */
@@ -72,6 +73,7 @@ function CompactRoomCard({
   horizontal,
   className = "",
   style,
+  onSlotClick,
 }: {
   row: RoomRow;
   layoutRoom: BaseBlueprint["rooms"][number] | undefined;
@@ -80,11 +82,12 @@ function CompactRoomCard({
   slots: { slot: RoomRow["operatorSlots"][number] | undefined; positionLabel?: string }[];
   currentMoraleByOperator?: ReadonlyMap<string, number>;
   shiftDirection: ShiftDirection;
-  onIssue: (row: RoomRow) => void;
+  onIssue?: (row: RoomRow) => void;
   feedbackDisabled?: boolean;
   horizontal: boolean;
   className?: string;
   style?: CSSProperties;
+  onSlotClick?: (row: RoomRow, slotIndex: number) => void;
 }) {
   const { locale } = useLanguageDemo();
   const en = locale === "en";
@@ -174,6 +177,7 @@ function CompactRoomCard({
       shiftDirection={shiftDirection}
       transitionDelay={Math.min(index, 2) * 0.02}
       positionLabel={positionLabel}
+      onActivate={onSlotClick ? () => onSlotClick(row, index) : undefined}
     />
   ));
 
@@ -210,7 +214,7 @@ function CompactRoomCard({
         style={{ ...rowStyle, ...style }}
       >
         {backgroundLayers}
-        <CompactFeedbackButton row={row} disabled={feedbackDisabled} onIssue={onIssue} />
+        {onIssue ? <CompactFeedbackButton row={row} disabled={feedbackDisabled} onIssue={onIssue} /> : null}
         {details}
         {operatorArea}
       </div>
@@ -225,7 +229,7 @@ function CompactRoomCard({
       style={{ ...rowStyle, ...style }}
     >
       {backgroundLayers}
-      <CompactFeedbackButton row={row} disabled={feedbackDisabled} onIssue={onIssue} />
+      {onIssue ? <CompactFeedbackButton row={row} disabled={feedbackDisabled} onIssue={onIssue} /> : null}
       {details}
       <div
         className={`relative z-10 ${
@@ -267,7 +271,7 @@ function CompactFeedbackButton({ row, disabled, onIssue }: { row: RoomRow; disab
 }
 
 export function CompactScheduleView(props: CompactScheduleViewProps) {
-  const { rows, layout, currentMoraleByOperator, shiftDirection, onIssue, feedbackDisabled = false } = props;
+  const { rows, layout, currentMoraleByOperator, shiftDirection, onIssue, feedbackDisabled = false, onSlotClick } = props;
   const { locale } = useLanguageDemo();
 
   if (rows.length === 0) {
@@ -300,7 +304,7 @@ export function CompactScheduleView(props: CompactScheduleViewProps) {
     const slotCount = roomSlotCountFor(row.group);
     const slots = row.positionSlots
       ? row.positionSlots.map(({ slot, positionLabel }) => ({ slot, positionLabel }))
-      : Array.from({ length: slotCount }, (_, i) => ({ slot: row.operatorSlots[i] }));
+      : Array.from({ length: slotCount }, (_, i) => ({ slot: row.slotAssignments ? row.slotAssignments[i] : row.operatorSlots[i] }));
     return (
       <CompactRoomCard
         key={row.key}
@@ -313,6 +317,7 @@ export function CompactScheduleView(props: CompactScheduleViewProps) {
         shiftDirection={shiftDirection}
         onIssue={onIssue}
         feedbackDisabled={feedbackDisabled}
+        onSlotClick={onSlotClick}
         horizontal={COMPACT_AUXILIARY_GROUPS.has(row.group)}
         className="min-w-0"
         style={widthPercent !== undefined ? { flexBasis: `${widthPercent}%` } : { flex: 1 }}

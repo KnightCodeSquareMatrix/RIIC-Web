@@ -1150,6 +1150,7 @@ function OperatorSlotShell({
   centerFrameInList,
   compactFactory,
   compactView,
+  editableHint,
   frameClassName,
   frameContent,
   frameFocusable = false,
@@ -1158,11 +1159,13 @@ function OperatorSlotShell({
   labelClassName,
   positionLabel,
   title,
+  onActivate,
 }: {
   ariaLabel?: string;
   centerFrameInList: boolean;
   compactFactory: boolean;
   compactView: boolean;
+  editableHint?: string;
   frameClassName: string;
   frameContent?: ReactNode;
   frameFocusable?: boolean;
@@ -1172,6 +1175,7 @@ function OperatorSlotShell({
   labelClassName: string;
   positionLabel?: string;
   title?: string;
+  onActivate?: () => void;
 }) {
   const frame = (
     <div
@@ -1179,6 +1183,7 @@ function OperatorSlotShell({
         "relative aspect-square h-[var(--operator-slot-size)] min-w-0 shrink-0 overflow-hidden border-2 max-sm:border",
         frameClassName,
         frameFocusable && "cursor-help outline-none transition-[border-color,box-shadow] hover:border-white/90 focus-visible:border-[#FFD501] focus-visible:ring-2 focus-visible:ring-[#FFD501]/70",
+        onActivate && "border-[#FFD800] shadow-[0_0_0_1px_rgba(255,216,0,0.42),0_0_12px_rgba(255,216,0,0.2)]",
         centerFrameInList && "max-sm:h-auto max-sm:w-full sm:absolute sm:left-0 sm:top-1/2 sm:-translate-y-1/2",
       )}
       aria-label={ariaLabel}
@@ -1186,6 +1191,11 @@ function OperatorSlotShell({
       tabIndex={frameFocusable ? 0 : undefined}
     >
       {frameContent}
+      {editableHint ? (
+        <span className="pointer-events-none absolute bottom-0.5 right-0.5 z-20 bg-black/72 px-1 py-0.5 text-[9px] font-medium leading-none tracking-wide text-[#FFD800]">
+          {editableHint}
+        </span>
+      ) : null}
     </div>
   );
 
@@ -1198,9 +1208,19 @@ function OperatorSlotShell({
           : "[--operator-slot-size:clamp(70px,7.3vw,80px)] max-sm:[--operator-slot-size:clamp(56px,16vw,76px)]",
         compactFactory && "min-[1800px]:[--operator-slot-size:70px]",
         centerFrameInList && "max-sm:w-full sm:relative sm:h-full sm:w-[var(--operator-slot-size)]",
+        onActivate && "cursor-pointer rounded-[4px] outline-none focus-visible:ring-2 focus-visible:ring-[#FFD800] focus-visible:ring-offset-2 focus-visible:ring-offset-[#313131]",
       )}
       data-position={positionLabel || undefined}
       title={title}
+      role={onActivate ? "button" : undefined}
+      tabIndex={onActivate ? 0 : undefined}
+      onClick={onActivate}
+      onKeyDown={onActivate ? (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onActivate();
+        }
+      } : undefined}
     >
       {frameWrapper(frame)}
       <span
@@ -1281,6 +1301,7 @@ export function OperatorSlot({
   skillTooltipHighlightIds = [],
   skillTooltipContextLabel,
   searchQuery = "",
+  onActivate,
 }: {
   slot: RoomRow["operatorSlots"][number] | undefined;
   currentMorale?: number;
@@ -1300,6 +1321,7 @@ export function OperatorSlot({
   skillTooltipHighlightIds?: readonly string[];
   skillTooltipContextLabel?: string;
   searchQuery?: string;
+  onActivate?: () => void;
 }) {
   const shouldReduceMotion = useReducedMotion();
   const { locale } = useLanguageDemo();
@@ -1331,6 +1353,7 @@ export function OperatorSlot({
       centerFrameInList={centerFrameInList}
       compactFactory={compactFactory}
       compactView={compactView}
+      editableHint={onActivate ? (locale === "en" ? "EDIT" : "可编辑") : undefined}
       frameClassName={frameClassName}
       frameContent={
         <AnimatePresence initial={false} mode="sync">
@@ -1434,6 +1457,7 @@ export function OperatorSlot({
           : "text-transparent select-none"}
       positionLabel={displayPositionLabel}
       title={suppressNativeTitles ? undefined : displayName ?? slot?.label}
+      onActivate={onActivate}
     />
   );
 
@@ -1458,6 +1482,7 @@ export function ScheduleBoard({
   onFactoryRecipeChange,
   onTradeOrderChange,
   onViewModeChange,
+  onSlotClick,
 }: {
   rows: RoomRow[];
   layout: BaseBlueprint;
@@ -1471,11 +1496,12 @@ export function ScheduleBoard({
   activePlan?: MaaPlan;
   searchQuery?: string;
   animateInitialView?: boolean;
-  onIssue: (row: RoomRow) => void;
+  onIssue?: (row: RoomRow) => void;
   feedbackDisabled?: boolean;
   onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
   onViewModeChange?: (viewMode: "list" | "compact") => void;
+  onSlotClick?: (row: RoomRow, slotIndex: number) => void;
 }) {
   const { locale } = useLanguageDemo();
   const en = locale === "en";
@@ -1730,7 +1756,7 @@ export function ScheduleBoard({
                   positionLabel?: string;
                 }> = row.positionSlots
                   ? row.positionSlots.map(({ slot, positionLabel }) => ({ slot, positionLabel }))
-                  : Array.from({ length: slotCount }, (_, index) => ({ slot: row.operatorSlots[index] }));
+                  : Array.from({ length: slotCount }, (_, index) => ({ slot: row.slotAssignments ? row.slotAssignments[index] : row.operatorSlots[index] }));
                 const gridTone = roomGridTone(row.group);
                 const rowStyle = {
                   "--room-accent": rowVisual.accent,
@@ -1826,6 +1852,7 @@ export function ScheduleBoard({
                             transitionDelay={Math.min(index, 2) * 0.02}
                             searchQuery={normalizedQuery}
                             positionLabel={positionLabel}
+                            onActivate={onSlotClick ? () => onSlotClick(row, index) : undefined}
                           />
                         ))}
                       </div>
@@ -1834,7 +1861,7 @@ export function ScheduleBoard({
                       )}
                     </div>
 
-                    <Tooltip>
+                    {onIssue ? <Tooltip>
                       <TooltipTrigger
                         render={
                           <span className="absolute right-2 top-2 z-10">
@@ -1858,7 +1885,7 @@ export function ScheduleBoard({
                           ? en ? "Sample data cannot submit feedback" : "全角色导入为体验数据，不能提交反馈"
                           : en ? "Report schedule issue" : "反馈排班问题"}
                       </TooltipContent>
-                    </Tooltip>
+                    </Tooltip> : null}
                   </div>
                 );
               })}
@@ -1878,6 +1905,7 @@ export function ScheduleBoard({
               shiftDirection={shiftDirection}
               onIssue={onIssue}
               feedbackDisabled={feedbackDisabled}
+              onSlotClick={onSlotClick}
             />
           ) : compactScheduleLoadFailed ? (
             <div className="grid min-h-[420px] place-items-center border-y border-destructive/35 text-sm text-destructive" role="alert">
