@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import layout243 from "../src/layouts/243.json" with { type: "json" };
-import { mockApis, now, planData } from "./production-readiness.fixture";
+import { mockAnonymousWebsiteSession, mockApis, now, planData } from "./production-readiness.fixture";
 
 const operators = [
   { id: "char_002_amiya", name: "阿米娅", elite: 2, level: 80, own: true, potential: 6, rarity: 5 },
@@ -47,12 +47,57 @@ test("calculator result toolbar keeps manual editing next to MAA export", async 
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/");
   await expect(page.locator('[data-workbench-hydrated="true"]')).toBeVisible();
+  await page.evaluate(() => {
+    window.localStorage.setItem("arknights-infra-manual-schedule-v1", JSON.stringify({
+      version: 2,
+      activeShift: 0,
+      fiammettaEnabled: false,
+      shifts: [{
+        durationHours: 9,
+        fiammettaTarget: null,
+        rooms: { trade_1: { operators: ["阿米娅", null, null] } },
+      }],
+    }));
+  });
   const desktopActions = page.locator('[data-calculator-export-actions="desktop"]');
   await expect(desktopActions.getByRole("button", { name: "手动修改排班" })).toBeEnabled();
   await expect(desktopActions.getByRole("button", { name: "导出到 MAA" })).toBeDisabled();
   await desktopActions.getByRole("button", { name: "手动修改排班" }).click();
   await expect(page).toHaveURL(/\/manual$/);
+  await expect(page.getByRole("tab", { name: /班次 1.*9h/ })).toBeVisible();
+  await expect(page.locator('[data-room-title="贸易站 1"] [data-operator-identity="阿米娅"]')).toBeVisible();
   expect(planRequests).toBe(0);
+});
+
+test("manual scheduling hides a personal Box until website login", async ({ page }) => {
+  await mockAnonymousWebsiteSession(page);
+  await page.addInitScript(() => {
+    const key = "arknights-infra-calc-session-v5";
+    const session = JSON.parse(window.localStorage.getItem(key) ?? "null");
+    window.localStorage.setItem(key, JSON.stringify({ ...session, boxSource: "maa" }));
+  });
+
+  await page.goto("/manual");
+  await expect(page.locator('[data-workbench-hydrated="true"]')).toBeVisible();
+  await expect(page.locator("[data-manual-schedule-page]")).toHaveCount(0);
+  await page.getByRole("button", { name: "配置 Box 与布局" }).click();
+  await expect(page.getByRole("dialog", { name: "登录网站账号" })).toBeVisible();
+});
+
+test("clearing local data from manual scheduling does not recreate its draft", async ({ page }) => {
+  await page.goto("/manual");
+  await expect(page.locator('[data-workbench-hydrated="true"]')).toBeVisible();
+  await page.getByRole("button", { name: "配置 Box 与布局" }).first().click();
+  const setup = page.getByRole("dialog");
+  await setup.getByText("数据管理", { exact: true }).click();
+  await setup.getByRole("button", { name: "清除本地数据" }).click();
+  const confirmation = page.getByRole("dialog", { name: "清除本地数据？" });
+  await confirmation.getByRole("button", { name: "清除本地数据" }).click();
+
+  await expect(page).toHaveURL(/\/$/);
+  await expect.poll(() => page.evaluate(() => (
+    window.localStorage.getItem("arknights-infra-manual-schedule-v1")
+  ))).toBeNull();
 });
 
 test("calculator onboarding does not expose manual editing", async ({ page }) => {
@@ -75,6 +120,15 @@ test("calculator converts a solved schedule into editable manual assignments", a
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/");
   await expect(page.locator('[data-workbench-hydrated="true"]')).toBeVisible();
+  await page.evaluate(() => {
+    const originalSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function setItem(key: string, value: string) {
+      if (key === "arknights-infra-manual-schedule-v1") {
+        throw new DOMException("Storage disabled", "SecurityError");
+      }
+      return originalSetItem.call(this, key, value);
+    };
+  });
   const desktopActions = page.locator('[data-calculator-export-actions="desktop"]');
   await expect(desktopActions.getByRole("button", { name: "导出到 MAA" })).toBeEnabled();
   await desktopActions.getByRole("button", { name: "手动修改排班" }).click();
@@ -143,7 +197,9 @@ test("manual scheduling configures independent shifts, moves conflicts and enabl
   await expect(trade.getByRole("button", { name: "空置" }).first()).toContainText("可编辑");
   await trade.getByRole("button", { name: "空置" }).first().click();
   await page.getByRole("dialog").getByRole("button", { name: /阿米娅/ }).click();
-  await expect(trade.locator('[data-operator-identity="阿米娅"]')).toBeVisible();
+  const editableAmiyaSlot = trade.getByRole("button", { name: /阿米娅/ });
+  await expect(editableAmiyaSlot).toBeVisible();
+  await expect(editableAmiyaSlot.locator("button")).toHaveCount(0);
 
   await trade.getByRole("button", { name: "空置" }).first().click();
   await page.getByRole("dialog").getByRole("button", { name: /锡兰/ }).click();

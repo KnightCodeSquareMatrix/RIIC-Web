@@ -72,6 +72,7 @@ import {
   MANUAL_SCHEDULE_STORAGE_KEY,
   persistManualScheduleDraft,
   reconcileManualScheduleDraft,
+  type ManualScheduleDraft,
 } from "./manual-schedule";
 import { effectiveFiammettaSetting, resolvePlanPresentationLayout } from "./plan-presentation";
 import {
@@ -140,7 +141,7 @@ const ProductChangeConfirmModal = lazy(() => loadComponents().then((module) => (
 type ProductChange =
   | { type: "factory"; roomId: string; recipe: FactoryRecipe }
   | { type: "trade"; roomId: string; order: TradeOrder };
-type WebsiteAuthIntent = "account" | "run" | "setup" | "skland" | "upgrade";
+type WebsiteAuthIntent = "account" | "manual" | "manual-edit" | "run" | "setup" | "skland" | "upgrade";
 
 type SklandFullRestoreResult =
   | { session: SklandSessionData; error?: never }
@@ -285,6 +286,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   const [fiammettaEnabled, setFiammettaEnabled] = useState(false);
   const [manualFiammettaEnabled, setManualFiammettaEnabled] = useState(false);
   const [manualShiftDurations, setManualShiftDurations] = useState<number[]>([...DEFAULT_MANUAL_SHIFT_DURATIONS]);
+  const [manualDraftHandoff, setManualDraftHandoff] = useState<ManualScheduleDraft | null>(null);
   const [inputMode, setInputMode] = useState<"skland" | "maa" | "manual">(CLIENT_SKLAND_ENABLED ? "skland" : "maa");
   const [maaPaste, setMaaPaste] = useState("");
   const [sklandScheduleSnapshot, setSklandScheduleSnapshot] = useState<SklandScheduleSnapshot | null>(null);
@@ -1165,20 +1167,25 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   }
 
   function handleEditManualSchedule() {
-    const resultDurations = result?.rotation.shifts
+    if (!scheduleResult) {
+      navigateToPage("manual");
+      return;
+    }
+    const resultDurations = scheduleResult.rotation.shifts
       .map((shift) => shift.duration_hours)
       .filter((duration) => Number.isFinite(duration) && duration > 0);
     const durations = resultDurations?.length ? resultDurations : rotationDurations(rotationProfile);
     const draft = reconcileManualScheduleDraft(createManualScheduleDraftFromCalculator({
       layout,
-      maa: result?.maa,
+      maa: scheduleResult.maa,
       fallbackDurations: durations,
       fiammettaEnabled: effectiveFiammettaEnabled,
-      trainingRoomShifts: result?.trainingRoom?.shifts,
+      trainingRoomShifts: scheduleResult.trainingRoom?.shifts,
     }), layout, operbox);
 
     setManualShiftDurations(draft.shifts.map((shift) => shift.durationHours));
     setManualFiammettaEnabled(draft.fiammettaEnabled);
+    setManualDraftHandoff(draft);
     try {
       persistManualScheduleDraft(window.localStorage, draft);
     } catch {
@@ -1475,6 +1482,10 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   }
 
   function handleAppPageChange(nextPage: AppPage, trigger?: HTMLElement): boolean {
+    if (nextPage === "manual" && !accountCanUseCurrentBox) {
+      requestWebsiteAccount("manual", trigger);
+      return false;
+    }
     if ((nextPage === "account" || nextPage === "skland") && !websiteSession) {
       requestWebsiteAccount(nextPage, trigger);
       return false;
@@ -1561,7 +1572,20 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   }
 
   function handleManualSetup() {
-    openSetup("manual");
+    setSetupMode("manual");
+    if (!accountCanUseCurrentBox) {
+      requestWebsiteAccount("setup");
+      return;
+    }
+    setSetupOpen(true);
+  }
+
+  function handleProtectedEditManualSchedule() {
+    if (!accountCanUseCurrentBox) {
+      requestWebsiteAccount("manual-edit");
+      return;
+    }
+    handleEditManualSchedule();
   }
 
   function handleProtectedRun() {
@@ -1589,6 +1613,14 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     }
     if (intent === "upgrade") {
       setUpgradeSimulationOpen(true);
+      return;
+    }
+    if (intent === "manual-edit") {
+      handleEditManualSchedule();
+      return;
+    }
+    if (intent === "manual") {
+      router.push(workbenchHref("manual"));
       return;
     }
     router.push(workbenchHref(intent === "skland" ? "skland" : "account"));
@@ -1692,6 +1724,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       setBoxSource("sample");
       setManualShiftDurations([...DEFAULT_MANUAL_SHIFT_DURATIONS]);
       setManualFiammettaEnabled(false);
+      setManualDraftHandoff(null);
       setLayoutDirty(false);
       setLayoutSource("local");
       setLocalLayoutBackup(null);
@@ -1702,6 +1735,8 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       setOnboardingPreference("active");
       setStorageNotice(null);
       clearIssueState();
+      setSetupOpen(false);
+      router.push(workbenchHref("calculator"));
     } catch {
       setStorageNotice(displayError("AIC-LOCAL-7001", locale === "en" ? "The browser could not clear local data. Check site storage permissions." : "浏览器无法清除本地数据，请检查站点存储权限。"));
     }
@@ -1865,17 +1900,19 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       onPerformanceIssue: handlePerformanceIssue,
       onFactoryRecipeChange: handleScheduleFactoryRecipeChange,
       onTradeOrderChange: handleScheduleTradeOrderChange,
-      onEditManualSchedule: handleEditManualSchedule,
+      onEditManualSchedule: handleProtectedEditManualSchedule,
       onDownloadMaa: handleDownloadMaa,
       onClearResultNotice: () => setResultClearNotice(null),
       onDismissResultClearWarning: dismissResultClearWarning,
     },
     manual: {
       layout,
-      operbox,
-      sourceName: fileName,
+      operbox: accountCanUseCurrentBox ? operbox : null,
+      sourceName: accountCanUseCurrentBox ? fileName : null,
       shiftDurations: manualShiftDurations,
       fiammettaEnabled: effectiveManualFiammettaEnabled,
+      initialDraft: accountCanUseCurrentBox ? manualDraftHandoff : null,
+      onInitialDraftConsumed: () => setManualDraftHandoff(null),
       onShiftDurationsChange: setManualShiftDurations,
       onFiammettaEnabledChange: setManualFiammettaEnabled,
       onOpenSetup: handleManualSetup,

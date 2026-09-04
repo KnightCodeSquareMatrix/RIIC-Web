@@ -43,6 +43,8 @@ export interface ManualSchedulePageProps {
   sourceName: string | null;
   shiftDurations: number[];
   fiammettaEnabled: boolean;
+  initialDraft: ManualScheduleDraft | null;
+  onInitialDraftConsumed: () => void;
   onShiftDurationsChange: (durations: number[]) => void;
   onFiammettaEnabledChange: (enabled: boolean) => void;
   onOpenSetup: () => void;
@@ -110,6 +112,8 @@ export function ManualSchedulePage({
   sourceName,
   shiftDurations,
   fiammettaEnabled,
+  initialDraft,
+  onInitialDraftConsumed,
   onShiftDurationsChange,
   onFiammettaEnabledChange,
   onOpenSetup,
@@ -135,12 +139,13 @@ export function ManualSchedulePage({
   const ownedOperators = useMemo(() => (
     (operbox ?? []).filter((entry) => entry.own).sort((left, right) => left.name.localeCompare(right.name, "zh-CN"))
   ), [operbox]);
+  const canPersistDraft = ownedOperators.length > 0;
   const ownedFingerprint = ownedOperators.map((operator) => operator.name).join("\0");
 
   useEffect(() => {
     if (restored) return;
     try {
-      const saved = loadManualScheduleDraft(window.localStorage);
+      const saved = initialDraft ?? loadManualScheduleDraft(window.localStorage);
       if (saved) {
         const reconciled = reconcileManualScheduleDraft(saved, layout, operbox);
         setDraft(reconciled);
@@ -150,8 +155,9 @@ export function ManualSchedulePage({
     } catch {
       setStorageWarning(en ? "The manual draft could not be restored." : "无法恢复浏览器中的手动排班草稿。");
     }
+    if (initialDraft) onInitialDraftConsumed();
     setRestored(true);
-  }, [en, layout, onFiammettaEnabledChange, onShiftDurationsChange, operbox, restored]);
+  }, [en, initialDraft, layout, onFiammettaEnabledChange, onInitialDraftConsumed, onShiftDurationsChange, operbox, restored]);
 
   useEffect(() => {
     if (!restored) return;
@@ -170,14 +176,14 @@ export function ManualSchedulePage({
   }, [layout, operbox, ownedFingerprint, restored, shiftDurations]);
 
   useEffect(() => {
-    if (!restored) return;
+    if (!restored || !canPersistDraft) return;
     try {
       persistManualScheduleDraft(window.localStorage, draft);
       setStorageWarning(null);
     } catch {
       setStorageWarning(en ? "Changes remain available for this visit but could not be saved locally." : "本次访问仍可继续编辑，但无法在浏览器中保存草稿。");
     }
-  }, [draft, en, restored]);
+  }, [canPersistDraft, draft, en, restored]);
 
   const activeShift = Math.min(draft.activeShift, Math.max(0, draft.shifts.length - 1));
   const maa = useMemo(() => manualScheduleToMaa(draft, layout, fiammettaEnabled), [draft, fiammettaEnabled, layout]);

@@ -1237,13 +1237,29 @@ function OperatorSlotShell({
   );
 }
 
-function BuildingSkillBadge({ skill }: { skill: NonNullable<RoomRow["operatorSlots"][number]["buildingSkill"]> }) {
+function BuildingSkillBadge({
+  skill,
+  interactive = true,
+}: {
+  skill: NonNullable<RoomRow["operatorSlots"][number]["buildingSkill"]>;
+  interactive?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const { locale } = useLanguageDemo();
   const displaySkill = demoBuildingSkill(skill.id, locale, skill);
   const unlockLabel = locale === "en"
     ? buildingSkillUnlockLabelEnglish(skill.elite, skill.level, skill.enhanced)
     : buildingSkillUnlockLabel(skill.elite, skill.level, skill.enhanced);
+  if (!interactive) {
+    return (
+      <span
+        className="pointer-events-none absolute right-0 top-0 z-10 flex size-10 items-center justify-center border-b border-l border-white/22 bg-black/76 text-white max-sm:size-11"
+        aria-hidden="true"
+      >
+        <img src={skill.icon} alt="" className="size-9 shrink-0 object-contain" />
+      </span>
+    );
+  }
   return (
     <Tooltip open={open} onOpenChange={setOpen}>
       <TooltipTrigger
@@ -1407,7 +1423,7 @@ export function OperatorSlot({
                   </div>
                 )}
                 {slot.buildingSkill ? (
-                  <BuildingSkillBadge skill={slot.buildingSkill} />
+                  <BuildingSkillBadge skill={slot.buildingSkill} interactive={!onActivate} />
                 ) : typeof slot.skill === "number" ? (
                   <span
                     className="absolute right-0 top-0 z-10 flex size-9 items-center justify-center border-b border-l border-white/22 bg-black/76 text-xs font-semibold text-white"

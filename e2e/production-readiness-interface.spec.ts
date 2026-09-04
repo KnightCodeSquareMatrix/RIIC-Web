@@ -170,6 +170,13 @@ test("progression adjustments sync back to the schedule settings manual BOX", as
   await mockApis(page, { taskQueueEnabled: true });
   const adjustedPlanData = {
     ...planData,
+    maa: {
+      ...planData.maa,
+      plans: planData.maa.plans.map((plan, index) => index === 0 ? {
+        ...plan,
+        rooms: { ...plan.rooms, processing: [{ operators: [] }] },
+      } : plan),
+    },
     rotation: {
       ...planData.rotation,
       daily: {
@@ -300,6 +307,11 @@ test("progression adjustments sync back to the schedule settings manual BOX", as
       expect(box?.height).toBeGreaterThanOrEqual(44 - 0.01);
     }
   }
+
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.locator('[data-calculator-export-actions="desktop"]').getByRole("button", { name: "手动修改排班" }).click();
+  await expect(page).toHaveURL(/\/manual$/);
+  await expect(page.locator('[data-room-title="加工站"] [data-operator-identity="阿米娅"]')).toHaveCount(0);
 });
 
 test("setup exposes and persists only worker-supported rotation profiles", async ({ page }) => {
