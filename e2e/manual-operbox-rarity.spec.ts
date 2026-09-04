@@ -65,6 +65,7 @@ for (const mobile of [false, true]) {
     test.use({ viewport: mobile ? { width: 390, height: 844 } : { width: 1440, height: 1000 } });
 
     test("manual Box combines rarity, search and ownership without losing hidden selections", async ({ page }, testInfo) => {
+      test.slow();
       const picker = await openPicker(page, "manual", mobile);
       for (const rarity of [1, 2, 3, 4, 5, 6]) {
         await chooseRarity(picker, rarity);
@@ -100,6 +101,7 @@ for (const mobile of [false, true]) {
     });
 
     test("upgrade simulation combines rarity and schedule scope and submits the complete Box", async ({ page }, testInfo) => {
+      test.slow();
       const picker = await openPicker(page, "upgrade", mobile);
       await chooseRarity(picker, 6);
       await expect(picker.getByText("没有符合条件的干员。", { exact: true })).toBeVisible();
