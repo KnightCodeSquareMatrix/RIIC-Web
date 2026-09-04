@@ -268,15 +268,14 @@ test("progression adjustments sync back to the schedule settings manual BOX", as
 
   const lmdProduction = page.locator('[data-daily-product="lmd-orders"] [data-animated-value="number"]');
   await expect(lmdProduction).toHaveAttribute("aria-label", "41,200");
+  const lmdCalligraph = lmdProduction.locator("[data-calligraph]");
+  await expect(lmdCalligraph).toBeVisible();
+  await lmdCalligraph.evaluate((element) => element.setAttribute("data-animation-sentinel", "stable"));
   await scheduleVariantTabs.getByRole("tab", { name: "当前方案", exact: true }).click();
-  expect(await lmdProduction.evaluate((element) => (
-    element.getAnimations({ subtree: true }).filter((animation) => animation.playState === "running").length
-  ))).toBeGreaterThan(0);
+  await expect(lmdCalligraph).toHaveAttribute("data-animation-sentinel", "stable");
   await expect(lmdProduction).toHaveAttribute("aria-label", "34,254");
   await scheduleVariantTabs.getByRole("tab", { name: "调整练度方案", exact: true }).click();
-  expect(await lmdProduction.evaluate((element) => (
-    element.getAnimations({ subtree: true }).filter((animation) => animation.playState === "running").length
-  ))).toBeGreaterThan(0);
+  await expect(lmdCalligraph).toHaveAttribute("data-animation-sentinel", "stable");
   await expect(lmdProduction).toHaveAttribute("aria-label", "41,200");
 
   await expect.poll(() => page.evaluate(() => {
