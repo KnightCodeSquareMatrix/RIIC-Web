@@ -17,6 +17,8 @@ import {
   type OperatorAssetRecord,
   type OperatorBuildingSkillRef,
 } from "@/operatorPortraits";
+import { skillAnnotationKey } from "@/skill-annotations";
+import type { SkillAnnotationData } from "@/types";
 import { demoBuildingSkill, demoOperatorName, useLanguageDemo } from "@/language-demo";
 
 /** 按「最后一个下划线之前」的前缀分组：同一族（基础 + 提升）分到同一组，行内按 index 升序。 */
@@ -53,9 +55,10 @@ function BuildingSkillUnlockText({ elite, level, enhanced }: { elite: number; le
 
 interface SkillResultRowProps {
   operator: OperatorAssetRecord;
+  annotationIndex: ReadonlyMap<string, SkillAnnotationData>;
 }
 
-export function SkillResultRow({ operator }: SkillResultRowProps) {
+export function SkillResultRow({ operator, annotationIndex }: SkillResultRowProps) {
   const isMobile = useIsMobile();
   const { locale } = useLanguageDemo();
   const displayName = demoOperatorName(operator.name, locale);
@@ -79,7 +82,7 @@ export function SkillResultRow({ operator }: SkillResultRowProps) {
           />
         </div>
         {isMobile ? (
-          <MobileSkillList skills={skills} />
+          <MobileSkillList operatorId={operator.id} skills={skills} annotationIndex={annotationIndex} />
         ) : (
           /* PC：按同前缀家族分行，基础 + 提升放同一行，孤例技能单独一行 */
           <div className="flex min-w-0 flex-col gap-3">
@@ -94,6 +97,7 @@ export function SkillResultRow({ operator }: SkillResultRowProps) {
                       elite={ref.elite}
                       level={ref.level}
                       enhanced={isBuildingSkillEnhanced(skills, ref)}
+                      annotation={annotationIndex.get(skillAnnotationKey(operator.id, ref.id))?.note}
                     />
                   ))}
                 </div>
@@ -114,12 +118,14 @@ function SkillColumn({
   elite,
   level,
   enhanced,
+  annotation,
 }: {
   index: number;
   id: string;
   elite: number;
   level: number;
   enhanced: boolean;
+  annotation?: string;
 }) {
   const { locale } = useLanguageDemo();
   const sourceSkill = BUILDING_SKILL_CATALOG[id];
@@ -134,7 +140,7 @@ function SkillColumn({
   }
 
   return (
-    <div className="flex min-w-0 flex-1 items-center border border-white/10 bg-black/24 px-3 py-3">
+    <div className="flex min-w-0 flex-1 flex-col justify-center border border-white/10 bg-black/24 px-3 py-3">
       {/* 两列：第一列 图标+名字+解锁条件（原工作房间位置），第二列 技能描述 */}
       <div className="grid w-full min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-3">
         <div className="flex min-w-0 items-center gap-2">
@@ -152,11 +158,33 @@ function SkillColumn({
           {skill.descriptionRich ? <RichText text={skill.descriptionRich} /> : skill.description}
         </p>
       </div>
+      {annotation ? <SkillAnnotationNote note={annotation} /> : null}
     </div>
   );
 }
 
-function MobileSkillList({ skills }: { skills: OperatorBuildingSkillRef[] }) {
+function SkillAnnotationNote({ note, light = false }: { note: string; light?: boolean }) {
+  const { locale } = useLanguageDemo();
+  return (
+    <span
+      className={`mt-2 flex w-full gap-1.5 border-t pt-2 text-left text-xs leading-5 ${light ? "border-border/70 text-muted-foreground" : "border-[#FFD501]/25 text-white/68"}`}
+      data-skill-annotation
+    >
+      <span className="shrink-0 font-semibold text-[#E5B900]" aria-hidden="true">*</span>
+      <span><span className="sr-only">{locale === "en" ? "Manual note: " : "补充说明："}</span>{note}</span>
+    </span>
+  );
+}
+
+function MobileSkillList({
+  operatorId,
+  skills,
+  annotationIndex,
+}: {
+  operatorId: string;
+  skills: OperatorBuildingSkillRef[];
+  annotationIndex: ReadonlyMap<string, SkillAnnotationData>;
+}) {
   const [selected, setSelected] = useState<OperatorBuildingSkillRef | null>(null);
   const { locale } = useLanguageDemo();
   const en = locale === "en";
@@ -167,26 +195,28 @@ function MobileSkillList({ skills }: { skills: OperatorBuildingSkillRef[] }) {
         skills.map((ref) => {
           const sourceSkill = BUILDING_SKILL_CATALOG[ref.id];
           const skill = sourceSkill ? demoBuildingSkill(ref.id, locale, sourceSkill) : undefined;
+          const annotation = annotationIndex.get(skillAnnotationKey(operatorId, ref.id))?.note;
           return (
             <button
               key={ref.id}
               type="button"
               onClick={() => setSelected(ref)}
-              className="flex min-h-11 items-center gap-2 rounded-lg border border-white/10 bg-black/24 px-2.5 py-2 text-left text-sm font-medium text-white outline-none transition-colors hover:bg-black/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#FFD800]"
+              className="flex min-h-11 flex-col items-start justify-center rounded-lg border border-white/10 bg-black/24 px-2.5 py-2 text-left text-sm font-medium text-white outline-none transition-colors hover:bg-black/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#FFD800]"
               aria-label={en ? (skill ? `View skill S${ref.index}: ${skill.name}` : "View skill details") : `查看${skill ? `技能 S${ref.index}：${skill.name}` : "技能详情"}`}
             >
               {skill ? (
-                <>
+                <span className="flex min-w-0 items-center gap-2">
                   <img src={skill.icon} alt="" className="size-7 shrink-0 object-contain" aria-hidden="true" />
                   <span className="truncate">
                     {skill.name}
                   </span>
-                </>
+                </span>
               ) : (
                 <span className="text-white/55">
                   S<span className="font-number">{ref.index}</span> {en ? "No skill data" : "暂无技能资料"}
                 </span>
               )}
+              {annotation ? <SkillAnnotationNote note={annotation} /> : null}
             </button>
           );
         })
@@ -196,6 +226,7 @@ function MobileSkillList({ skills }: { skills: OperatorBuildingSkillRef[] }) {
       <SkillDetailDialog
         selected={selected}
         enhanced={selected !== null ? isBuildingSkillEnhanced(skills, selected) : false}
+        annotation={selected ? annotationIndex.get(skillAnnotationKey(operatorId, selected.id))?.note : undefined}
         onClose={() => setSelected(null)}
       />
     </div>
@@ -205,10 +236,12 @@ function MobileSkillList({ skills }: { skills: OperatorBuildingSkillRef[] }) {
 function SkillDetailDialog({
   selected,
   enhanced,
+  annotation,
   onClose,
 }: {
   selected: OperatorBuildingSkillRef | null;
   enhanced: boolean;
+  annotation?: string;
   onClose: () => void;
 }) {
   const { locale } = useLanguageDemo();
@@ -256,6 +289,7 @@ function SkillDetailDialog({
               {skill.descriptionRich ? <RichText text={skill.descriptionRich} /> : skill.description}
             </p>
           ) : null}
+          {annotation ? <SkillAnnotationNote note={annotation} light /> : null}
         </DialogBody>
       </DialogContent>
     </Dialog>

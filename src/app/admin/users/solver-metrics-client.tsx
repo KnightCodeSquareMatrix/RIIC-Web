@@ -121,20 +121,17 @@ export function AdminSolverMetrics() {
   return (
     <section id="solver-metrics" className="scroll-mt-24 overflow-hidden rounded-2xl border bg-card" data-admin-solver-metrics>
       <header className="flex flex-wrap items-start justify-between gap-4 border-b px-5 py-5 sm:px-6">
-        <div className="flex gap-3">
-          <span className="pt-0.5 font-mono text-xs text-muted-foreground" aria-hidden="true">02</span>
-          <div>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <h2 className="text-lg font-semibold tracking-tight">{en ? "Live solver metrics" : "实时求解指标"}</h2>
-              <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                <span className={`size-1.5 rounded-full ${error ? "bg-destructive" : metrics ? "bg-emerald-500" : "animate-pulse bg-amber-500"}`} aria-hidden="true" />
-                {en ? `Refreshes every ${ADMIN_SOLVER_METRICS_REFRESH_INTERVAL_SECONDS} seconds` : `每 ${ADMIN_SOLVER_METRICS_REFRESH_INTERVAL_SECONDS} 秒刷新`}
-              </span>
-            </div>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {metrics ? (en ? `Updated ${TIME_FORMATTER.format(new Date(metrics.generatedAt))}` : `更新于 ${TIME_FORMATTER.format(new Date(metrics.generatedAt))}`) : (en ? "Loading recent solver data…" : "正在读取最近的求解数据…")}
-            </p>
+        <div>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <h2 className="text-lg font-semibold tracking-tight">{en ? "Live solver metrics" : "实时求解指标"}</h2>
+            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+              <span className={`size-1.5 rounded-full ${error ? "bg-destructive" : metrics ? "bg-emerald-500" : "animate-pulse bg-amber-500"}`} aria-hidden="true" />
+              {en ? `Refreshes every ${ADMIN_SOLVER_METRICS_REFRESH_INTERVAL_SECONDS} seconds` : `每 ${ADMIN_SOLVER_METRICS_REFRESH_INTERVAL_SECONDS} 秒刷新`}
+            </span>
           </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {metrics ? (en ? `Updated ${TIME_FORMATTER.format(new Date(metrics.generatedAt))}` : `更新于 ${TIME_FORMATTER.format(new Date(metrics.generatedAt))}`) : (en ? "Loading recent solver data…" : "正在读取最近的求解数据…")}
+          </p>
         </div>
         <Button type="button" size="sm" variant="outline" disabled={refreshing} onClick={() => void load()}>
           <RefreshCw aria-hidden="true" className={`size-3.5 ${refreshing ? "animate-spin" : ""}`} />

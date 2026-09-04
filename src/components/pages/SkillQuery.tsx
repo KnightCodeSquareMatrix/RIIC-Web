@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
 
 import { Search, X } from "lucide-react";
@@ -13,6 +13,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { LoadMore } from "@/components/ui/load-more";
 import { BUILDING_SKILL_CATALOG, OPERATOR_CATALOG } from "@/operatorPortraits";
+import { indexSkillAnnotations } from "@/skill-annotations";
+import type { ApiResponse, SkillAnnotationListData } from "@/types";
 import { useLanguageDemo } from "@/language-demo";
 
 export const SKILL_QUERY_PAGE_SIZE = 10;
@@ -24,8 +26,26 @@ export function SkillQuery() {
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [visibleCount, setVisibleCount] = useState(SKILL_QUERY_PAGE_SIZE);
+  const [annotations, setAnnotations] = useState<SkillAnnotationListData["annotations"]>([]);
+  const [annotationError, setAnnotationError] = useState(false);
+  const [annotationRequest, setAnnotationRequest] = useState(0);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const shouldReduceMotion = useReducedMotion();
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setAnnotationError(false);
+    void fetch("/api/skill-annotations", { cache: "no-store", signal: controller.signal })
+      .then(async (response) => {
+        const body = await response.json() as ApiResponse<SkillAnnotationListData>;
+        if (!response.ok || !body.success) throw new Error("skill annotations unavailable");
+        setAnnotations(body.data.annotations);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setAnnotationError(true);
+      });
+    return () => controller.abort();
+  }, [annotationRequest]);
 
   const availableTags = selectedRoom ? ROOM_SKILL_TAGS[selectedRoom] : [];
   const filtered = useMemo(
@@ -39,6 +59,7 @@ export function SkillQuery() {
     [query, selectedRoom, selectedTag],
   );
   const visible = filtered.slice(0, visibleCount);
+  const annotationIndex = useMemo(() => indexSkillAnnotations(annotations), [annotations]);
   const hasMore = visibleCount < filtered.length;
   const loadMore = useCallback(async () => {
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
@@ -132,6 +153,15 @@ export function SkillQuery() {
         ) : null}
       </label>
 
+      {annotationError ? (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-l-2 border-amber-400 bg-amber-400/8 px-3 py-2 text-sm text-muted-foreground" role="status">
+          <span>{en ? "Manual skill notes could not be loaded." : "技能补充说明暂未加载。"}</span>
+          <Button type="button" variant="ghost" size="sm" onClick={() => setAnnotationRequest((value) => value + 1)}>
+            {en ? "Retry notes" : "重新加载说明"}
+          </Button>
+        </div>
+      ) : null}
+
       <div className="mt-4">
         {filtered.length === 0 ? (
           <p className="py-12 text-center text-sm text-muted-foreground">{en ? "No operators match these filters." : "没有符合筛选条件的干员。"}</p>
@@ -140,7 +170,7 @@ export function SkillQuery() {
             <div className="grid gap-3">
               {visible.map((operator, index) => (
                 <motion.div key={operator.id} initial={{ opacity: 0, y: shouldReduceMotion ? 0 : 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: shouldReduceMotion ? 0 : 0.24, delay: shouldReduceMotion ? 0 : Math.min(index % SKILL_QUERY_PAGE_SIZE, 4) * 0.025 }}>
-                  <SkillResultRow operator={operator} />
+                  <SkillResultRow operator={operator} annotationIndex={annotationIndex} />
                 </motion.div>
               ))}
             </div>
