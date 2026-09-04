@@ -2,8 +2,9 @@
 
 ## arkntools data and building-skill assets
 
-Operator metadata, building-skill icons, and the generated presentation catalogs under the following paths come from the public [`arkntools/arknights-toolbox-data`](https://github.com/arkntools/arknights-toolbox-data) repository:
+Operator metadata, the full-operator Box fixture, building-skill icons, and the generated presentation catalogs under the following paths come from the public [`arkntools/arknights-toolbox-data`](https://github.com/arkntools/arknights-toolbox-data) repository:
 
+- `fixtures/operbox_full_e2.json`
 - `public/images/building-skills`
 - `src/generated/arkntools`
 
@@ -29,7 +30,7 @@ Run `npm run assets:site-icon` after updating the source PNG. CI regenerates the
 
 ## Updating
 
-The `Sync arkntools assets` GitHub Actions workflow performs shallow sparse checkouts of both public sources once per day at 10:17 Asia/Shanghai and opens or refreshes a pull request in this frontend repository when generated content changes. It uses the repository-scoped `GITHUB_TOKEN`; maintainers must enable **Allow GitHub Actions to create and approve pull requests** in the repository Actions settings. The workflow creates pull requests but never approves or merges them.
+The `Sync arkntools assets` GitHub Actions workflow performs shallow sparse checkouts of both public sources once per day at 08:00 Asia/Shanghai. When generated content changes, it runs the complete local checks and build, creates or refreshes an allowlisted release pull request to `main`, validates and squash-merges that exact resource update, dispatches the full production release, and then mirrors the released resources to `develop` through a separate pull request. It uses the repository-scoped `GITHUB_TOKEN`; maintainers must enable **Allow GitHub Actions to create and approve pull requests** in the repository Actions settings.
 
 For a local, explicitly reviewed update:
 
@@ -43,7 +44,7 @@ $portraitsSha = git -C .tmp/arknights-game-resource rev-parse HEAD
 npm run assets:sync:arkntools -- --source .tmp/arkntools-data --source-sha $sourceSha --portraits-source .tmp/arknights-game-resource --portraits-source-sha $portraitsSha
 ```
 
-Scheduled updates fail closed when upstream removes a managed file or reduces the operator count. After reviewing a legitimate removal, rerun the manual workflow with `allow_removals` enabled. The generator stages and validates the complete result before replacing managed directories.
+Scheduled updates fail closed when upstream removes a managed file or reduces the operator count. After reviewing a legitimate removal, rerun the manual workflow with `allow_removals` enabled. The generator stages and validates the complete result, including the full-operator fixture, before replacing managed paths.
 
 No runtime page or API route fetches data from either upstream. Production builds always use the reviewed, Git-tracked snapshot in this repository.
 

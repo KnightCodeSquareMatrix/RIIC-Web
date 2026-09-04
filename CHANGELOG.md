@@ -2,6 +2,19 @@
 
 All notable changes to RIIC-Web are documented in this file.
 
+## [0.4.7] - 2026-09-04
+
+### Fixed
+
+- The Skills catalog now includes the latest arkntools operators, building skills, portraits, and icons, including Makoto Yuki, Aigis, Yukari Takeba, and Koromaru.
+- Automated arkntools releases now regenerate the full operator Box fixture together with the catalog, preventing a stale fixture from blocking otherwise valid resource updates.
+
+### For contributors
+
+- Asset synchronization validates, stages, publishes, and mirrors the full operator fixture through the same managed-file allowlists as generated catalogs and images.
+- Deterministic generation and workflow contract tests protect the 429-operator, 755-building-skill resource release.
+- `package.json` and `package-lock.json` record release `0.4.7`.
+
 ## [0.4.6] - 2026-09-04
 
 ### Fixed

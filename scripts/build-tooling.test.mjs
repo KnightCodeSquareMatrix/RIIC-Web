@@ -361,6 +361,8 @@ test("asset synchronization isolates untrusted generation from repository write 
   assert.match(generate, /persist-credentials: false/);
   assert.doesNotMatch(generate, /contents: write|pull-requests: write|actions: write|GH_TOKEN:/);
   assert.match(generate, /actions\/upload-artifact@[0-9a-f]{40}/);
+  assert.match(generate, /git status --porcelain --[^\n]+fixtures\/operbox_full_e2\.json/);
+  assert.match(generate, /git add --[^\n]+fixtures\/operbox_full_e2\.json/);
   assert.match(publish, /permissions:\n {6}actions: write\n {6}contents: write\n {6}issues: write\n {6}pull-requests: write/);
   assert.match(publish, /GH_TOKEN: \$\{\{ github\.token \}\}/);
   assert.match(publish, /actions\/download-artifact@[0-9a-f]{40}/);
@@ -369,7 +371,9 @@ test("asset synchronization isolates untrusted generation from repository write 
   assert.match(publish, /awk '\$1 != "100644"/);
   assert.match(publish, /Publication artifact changed a forbidden path/);
   assert.match(publish, /Resource pull request changed a forbidden path/);
+  assert.ok((publish.match(/\|fixtures\/operbox_full_e2\.json/g)?.length ?? 0) >= 4);
   assert.match(publish, /git restore --source "refs\/remotes\/origin\/\$SOURCE_BRANCH" --staged --worktree --/);
+  assert.match(publish, /git restore --source[^\n]+[\s\S]+fixtures\/operbox_full_e2\.json/);
   assert.doesNotMatch(publish, /npm (?:ci|run)|node scripts\//);
 });
 
