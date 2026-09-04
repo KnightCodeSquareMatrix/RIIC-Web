@@ -117,6 +117,13 @@ test("the anonymous sample trial fetches and solves once before showing the sche
   await expect(page.locator("[data-plan-board]")).toHaveAttribute("data-plan-revision", diagnosticId);
   await expect(page.locator("[data-anonymous-sample-trial]")).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => window.localStorage.getItem("arknights-infra-calc-beta-onboarding-v1"))).toBe("completed");
+
+  const adjustmentTrigger = page.getByRole("button", { name: "调整练度", exact: true });
+  await adjustmentTrigger.click();
+  await expect(page.getByRole("dialog", { name: "登录网站账号" })).toBeVisible();
+  await expect(page.locator("[data-upgrade-simulation-dialog]")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(adjustmentTrigger).toBeFocused();
 });
 
 test("the anonymous sample trial is absent for a signed-in onboarding session", async ({ page }) => {

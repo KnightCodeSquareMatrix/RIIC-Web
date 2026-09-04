@@ -35,19 +35,24 @@ function delta(before: number | null | undefined, after: number | null | undefin
 export function UpgradeSimulationDialog({
   operbox,
   baseline,
+  open,
   disabled = false,
+  onOpen,
+  onOpenChange,
   onSimulate,
   onTrialReady,
 }: {
   operbox: OperBoxEntry[];
   baseline: PublicPlanData;
+  open: boolean;
   disabled?: boolean;
+  onOpen: () => void;
+  onOpenChange: (open: boolean) => void;
   onSimulate: (trialOperbox: OperBoxEntry[]) => Promise<PublicPlanData>;
   onTrialReady?: (trial: PublicPlanData) => void;
 }) {
   const { locale } = useLanguageDemo();
   const en = locale === "en";
-  const [open, setOpen] = useState(false);
   const [trial, setTrial] = useState<PublicPlanData | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -87,7 +92,7 @@ export function UpgradeSimulationDialog({
       const nextTrial = await onSimulate(nextBox);
       setTrial(nextTrial);
       onTrialReady?.(nextTrial);
-      setOpen(false);
+      onOpenChange(false);
     } catch (reason) {
       setError(reason instanceof Error
         ? reason.message
@@ -100,10 +105,10 @@ export function UpgradeSimulationDialog({
 
   return (
     <>
-      <Button type="button" variant="outline" size="sm" className="h-9 min-h-0 max-sm:h-11" disabled={disabled} onClick={() => setOpen(true)}>
+      <Button type="button" variant="outline" size="sm" className="h-9 min-h-0 max-sm:h-11" disabled={disabled} onClick={onOpen}>
         <FlaskConical />{en ? "Adjust progression" : "调整练度"}
       </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent data-upgrade-simulation-dialog className="h-[min(720px,calc(100dvh-1rem))] max-w-[calc(100%-1rem)] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden rounded-[24px] p-0 sm:max-w-[min(1060px,calc(100%-2rem))] sm:rounded-[32px]" aria-describedby="upgrade-simulation-description">
           <DialogHeader className="border-b border-border/70 px-4 py-3 pr-14 sm:flex-row sm:items-center sm:gap-5 sm:px-6 sm:py-4 sm:pr-16">
             <DialogTitle className="shrink-0 text-lg">

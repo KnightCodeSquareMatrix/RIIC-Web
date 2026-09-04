@@ -45,17 +45,23 @@ async function assertFilterGeometry(picker: Locator) {
   const filter = picker.getByRole("group", { name: "星级筛选", exact: true });
   await filter.scrollIntoViewIfNeeded();
   const geometry = await filter.evaluate((element) => {
-    const bounds = element.getBoundingClientRect();
-    return Array.from(element.querySelectorAll("button")).map((button) => {
-      const rect = button.getBoundingClientRect();
-      return { width: rect.width, height: rect.height, contained: rect.left >= bounds.left - 1 && rect.right <= bounds.right + 1 };
-    });
+    const row = element.closest<HTMLElement>("[data-manual-operbox-rarity-filter]");
+    const label = row?.querySelector<HTMLElement>(":scope > div:first-child");
+    return {
+      labelCenter: label ? label.getBoundingClientRect().top + label.getBoundingClientRect().height / 2 : null,
+      options: Array.from(element.querySelectorAll("button")).map((button) => {
+        const rect = button.getBoundingClientRect();
+        return { width: rect.width, height: rect.height, top: rect.top, center: rect.top + rect.height / 2 };
+      }),
+    };
   });
-  expect(geometry).toHaveLength(7);
-  for (const button of geometry) {
+  expect(geometry.options).toHaveLength(7);
+  expect(new Set(geometry.options.map((button) => Math.round(button.top))).size).toBe(1);
+  expect(geometry.labelCenter).not.toBeNull();
+  expect(geometry.options[0]?.center).toBeCloseTo(geometry.labelCenter ?? 0, 0);
+  for (const button of geometry.options) {
     expect(button.width).toBeGreaterThanOrEqual(44);
     expect(button.height).toBeGreaterThanOrEqual(44);
-    expect(button.contained).toBe(true);
   }
 }
 
@@ -119,7 +125,9 @@ for (const mobile of [false, true]) {
       await picker.getByRole("textbox", { name: "搜索干员" }).fill("");
       await picker.getByRole("button", { name: /^第一班/ }).click();
       await expect(picker.locator("article")).toHaveCount(1);
+      await expect(picker.getByRole("button", { name: /^第一班/ })).toHaveAttribute("data-manual-operbox-filter-option", "");
       await chooseRarity(picker, 6);
+      await expect(picker.getByRole("button", { name: "6 星干员", exact: true })).toHaveAttribute("data-manual-operbox-filter-option", "");
       await expect(picker.getByText("没有符合条件的干员。", { exact: true })).toBeVisible();
       await chooseRarity(picker, 5);
       await expect(picker.getByRole("button", { name: /^第一班/ })).toHaveAttribute("aria-pressed", "true");

@@ -1,7 +1,8 @@
-export type AppPage = "calculator" | "training" | "skill-query" | "skland" | "account";
+export type AppPage = "calculator" | "manual" | "training" | "skill-query" | "skland" | "account";
 
 export const WORKBENCH_PAGE_PATHS: Record<AppPage, string> = {
   calculator: "/",
+  manual: "/manual",
   training: "/training",
   "skill-query": "/skills",
   skland: "/skland",
@@ -9,6 +10,7 @@ export const WORKBENCH_PAGE_PATHS: Record<AppPage, string> = {
 };
 
 export function workbenchPageFromPathname(pathname: string): AppPage {
+  if (pathname === WORKBENCH_PAGE_PATHS.manual) return "manual";
   if (pathname === WORKBENCH_PAGE_PATHS.training) return "training";
   if (pathname === WORKBENCH_PAGE_PATHS["skill-query"]) return "skill-query";
   if (pathname === WORKBENCH_PAGE_PATHS.skland) return "skland";

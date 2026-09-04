@@ -1,6 +1,14 @@
 "use client";
 
-import { memo, useCallback, useDeferredValue, useMemo, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useDeferredValue,
+  useMemo,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from "react";
 import { Check, RotateCcw, Search } from "lucide-react";
 
 import fullOperboxJson from "../../../fixtures/operbox_full_e2.json" with { type: "json" };
@@ -8,7 +16,6 @@ import operatorCatalogJson from "../../generated/arkntools/operator-catalog.json
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { LoadMore } from "@/components/ui/load-more";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SetupActionButton } from "@/components/setup/SetupActionButton";
 import { demoOperatorName, useLanguageDemo, type DemoLocale } from "@/language-demo";
@@ -23,7 +30,7 @@ import type { OperBoxEntry } from "@/types";
 
 const PAGE_SIZE = 48;
 const RARITIES = [6, 5, 4, 3, 2, 1] as const;
-const RARITY_BUTTON_CLASS = "min-h-11 min-w-11 font-number aria-pressed:border-[#FFD800] aria-pressed:bg-[#FFD800] aria-pressed:text-[#313131] aria-pressed:hover:bg-[#FFD800] aria-pressed:hover:text-[#313131]";
+const FILTER_BUTTON_CLASS = "min-h-11 min-w-11 shrink-0 border px-2 font-number";
 
 type CatalogOperator = {
   id: string;
@@ -67,6 +74,52 @@ function shiftLabel(shift: number, en: boolean, short = false): string {
   if (en) return short ? `S${shift}` : `Shift ${shift}`;
   if (short) return `${shift}班`;
   return ["第一班", "第二班", "第三班"][shift - 1] ?? `第${shift}班`;
+}
+
+function moveFilterFocus(event: ReactKeyboardEvent<HTMLDivElement>) {
+  if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+  const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>("button:not(:disabled)"));
+  const currentIndex = buttons.indexOf(document.activeElement as HTMLButtonElement);
+  if (currentIndex < 0 || buttons.length === 0) return;
+  event.preventDefault();
+  const nextIndex = event.key === "Home"
+    ? 0
+    : event.key === "End"
+      ? buttons.length - 1
+      : (currentIndex + (event.key === "ArrowRight" ? 1 : -1) + buttons.length) % buttons.length;
+  buttons[nextIndex]?.focus();
+}
+
+function FilterButton({
+  pressed,
+  disabled = false,
+  selectedClassName,
+  ariaLabel,
+  children,
+  onClick,
+}: {
+  pressed: boolean;
+  disabled?: boolean;
+  selectedClassName?: string;
+  ariaLabel?: string;
+  children: ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant={pressed ? "secondary" : "ghost"}
+      className={cn(FILTER_BUTTON_CLASS, pressed ? selectedClassName : "border-transparent")}
+      data-manual-operbox-filter-option=""
+      aria-pressed={pressed}
+      aria-label={ariaLabel}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      {children}
+    </Button>
+  );
 }
 
 function initialStages(operbox: OperBoxEntry[] | null): Record<string, ManualOperboxStage> {
@@ -366,35 +419,41 @@ export function ManualOperboxPicker({
         </div>
       </div>
 
-      <div className="grid gap-2">
-        <div className="text-xs font-medium text-muted-foreground">{en ? "Rarity" : "星级"}</div>
-        <ToggleGroup
-          value={[rarity]}
-          onValueChange={(next) => {
-            setRarity(next[0] ?? "all");
-            resetListView();
-          }}
-          disabled={applyDisabled}
-          variant="outline"
-          size="sm"
-          spacing={2}
+      <div className="flex min-w-0 items-center gap-1" data-manual-operbox-rarity-filter>
+        <div className="shrink-0 text-xs font-medium text-muted-foreground">{en ? "Rarity" : "星级"}</div>
+        <div
+          role="group"
           aria-label={en ? "Filter by rarity" : "星级筛选"}
-          className="w-full flex-wrap justify-start"
+          className="flex min-w-0 flex-1 flex-nowrap gap-0.5 overflow-x-auto"
+          onKeyDown={moveFilterFocus}
         >
-          <ToggleGroupItem value="all" className={RARITY_BUTTON_CLASS}>
+          <FilterButton
+            pressed={rarity === "all"}
+            disabled={applyDisabled}
+            selectedClassName={SHIFT_BADGE_CLASS[0]}
+            onClick={() => {
+              setRarity("all");
+              resetListView();
+            }}
+          >
             {en ? "All" : "全部"}
-          </ToggleGroupItem>
+          </FilterButton>
           {RARITIES.map((value) => (
-            <ToggleGroupItem
+            <FilterButton
               key={value}
-              value={String(value)}
-              aria-label={en ? `${value}-star operators` : `${value} 星干员`}
-              className={RARITY_BUTTON_CLASS}
+              pressed={rarity === String(value)}
+              disabled={applyDisabled}
+              selectedClassName={SHIFT_BADGE_CLASS[0]}
+              ariaLabel={en ? `${value}-star operators` : `${value} 星干员`}
+              onClick={() => {
+                setRarity((current) => current === String(value) ? "all" : String(value));
+                resetListView();
+              }}
             >
               {value}★
-            </ToggleGroupItem>
+            </FilterButton>
           ))}
-        </ToggleGroup>
+        </div>
       </div>
 
       {hasScheduledOperators ? (
@@ -418,24 +477,26 @@ export function ManualOperboxPicker({
             </TabsList>
           </Tabs>
           {compact && rosterScope === "scheduled" && scheduledShiftCount > 0 ? (
-            <div className="ml-1 flex flex-wrap items-center gap-1 border-l border-border/70 pl-2" aria-label={en ? "Schedule shift" : "排班班次"}>
-              <Button type="button" size="sm" variant={scheduledShift === "all" ? "secondary" : "ghost"} aria-pressed={scheduledShift === "all"} onClick={() => { setScheduledShift("all"); resetListView(); }}>
+            <div
+              role="group"
+              className="ml-1 flex flex-wrap items-center gap-1 border-l border-border/70 pl-2"
+              aria-label={en ? "Schedule shift" : "排班班次"}
+              onKeyDown={moveFilterFocus}
+            >
+              <FilterButton pressed={scheduledShift === "all"} onClick={() => { setScheduledShift("all"); resetListView(); }}>
                 {en ? "All shifts" : "全部班次"}
-              </Button>
+              </FilterButton>
               {shiftCounts.map((count, index) => {
                 const shift = index + 1;
                 return (
-                  <Button
+                  <FilterButton
                     key={shift}
-                    type="button"
-                    size="sm"
-                    variant={scheduledShift === shift ? "secondary" : "ghost"}
-                    className={cn("border", scheduledShift === shift ? SHIFT_BADGE_CLASS[index % SHIFT_BADGE_CLASS.length] : "border-transparent")}
-                    aria-pressed={scheduledShift === shift}
+                    pressed={scheduledShift === shift}
+                    selectedClassName={SHIFT_BADGE_CLASS[index % SHIFT_BADGE_CLASS.length]}
                     onClick={() => { setScheduledShift(shift); resetListView(); }}
                   >
                     {shiftLabel(shift, en)}<span className="font-number opacity-65">{count}</span>
-                  </Button>
+                  </FilterButton>
                 );
               })}
             </div>

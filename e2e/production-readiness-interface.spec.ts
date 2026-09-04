@@ -170,6 +170,13 @@ test("progression adjustments sync back to the schedule settings manual BOX", as
   await mockApis(page, { taskQueueEnabled: true });
   const adjustedPlanData = {
     ...planData,
+    maa: {
+      ...planData.maa,
+      plans: planData.maa.plans.map((plan, index) => index === 0 ? {
+        ...plan,
+        rooms: { ...plan.rooms, processing: [{ operators: [] }] },
+      } : plan),
+    },
     rotation: {
       ...planData.rotation,
       daily: {
@@ -300,9 +307,15 @@ test("progression adjustments sync back to the schedule settings manual BOX", as
       expect(box?.height).toBeGreaterThanOrEqual(44 - 0.01);
     }
   }
+
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.locator('[data-calculator-export-actions="desktop"]').getByRole("button", { name: "手动修改排班" }).click();
+  await expect(page).toHaveURL(/\/manual$/);
+  await expect(page.locator('[data-room-title="加工站"] [data-operator-identity="阿米娅"]')).toHaveCount(0);
 });
 
 test("setup exposes and persists only worker-supported rotation profiles", async ({ page }) => {
+  test.slow();
   await mockApis(page);
   await seedV4Session(page);
   let planRequests = 0;
@@ -621,8 +634,12 @@ test("calculator owns scheduling controls and training advice uses a single tech
   expect(controlOrder.at(-1)).toContain("生成排班");
   expect(controlOrder.some((label) => label.includes("全角色导入"))).toBe(false);
   const exportOrder = await page.locator("[data-calculator-export-actions]").locator("button").allTextContents();
-  expect(exportOrder).toHaveLength(2);
-  expect(exportOrder.every((label) => label.includes("导出到 MAA"))).toBe(true);
+  expect(exportOrder).toEqual([
+    expect.stringContaining("手动修改排班"),
+    expect.stringContaining("导出到 MAA"),
+    expect.stringContaining("手动修改排班"),
+    expect.stringContaining("导出到 MAA"),
+  ]);
 
   await page.getByRole("button", { name: "练卡建议" }).click();
   await expect(calculatorControls).toHaveCount(0);

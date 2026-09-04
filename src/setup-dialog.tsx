@@ -1,7 +1,7 @@
 "use client";
 
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { Check, Database, FileJson, ListChecks, ScanLine, Trash2, Upload } from "lucide-react";
+import { Check, Database, FileJson, ListChecks, Minus, Plus, ScanLine, Trash2, Upload } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -33,6 +33,7 @@ const PANEL_TRANSITION = { type: "spring", stiffness: 420, damping: 38, mass: 0.
 type OperatorInputMode = "skland" | "maa" | "manual";
 
 type SetupDialogProps = {
+  mode?: "calculator" | "manual";
   open: boolean;
   onOpenChange: (open: boolean) => void;
   operbox: OperBoxEntry[] | null;
@@ -60,6 +61,8 @@ type SetupDialogProps = {
   configurationKey: string;
   rotationProfile: RotationProfile;
   onRotationProfileChange: (value: RotationProfile) => void;
+  manualShiftDurations?: number[];
+  onManualShiftDurationsChange?: (durations: number[]) => void;
   fiammettaEnabled: boolean;
   onFiammettaEnabledChange: (enabled: boolean) => void;
   onPresetSelect: (preset: PresetDef) => void;
@@ -89,6 +92,7 @@ function formatSyncTime(timestamp: number | null | undefined, en: boolean): stri
 }
 
 export function SetupDialog({
+  mode = "calculator",
   open,
   onOpenChange,
   operbox,
@@ -116,6 +120,8 @@ export function SetupDialog({
   configurationKey,
   rotationProfile,
   onRotationProfileChange,
+  manualShiftDurations = [12, 6, 6],
+  onManualShiftDurationsChange,
   fiammettaEnabled,
   onFiammettaEnabledChange,
   onPresetSelect,
@@ -157,6 +163,22 @@ export function SetupDialog({
       ? "243 full E2 sample"
       : persistedDataLabel;
   const reducedMotion = useReducedMotion();
+
+  function updateManualShiftCount(count: number) {
+    if (!onManualShiftDurationsChange) return;
+    const nextCount = Math.max(1, Math.min(12, Math.trunc(count || 1)));
+    onManualShiftDurationsChange(Array.from(
+      { length: nextCount },
+      (_, index) => manualShiftDurations[index] ?? 12,
+    ));
+  }
+
+  function updateManualShiftDuration(index: number, duration: number) {
+    if (!onManualShiftDurationsChange || !Number.isFinite(duration)) return;
+    onManualShiftDurationsChange(manualShiftDurations.map((current, candidate) => (
+      candidate === index ? Math.max(0.25, Math.round(duration * 100) / 100) : current
+    )));
+  }
 
   useEffect(() => {
     const justOpened = open && !wasOpenRef.current;
@@ -504,7 +526,7 @@ export function SetupDialog({
                     ref={basicsPanelRef}
                     data-setup-layout-basics
                     role="region"
-                    aria-label={en ? "Layout and rotations" : "布局与换班"}
+                    aria-label={mode === "manual" ? (en ? "Layout and shifts" : "布局与班次") : (en ? "Layout and rotations" : "布局与换班")}
                     tabIndex={-1}
                     className="grid gap-6 px-4 py-5 outline-none sm:px-7 sm:py-6"
                     initial={reducedMotion ? false : { x: stepDirection * 28, opacity: 0 }}
@@ -517,7 +539,35 @@ export function SetupDialog({
                     </section>
 
                     <div className="pt-1">
-                      <RotationSettings value={rotationProfile} onChange={onRotationProfileChange} />
+                      {mode === "manual" ? (
+                        <section className="grid gap-4" aria-labelledby="manual-shift-settings-title" data-manual-shift-settings>
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                              <h3 id="manual-shift-settings-title" className="text-sm font-semibold">{en ? "Manual shifts" : "手动班次"}</h3>
+                              <p className="mt-1 text-xs text-muted-foreground">{en ? "Durations are independent and do not need to add up to 24 hours." : "每班时长相互独立，不要求合计为 24 小时。"}</p>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Button type="button" size="icon-sm" variant="outline" aria-label={en ? "Remove one shift" : "减少一个班次"} disabled={manualShiftDurations.length <= 1} onClick={() => updateManualShiftCount(manualShiftDurations.length - 1)}><Minus /></Button>
+                              <label className="flex items-center gap-2 text-sm">
+                                <span>{en ? "Shifts" : "班次数"}</span>
+                                <input className="h-9 w-16 rounded-[4px] border border-input bg-background px-2 text-center font-number" type="number" min="1" max="12" step="1" value={manualShiftDurations.length} onChange={(event) => updateManualShiftCount(Number(event.target.value))} />
+                              </label>
+                              <Button type="button" size="icon-sm" variant="outline" aria-label={en ? "Add one shift" : "增加一个班次"} disabled={manualShiftDurations.length >= 12} onClick={() => updateManualShiftCount(manualShiftDurations.length + 1)}><Plus /></Button>
+                            </div>
+                          </div>
+                          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                            {manualShiftDurations.map((duration, index) => (
+                              <label key={index} className="flex min-h-11 items-center justify-between gap-3 border border-border/70 bg-muted/25 px-3 py-2 text-sm">
+                                <span>{en ? `Shift ${index + 1}` : `班次 ${index + 1}`}</span>
+                                <span className="flex items-center gap-1.5">
+                                  <input aria-label={en ? `Shift ${index + 1} duration` : `班次 ${index + 1} 时长`} className="h-8 w-20 rounded-[4px] border border-input bg-background px-2 text-right font-number" type="number" min="0.25" step="0.25" value={duration} onChange={(event) => updateManualShiftDuration(index, Number(event.target.value))} />
+                                  <span className="text-xs text-muted-foreground">{en ? "h" : "小时"}</span>
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                        </section>
+                      ) : <RotationSettings value={rotationProfile} onChange={onRotationProfileChange} />}
                     </div>
 
                     <div className="border-t border-border/70 pt-5">
@@ -526,6 +576,7 @@ export function SetupDialog({
                         operbox={operbox}
                         rotation={rotationProfile}
                         onEnabledChange={onFiammettaEnabledChange}
+                        mode={mode}
                       />
                     </div>
 

@@ -6,6 +6,7 @@ import {
   Cloud,
   GraduationCap,
   Search,
+  SquarePen,
   UserRound,
   type LucideIcon,
 } from "lucide-react";
@@ -78,6 +79,7 @@ export function AppSidebar({ page, onPageChange }: AppSidebarProps) {
   const { locale } = useLanguageDemo();
   const labels = locale === "en" ? {
     calculator: "Infrastructure Calculator",
+    manual: "Manual Scheduling",
     training: "Training Advice",
     skills: "Skill Search",
     skland: "Skland Status",
@@ -85,6 +87,7 @@ export function AppSidebar({ page, onPageChange }: AppSidebarProps) {
     help: "Help",
   } : {
     calculator: "基建计算器",
+    manual: "手动排班",
     training: "练卡建议",
     skills: "技能查询",
     skland: "森空岛状态中心",
@@ -100,6 +103,7 @@ export function AppSidebar({ page, onPageChange }: AppSidebarProps) {
         <SidebarGroup>
           <SidebarMenu>
             <AppNavigationItem page={page} target="calculator" label={labels.calculator} icon={Calculator} onPageChange={onPageChange} />
+            <AppNavigationItem page={page} target="manual" label={labels.manual} icon={SquarePen} onPageChange={onPageChange} />
             <AppNavigationItem page={page} target="training" label={labels.training} icon={GraduationCap} onPageChange={onPageChange} />
             <AppNavigationItem page={page} target="skill-query" label={labels.skills} icon={Search} onPageChange={onPageChange} />
             {CLIENT_SKLAND_ENABLED ? (
