@@ -157,7 +157,7 @@ test("CI enforces route and document preload JavaScript budgets after building",
   assert.match(budgetCheck, /MAX_SKLAND_DISABLED_DOCUMENT_INITIAL_GZIP_JS_BYTES = 416_000/);
   assert.match(budgetCheck, /MAX_SKLAND_ENABLED_DOCUMENT_INITIAL_GZIP_JS_BYTES = 422_000/);
   assert.match(budgetCheck, /const sklandEnabled = sklandRoute\.firstLoadChunkPaths\.some/);
-  assert.match(budgetCheck, /MAX_SECONDARY_ROUTE_INITIAL_JS_BYTES = 1_572_000/);
+  assert.match(budgetCheck, /MAX_SECONDARY_ROUTE_INITIAL_JS_BYTES = 1_582_000/);
   assert.match(budgetCheck, /MAX_DOCUMENT_INITIAL_JS_FILES = 18/);
   assert.match(budgetCheck, /WORKBENCH_ROUTES = \["\/", "\/training", "\/skills", "\/skland", "\/account"\]/);
   assert.match(budgetCheck, /firstLoadUncompressedJsBytes/);

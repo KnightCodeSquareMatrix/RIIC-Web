@@ -11,9 +11,9 @@ const MAX_SKLAND_DISABLED_ROUTE_INITIAL_JS_BYTES = 1_167_000;
 // full-page translation catalogs stay in their on-demand route chunks. Keep roughly
 // 8 KB of raw headroom over the verified disabled and enabled production builds.
 const MAX_SKLAND_ENABLED_ROUTE_INITIAL_JS_BYTES = 1_191_000;
-// Task progress UI and training tooltips add intentional code to secondary workbench routes.
-// Keep the ceiling narrow enough to flag unrelated bundle growth.
-const MAX_SECONDARY_ROUTE_INITIAL_JS_BYTES = 1_572_000;
+// Task progress UI, training tooltips, and the shared operator catalog add intentional code
+// to secondary workbench routes. Keep roughly 8 KB of raw headroom over the verified build.
+const MAX_SECONDARY_ROUTE_INITIAL_JS_BYTES = 1_582_000;
 const MAX_SKLAND_ROUTE_INITIAL_JS_BYTES = 1_632_000;
 const MAX_SKLAND_DISABLED_DOCUMENT_INITIAL_JS_BYTES = 1_280_000;
 const MAX_SKLAND_ENABLED_DOCUMENT_INITIAL_JS_BYTES = 1_304_000;
