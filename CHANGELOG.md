@@ -2,6 +2,30 @@
 
 All notable changes to RIIC-Web are documented in this file.
 
+## [0.4.8] - 2026-09-04
+
+### Added
+
+- Personal Box users can create manual schedules with 1–12 independent shifts, per-shift durations and Fiammetta targets, conflict-safe operator assignment, local draft persistence, and MAA JSON export.
+- An existing solved or progression-trial schedule can be converted into a manual draft without losing the schedule currently shown on screen.
+
+### Changed
+
+- Rarity and shift filters in manual Box and progression adjustment now share the same compact, keyboard-accessible option controls used by the class filters.
+- Manual scheduling, manual edits, and progression adjustment consistently request a website login before exposing personal Box data.
+
+### Fixed
+
+- A newly selected base layout now remains authoritative through Skland restoration and subsequent solving instead of requiring a refresh or falling back to the 243 layout.
+- The overview schedule now holds every room card in place with a matching skeleton while its lazy view loads, without moving the whole base vertically.
+- Clearing local data no longer recreates a mounted manual draft, and an in-memory schedule handoff survives unavailable browser storage.
+- Manual-schedule conversion stays outside the initial calculator bundle; route and document budgets now explicitly cover the new `/manual` page and protected navigation state.
+
+### For contributors
+
+- Unit, API-contract, shift-comparison, database, bundle, and sharded Chromium checks cover the integrated workflow, with focused manual-scheduling browser coverage for login, persistence, conversion, assignment conflicts, and MAA export.
+- `package.json` and `package-lock.json` record release `0.4.8`.
+
 ## [0.4.7] - 2026-09-04
 
 ### Fixed
