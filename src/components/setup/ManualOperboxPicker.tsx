@@ -8,6 +8,7 @@ import operatorCatalogJson from "../../generated/arkntools/operator-catalog.json
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { LoadMore } from "@/components/ui/load-more";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SetupActionButton } from "@/components/setup/SetupActionButton";
 import { demoOperatorName, useLanguageDemo, type DemoLocale } from "@/language-demo";
@@ -21,6 +22,8 @@ import {
 import type { OperBoxEntry } from "@/types";
 
 const PAGE_SIZE = 48;
+const RARITIES = [6, 5, 4, 3, 2, 1] as const;
+const RARITY_BUTTON_CLASS = "min-h-11 min-w-11 font-number aria-pressed:border-[#FFD800] aria-pressed:bg-[#FFD800] aria-pressed:text-[#313131] aria-pressed:hover:bg-[#FFD800] aria-pressed:hover:text-[#313131]";
 
 type CatalogOperator = {
   id: string;
@@ -218,6 +221,7 @@ export function ManualOperboxPicker({
   const en = locale === "en";
   const [query, setQuery] = useState("");
   const [onlyOwned, setOnlyOwned] = useState(false);
+  const [rarity, setRarity] = useState("all");
   const [rosterScope, setRosterScope] = useState<"scheduled" | "other">("scheduled");
   const [scheduledShift, setScheduledShift] = useState<"all" | number>("all");
   const [visibleLimit, setVisibleLimit] = useState(PAGE_SIZE);
@@ -251,12 +255,13 @@ export function ManualOperboxPicker({
     if (hasScheduledOperators && (rosterScope === "scheduled") !== scheduledNames.has(operator.name)) return false;
     if (rosterScope === "scheduled" && scheduledShift !== "all" && !scheduledOperatorShifts?.[operator.name]?.includes(scheduledShift)) return false;
     if (onlyOwned && stage === "none") return false;
+    if (rarity !== "all" && operator.rarity !== Number(rarity)) return false;
     if (!deferredQuery) return true;
     const displayName = demoOperatorName(operator.name, locale).toLocaleLowerCase(locale === "en" ? "en-US" : "zh-CN");
     return operator.name.toLocaleLowerCase("zh-CN").includes(deferredQuery)
       || displayName.includes(deferredQuery)
       || operator.id.toLocaleLowerCase("en-US").includes(deferredQuery);
-  }), [deferredQuery, hasScheduledOperators, locale, onlyOwned, rosterScope, scheduledNames, scheduledOperatorShifts, scheduledShift, stages]);
+  }), [deferredQuery, hasScheduledOperators, locale, onlyOwned, rarity, rosterScope, scheduledNames, scheduledOperatorShifts, scheduledShift, stages]);
 
   function resetListView() {
     setVisibleLimit(PAGE_SIZE);
@@ -359,6 +364,37 @@ export function ManualOperboxPicker({
             <RotateCcw />{en ? "Clear" : "清空选择"}
           </Button>
         </div>
+      </div>
+
+      <div className="grid gap-2">
+        <div className="text-xs font-medium text-muted-foreground">{en ? "Rarity" : "星级"}</div>
+        <ToggleGroup
+          value={[rarity]}
+          onValueChange={(next) => {
+            setRarity(next[0] ?? "all");
+            resetListView();
+          }}
+          disabled={applyDisabled}
+          variant="outline"
+          size="sm"
+          spacing={2}
+          aria-label={en ? "Filter by rarity" : "星级筛选"}
+          className="w-full flex-wrap justify-start"
+        >
+          <ToggleGroupItem value="all" className={RARITY_BUTTON_CLASS}>
+            {en ? "All" : "全部"}
+          </ToggleGroupItem>
+          {RARITIES.map((value) => (
+            <ToggleGroupItem
+              key={value}
+              value={String(value)}
+              aria-label={en ? `${value}-star operators` : `${value} 星干员`}
+              className={RARITY_BUTTON_CLASS}
+            >
+              {value}★
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
       </div>
 
       {hasScheduledOperators ? (
