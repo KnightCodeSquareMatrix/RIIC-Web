@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -119,15 +120,73 @@ const OperatorSkillTooltip = lazy(() => loadClientFeature("operatorSkillTooltip"
   default: module.OperatorSkillTooltip,
 })));
 
-function CompactScheduleLoading() {
+function CompactScheduleLoading({ rows }: { rows: RoomRow[] }) {
   const { locale } = useLanguageDemo();
+  const grouped = new Map<string, RoomRow[]>();
+  for (const row of rows) {
+    grouped.set(row.group, [...(grouped.get(row.group) ?? []), row]);
+  }
+  const workstations = [...(grouped.get("trading") ?? []), ...(grouped.get("manufacture") ?? [])];
+  const power = grouped.get("power") ?? [];
+  const dormitories = grouped.get("dormitory") ?? [];
+  const skeleton = (
+    row: RoomRow,
+    className: string,
+    style?: CSSProperties,
+  ) => (
+    <Skeleton
+      key={row.key}
+      className={cn("min-w-0 flex-1 rounded-none border border-[#313131]/10 bg-[#313131]/14", className)}
+      data-compact-room-skeleton
+      data-room-group={row.group}
+      style={style}
+    />
+  );
+
   return (
     <div
-      className="grid min-h-[560px] place-items-center border-y border-dashed border-border/70 text-sm text-muted-foreground"
+      className="min-h-[560px]"
       data-compact-schedule-loading
       role="status"
+      aria-label={locale === "en" ? "Preparing overview" : "正在准备一图流布局"}
     >
-      {locale === "en" ? "Preparing overview" : "正在准备一图流布局"}
+      <span className="sr-only">{locale === "en" ? "Preparing overview" : "正在准备一图流布局"}</span>
+      <div className="flex items-stretch gap-3" aria-hidden="true">
+        <div className="flex min-w-0 flex-col gap-3" style={{ flexBasis: "55%" }}>
+          {(grouped.get("control") ?? []).map((room) => skeleton(room, "h-32"))}
+          {[0, 2, 4].map((start) => (
+            <div key={start} className="flex gap-3">
+              {workstations.slice(start, start + 2).map((room) => skeleton(room, "h-36"))}
+            </div>
+          ))}
+          {power.length === 3 ? (
+            <div className="flex gap-3">
+              {power.map((room) => skeleton(room, "h-24"))}
+            </div>
+          ) : (
+            <div className="flex gap-3">
+              <div className="flex gap-3" style={{ flexBasis: "50%" }}>
+                {power.slice(0, 2).map((room) => skeleton(room, "h-24"))}
+              </div>
+              {workstations[6] ? skeleton(workstations[6], "h-24", { flexBasis: "50%" }) : null}
+            </div>
+          )}
+        </div>
+        <div className="flex min-w-0 flex-col gap-3" style={{ flexBasis: "45%" }}>
+          <div className="compact-auxiliary-container min-w-0">
+            <div className="compact-auxiliary-grid">
+              {["meeting", "training", "hire", "processing"].flatMap((group) => (
+                (grouped.get(group) ?? []).map((room) => skeleton(room, "h-28"))
+              ))}
+            </div>
+          </div>
+          {dormitories.slice(0, 4).map((room) => (
+            <div key={room.key} className="flex min-h-24 flex-1">
+              {skeleton(room, "h-full")}
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -1150,6 +1209,7 @@ function OperatorSlotShell({
   centerFrameInList,
   compactFactory,
   compactView,
+  editableHint,
   frameClassName,
   frameContent,
   frameFocusable = false,
@@ -1158,11 +1218,13 @@ function OperatorSlotShell({
   labelClassName,
   positionLabel,
   title,
+  onActivate,
 }: {
   ariaLabel?: string;
   centerFrameInList: boolean;
   compactFactory: boolean;
   compactView: boolean;
+  editableHint?: string;
   frameClassName: string;
   frameContent?: ReactNode;
   frameFocusable?: boolean;
@@ -1172,6 +1234,7 @@ function OperatorSlotShell({
   labelClassName: string;
   positionLabel?: string;
   title?: string;
+  onActivate?: () => void;
 }) {
   const frame = (
     <div
@@ -1179,6 +1242,7 @@ function OperatorSlotShell({
         "relative aspect-square h-[var(--operator-slot-size)] min-w-0 shrink-0 overflow-hidden border-2 max-sm:border",
         frameClassName,
         frameFocusable && "cursor-help outline-none transition-[border-color,box-shadow] hover:border-white/90 focus-visible:border-[#FFD501] focus-visible:ring-2 focus-visible:ring-[#FFD501]/70",
+        onActivate && "border-[#FFD800] shadow-[0_0_0_1px_rgba(255,216,0,0.42),0_0_12px_rgba(255,216,0,0.2)]",
         centerFrameInList && "max-sm:h-auto max-sm:w-full sm:absolute sm:left-0 sm:top-1/2 sm:-translate-y-1/2",
       )}
       aria-label={ariaLabel}
@@ -1186,6 +1250,11 @@ function OperatorSlotShell({
       tabIndex={frameFocusable ? 0 : undefined}
     >
       {frameContent}
+      {editableHint ? (
+        <span className="pointer-events-none absolute bottom-0.5 right-0.5 z-20 bg-black/72 px-1 py-0.5 text-[9px] font-medium leading-none tracking-wide text-[#FFD800]">
+          {editableHint}
+        </span>
+      ) : null}
     </div>
   );
 
@@ -1198,9 +1267,19 @@ function OperatorSlotShell({
           : "[--operator-slot-size:clamp(70px,7.3vw,80px)] max-sm:[--operator-slot-size:clamp(56px,16vw,76px)]",
         compactFactory && "min-[1800px]:[--operator-slot-size:70px]",
         centerFrameInList && "max-sm:w-full sm:relative sm:h-full sm:w-[var(--operator-slot-size)]",
+        onActivate && "cursor-pointer rounded-[4px] outline-none focus-visible:ring-2 focus-visible:ring-[#FFD800] focus-visible:ring-offset-2 focus-visible:ring-offset-[#313131]",
       )}
       data-position={positionLabel || undefined}
       title={title}
+      role={onActivate ? "button" : undefined}
+      tabIndex={onActivate ? 0 : undefined}
+      onClick={onActivate}
+      onKeyDown={onActivate ? (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onActivate();
+        }
+      } : undefined}
     >
       {frameWrapper(frame)}
       <span
@@ -1217,13 +1296,29 @@ function OperatorSlotShell({
   );
 }
 
-function BuildingSkillBadge({ skill }: { skill: NonNullable<RoomRow["operatorSlots"][number]["buildingSkill"]> }) {
+function BuildingSkillBadge({
+  skill,
+  interactive = true,
+}: {
+  skill: NonNullable<RoomRow["operatorSlots"][number]["buildingSkill"]>;
+  interactive?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const { locale } = useLanguageDemo();
   const displaySkill = demoBuildingSkill(skill.id, locale, skill);
   const unlockLabel = locale === "en"
     ? buildingSkillUnlockLabelEnglish(skill.elite, skill.level, skill.enhanced)
     : buildingSkillUnlockLabel(skill.elite, skill.level, skill.enhanced);
+  if (!interactive) {
+    return (
+      <span
+        className="pointer-events-none absolute right-0 top-0 z-10 flex size-10 items-center justify-center border-b border-l border-white/22 bg-black/76 text-white max-sm:size-11"
+        aria-hidden="true"
+      >
+        <img src={skill.icon} alt="" className="size-9 shrink-0 object-contain" />
+      </span>
+    );
+  }
   return (
     <Tooltip open={open} onOpenChange={setOpen}>
       <TooltipTrigger
@@ -1281,6 +1376,7 @@ export function OperatorSlot({
   skillTooltipHighlightIds = [],
   skillTooltipContextLabel,
   searchQuery = "",
+  onActivate,
 }: {
   slot: RoomRow["operatorSlots"][number] | undefined;
   currentMorale?: number;
@@ -1300,6 +1396,7 @@ export function OperatorSlot({
   skillTooltipHighlightIds?: readonly string[];
   skillTooltipContextLabel?: string;
   searchQuery?: string;
+  onActivate?: () => void;
 }) {
   const shouldReduceMotion = useReducedMotion();
   const { locale } = useLanguageDemo();
@@ -1331,6 +1428,7 @@ export function OperatorSlot({
       centerFrameInList={centerFrameInList}
       compactFactory={compactFactory}
       compactView={compactView}
+      editableHint={onActivate ? (locale === "en" ? "EDIT" : "可编辑") : undefined}
       frameClassName={frameClassName}
       frameContent={
         <AnimatePresence initial={false} mode="sync">
@@ -1384,7 +1482,7 @@ export function OperatorSlot({
                   </div>
                 )}
                 {slot.buildingSkill ? (
-                  <BuildingSkillBadge skill={slot.buildingSkill} />
+                  <BuildingSkillBadge skill={slot.buildingSkill} interactive={!onActivate} />
                 ) : typeof slot.skill === "number" ? (
                   <span
                     className="absolute right-0 top-0 z-10 flex size-9 items-center justify-center border-b border-l border-white/22 bg-black/76 text-xs font-semibold text-white"
@@ -1434,6 +1532,7 @@ export function OperatorSlot({
           : "text-transparent select-none"}
       positionLabel={displayPositionLabel}
       title={suppressNativeTitles ? undefined : displayName ?? slot?.label}
+      onActivate={onActivate}
     />
   );
 
@@ -1458,6 +1557,7 @@ export function ScheduleBoard({
   onFactoryRecipeChange,
   onTradeOrderChange,
   onViewModeChange,
+  onSlotClick,
 }: {
   rows: RoomRow[];
   layout: BaseBlueprint;
@@ -1471,11 +1571,12 @@ export function ScheduleBoard({
   activePlan?: MaaPlan;
   searchQuery?: string;
   animateInitialView?: boolean;
-  onIssue: (row: RoomRow) => void;
+  onIssue?: (row: RoomRow) => void;
   feedbackDisabled?: boolean;
   onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
   onViewModeChange?: (viewMode: "list" | "compact") => void;
+  onSlotClick?: (row: RoomRow, slotIndex: number) => void;
 }) {
   const { locale } = useLanguageDemo();
   const en = locale === "en";
@@ -1633,12 +1734,13 @@ export function ScheduleBoard({
             <motion.div
               key={viewMode}
               data-schedule-view={viewMode || undefined}
-              initial={{
+              data-schedule-view-transition={viewMode === "compact" ? "skeleton" : "motion"}
+              initial={viewMode === "compact" ? false : {
                 opacity: 0,
                 y: shouldReduceMotion ? 0 : 8,
               }}
               animate={{ opacity: 1, y: 0, pointerEvents: "auto" }}
-              exit={{
+              exit={viewMode === "compact" ? undefined : {
                 opacity: 0,
                 y: shouldReduceMotion ? 0 : -6,
                 pointerEvents: "none",
@@ -1648,7 +1750,7 @@ export function ScheduleBoard({
                 },
               }}
               transition={{
-                duration: shouldReduceMotion ? MOTION_DURATION.feedback : MOTION_DURATION.content,
+                duration: viewMode === "compact" ? 0 : shouldReduceMotion ? MOTION_DURATION.feedback : MOTION_DURATION.content,
                 ease: MOTION_EASE_OUT,
               }}
             >
@@ -1730,7 +1832,7 @@ export function ScheduleBoard({
                   positionLabel?: string;
                 }> = row.positionSlots
                   ? row.positionSlots.map(({ slot, positionLabel }) => ({ slot, positionLabel }))
-                  : Array.from({ length: slotCount }, (_, index) => ({ slot: row.operatorSlots[index] }));
+                  : Array.from({ length: slotCount }, (_, index) => ({ slot: row.slotAssignments ? row.slotAssignments[index] : row.operatorSlots[index] }));
                 const gridTone = roomGridTone(row.group);
                 const rowStyle = {
                   "--room-accent": rowVisual.accent,
@@ -1826,6 +1928,7 @@ export function ScheduleBoard({
                             transitionDelay={Math.min(index, 2) * 0.02}
                             searchQuery={normalizedQuery}
                             positionLabel={positionLabel}
+                            onActivate={onSlotClick ? () => onSlotClick(row, index) : undefined}
                           />
                         ))}
                       </div>
@@ -1834,7 +1937,7 @@ export function ScheduleBoard({
                       )}
                     </div>
 
-                    <Tooltip>
+                    {onIssue ? <Tooltip>
                       <TooltipTrigger
                         render={
                           <span className="absolute right-2 top-2 z-10">
@@ -1858,7 +1961,7 @@ export function ScheduleBoard({
                           ? en ? "Sample data cannot submit feedback" : "全角色导入为体验数据，不能提交反馈"
                           : en ? "Report schedule issue" : "反馈排班问题"}
                       </TooltipContent>
-                    </Tooltip>
+                    </Tooltip> : null}
                   </div>
                 );
               })}
@@ -1878,13 +1981,14 @@ export function ScheduleBoard({
               shiftDirection={shiftDirection}
               onIssue={onIssue}
               feedbackDisabled={feedbackDisabled}
+              onSlotClick={onSlotClick}
             />
           ) : compactScheduleLoadFailed ? (
             <div className="grid min-h-[420px] place-items-center border-y border-destructive/35 text-sm text-destructive" role="alert">
               {en ? "Overview failed to load. Switch to the list view." : "一图流布局加载失败，请切换到列表式布局。"}
             </div>
           ) : (
-            <CompactScheduleLoading />
+            <CompactScheduleLoading rows={visibleRows} />
           )
         ) : (
           <div className="min-h-[420px]" data-schedule-view-pending aria-hidden="true" />

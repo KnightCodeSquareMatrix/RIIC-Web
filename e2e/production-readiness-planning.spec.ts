@@ -458,6 +458,44 @@ test("empty returning calculator shows the empty compact schedule", async ({ pag
   await expect(page.locator('[data-operator-identity="empty"]').first()).toBeVisible();
 });
 
+test("compact schedule reserves one skeleton card per room while its view loads", async ({ page }) => {
+  await mockApis(page);
+  await seedV4Session(page);
+  await page.setViewportSize({ width: 768, height: 900 });
+  await page.goto("/");
+  const listView = page.locator('[data-schedule-view="list"]');
+  await expect(listView).toBeVisible();
+  const roomCount = await listView.locator("[data-room-group]").count();
+
+  let releaseCompactChunk!: () => void;
+  const compactChunkGate = new Promise<void>((resolve) => {
+    releaseCompactChunk = resolve;
+  });
+  let compactChunkRequested = false;
+  await page.route("**/_next/static/chunks/**", async (route) => {
+    const response = await route.fetch();
+    const body = await response.body();
+    if (body.toString("utf8").includes("data-compact-schedule-view")) {
+      compactChunkRequested = true;
+      await compactChunkGate;
+    }
+    await route.fulfill({ response, body });
+  });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect.poll(() => compactChunkRequested).toBe(true);
+  const loadingView = page.locator('[data-schedule-view="compact"]');
+  const skeleton = loadingView.locator("[data-compact-schedule-loading]");
+  await expect(loadingView).toHaveAttribute("data-schedule-view-transition", "skeleton");
+  await expect(skeleton).toBeVisible();
+  await expect(skeleton.locator("[data-compact-room-skeleton]")).toHaveCount(roomCount);
+  expect(await loadingView.evaluate((element) => element.getAnimations().length)).toBe(0);
+
+  releaseCompactChunk();
+  await expect(page.locator("[data-compact-schedule-view]")).toBeVisible();
+  await expect(skeleton).toHaveCount(0);
+});
+
 test("mobile list follows the in-game assignment overview without rendering the compact view", async ({ page }) => {
   await mockApis(page);
   await seedV4Session(page, motionPlanData);
@@ -622,26 +660,17 @@ test("plan completion reveals status, metrics, and schedule once without resetti
   await page.waitForTimeout(320);
   await expect(board.locator('[data-operator-identity="凯尔希"]').first()).toBeVisible();
   await expect(board.locator('[data-operator-identity="阿米娅"], [data-operator-identity="贝洛内"]')).toHaveCount(0);
-  if (browserName === "webkit") {
-    await armTransientStyleCapture(page, '[data-schedule-view="compact"]', "compact-view");
-  } else {
-    await armMotionCapture(page, '[data-schedule-view="compact"]', "compact-view", 280);
-  }
-
   await page.getByRole("tab", { name: "一图流布局" }).click();
   await expect(board).toHaveAttribute("data-motion-sentinel", "stable");
   expect(await board.evaluate((element) => element.getAnimations().filter((animation) => animation.playState === "running").length)).toBe(0);
   const compactView = board.locator('[data-schedule-view="compact"]');
   await expect(compactView).toBeVisible();
+  await expect(compactView).toHaveAttribute("data-schedule-view-transition", "skeleton");
+  expect(await compactView.evaluate((element) => element.getAnimations().length)).toBe(0);
   const compactTrainingRoom = compactView.locator('[data-room-group="training"]');
   await expect(compactTrainingRoom).toBeVisible();
   await expect(compactTrainingRoom.locator('[data-position="训练位"]')).toContainText("Training-B");
   await expect(compactView.locator(".compact-auxiliary-grid")).toHaveCSS("grid-template-columns", /px/);
-  if (browserName === "webkit") {
-    await expectCapturedStyleMotion(page, "compact-view");
-  } else {
-    await expectCapturedMotion(page, "compact-view", 280);
-  }
   const auxiliaryGrid = compactView.locator(".compact-auxiliary-grid");
   await expect.poll(() => auxiliaryGrid.evaluate((element) => ({
     columns: getComputedStyle(element).gridTemplateColumns.split(" ").length,

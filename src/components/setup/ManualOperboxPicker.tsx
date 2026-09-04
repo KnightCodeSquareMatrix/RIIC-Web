@@ -1,6 +1,14 @@
 "use client";
 
-import { memo, useCallback, useDeferredValue, useMemo, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useDeferredValue,
+  useMemo,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from "react";
 import { Check, RotateCcw, Search } from "lucide-react";
 
 import fullOperboxJson from "../../../fixtures/operbox_full_e2.json" with { type: "json" };
@@ -21,6 +29,8 @@ import {
 import type { OperBoxEntry } from "@/types";
 
 const PAGE_SIZE = 48;
+const RARITIES = [6, 5, 4, 3, 2, 1] as const;
+const FILTER_BUTTON_CLASS = "min-h-11 min-w-11 shrink-0 border px-2 font-number";
 
 type CatalogOperator = {
   id: string;
@@ -64,6 +74,52 @@ function shiftLabel(shift: number, en: boolean, short = false): string {
   if (en) return short ? `S${shift}` : `Shift ${shift}`;
   if (short) return `${shift}班`;
   return ["第一班", "第二班", "第三班"][shift - 1] ?? `第${shift}班`;
+}
+
+function moveFilterFocus(event: ReactKeyboardEvent<HTMLDivElement>) {
+  if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+  const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>("button:not(:disabled)"));
+  const currentIndex = buttons.indexOf(document.activeElement as HTMLButtonElement);
+  if (currentIndex < 0 || buttons.length === 0) return;
+  event.preventDefault();
+  const nextIndex = event.key === "Home"
+    ? 0
+    : event.key === "End"
+      ? buttons.length - 1
+      : (currentIndex + (event.key === "ArrowRight" ? 1 : -1) + buttons.length) % buttons.length;
+  buttons[nextIndex]?.focus();
+}
+
+function FilterButton({
+  pressed,
+  disabled = false,
+  selectedClassName,
+  ariaLabel,
+  children,
+  onClick,
+}: {
+  pressed: boolean;
+  disabled?: boolean;
+  selectedClassName?: string;
+  ariaLabel?: string;
+  children: ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant={pressed ? "secondary" : "ghost"}
+      className={cn(FILTER_BUTTON_CLASS, pressed ? selectedClassName : "border-transparent")}
+      data-manual-operbox-filter-option=""
+      aria-pressed={pressed}
+      aria-label={ariaLabel}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      {children}
+    </Button>
+  );
 }
 
 function initialStages(operbox: OperBoxEntry[] | null): Record<string, ManualOperboxStage> {
@@ -218,6 +274,7 @@ export function ManualOperboxPicker({
   const en = locale === "en";
   const [query, setQuery] = useState("");
   const [onlyOwned, setOnlyOwned] = useState(false);
+  const [rarity, setRarity] = useState("all");
   const [rosterScope, setRosterScope] = useState<"scheduled" | "other">("scheduled");
   const [scheduledShift, setScheduledShift] = useState<"all" | number>("all");
   const [visibleLimit, setVisibleLimit] = useState(PAGE_SIZE);
@@ -251,12 +308,13 @@ export function ManualOperboxPicker({
     if (hasScheduledOperators && (rosterScope === "scheduled") !== scheduledNames.has(operator.name)) return false;
     if (rosterScope === "scheduled" && scheduledShift !== "all" && !scheduledOperatorShifts?.[operator.name]?.includes(scheduledShift)) return false;
     if (onlyOwned && stage === "none") return false;
+    if (rarity !== "all" && operator.rarity !== Number(rarity)) return false;
     if (!deferredQuery) return true;
     const displayName = demoOperatorName(operator.name, locale).toLocaleLowerCase(locale === "en" ? "en-US" : "zh-CN");
     return operator.name.toLocaleLowerCase("zh-CN").includes(deferredQuery)
       || displayName.includes(deferredQuery)
       || operator.id.toLocaleLowerCase("en-US").includes(deferredQuery);
-  }), [deferredQuery, hasScheduledOperators, locale, onlyOwned, rosterScope, scheduledNames, scheduledOperatorShifts, scheduledShift, stages]);
+  }), [deferredQuery, hasScheduledOperators, locale, onlyOwned, rarity, rosterScope, scheduledNames, scheduledOperatorShifts, scheduledShift, stages]);
 
   function resetListView() {
     setVisibleLimit(PAGE_SIZE);
@@ -361,6 +419,43 @@ export function ManualOperboxPicker({
         </div>
       </div>
 
+      <div className="flex min-w-0 items-center gap-1" data-manual-operbox-rarity-filter>
+        <div className="shrink-0 text-xs font-medium text-muted-foreground">{en ? "Rarity" : "星级"}</div>
+        <div
+          role="group"
+          aria-label={en ? "Filter by rarity" : "星级筛选"}
+          className="flex min-w-0 flex-1 flex-nowrap gap-0.5 overflow-x-auto"
+          onKeyDown={moveFilterFocus}
+        >
+          <FilterButton
+            pressed={rarity === "all"}
+            disabled={applyDisabled}
+            selectedClassName={SHIFT_BADGE_CLASS[0]}
+            onClick={() => {
+              setRarity("all");
+              resetListView();
+            }}
+          >
+            {en ? "All" : "全部"}
+          </FilterButton>
+          {RARITIES.map((value) => (
+            <FilterButton
+              key={value}
+              pressed={rarity === String(value)}
+              disabled={applyDisabled}
+              selectedClassName={SHIFT_BADGE_CLASS[0]}
+              ariaLabel={en ? `${value}-star operators` : `${value} 星干员`}
+              onClick={() => {
+                setRarity((current) => current === String(value) ? "all" : String(value));
+                resetListView();
+              }}
+            >
+              {value}★
+            </FilterButton>
+          ))}
+        </div>
+      </div>
+
       {hasScheduledOperators ? (
         <div className={cn(compact ? "flex flex-wrap items-center gap-1.5" : "flex flex-wrap items-center gap-2")}>
           <Tabs
@@ -382,24 +477,26 @@ export function ManualOperboxPicker({
             </TabsList>
           </Tabs>
           {compact && rosterScope === "scheduled" && scheduledShiftCount > 0 ? (
-            <div className="ml-1 flex flex-wrap items-center gap-1 border-l border-border/70 pl-2" aria-label={en ? "Schedule shift" : "排班班次"}>
-              <Button type="button" size="sm" variant={scheduledShift === "all" ? "secondary" : "ghost"} aria-pressed={scheduledShift === "all"} onClick={() => { setScheduledShift("all"); resetListView(); }}>
+            <div
+              role="group"
+              className="ml-1 flex flex-wrap items-center gap-1 border-l border-border/70 pl-2"
+              aria-label={en ? "Schedule shift" : "排班班次"}
+              onKeyDown={moveFilterFocus}
+            >
+              <FilterButton pressed={scheduledShift === "all"} onClick={() => { setScheduledShift("all"); resetListView(); }}>
                 {en ? "All shifts" : "全部班次"}
-              </Button>
+              </FilterButton>
               {shiftCounts.map((count, index) => {
                 const shift = index + 1;
                 return (
-                  <Button
+                  <FilterButton
                     key={shift}
-                    type="button"
-                    size="sm"
-                    variant={scheduledShift === shift ? "secondary" : "ghost"}
-                    className={cn("border", scheduledShift === shift ? SHIFT_BADGE_CLASS[index % SHIFT_BADGE_CLASS.length] : "border-transparent")}
-                    aria-pressed={scheduledShift === shift}
+                    pressed={scheduledShift === shift}
+                    selectedClassName={SHIFT_BADGE_CLASS[index % SHIFT_BADGE_CLASS.length]}
                     onClick={() => { setScheduledShift(shift); resetListView(); }}
                   >
                     {shiftLabel(shift, en)}<span className="font-number opacity-65">{count}</span>
-                  </Button>
+                  </FilterButton>
                 );
               })}
             </div>

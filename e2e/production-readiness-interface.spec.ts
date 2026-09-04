@@ -173,6 +173,13 @@ test("progression adjustments sync back to the schedule settings manual BOX", as
   await mockApis(page, { taskQueueEnabled: true });
   const adjustedPlanData = {
     ...planData,
+    maa: {
+      ...planData.maa,
+      plans: planData.maa.plans.map((plan, index) => index === 0 ? {
+        ...plan,
+        rooms: { ...plan.rooms, processing: [{ operators: [] }] },
+      } : plan),
+    },
     rotation: {
       ...planData.rotation,
       daily: {
@@ -264,15 +271,14 @@ test("progression adjustments sync back to the schedule settings manual BOX", as
 
   const lmdProduction = page.locator('[data-daily-product="lmd-orders"] [data-animated-value="number"]');
   await expect(lmdProduction).toHaveAttribute("aria-label", "41,200");
+  const lmdCalligraph = lmdProduction.locator("[data-calligraph]");
+  await expect(lmdCalligraph).toBeVisible();
+  await lmdCalligraph.evaluate((element) => element.setAttribute("data-animation-sentinel", "stable"));
   await scheduleVariantTabs.getByRole("tab", { name: "当前方案", exact: true }).click();
-  expect(await lmdProduction.evaluate((element) => (
-    element.getAnimations({ subtree: true }).filter((animation) => animation.playState === "running").length
-  ))).toBeGreaterThan(0);
+  await expect(lmdCalligraph).toHaveAttribute("data-animation-sentinel", "stable");
   await expect(lmdProduction).toHaveAttribute("aria-label", "34,254");
   await scheduleVariantTabs.getByRole("tab", { name: "调整练度方案", exact: true }).click();
-  expect(await lmdProduction.evaluate((element) => (
-    element.getAnimations({ subtree: true }).filter((animation) => animation.playState === "running").length
-  ))).toBeGreaterThan(0);
+  await expect(lmdCalligraph).toHaveAttribute("data-animation-sentinel", "stable");
   await expect(lmdProduction).toHaveAttribute("aria-label", "41,200");
 
   await expect.poll(() => page.evaluate(() => {
@@ -303,9 +309,15 @@ test("progression adjustments sync back to the schedule settings manual BOX", as
       expect(box?.height).toBeGreaterThanOrEqual(44 - 0.01);
     }
   }
+
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.locator('[data-calculator-export-actions="desktop"]').getByRole("button", { name: "手动修改排班" }).click();
+  await expect(page).toHaveURL(/\/manual$/);
+  await expect(page.locator('[data-room-title="加工站"] [data-operator-identity="阿米娅"]')).toHaveCount(0);
 });
 
 test("setup exposes and persists only worker-supported rotation profiles", async ({ page }) => {
+  test.slow();
   await mockApis(page);
   await seedV4Session(page);
   let planRequests = 0;
@@ -624,8 +636,12 @@ test("calculator owns scheduling controls and training advice uses a single tech
   expect(controlOrder.at(-1)).toContain("生成排班");
   expect(controlOrder.some((label) => label.includes("全角色导入"))).toBe(false);
   const exportOrder = await page.locator("[data-calculator-export-actions]").locator("button").allTextContents();
-  expect(exportOrder).toHaveLength(2);
-  expect(exportOrder.every((label) => label.includes("导出到 MAA"))).toBe(true);
+  expect(exportOrder).toEqual([
+    expect.stringContaining("手动修改排班"),
+    expect.stringContaining("导出到 MAA"),
+    expect.stringContaining("手动修改排班"),
+    expect.stringContaining("导出到 MAA"),
+  ]);
 
   await page.getByRole("button", { name: "练卡建议" }).click();
   await expect(calculatorControls).toHaveCount(0);

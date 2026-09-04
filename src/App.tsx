@@ -66,6 +66,11 @@ import {
 } from "./onboarding";
 import { normalizeOperboxEntries } from "./operbox-normalization";
 import { upgradeSimulationBoxSource } from "./upgrade-simulation";
+import {
+  DEFAULT_MANUAL_SHIFT_DURATIONS,
+  MANUAL_SCHEDULE_STORAGE_KEY,
+} from "./manual-schedule-config";
+import type { ManualScheduleDraft } from "./manual-schedule";
 import { effectiveFiammettaSetting, resolvePlanPresentationLayout } from "./plan-presentation";
 import {
   applyLocalLayoutPatch,
@@ -75,7 +80,7 @@ import {
   RESULT_CLEAR_WARNING_DISMISSED_KEY,
 } from "./persistence";
 import type { RoomRow } from "./schedule";
-import { DEFAULT_ROTATION_PROFILE } from "./rotation-settings";
+import { DEFAULT_ROTATION_PROFILE, rotationDurations } from "./rotation-settings";
 import { MOTION_DURATION } from "./motion";
 import { emptySklandBindingSummary } from "./skland-binding-state";
 import { createSklandRestoreGuard } from "./skland-restore-guard";
@@ -133,7 +138,7 @@ const ProductChangeConfirmModal = lazy(() => loadComponents().then((module) => (
 type ProductChange =
   | { type: "factory"; roomId: string; recipe: FactoryRecipe }
   | { type: "trade"; roomId: string; order: TradeOrder };
-type WebsiteAuthIntent = "account" | "run" | "setup" | "skland";
+type WebsiteAuthIntent = "account" | "manual" | "manual-edit" | "run" | "setup" | "skland" | "upgrade";
 
 type SklandFullRestoreResult =
   | { session: SklandSessionData; error?: never }
@@ -263,11 +268,22 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     currentBoxSourceRef.current = resolvedSource;
     setBoxSourceState(resolvedSource);
   }, []);
-  const [layoutDirty, setLayoutDirty] = useState(false);
+  const [layoutDirty, setLayoutDirtyState] = useState(false);
+  const currentLayoutDirtyRef = useRef(layoutDirty);
+  const setLayoutDirty = useCallback<Dispatch<SetStateAction<boolean>>>((nextDirty) => {
+    const resolvedDirty = typeof nextDirty === "function"
+      ? nextDirty(currentLayoutDirtyRef.current)
+      : nextDirty;
+    currentLayoutDirtyRef.current = resolvedDirty;
+    setLayoutDirtyState(resolvedDirty);
+  }, []);
   const [layoutSource, setLayoutSource] = useState<"local" | "skland">("local");
   const [localLayoutBackup, setLocalLayoutBackup] = useState<BaseBlueprint | null>(null);
   const [rotationProfile, setRotationProfile] = useState<RotationProfile>(DEFAULT_ROTATION_PROFILE);
   const [fiammettaEnabled, setFiammettaEnabled] = useState(false);
+  const [manualFiammettaEnabled, setManualFiammettaEnabled] = useState(false);
+  const [manualShiftDurations, setManualShiftDurations] = useState<number[]>([...DEFAULT_MANUAL_SHIFT_DURATIONS]);
+  const [manualDraftHandoff, setManualDraftHandoff] = useState<ManualScheduleDraft | null>(null);
   const [inputMode, setInputMode] = useState<"skland" | "maa" | "manual">(CLIENT_SKLAND_ENABLED ? "skland" : "maa");
   const [maaPaste, setMaaPaste] = useState("");
   const [sklandScheduleSnapshot, setSklandScheduleSnapshot] = useState<SklandScheduleSnapshot | null>(null);
@@ -282,13 +298,14 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   const [sklandError, setSklandError] = useState<DisplayError | null>(null);
   const [sklandBusy, setSklandBusy] = useState(false);
   const [setupOpen, setSetupOpen] = useState(false);
+  const [upgradeSimulationOpen, setUpgradeSimulationOpen] = useState(false);
+  const [setupMode, setSetupMode] = useState<"calculator" | "manual">("calculator");
   const [setupMounted, setSetupMounted] = useState(false);
   const [issueModalMounted, setIssueModalMounted] = useState(false);
   const [productModalMounted, setProductModalMounted] = useState(false);
   const initialLayoutForRestore = useRef(defaultLayout);
   const initialBoxSource = useRef(boxSource);
   const initialOperbox = useRef(operbox);
-  const initialLayoutDirty = useRef(layoutDirty);
   const initialLayoutSource = useRef<"local" | "skland">("local");
   const initialLocalLayoutBackup = useRef<BaseBlueprint | null>(null);
   const skipNextPersistence = useRef(false);
@@ -440,6 +457,9 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   }, [baseRows]);
   const rows = presentedRows?.source === baseRows ? presentedRows.rows : baseRows;
   const effectiveFiammettaEnabled = effectiveFiammettaSetting(operbox, rotationProfile, fiammettaEnabled);
+  const effectiveManualFiammettaEnabled = Boolean(
+    manualFiammettaEnabled && operbox?.some((operator) => operator.own && operator.name === "菲亚梅塔")
+  );
   const setupConfigurationKey = useMemo(() => setupConfigurationFingerprint({
     layout,
     rotationProfile,
@@ -625,7 +645,6 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
         initialLayoutForRestore.current = restoredLayout;
         initialBoxSource.current = restoredBoxSource;
         initialOperbox.current = restoredOperbox;
-        initialLayoutDirty.current = restored.layoutDirty;
         initialLayoutSource.current = restoredLayoutSource;
         initialLocalLayoutBackup.current = CLIENT_SKLAND_ENABLED ? restored.localLayoutBackup : null;
       }
@@ -634,7 +653,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     } finally {
       setHasRestoredSession(true);
     }
-  }, [locale, setBoxSource, setOperbox]);
+  }, [locale, setBoxSource, setLayoutDirty, setOperbox]);
 
   useEffect(() => {
     if (!hasRestoredSession || typeof window === "undefined") return;
@@ -797,7 +816,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
             setBoxSource("skland");
           }
           if (
-            !initialLayoutDirty.current
+            !currentLayoutDirtyRef.current
             && (initialBoxSource.current === "skland" || !initialOperbox.current)
             && session.scheduleSnapshot.infrastructure.layoutSuggestion
           ) {
@@ -1144,6 +1163,39 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     downloadJson("arknights-infra-schedule-maa.json", result.maa);
   }
 
+  async function handleEditManualSchedule() {
+    if (!scheduleResult) {
+      navigateToPage("manual");
+      return;
+    }
+    const {
+      createManualScheduleDraftFromCalculator,
+      persistManualScheduleDraft,
+      reconcileManualScheduleDraft,
+    } = await import("./manual-schedule");
+    const resultDurations = scheduleResult.rotation.shifts
+      .map((shift) => shift.duration_hours)
+      .filter((duration) => Number.isFinite(duration) && duration > 0);
+    const durations = resultDurations?.length ? resultDurations : rotationDurations(rotationProfile);
+    const draft = reconcileManualScheduleDraft(createManualScheduleDraftFromCalculator({
+      layout,
+      maa: scheduleResult.maa,
+      fallbackDurations: durations,
+      fiammettaEnabled: effectiveFiammettaEnabled,
+      trainingRoomShifts: scheduleResult.trainingRoom?.shifts,
+    }), layout, operbox);
+
+    setManualShiftDurations(draft.shifts.map((shift) => shift.durationHours));
+    setManualFiammettaEnabled(draft.fiammettaEnabled);
+    setManualDraftHandoff(draft);
+    try {
+      persistManualScheduleDraft(window.localStorage, draft);
+    } catch {
+      // The manual page remains usable; it will surface its existing storage warning.
+    }
+    navigateToPage("manual");
+  }
+
   function clearIssueState() {
     setIssueDraftKind("room_issue");
     setIssueDraftRow(null);
@@ -1253,6 +1305,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
 
   function clearPlanResult() {
     setResult(null);
+    setUpgradeSimulationOpen(false);
     setActiveShift(0);
     clearIssueState();
   }
@@ -1409,7 +1462,8 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     persistOnboardingPreference("completed");
   }
 
-  function openSetup() {
+  function openSetup(mode: "calculator" | "manual" = "calculator") {
+    setSetupMode(mode);
     setSetupOpen(true);
   }
 
@@ -1430,6 +1484,10 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   }
 
   function handleAppPageChange(nextPage: AppPage, trigger?: HTMLElement): boolean {
+    if (nextPage === "manual" && !accountCanUseCurrentBox) {
+      requestWebsiteAccount("manual", trigger);
+      return false;
+    }
     if ((nextPage === "account" || nextPage === "skland") && !websiteSession) {
       requestWebsiteAccount(nextPage, trigger);
       return false;
@@ -1474,6 +1532,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       websiteAuthIntentRef.current = null;
       websiteAuthReturnFocusRef.current = null;
       setWebsiteAuthDialogOpen(false);
+      setUpgradeSimulationOpen(false);
       router.push(workbenchHref("calculator"));
       setSklandAccounts([]);
       setSklandActiveAccountId(null);
@@ -1506,6 +1565,31 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     openSetup();
   }
 
+  function handleProtectedUpgradeSimulation() {
+    if (!websiteSession) {
+      requestWebsiteAccount("upgrade");
+      return;
+    }
+    setUpgradeSimulationOpen(true);
+  }
+
+  function handleManualSetup() {
+    setSetupMode("manual");
+    if (!accountCanUseCurrentBox) {
+      requestWebsiteAccount("setup");
+      return;
+    }
+    setSetupOpen(true);
+  }
+
+  function handleProtectedEditManualSchedule() {
+    if (!accountCanUseCurrentBox) {
+      requestWebsiteAccount("manual-edit");
+      return;
+    }
+    handleEditManualSchedule();
+  }
+
   function handleProtectedRun() {
     if (hasPersonalBox && !websiteSession) {
       requestWebsiteAccount("run");
@@ -1527,6 +1611,18 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     }
     if (intent === "run") {
       if (cliReady) void handleRun();
+      return;
+    }
+    if (intent === "upgrade") {
+      setUpgradeSimulationOpen(true);
+      return;
+    }
+    if (intent === "manual-edit") {
+      handleEditManualSchedule();
+      return;
+    }
+    if (intent === "manual") {
+      router.push(workbenchHref("manual"));
       return;
     }
     router.push(workbenchHref(intent === "skland" ? "skland" : "account"));
@@ -1621,13 +1717,16 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
 
   function handleClearLocalData() {
     try {
-      clearLocalProductData(window.localStorage, [ONBOARDING_STORAGE_KEY]);
+      clearLocalProductData(window.localStorage, [ONBOARDING_STORAGE_KEY, MANUAL_SCHEDULE_STORAGE_KEY]);
       skipNextPersistence.current = true;
       setPreset(defaultPreset);
       setLayout(buildBlueprint(defaultPreset));
       setOperbox(null);
       setFileName(null);
       setBoxSource("sample");
+      setManualShiftDurations([...DEFAULT_MANUAL_SHIFT_DURATIONS]);
+      setManualFiammettaEnabled(false);
+      setManualDraftHandoff(null);
       setLayoutDirty(false);
       setLayoutSource("local");
       setLocalLayoutBackup(null);
@@ -1638,6 +1737,8 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       setOnboardingPreference("active");
       setStorageNotice(null);
       clearIssueState();
+      setSetupOpen(false);
+      router.push(workbenchHref("calculator"));
     } catch {
       setStorageNotice(displayError("AIC-LOCAL-7001", locale === "en" ? "The browser could not clear local data. Check site storage permissions." : "浏览器无法清除本地数据，请检查站点存储权限。"));
     }
@@ -1781,6 +1882,9 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       onStartPersonalFlow: handleStartPersonalFlow,
       onDismissOnboarding: dismissOnboarding,
       onOpenSetup: handleProtectedSetup,
+      upgradeSimulationOpen,
+      onOpenUpgradeSimulation: handleProtectedUpgradeSimulation,
+      onUpgradeSimulationOpenChange: setUpgradeSimulationOpen,
       onRun: handleProtectedRun,
       onSimulateUpgrades: handleSimulateUpgrades,
       upgradeComparison: upgradeComparison?.baseline === result ? { trial: upgradeComparison.trial } : null,
@@ -1798,9 +1902,24 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       onPerformanceIssue: handlePerformanceIssue,
       onFactoryRecipeChange: handleScheduleFactoryRecipeChange,
       onTradeOrderChange: handleScheduleTradeOrderChange,
+      onEditManualSchedule: handleProtectedEditManualSchedule,
       onDownloadMaa: handleDownloadMaa,
       onClearResultNotice: () => setResultClearNotice(null),
       onDismissResultClearWarning: dismissResultClearWarning,
+    },
+    manual: {
+      layout,
+      operbox: accountCanUseCurrentBox ? operbox : null,
+      sourceName: accountCanUseCurrentBox ? fileName : null,
+      shiftDurations: manualShiftDurations,
+      fiammettaEnabled: effectiveManualFiammettaEnabled,
+      initialDraft: accountCanUseCurrentBox ? manualDraftHandoff : null,
+      onInitialDraftConsumed: () => setManualDraftHandoff(null),
+      onShiftDurationsChange: setManualShiftDurations,
+      onFiammettaEnabledChange: setManualFiammettaEnabled,
+      onOpenSetup: handleManualSetup,
+      onFactoryRecipeChange: handleFactoryRecipeChange,
+      onTradeOrderChange: handleTradeOrderChange,
     },
     training: {
       operbox: accountCanUseCurrentBox ? operbox : null,
@@ -1986,6 +2105,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
           onUseSklandSnapshot: useSklandSnapshotFromSetup,
         } : {})}
         open={setupOpen}
+        mode={setupMode}
         onOpenChange={handleSetupOpenChange}
         operbox={operbox}
         boxSource={boxSource}
@@ -2003,11 +2123,13 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
         presets={PRESETS}
         preset={preset}
         layout={layout}
-        configurationKey={setupConfigurationKey}
-        rotationProfile={rotationProfile}
+        configurationKey={setupMode === "manual" ? `${setupConfigurationKey}:${manualShiftDurations.join(",")}:${manualFiammettaEnabled}` : setupConfigurationKey}
+        rotationProfile={setupMode === "manual" ? DEFAULT_ROTATION_PROFILE : rotationProfile}
         onRotationProfileChange={handleRotationProfileChange}
-        fiammettaEnabled={effectiveFiammettaEnabled}
-        onFiammettaEnabledChange={handleFiammettaEnabledChange}
+        manualShiftDurations={manualShiftDurations}
+        onManualShiftDurationsChange={setManualShiftDurations}
+        fiammettaEnabled={setupMode === "manual" ? effectiveManualFiammettaEnabled : effectiveFiammettaEnabled}
+        onFiammettaEnabledChange={setupMode === "manual" ? setManualFiammettaEnabled : handleFiammettaEnabledChange}
         onPresetSelect={handlePresetSelect}
         onLayoutFile={handleLayoutFile}
         onDownloadLayout={() => {
