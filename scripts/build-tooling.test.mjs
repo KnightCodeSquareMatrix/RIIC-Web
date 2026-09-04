@@ -176,6 +176,7 @@ test("Next and the verified deployment keep real public GET responses compressed
 
   assert.match(nextConfig, /compress: true/);
   assert.match(nextConfig, /const uncachedDocumentRoutes = \[/);
+  assert.match(nextConfig, /const uncachedDocumentRoutes = \[[\s\S]+"\/manual"/);
   assert.match(nextConfig, /private, no-cache, no-store, max-age=0, must-revalidate/);
   assert.match(rootLayout, /"riic-build-id": process\.env\.APP_CLIENT_BUILD_ID \?\? "local-development"/);
   assert.match(publicVerification, /public HTML build ID is/);

@@ -35,6 +35,12 @@ export function isDebugToolsFeatureEnabled(
     && environment.BETA_DEBUG_TOOLS_ENABLED === "1";
 }
 
+export function isManualScheduleEnabled(
+  environment: DeploymentEnvironment = process.env
+): boolean {
+  return appDeploymentEnvironment(environment) !== "production";
+}
+
 export function areRequestRateLimitsEnabled(
   environment: DeploymentEnvironment = process.env
 ): boolean {
