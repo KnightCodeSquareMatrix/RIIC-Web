@@ -1498,7 +1498,7 @@ export function OperatorSlot({
                   <img
                     src={`/images/elite/elite_${elite}.png`}
                     alt={locale === "en" ? `Elite ${elite}` : `精英${elite}`}
-                    className="pointer-events-none absolute bottom-0 left-0 z-10 h-[25%] w-auto"
+                    className="pointer-events-none absolute bottom-0 left-0 z-10 h-[30%] w-auto"
                     data-elite-badge={elite}
                   />
                 ) : null}
