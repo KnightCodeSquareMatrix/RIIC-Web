@@ -1363,6 +1363,7 @@ function BuildingSkillBadge({
 export function OperatorSlot({
   slot,
   currentMorale,
+  elite,
   autofill = false,
   compactFactory = false,
   compactView = false,
@@ -1380,6 +1381,8 @@ export function OperatorSlot({
 }: {
   slot: RoomRow["operatorSlots"][number] | undefined;
   currentMorale?: number;
+  /** 干员精英化等级（0/1/2），传入后会在头像左下角显示对应角标。 */
+  elite?: number;
   autofill?: boolean;
   compactFactory?: boolean;
   compactView?: boolean;
@@ -1491,7 +1494,15 @@ export function OperatorSlot({
                     S<span className="font-number">{slot.skill}</span>
                   </span>
                 ) : null}
-                {typeof currentMorale === "number" ? (
+                {typeof elite === "number" && elite >= 0 && elite <= 2 ? (
+                  <img
+                    src={`/images/elite/elite_${elite}.png`}
+                    alt={locale === "en" ? `Elite ${elite}` : `精英${elite}`}
+                    className="pointer-events-none absolute bottom-0 left-0 z-10 h-[25%] w-auto"
+                    data-elite-badge={elite}
+                  />
+                ) : null}
+                {elite === undefined && typeof currentMorale === "number" ? (
                   <span
                     className="absolute bottom-0.5 left-0.5 flex items-center gap-0.5 whitespace-nowrap rounded-sm bg-black/72 px-1 py-0.5 text-xs font-normal leading-none text-white shadow-[0_1px_3px_rgba(0,0,0,0.5)] [&_svg]:size-2.5 max-sm:bottom-0.5 max-sm:left-0.5 max-sm:px-0.5 max-sm:[&_svg]:size-2.5"
                     aria-label={locale === "en" ? `Current morale ${currentMorale}/24` : `当前心情 ${currentMorale}/24`}
@@ -1543,7 +1554,7 @@ export function ScheduleBoard({
   rows,
   layout,
   planRevision,
-  currentMoraleByOperator,
+  eliteByOperator,
   viewControlsSlot,
   mobileActionsSlot,
   shiftInfoSlot,
@@ -1562,7 +1573,8 @@ export function ScheduleBoard({
   rows: RoomRow[];
   layout: BaseBlueprint;
   planRevision?: string;
-  currentMoraleByOperator?: ReadonlyMap<string, number>;
+  /** 按干员名查精英化等级（0/1/2），用于在排班头像左下角显示角标。 */
+  eliteByOperator?: ReadonlyMap<string, number>;
   viewControlsSlot?: ReactNode;
   mobileActionsSlot?: ReactNode;
   shiftInfoSlot?: ReactNode;
@@ -1919,7 +1931,7 @@ export function ScheduleBoard({
                           <OperatorSlot
                             key={`${row.key}-${index}`}
                             slot={slot}
-                            currentMorale={slot ? currentMoraleByOperator?.get(slot.name) : undefined}
+                            elite={slot ? eliteByOperator?.get(slot.name) : undefined}
                             autofill={row.group === "dormitory" && row.autofill}
                             compactFactory={compactFactoryRoom}
                             centerFrameInList
@@ -1975,7 +1987,7 @@ export function ScheduleBoard({
             <CompactScheduleView
               rows={visibleRows}
               layout={layout}
-              currentMoraleByOperator={currentMoraleByOperator}
+              eliteByOperator={eliteByOperator}
               activeShift={activeShift}
               activePlan={activePlan}
               shiftDirection={shiftDirection}

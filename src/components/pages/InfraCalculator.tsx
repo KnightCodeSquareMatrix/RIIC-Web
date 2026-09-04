@@ -1,7 +1,7 @@
 "use client";
 
 import { Download, Ellipsis, FlaskConical, HeartPulse, Keyboard, Loader2, PencilLine, Play, RefreshCw, Search, Settings2, X } from "lucide-react";
-import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { ScheduleBoard, ShiftTabs } from "@/components";
 import { Button } from "@/components/ui/button";
@@ -323,7 +323,6 @@ export interface InfraCalculatorProps {
   scheduleResult: PublicPlanData | null;
   activeShift: number;
   rows: RoomRow[];
-  currentMoraleByOperator: Map<string, number> | undefined;
   activePlan: MaaPlan | undefined;
   closestComparison: ShiftComparison | null;
   resultClearNotice: string | null;
@@ -381,7 +380,7 @@ export interface InfraCalculatorProps {
 export function InfraCalculator(props: InfraCalculatorProps) {
   const {
     layout,
-    result, scheduleResult, activeShift, rows, currentMoraleByOperator,
+    result, scheduleResult, activeShift, rows,
     activePlan, closestComparison,
     resultClearNotice,
     feedbackResult,
@@ -395,6 +394,13 @@ export function InfraCalculator(props: InfraCalculatorProps) {
   } = props;
   const { locale } = useLanguageDemo();
   const en = locale === "en";
+  const eliteByOperator = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const entry of operbox ?? []) {
+      if (entry.own) map.set(entry.name, entry.elite);
+    }
+    return map;
+  }, [operbox]);
   const [shortcutGuideOpen, setShortcutGuideOpen] = useState(false);
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [operatorQuery, setOperatorQuery] = useState("");
@@ -637,7 +643,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
               rows={rows}
               layout={layout}
               planRevision={scheduleResult?.diagnosticId}
-              currentMoraleByOperator={currentMoraleByOperator}
+              eliteByOperator={eliteByOperator}
               activeShift={activeShift}
               shiftDirection={shiftDirection}
               activePlan={activePlan}

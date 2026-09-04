@@ -46,7 +46,7 @@ const nextConfig: NextConfig = {
         has: [{ type: "query", key: "v", value: "\\d+-[0-9a-f]{12}" }],
         headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
       },
-      // 以下目录按一年强缓存处理。profession / building-room-emblems / ui 是静态资源，
+      // 以下目录按一年强缓存处理。profession / building-room-emblems / ui / elite 是静态资源，
       // 不随 sync-arkntools-assets 工作流更新；若手工更新这些图片，必须改文件名或加版本参数，
       // 否则浏览器最长一年内会继续使用旧图。
       // building-skills 实际随工作流更新，当前暂不加版本号，更新源后同样存在最长一年的旧图窗口。
@@ -64,6 +64,10 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/images/ui/:asset",
+        headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
+      },
+      {
+        source: "/images/elite/:asset",
         headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
       },
     ];

@@ -465,15 +465,6 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     rotationProfile,
     fiammettaEnabled,
   }), [fiammettaEnabled, layout, rotationProfile]);
-  const currentMoraleByOperator = useMemo(() => {
-    if (!CLIENT_SKLAND_ENABLED || boxSource !== "skland" || !sklandScheduleSnapshot) return undefined;
-
-    return new Map(
-      sklandScheduleSnapshot.infrastructure.rooms.flatMap((room) =>
-        room.operators.map((operator) => [operator.name, operator.morale] as const)
-      )
-    );
-  }, [boxSource, sklandScheduleSnapshot]);
   const [closestComparison, setClosestComparison] = useState<ShiftComparison | null>(null);
   useEffect(() => {
     const maa = scheduleResult?.maa;
@@ -1830,7 +1821,6 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       scheduleResult,
       activeShift,
       rows,
-      currentMoraleByOperator,
       activePlan,
       closestComparison,
       resultClearNotice,
