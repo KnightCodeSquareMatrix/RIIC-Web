@@ -9,11 +9,19 @@ import type {
   RoomKind,
   TrainingRoomShift,
 } from "./types.ts";
+import {
+  DEFAULT_MANUAL_SHIFT_DURATIONS,
+  MANUAL_SCHEDULE_STORAGE_KEY,
+  MAX_MANUAL_SHIFT_COUNT,
+  MIN_MANUAL_SHIFT_COUNT,
+} from "./manual-schedule-config.ts";
 
-export const MANUAL_SCHEDULE_STORAGE_KEY = "arknights-infra-manual-schedule-v1";
-export const DEFAULT_MANUAL_SHIFT_DURATIONS = [12, 6, 6] as const;
-export const MIN_MANUAL_SHIFT_COUNT = 1;
-export const MAX_MANUAL_SHIFT_COUNT = 12;
+export {
+  DEFAULT_MANUAL_SHIFT_DURATIONS,
+  MANUAL_SCHEDULE_STORAGE_KEY,
+  MAX_MANUAL_SHIFT_COUNT,
+  MIN_MANUAL_SHIFT_COUNT,
+} from "./manual-schedule-config.ts";
 
 export interface ManualRoomAssignment {
   operators: Array<string | null>;

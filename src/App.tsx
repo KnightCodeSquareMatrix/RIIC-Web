@@ -67,13 +67,10 @@ import {
 import { normalizeOperboxEntries } from "./operbox-normalization";
 import { upgradeSimulationBoxSource } from "./upgrade-simulation";
 import {
-  createManualScheduleDraftFromCalculator,
   DEFAULT_MANUAL_SHIFT_DURATIONS,
   MANUAL_SCHEDULE_STORAGE_KEY,
-  persistManualScheduleDraft,
-  reconcileManualScheduleDraft,
-  type ManualScheduleDraft,
-} from "./manual-schedule";
+} from "./manual-schedule-config";
+import type { ManualScheduleDraft } from "./manual-schedule";
 import { effectiveFiammettaSetting, resolvePlanPresentationLayout } from "./plan-presentation";
 import {
   applyLocalLayoutPatch,
@@ -1166,11 +1163,16 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     downloadJson("arknights-infra-schedule-maa.json", result.maa);
   }
 
-  function handleEditManualSchedule() {
+  async function handleEditManualSchedule() {
     if (!scheduleResult) {
       navigateToPage("manual");
       return;
     }
+    const {
+      createManualScheduleDraftFromCalculator,
+      persistManualScheduleDraft,
+      reconcileManualScheduleDraft,
+    } = await import("./manual-schedule");
     const resultDurations = scheduleResult.rotation.shifts
       .map((shift) => shift.duration_hours)
       .filter((duration) => Number.isFinite(duration) && duration > 0);

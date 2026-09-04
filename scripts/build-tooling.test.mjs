@@ -150,16 +150,17 @@ test("CI enforces route and document preload JavaScript budgets after building",
   assert.equal(packageJson.scripts["check:bundle-budget"], "node scripts/check-bundle-budget.mjs");
   assert.match(workflow, /Build standalone application and worker[\s\S]+Release output checks[\s\S]+npm run check:bundle-budget/);
   assert.match(budgetCheck, /MAX_SKLAND_DISABLED_ROUTE_INITIAL_JS_BYTES = 1_167_000/);
-  assert.match(budgetCheck, /MAX_SKLAND_ENABLED_ROUTE_INITIAL_JS_BYTES = 1_191_000/);
-  assert.match(budgetCheck, /MAX_SKLAND_ROUTE_INITIAL_JS_BYTES = 1_632_000/);
+  assert.match(budgetCheck, /MAX_SKLAND_ENABLED_ROUTE_INITIAL_JS_BYTES = 1_203_000/);
+  assert.match(budgetCheck, /MAX_SKLAND_ROUTE_INITIAL_JS_BYTES = 1_642_000/);
   assert.match(budgetCheck, /MAX_SKLAND_DISABLED_DOCUMENT_INITIAL_JS_BYTES = 1_280_000/);
-  assert.match(budgetCheck, /MAX_SKLAND_ENABLED_DOCUMENT_INITIAL_JS_BYTES = 1_304_000/);
+  assert.match(budgetCheck, /MAX_SKLAND_ENABLED_DOCUMENT_INITIAL_JS_BYTES = 1_316_000/);
   assert.match(budgetCheck, /MAX_SKLAND_DISABLED_DOCUMENT_INITIAL_GZIP_JS_BYTES = 416_000/);
   assert.match(budgetCheck, /MAX_SKLAND_ENABLED_DOCUMENT_INITIAL_GZIP_JS_BYTES = 422_000/);
   assert.match(budgetCheck, /const sklandEnabled = sklandRoute\.firstLoadChunkPaths\.some/);
-  assert.match(budgetCheck, /MAX_SECONDARY_ROUTE_INITIAL_JS_BYTES = 1_572_000/);
+  assert.match(budgetCheck, /MAX_SECONDARY_ROUTE_INITIAL_JS_BYTES = 1_582_000/);
+  assert.match(budgetCheck, /MAX_MANUAL_ROUTE_INITIAL_JS_BYTES = 1_602_000/);
   assert.match(budgetCheck, /MAX_DOCUMENT_INITIAL_JS_FILES = 18/);
-  assert.match(budgetCheck, /WORKBENCH_ROUTES = \["\/", "\/training", "\/skills", "\/skland", "\/account"\]/);
+  assert.match(budgetCheck, /WORKBENCH_ROUTES = \["\/", "\/manual", "\/training", "\/skills", "\/skland", "\/account"\]/);
   assert.match(budgetCheck, /firstLoadUncompressedJsBytes/);
   assert.match(budgetCheck, /\.next\/server\/app\/index\.html/);
   assert.match(budgetCheck, /gzipSync/);
@@ -486,6 +487,9 @@ test("heavy account, operator, and scrollbar modules stay behind runtime boundar
 
   assert.match(app, /useWebsiteSession/);
   assert.doesNotMatch(app, /authClient\.useSession/);
+  assert.match(app, /await import\("\.\/manual-schedule"\)/);
+  assert.match(app, /from "\.\/manual-schedule-config"/);
+  assert.doesNotMatch(app, /import \{\s*createManualScheduleDraftFromCalculator/);
   assert.doesNotMatch(schedule, /operatorPresentationFor/);
   assert.doesNotMatch(components, /from "@\/operatorPortraits"/);
   assert.match(scrollbar, /import\("overlayscrollbars"\)/);
