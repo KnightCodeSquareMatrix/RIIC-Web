@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -119,15 +120,73 @@ const OperatorSkillTooltip = lazy(() => loadClientFeature("operatorSkillTooltip"
   default: module.OperatorSkillTooltip,
 })));
 
-function CompactScheduleLoading() {
+function CompactScheduleLoading({ rows }: { rows: RoomRow[] }) {
   const { locale } = useLanguageDemo();
+  const grouped = new Map<string, RoomRow[]>();
+  for (const row of rows) {
+    grouped.set(row.group, [...(grouped.get(row.group) ?? []), row]);
+  }
+  const workstations = [...(grouped.get("trading") ?? []), ...(grouped.get("manufacture") ?? [])];
+  const power = grouped.get("power") ?? [];
+  const dormitories = grouped.get("dormitory") ?? [];
+  const skeleton = (
+    row: RoomRow,
+    className: string,
+    style?: CSSProperties,
+  ) => (
+    <Skeleton
+      key={row.key}
+      className={cn("min-w-0 flex-1 rounded-none border border-[#313131]/10 bg-[#313131]/14", className)}
+      data-compact-room-skeleton
+      data-room-group={row.group}
+      style={style}
+    />
+  );
+
   return (
     <div
-      className="grid min-h-[560px] place-items-center border-y border-dashed border-border/70 text-sm text-muted-foreground"
+      className="min-h-[560px]"
       data-compact-schedule-loading
       role="status"
+      aria-label={locale === "en" ? "Preparing overview" : "正在准备一图流布局"}
     >
-      {locale === "en" ? "Preparing overview" : "正在准备一图流布局"}
+      <span className="sr-only">{locale === "en" ? "Preparing overview" : "正在准备一图流布局"}</span>
+      <div className="flex items-stretch gap-3" aria-hidden="true">
+        <div className="flex min-w-0 flex-col gap-3" style={{ flexBasis: "55%" }}>
+          {(grouped.get("control") ?? []).map((room) => skeleton(room, "h-32"))}
+          {[0, 2, 4].map((start) => (
+            <div key={start} className="flex gap-3">
+              {workstations.slice(start, start + 2).map((room) => skeleton(room, "h-36"))}
+            </div>
+          ))}
+          {power.length === 3 ? (
+            <div className="flex gap-3">
+              {power.map((room) => skeleton(room, "h-24"))}
+            </div>
+          ) : (
+            <div className="flex gap-3">
+              <div className="flex gap-3" style={{ flexBasis: "50%" }}>
+                {power.slice(0, 2).map((room) => skeleton(room, "h-24"))}
+              </div>
+              {workstations[6] ? skeleton(workstations[6], "h-24", { flexBasis: "50%" }) : null}
+            </div>
+          )}
+        </div>
+        <div className="flex min-w-0 flex-col gap-3" style={{ flexBasis: "45%" }}>
+          <div className="compact-auxiliary-container min-w-0">
+            <div className="compact-auxiliary-grid">
+              {["meeting", "training", "hire", "processing"].flatMap((group) => (
+                (grouped.get(group) ?? []).map((room) => skeleton(room, "h-28"))
+              ))}
+            </div>
+          </div>
+          {dormitories.slice(0, 4).map((room) => (
+            <div key={room.key} className="flex min-h-24 flex-1">
+              {skeleton(room, "h-full")}
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -1675,12 +1734,13 @@ export function ScheduleBoard({
             <motion.div
               key={viewMode}
               data-schedule-view={viewMode || undefined}
-              initial={{
+              data-schedule-view-transition={viewMode === "compact" ? "skeleton" : "motion"}
+              initial={viewMode === "compact" ? false : {
                 opacity: 0,
                 y: shouldReduceMotion ? 0 : 8,
               }}
               animate={{ opacity: 1, y: 0, pointerEvents: "auto" }}
-              exit={{
+              exit={viewMode === "compact" ? undefined : {
                 opacity: 0,
                 y: shouldReduceMotion ? 0 : -6,
                 pointerEvents: "none",
@@ -1690,7 +1750,7 @@ export function ScheduleBoard({
                 },
               }}
               transition={{
-                duration: shouldReduceMotion ? MOTION_DURATION.feedback : MOTION_DURATION.content,
+                duration: viewMode === "compact" ? 0 : shouldReduceMotion ? MOTION_DURATION.feedback : MOTION_DURATION.content,
                 ease: MOTION_EASE_OUT,
               }}
             >
@@ -1928,7 +1988,7 @@ export function ScheduleBoard({
               {en ? "Overview failed to load. Switch to the list view." : "一图流布局加载失败，请切换到列表式布局。"}
             </div>
           ) : (
-            <CompactScheduleLoading />
+            <CompactScheduleLoading rows={visibleRows} />
           )
         ) : (
           <div className="min-h-[420px]" data-schedule-view-pending aria-hidden="true" />
