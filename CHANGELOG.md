@@ -2,6 +2,21 @@
 
 All notable changes to RIIC-Web are documented in this file.
 
+## [0.4.9] - 2026-09-04
+
+### Changed
+
+- Production now shows a localized “under development” state at `/manual` instead of loading the manual-scheduling editor; development deployments keep the complete editor available for testing.
+
+### Fixed
+
+- `/manual` responses now use the same private, no-store cache policy as the other workbench documents, preventing an older deployment profile from being reused after a release.
+
+### For contributors
+
+- Deployment-environment unit tests, production-profile browser coverage, and production/development standalone smoke checks protect the manual-scheduling availability boundary.
+- `package.json` and `package-lock.json` record release `0.4.9`.
+
 ## [0.4.8] - 2026-09-04
 
 ### Added
