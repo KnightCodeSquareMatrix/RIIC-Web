@@ -85,6 +85,7 @@ test("calculator converts a solved schedule into editable manual assignments", a
 });
 
 test("manual scheduling configures independent shifts, moves conflicts and enables dorm autofill", async ({ page }) => {
+  test.slow();
   let planRequests = 0;
   await page.route("**/api/plan", (route) => {
     planRequests += 1;

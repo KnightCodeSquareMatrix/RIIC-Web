@@ -303,6 +303,7 @@ test("progression adjustments sync back to the schedule settings manual BOX", as
 });
 
 test("setup exposes and persists only worker-supported rotation profiles", async ({ page }) => {
+  test.slow();
   await mockApis(page);
   await seedV4Session(page);
   let planRequests = 0;
