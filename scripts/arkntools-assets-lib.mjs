@@ -10,12 +10,23 @@ export const ARKNTOOLS_REPOSITORY = "https://github.com/arkntools/arknights-tool
 export const ARKNIGHTS_GAME_RESOURCE_REPOSITORY = "https://github.com/yuanyan3060/ArknightsGameResource";
 export const GENERATED_VERSION = 2;
 
-const MANAGED_PATHS = [
+const MANAGED_DIRECTORIES = [
   "public/images/operator-portraits",
   "public/images/building-skills",
   "public/images/products",
   "src/generated/arkntools",
 ];
+const MANAGED_FILES = ["fixtures/operbox_full_e2.json"];
+const MANAGED_PATHS = [...MANAGED_DIRECTORIES, ...MANAGED_FILES];
+
+const FULL_OPERATOR_STAGE_BY_RARITY = {
+  1: { elite: 0, level: 30 },
+  2: { elite: 0, level: 30 },
+  3: { elite: 1, level: 55 },
+  4: { elite: 2, level: 70 },
+  5: { elite: 2, level: 80 },
+  6: { elite: 2, level: 90 },
+};
 
 // 干员头像来自 ArknightsGameResource 仓库的 avatar 目录，文件名形如 char_<shortId>.png；
 // 按上游原尺寸使用：透明内容在画布内居中后有损转成 WebP（透明背景保留，q85 + 智能色度抽样避免边缘色晕）。
@@ -455,12 +466,32 @@ function json(value) {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
+function fullOperatorFixture(operators) {
+  return operators
+    .map(({ id, name, rarity }) => ({
+      id,
+      name,
+      ...FULL_OPERATOR_STAGE_BY_RARITY[rarity],
+      own: true,
+      potential: 6,
+      rarity,
+    }))
+    .sort((left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0);
+}
+
 async function writeStage(stageRoot, generated) {
-  const portraitTarget = path.join(stageRoot, MANAGED_PATHS[0]);
-  const iconTarget = path.join(stageRoot, MANAGED_PATHS[1]);
-  const productTarget = path.join(stageRoot, MANAGED_PATHS[2]);
-  const dataTarget = path.join(stageRoot, MANAGED_PATHS[3]);
-  await Promise.all([mkdir(portraitTarget, { recursive: true }), mkdir(iconTarget, { recursive: true }), mkdir(productTarget, { recursive: true }), mkdir(dataTarget, { recursive: true })]);
+  const portraitTarget = path.join(stageRoot, MANAGED_DIRECTORIES[0]);
+  const iconTarget = path.join(stageRoot, MANAGED_DIRECTORIES[1]);
+  const productTarget = path.join(stageRoot, MANAGED_DIRECTORIES[2]);
+  const dataTarget = path.join(stageRoot, MANAGED_DIRECTORIES[3]);
+  const fullOperboxTarget = path.join(stageRoot, MANAGED_FILES[0]);
+  await Promise.all([
+    mkdir(portraitTarget, { recursive: true }),
+    mkdir(iconTarget, { recursive: true }),
+    mkdir(productTarget, { recursive: true }),
+    mkdir(dataTarget, { recursive: true }),
+    mkdir(path.dirname(fullOperboxTarget), { recursive: true }),
+  ]);
 
   await Promise.all([
     mapLimit(generated.portraitFiles, 16, ({ source, name }) =>
@@ -479,6 +510,7 @@ async function writeStage(stageRoot, generated) {
     writeFile(path.join(dataTarget, "building-skill-catalog.json"), json(generated.skills), "utf8"),
     writeFile(path.join(dataTarget, "term-catalog.json"), json(generated.terms), "utf8"),
     writeFile(path.join(dataTarget, "source.json"), json(generated.manifest), "utf8"),
+    writeFile(fullOperboxTarget, json(fullOperatorFixture(generated.operators)), "utf8"),
   ]);
 }
 
@@ -495,17 +527,20 @@ async function listRegularAssetNames(directory, label, extension) {
 
 export async function checkGeneratedAssets(root) {
   const resolvedRoot = path.resolve(root);
-  const dataRoot = path.join(resolvedRoot, MANAGED_PATHS[3]);
-  const [operators, skills, terms, manifest] = await Promise.all([
+  const dataRoot = path.join(resolvedRoot, MANAGED_DIRECTORIES[3]);
+  const [operators, skills, terms, manifest, fullOperbox] = await Promise.all([
     readJson(path.join(dataRoot, "operator-catalog.json"), "已生成干员目录"),
     readJson(path.join(dataRoot, "building-skill-catalog.json"), "已生成基建技能目录"),
     readJson(path.join(dataRoot, "term-catalog.json"), "已生成词条目录"),
     readJson(path.join(dataRoot, "source.json"), "已生成来源清单"),
+    readJson(path.join(resolvedRoot, MANAGED_FILES[0]), "全量干员 Box 夹具"),
   ]);
   assert(Array.isArray(operators), "已生成干员目录必须是数组。");
   assert(isObject(skills), "已生成基建技能目录必须是对象。");
   assert(isObject(terms), "已生成词条目录必须是对象。");
   assert(isObject(manifest) && manifest.version === GENERATED_VERSION, "已生成来源清单版本无效。");
+  assert(Array.isArray(fullOperbox), "全量干员 Box 夹具必须是数组。");
+  assert(JSON.stringify(fullOperbox) === JSON.stringify(fullOperatorFixture(operators)), "全量干员 Box 夹具与干员目录不一致。");
   normalizeCommit(manifest.source?.commit);
   assert(manifest.source?.repository === ARKNTOOLS_REPOSITORY, "已生成来源仓库无效。");
   assert(isObject(manifest.portraitsSource), "已生成头像来源清单无效。");
@@ -609,13 +644,23 @@ async function existingManifest(root) {
 
 async function existingManagedFiles(root) {
   const files = new Set();
-  for (const relative of MANAGED_PATHS) {
+  for (const relative of MANAGED_DIRECTORIES) {
     const target = path.join(root, relative);
     try {
       const entries = await readdir(target, { recursive: true, withFileTypes: true });
       for (const entry of entries) {
         if (entry.isFile()) files.add(path.join(relative, entry.parentPath ? path.relative(target, entry.parentPath) : "", entry.name).replaceAll("\\", "/"));
       }
+    } catch (error) {
+      if (!(error && typeof error === "object" && "code" in error && error.code === "ENOENT")) throw error;
+    }
+  }
+  for (const relative of MANAGED_FILES) {
+    const target = path.join(root, relative);
+    try {
+      const fileStat = await lstat(target);
+      assert(fileStat.isFile() && !fileStat.isSymbolicLink(), `受管文件必须是普通文件：${relative}`);
+      files.add(relative);
     } catch (error) {
       if (!(error && typeof error === "object" && "code" in error && error.code === "ENOENT")) throw error;
     }

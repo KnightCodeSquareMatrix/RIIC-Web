@@ -1,5 +1,8 @@
 import { expect, test, type Locator } from "@playwright/test";
+import arkntoolsSource from "../src/generated/arkntools/source.json" with { type: "json" };
 import { requestId, diagnosticId, waitForOwnAnimations, gotoStable, expectVisibleNumbersUseNumberFont, profile, planData, scheduleVisualPlanData, sampleData, authenticatedSklandSnapshot, mockApis, openSklandOverview, seedPreferences, seedV4Session } from "./production-readiness.fixture";
+
+const fullOperatorCount = arkntoolsSource.counts.operators;
 
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/auth/get-session", (route) => route.fulfill({
@@ -420,7 +423,7 @@ test("setup exposes and persists only worker-supported rotation profiles", async
     await expect(stageButton).toHaveCSS("border-radius", "4px");
   }
   await manualPicker.getByRole("button", { name: "全选最高精英", exact: true }).click();
-  await expect(manualPicker.getByText("已拥有 425 名", { exact: true })).toBeVisible();
+  await expect(manualPicker.getByText(`已拥有 ${fullOperatorCount} 名`, { exact: true })).toBeVisible();
   const manualApplyButtons = manualPicker.locator("[data-manual-operbox-apply]");
   await expect(manualApplyButtons).toHaveCount(1);
   for (const manualApplyButton of await manualApplyButtons.all()) {
@@ -493,8 +496,8 @@ test("setup exposes and persists only worker-supported rotation profiles", async
   expect(requestedSourceName).toBe("手动选择的 Box");
   expect(requestedBoxSource).toBe("maa");
   expect(Array.isArray(requestedOperbox)).toBe(true);
-  expect(requestedOperbox).toHaveLength(425);
-  expect(new Set((requestedOperbox as Array<{ id: string }>).map((operator) => operator.id)).size).toBe(425);
+  expect(requestedOperbox).toHaveLength(fullOperatorCount);
+  expect(new Set((requestedOperbox as Array<{ id: string }>).map((operator) => operator.id)).size).toBe(fullOperatorCount);
   expect((requestedOperbox as Array<{ own: boolean }>).every((operator) => operator.own)).toBe(true);
   const persisted = await page.evaluate(() => JSON.parse(
     window.localStorage.getItem("arknights-infra-calc-session-v5") ?? "{}"
@@ -502,7 +505,7 @@ test("setup exposes and persists only worker-supported rotation profiles", async
   expect(persisted.rotationProfile).toBe("abc_12_12_12");
   expect(persisted.sourceName).toBe("手动选择的 Box");
   expect(persisted.boxSource).toBe("maa");
-  expect(persisted.operbox).toHaveLength(425);
+  expect(persisted.operbox).toHaveLength(fullOperatorCount);
 });
 
 test("layout level controls clamp edits and expose the power-safe 342 defaults", async ({ page }) => {

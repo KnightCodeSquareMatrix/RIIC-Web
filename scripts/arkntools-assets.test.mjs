@@ -203,6 +203,17 @@ test("generates deterministic catalogs and normalizes the known 35px icon input"
   assert.deepEqual(operators[0].buildingSkills[0], { index: 1, id: "skill_alpha", elite: 0, level: 1 });
   assert.deepEqual(operators[1].buildingSkills[0], { index: 1, id: "skill_beta", elite: 2, level: 1 });
 
+  const fullOperbox = JSON.parse(await readFile(path.join(first, "fixtures/operbox_full_e2.json"), "utf8"));
+  assert.deepEqual(fullOperbox, operators.map(({ id, name, rarity }) => ({
+    id,
+    name,
+    elite: 2,
+    level: rarity === 6 ? 90 : 80,
+    own: true,
+    potential: 6,
+    rarity,
+  })).sort((left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0));
+
   const skills = JSON.parse(await readFile(path.join(first, "src/generated/arkntools/building-skill-catalog.json"), "utf8"));
   assert.equal(skills.skill_alpha.descriptionRich, "进驻时，生产力<@cc.vup>+10%</>。");
   assert.equal("description" in skills.skill_alpha, false);
@@ -219,6 +230,7 @@ test("generates deterministic catalogs and normalizes the known 35px icon input"
     "src/generated/arkntools/building-skill-catalog.json",
     "src/generated/arkntools/term-catalog.json",
     "src/generated/arkntools/source.json",
+    "fixtures/operbox_full_e2.json",
     "public/images/building-skills/icon_shared.png",
     "public/images/operator-portraits/001_alpha.webp",
     "public/images/products/lmd_orders.webp",
