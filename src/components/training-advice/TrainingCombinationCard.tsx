@@ -1,11 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { lazy, Suspense } from "react";
 
+import { loadClientFeature } from "@/client-lazy-loader";
 import { InfraTechnicalCard } from "@/components/InfraTechnicalCard";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { operatorProfessionPresentationForCode } from "@/operator-presentation";
-import { operatorPortraitFor, operatorProfessionFor } from "@/operatorPortraits";
+import { operatorBuildingSkillList, operatorPortraitFor } from "@/operatorPortraits";
 import { cn } from "@/lib/utils";
 import type { TrainingCombination, TrainingAdviceMember } from "@/types";
 import { demoOperatorName, useLanguageDemo } from "@/language-demo";
@@ -21,6 +20,10 @@ import {
   trainingScaleLabel,
 } from "./presentation";
 
+const OperatorSkillTooltip = lazy(() => loadClientFeature("operatorSkillTooltip").then((module) => ({
+  default: module.OperatorSkillTooltip,
+})));
+
 const STATE_CLASSES: Record<string, string> = {
   complete: "border-emerald-400/60 bg-emerald-400/10 text-emerald-300",
   needs_training: "border-amber-400/60 bg-amber-400/10 text-amber-300",
@@ -30,7 +33,6 @@ const STATE_CLASSES: Record<string, string> = {
 };
 
 function MemberRow({ member }: { member: TrainingAdviceMember }) {
-  const [professionOpen, setProfessionOpen] = useState(false);
   const { locale } = useLanguageDemo();
   const en = locale === "en";
   const isReady = member.progress === "ready";
@@ -59,7 +61,7 @@ function MemberRow({ member }: { member: TrainingAdviceMember }) {
     member.role === "core"
       ? "border-white/20 bg-white/10 text-white"
       : "border-white/10 bg-white/5 text-white/65";
-  const profession = operatorProfessionPresentationForCode(operatorProfessionFor(member.operator));
+  const hasSkills = operatorBuildingSkillList(member.operator).length > 0;
   const content = (
     <>
       <span className="size-8 shrink-0 overflow-hidden border border-white/10 bg-[#272A2B]">
@@ -75,27 +77,16 @@ function MemberRow({ member }: { member: TrainingAdviceMember }) {
     </>
   );
   const cardClassName = cn("flex min-w-0 items-center gap-1.5 border px-2 py-1", cardClass);
-  if (!profession) return <div className={cardClassName}>{content}</div>;
+  const cardButton = (
+    <button type="button" className={cardClassName}>
+      {content}
+    </button>
+  );
+  if (!hasSkills) return <div className={cardClassName}>{content}</div>;
   return (
-    <Tooltip open={professionOpen} onOpenChange={setProfessionOpen}>
-      <TooltipTrigger
-        closeOnClick={false}
-        render={(
-        <button
-          type="button"
-          className={cardClassName}
-          aria-label={`${member.operator}，职业：${profession.label}`}
-          onClick={() => setProfessionOpen((value) => !value)}
-        >
-          {content}
-        </button>
-      )}
-      />
-      <TooltipContent side="top" align="center" className="gap-2 whitespace-nowrap px-3.5 py-2">
-        <img src={profession.icon} alt="" aria-hidden="true" className="size-6 shrink-0 object-contain" />
-        <span className="text-sm font-semibold">{profession.label}</span>
-      </TooltipContent>
-    </Tooltip>
+    <Suspense fallback={cardButton}>
+      <OperatorSkillTooltip name={member.operator} trigger={cardButton} />
+    </Suspense>
   );
 }
 
