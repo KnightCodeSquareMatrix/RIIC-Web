@@ -2,6 +2,122 @@
 
 All notable changes to RIIC-Web are documented in this file.
 
+## [0.4.9] - 2026-09-04
+
+### Changed
+
+- Production now shows a localized “under development” state at `/manual` instead of loading the manual-scheduling editor; development deployments keep the complete editor available for testing.
+
+### Fixed
+
+- `/manual` responses now use the same private, no-store cache policy as the other workbench documents, preventing an older deployment profile from being reused after a release.
+
+### For contributors
+
+- Deployment-environment unit tests, production-profile browser coverage, and production/development standalone smoke checks protect the manual-scheduling availability boundary.
+- `package.json` and `package-lock.json` record release `0.4.9`.
+
+## [0.4.8] - 2026-09-04
+
+### Added
+
+- Personal Box users can create manual schedules with 1–12 independent shifts, per-shift durations and Fiammetta targets, conflict-safe operator assignment, local draft persistence, and MAA JSON export.
+- An existing solved or progression-trial schedule can be converted into a manual draft without losing the schedule currently shown on screen.
+
+### Changed
+
+- Rarity and shift filters in manual Box and progression adjustment now share the same compact, keyboard-accessible option controls used by the class filters.
+- Manual scheduling, manual edits, and progression adjustment consistently request a website login before exposing personal Box data.
+
+### Fixed
+
+- A newly selected base layout now remains authoritative through Skland restoration and subsequent solving instead of requiring a refresh or falling back to the 243 layout.
+- The overview schedule now holds every room card in place with a matching skeleton while its lazy view loads, without moving the whole base vertically.
+- Clearing local data no longer recreates a mounted manual draft, and an in-memory schedule handoff survives unavailable browser storage.
+- Manual-schedule conversion stays outside the initial calculator bundle; route and document budgets now explicitly cover the new `/manual` page and protected navigation state.
+
+### For contributors
+
+- Unit, API-contract, shift-comparison, database, bundle, and sharded Chromium checks cover the integrated workflow, with focused manual-scheduling browser coverage for login, persistence, conversion, assignment conflicts, and MAA export.
+- `package.json` and `package-lock.json` record release `0.4.8`.
+
+## [0.4.7] - 2026-09-04
+
+### Fixed
+
+- The Skills catalog now includes the latest arkntools operators, building skills, portraits, and icons, including Makoto Yuki, Aigis, Yukari Takeba, and Koromaru.
+- Automated arkntools releases now regenerate the full operator Box fixture together with the catalog, preventing a stale fixture from blocking otherwise valid resource updates.
+
+### For contributors
+
+- Asset synchronization validates, stages, publishes, and mirrors the full operator fixture through the same managed-file allowlists as generated catalogs and images.
+- Deterministic generation and workflow contract tests protect the 429-operator, 755-building-skill resource release.
+- `package.json` and `package-lock.json` record release `0.4.7`.
+
+## [0.4.6] - 2026-09-04
+
+### Fixed
+
+- Current-state comparison now treats operators assigned to different rooms of the same facility type as matched, so no unnecessary placement adjustment is suggested.
+- Fatigue warnings remain visible for same-facility matches, while assignments to a different facility type still require relocation.
+
+### For contributors
+
+- Shift-comparison regression coverage verifies same-facility matches, fatigue-only warnings, and cross-facility relocation behavior.
+- `package.json` and `package-lock.json` record release `0.4.6`.
+
+## [0.4.5] - 2026-09-04
+
+### Fixed
+
+- Progression adjustment now submits to the asynchronous planning queue when production queueing is enabled, keeps Live Activity visible through queue polling, and closes the dialog only after a real result arrives.
+- Queue failures and interrupted polling remain visible in Live Activity instead of flashing for less than a second and silently ending the re-solve.
+
+### For contributors
+
+- Production-mode browser coverage rejects direct `/api/plan` calls and verifies task submission, queue feedback, polling, result handling, and shared manual Box synchronization.
+- `package.json` and `package-lock.json` record release `0.4.5`.
+
+## [0.4.4] - 2026-09-04
+
+### Added
+
+- The calculator can re-solve the current base layout with adjusted operator ownership and elite stages, then switch between the current and adjusted schedules with animated production values.
+- The Help section includes a localized, accessible back-to-top control.
+
+### Changed
+
+- Progression adjustment and manual Box editing share one compact roster editor, distinguish the first three shifts, and keep long operator lists inside the dialog scroll area.
+- Schedule setup uses consistent compact action buttons, a larger desktop dialog, and mobile-specific control sizing.
+- The sidebar starts expanded at widths of at least 1280px and collapsed below that breakpoint.
+- Skland manufacture rooms follow the displayed in-game order 3, 1, 4, 2.
+
+### Fixed
+
+- Progression re-solving now surfaces Live Activity feedback and closes the adjustment dialog after a successful result.
+
+### For contributors
+
+- Browser coverage verifies shared Box state, responsive setup controls, schedule variant tabs, production-value animation, and the Skland manufacture mapping.
+- `package.json` and `package-lock.json` record release `0.4.4`.
+
+## [0.4.3] - 2026-09-03
+
+### Added
+
+- English localization now covers the workbench, help, account, administration, legal, and Skland status interfaces.
+- Training advice cards show the infrastructure skills associated with each recommended operator, including keyboard-accessible tooltips and target-skill highlighting.
+
+### Fixed
+
+- The desktop sidebar preserves its expanded state across workbench navigation and hard reloads without causing a hydration mismatch.
+- English Skland status labels retain the corrected Orundum display for Originium Shard trading orders.
+
+### For contributors
+
+- Chromium, WebKit, production-profile, PostgreSQL, build-output, and bilingual bundle-budget coverage gate the release.
+- `package.json` and `package-lock.json` record release `0.4.3`.
+
 ## [0.4.1] - 2026-09-03
 
 ### Fixed
