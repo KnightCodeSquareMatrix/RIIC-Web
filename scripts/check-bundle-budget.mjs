@@ -6,21 +6,23 @@ import { gzipSync } from "node:zlib";
 
 // The calculator keeps its always-visible board in the initial graph. Secondary workbench
 // views have independent route chunks and may carry their own datasets without joining `/`.
-const MAX_SKLAND_DISABLED_ROUTE_INITIAL_JS_BYTES = 1_140_000;
-// The language switch itself is part of the shell; translation catalogs stay in an on-demand chunk.
-// Status-aware queue polling and the release-candidate workbench polish add a small
-// shared policy to the main graph. Keep less than 8 KB of headroom over the verified build.
-const MAX_SKLAND_ENABLED_ROUTE_INITIAL_JS_BYTES = 1_180_000;
+const MAX_SKLAND_DISABLED_ROUTE_INITIAL_JS_BYTES = 1_167_000;
+// The language switch, protected manual-scheduling entry, and compact bilingual shell copy
+// are part of the initial graph; the full editor and schedule conversion logic stay in
+// on-demand chunks. Keep roughly 8 KB of raw headroom over the verified enabled build.
+const MAX_SKLAND_ENABLED_ROUTE_INITIAL_JS_BYTES = 1_203_000;
 // Task progress UI and training tooltips add intentional code to secondary workbench routes.
-// Keep the ceiling narrow enough to flag unrelated bundle growth.
-const MAX_SECONDARY_ROUTE_INITIAL_JS_BYTES = 1_555_000;
-const MAX_SKLAND_ROUTE_INITIAL_JS_BYTES = 1_615_000;
-const MAX_SKLAND_DISABLED_DOCUMENT_INITIAL_JS_BYTES = 1_240_000;
-const MAX_SKLAND_ENABLED_DOCUMENT_INITIAL_JS_BYTES = 1_295_000;
-const MAX_SKLAND_DISABLED_DOCUMENT_INITIAL_GZIP_JS_BYTES = 395_000;
-const MAX_SKLAND_ENABLED_DOCUMENT_INITIAL_GZIP_JS_BYTES = 415_000;
+// The manual editor owns a larger independent page chunk, so track it separately while
+// keeping each ceiling narrow enough to flag unrelated bundle growth.
+const MAX_SECONDARY_ROUTE_INITIAL_JS_BYTES = 1_582_000;
+const MAX_MANUAL_ROUTE_INITIAL_JS_BYTES = 1_602_000;
+const MAX_SKLAND_ROUTE_INITIAL_JS_BYTES = 1_642_000;
+const MAX_SKLAND_DISABLED_DOCUMENT_INITIAL_JS_BYTES = 1_280_000;
+const MAX_SKLAND_ENABLED_DOCUMENT_INITIAL_JS_BYTES = 1_316_000;
+const MAX_SKLAND_DISABLED_DOCUMENT_INITIAL_GZIP_JS_BYTES = 416_000;
+const MAX_SKLAND_ENABLED_DOCUMENT_INITIAL_GZIP_JS_BYTES = 422_000;
 const MAX_DOCUMENT_INITIAL_JS_FILES = 18;
-const WORKBENCH_ROUTES = ["/", "/training", "/skills", "/skland", "/account"];
+const WORKBENCH_ROUTES = ["/", "/manual", "/training", "/skills", "/skland", "/account"];
 const statsUrl = new URL("../.next/diagnostics/route-bundle-stats.json", import.meta.url);
 const documentUrl = new URL("../.next/server/app/index.html", import.meta.url);
 const buildRootUrl = new URL("../.next/", import.meta.url);
@@ -53,7 +55,9 @@ for (const route of WORKBENCH_ROUTES.slice(1)) {
   assert.ok(routeStats, `route bundle stats do not contain the ${route} route`);
   const maxSecondaryRouteInitialJsBytes = route === "/skland" && sklandEnabled
     ? MAX_SKLAND_ROUTE_INITIAL_JS_BYTES
-    : MAX_SECONDARY_ROUTE_INITIAL_JS_BYTES;
+    : route === "/manual"
+      ? MAX_MANUAL_ROUTE_INITIAL_JS_BYTES
+      : MAX_SECONDARY_ROUTE_INITIAL_JS_BYTES;
   assert.ok(
     routeStats.firstLoadUncompressedJsBytes <= maxSecondaryRouteInitialJsBytes,
     `${route} initial uncompressed JavaScript is ${routeStats.firstLoadUncompressedJsBytes} bytes, exceeding the ${maxSecondaryRouteInitialJsBytes} byte budget`,

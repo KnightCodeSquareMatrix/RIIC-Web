@@ -19,28 +19,31 @@ export interface SklandStatusMetric {
   visual: SklandMetricVisual;
 }
 
-export function sklandTradingOrderRewardLabel(order: SklandTradingOrder): "合成玉" | "龙门币" {
-  return order.reward.type === "orundum"
-    || order.delivery.some((item) => item.type === "originium_shard")
-    ? "合成玉"
-    : "龙门币";
+export function sklandTradingOrderRewardLabel(
+  order: SklandTradingOrder,
+  en = false
+): "合成玉" | "龙门币" | "Orundum" | "LMD" {
+  const isOrundum = order.reward.type === "orundum"
+    || order.delivery.some((item) => item.type === "originium_shard");
+  if (en) return isOrundum ? "Orundum" : "LMD";
+  return isOrundum ? "合成玉" : "龙门币";
 }
 
-export function formatDashboardDuration(seconds: number): string {
+export function formatDashboardDuration(seconds: number, en = false): string {
   const safe = Math.max(0, Math.floor(Number.isFinite(seconds) ? seconds : 0));
-  if (safe <= 0) return "已完成";
-  if (safe < 60) return "不足1分钟";
+  if (safe <= 0) return en ? "Complete" : "已完成";
+  if (safe < 60) return en ? "Under 1 minute" : "不足1分钟";
   const days = Math.floor(safe / 86_400);
   const hours = Math.floor((safe % 86_400) / 3_600);
   const minutes = Math.floor((safe % 3_600) / 60);
-  if (days > 0) return `${days}天${hours}小时`;
-  if (hours > 0) return `${hours}小时${minutes}分钟`;
-  return `${Math.max(1, minutes)}分钟`;
+  if (days > 0) return en ? `${days}d ${hours}h` : `${days}天${hours}小时`;
+  if (hours > 0) return en ? `${hours}h ${minutes}m` : `${hours}小时${minutes}分钟`;
+  return en ? `${Math.max(1, minutes)}m` : `${Math.max(1, minutes)}分钟`;
 }
 
-function until(timestamp: number | null | undefined, now: number, fallback: string): string {
+function until(timestamp: number | null | undefined, now: number, fallback: string, en = false): string {
   if (!timestamp || timestamp <= 0) return fallback;
-  return formatDashboardDuration(timestamp - now);
+  return formatDashboardDuration(timestamp - now, en);
 }
 
 function sumProduction(
@@ -77,7 +80,7 @@ function fractionMetric(
   return { id, label, value: String(current), total: total === null ? "—" : String(total), hint, tone, visual };
 }
 
-export function deriveSklandBuildingMetrics(snapshot: SklandStatusSnapshot, now: number): SklandStatusMetric[] {
+export function deriveSklandBuildingMetrics(snapshot: SklandStatusSnapshot, now: number, en = false): SklandStatusMetric[] {
   const { infrastructure } = snapshot;
   const trading = sumProduction(infrastructure.rooms, "trading");
   const manufacture = sumProduction(infrastructure.rooms, "manufacture");
@@ -92,31 +95,37 @@ export function deriveSklandBuildingMetrics(snapshot: SklandStatusSnapshot, now:
   return [
     fractionMetric(
       "rest",
-      "休息进度",
+      en ? "Rest progress" : "休息进度",
       restedOperators,
       dormOperators.length,
-      dormOperators.length ? `${dormOperators.length - restedOperators} 名干员仍在休息` : "当前宿舍无人休息",
+      dormOperators.length
+        ? en ? `${dormOperators.length - restedOperators} operators are still resting` : `${dormOperators.length - restedOperators} 名干员仍在休息`
+        : en ? "No operators are resting" : "当前宿舍无人休息",
       "green",
       "rest"
     ),
-    fractionMetric("trading", "订单进度", trading.current, trading.total, "贸易站订单库存", "blue", "trading"),
+    fractionMetric("trading", en ? "Order progress" : "订单进度", trading.current, trading.total, en ? "Trading Post order stock" : "贸易站订单库存", "blue", "trading"),
     fractionMetric(
       "manufacture",
-      "制造进度",
+      en ? "Manufacturing progress" : "制造进度",
       manufacture.current,
       manufacture.total,
-      manufacture.total === null ? "部分制造配方容量未知" : "制造站已完成产物",
+      manufacture.total === null ? (en ? "Capacity is unknown for some formulas" : "部分制造配方容量未知") : (en ? "Completed Factory products" : "制造站已完成产物"),
       "amber",
       "manufacture"
     ),
     {
       id: "clue",
-      label: "线索收集",
-      value: sharingClues ? "交流中" : String(clueCount),
+      label: en ? "Clue collection" : "线索收集",
+      value: sharingClues ? (en ? "Sharing" : "交流中") : String(clueCount),
       total: sharingClues ? null : "7",
       hint: sharingClues
-        ? `${until(meeting?.group === "meeting" ? meeting.clue.shareCompleteTime : null, now, "交流进行中")}后结束交流`
-        : meeting ? `当前已布置 ${clueCount} 条线索` : "会客室数据未提供",
+        ? en
+          ? `Sharing ends in ${until(meeting?.group === "meeting" ? meeting.clue.shareCompleteTime : null, now, "progress", true)}`
+          : `${until(meeting?.group === "meeting" ? meeting.clue.shareCompleteTime : null, now, "交流进行中")}后结束交流`
+        : meeting
+          ? en ? `${clueCount} clues placed` : `当前已布置 ${clueCount} 条线索`
+          : en ? "Reception Room data not provided" : "会客室数据未提供",
       tone: "orange",
       visual: "clue",
     },

@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator } from "@playwright/test";
 import { requestId, diagnosticId, waitForOwnAnimations, gotoStable, expectVisibleNumbersUseNumberFont, profile, planData, scheduleVisualPlanData, sampleData, authenticatedSklandSnapshot, mockApis, openSklandOverview, seedPreferences, seedV4Session } from "./production-readiness.fixture";
 
 test.beforeEach(async ({ page }) => {
@@ -11,6 +11,16 @@ test.beforeEach(async ({ page }) => {
     }),
   }));
 });
+
+async function expectSetupAction(button: Locator) {
+  await expect(button).toHaveAttribute("data-setup-action", "");
+  const expectedHeight = await button.evaluate(() => (
+    window.matchMedia("(max-width: 639px)").matches ? "44px" : "36px"
+  ));
+  await expect(button).toHaveCSS("height", expectedHeight);
+  await expect(button).toHaveCSS("border-radius", "18px");
+  await expect(button).toHaveCSS("font-size", "12px");
+}
 
 test("mobile interactive targets remain at least 44 CSS pixels", async ({ page }) => {
   await mockApis(page);
@@ -66,7 +76,9 @@ test("setup keeps Box parse errors local and actionable", async ({ page }) => {
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("button", { name: /第 1 步，共 3 步：干员数据/ }).click();
   await expect(dialog.locator(".setup-data-summary")).toHaveCount(1);
-  await dialog.getByRole("button", { name: "更换", exact: true }).click();
+  const changeBoxButton = dialog.getByRole("button", { name: "更换", exact: true });
+  await expectSetupAction(changeBoxButton);
+  await changeBoxButton.click();
   await page.getByRole("tab", { name: "森空岛", exact: true }).click();
   await expect(dialog.locator(".setup-import-action")).toHaveCount(1);
   await page.getByRole("tab", { name: "MAA", exact: true }).click();
@@ -80,7 +92,9 @@ test("setup keeps Box parse errors local and actionable", async ({ page }) => {
   expect(boxContentBox?.width).toBeCloseTo(boxViewportBox?.width ?? 0, 0);
   const textarea = dialog.getByPlaceholder("粘贴 Arknights_OperBox_Export.json 内容");
   await textarea.fill("not valid json");
-  await dialog.getByRole("button", { name: "导入 JSON" }).click();
+  const importJsonButton = dialog.getByRole("button", { name: "导入 JSON" });
+  await expectSetupAction(importJsonButton);
+  await importJsonButton.click();
 
   await expect(textarea).toHaveAttribute("aria-invalid", "true");
   await expect(dialog.locator('[role="alert"]')).toHaveCount(1);
@@ -152,7 +166,155 @@ test("setup with an empty BOX starts on operator data", async ({ page }) => {
   await expect(dialog.getByRole("button", { name: /第 1 步，共 3 步：干员数据/ })).toHaveAttribute("aria-current", "step");
 });
 
+test("progression adjustments sync back to the schedule settings manual BOX", async ({ page }) => {
+  await mockApis(page, { taskQueueEnabled: true });
+  const adjustedPlanData = {
+    ...planData,
+    maa: {
+      ...planData.maa,
+      plans: planData.maa.plans.map((plan, index) => index === 0 ? {
+        ...plan,
+        rooms: { ...plan.rooms, processing: [{ operators: [] }] },
+      } : plan),
+    },
+    rotation: {
+      ...planData.rotation,
+      daily: {
+        ...planData.rotation.daily,
+        production: {
+          ...planData.rotation.daily.production,
+          lmd: 41_200,
+        },
+      },
+    },
+    diagnosticId: `${diagnosticId}-progression-adjustment`,
+  };
+  let releaseAdjustment!: () => void;
+  const adjustmentGate = new Promise<void>((resolve) => {
+    releaseAdjustment = resolve;
+  });
+  const taskId = "11111111-1111-4111-8111-111111111113";
+  let directPlanRequests = 0;
+  let taskSubmissions = 0;
+  let taskPolls = 0;
+  await page.route("**/api/plan", async (route) => {
+    directPlanRequests += 1;
+    await route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({ success: false, error: { code: "AIC-PLAN-3001", message: "排班服务暂不可用，请稍后重试。", retryable: true }, requestId }),
+    });
+  });
+  await page.route(/\/api\/tasks(?:\/[^/?]+)?$/, async (route) => {
+    if (route.request().method() === "POST") {
+      taskSubmissions += 1;
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ success: true, data: { taskId, status: "pending", queuePosition: 1, etaSeconds: 3 }, requestId }),
+      });
+    }
+    taskPolls += 1;
+    await adjustmentGate;
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ success: true, data: { taskId, status: "done", result: adjustedPlanData }, requestId }),
+    });
+  });
+  await seedV4Session(page, planData, { boxSource: "maa" });
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "调整练度", exact: true }).click();
+  const adjustmentDialog = page.getByRole("dialog");
+  const rosterScopeTabs = adjustmentDialog.getByRole("tablist", { name: "干员列表范围" });
+  const scheduledTab = rosterScopeTabs.getByRole("tab", { name: /进入排班/ });
+  const unscheduledTab = rosterScopeTabs.getByRole("tab", { name: /未进排班/ });
+  await expect(rosterScopeTabs).toHaveAttribute("data-slot", "tabs-list");
+  await expect(scheduledTab).toHaveAttribute("data-slot", "tabs-trigger");
+  await expect(scheduledTab).toHaveAttribute("aria-selected", "true");
+  await unscheduledTab.click();
+  await expect(unscheduledTab).toHaveAttribute("aria-selected", "true");
+  await scheduledTab.click();
+  await adjustmentDialog.getByRole("textbox", { name: "搜索干员" }).fill("阿米娅");
+  const adjustmentStage = adjustmentDialog.getByRole("radiogroup", { name: "阿米娅持有与精英阶段" });
+  await adjustmentStage.getByRole("radio", { name: "精1", exact: true }).click();
+  await adjustmentDialog.getByRole("button", { name: "按调整重新试算", exact: true }).click();
+  const activity = page.locator('[data-slot="live-activity"]');
+  await expect(activity).toHaveAttribute("data-activity-phase", "queued");
+  await expect(activity).toBeVisible();
+  await expect(activity).toContainText("正在排队");
+  await expect(adjustmentDialog).toBeVisible();
+  await expect(adjustmentDialog.getByRole("button", { name: "正在重新求解…", exact: true })).toBeDisabled();
+  await expect.poll(() => ({ directPlanRequests, taskSubmissions, taskPolls })).toEqual({ directPlanRequests: 0, taskSubmissions: 1, taskPolls: 1 });
+  releaseAdjustment();
+  await expect(activity).toHaveAttribute("data-activity-phase", "success");
+  await expect(activity).toContainText("调整练度已完成");
+  await expect(adjustmentDialog).toBeHidden();
+
+  const scheduleVariantTabs = page.getByRole("tablist", { name: "排班方案切换" });
+  await expect(scheduleVariantTabs).toHaveAttribute("data-slot", "tabs-list");
+  await expect(scheduleVariantTabs.getByRole("tab", { name: "调整练度方案", exact: true })).toHaveAttribute("aria-selected", "true");
+  const scheduleViewControls = page.locator("[data-schedule-view-controls]");
+  const scheduleLayoutTabs = scheduleViewControls.getByRole("tablist", { name: "排班布局切换" });
+  await expect(scheduleViewControls).toContainText("当前方案");
+  await expect(scheduleViewControls).toContainText("一图流布局");
+  const [variantTabsBox, layoutTabsBox] = await Promise.all([
+    scheduleVariantTabs.boundingBox(),
+    scheduleLayoutTabs.boundingBox(),
+  ]);
+  expect(variantTabsBox?.y).toBeCloseTo(layoutTabsBox?.y ?? 0, 0);
+  await expect(page.getByText(/正在查看调整练度方案/)).toHaveCount(0);
+
+  const lmdProduction = page.locator('[data-daily-product="lmd-orders"] [data-animated-value="number"]');
+  await expect(lmdProduction).toHaveAttribute("aria-label", "41,200");
+  const lmdCalligraph = lmdProduction.locator("[data-calligraph]");
+  await expect(lmdCalligraph).toBeVisible();
+  await lmdCalligraph.evaluate((element) => element.setAttribute("data-animation-sentinel", "stable"));
+  await scheduleVariantTabs.getByRole("tab", { name: "当前方案", exact: true }).click();
+  await expect(lmdCalligraph).toHaveAttribute("data-animation-sentinel", "stable");
+  await expect(lmdProduction).toHaveAttribute("aria-label", "34,254");
+  await scheduleVariantTabs.getByRole("tab", { name: "调整练度方案", exact: true }).click();
+  await expect(lmdCalligraph).toHaveAttribute("data-animation-sentinel", "stable");
+  await expect(lmdProduction).toHaveAttribute("aria-label", "41,200");
+
+  await expect.poll(() => page.evaluate(() => {
+    const session = JSON.parse(window.localStorage.getItem("arknights-infra-calc-session-v5") ?? "{}");
+    return session.operbox?.find((operator: { name?: string }) => operator.name === "阿米娅")?.elite;
+  })).toBe(1);
+
+  await page.getByRole("button", { name: "配置Box与布局" }).first().click();
+  const setupDialog = page.getByRole("dialog");
+  await setupDialog.getByRole("button", { name: "更换", exact: true }).click();
+  await expect(setupDialog.getByRole("tab", { name: "手动选择", exact: true })).toHaveAttribute("aria-selected", "true");
+  const manualPicker = setupDialog.locator("[data-manual-operbox-picker]");
+  await manualPicker.getByRole("textbox", { name: "搜索干员" }).fill("阿米娅");
+  await expect(manualPicker.getByRole("radiogroup", { name: "阿米娅持有与精英阶段" }).getByRole("radio", { name: "精1", exact: true })).toBeChecked();
+  await setupDialog.getByRole("button", { name: "Close" }).click();
+
+  for (const width of [390, 320]) {
+    await page.setViewportSize({ width, height: 844 });
+    await expect(scheduleVariantTabs).toBeVisible();
+    await expect(scheduleLayoutTabs).toBeHidden();
+    const [mobileControlsBox, mobileVariantBox] = await Promise.all([
+      scheduleViewControls.boundingBox(),
+      scheduleVariantTabs.boundingBox(),
+    ]);
+    expect(mobileVariantBox?.width).toBeCloseTo(mobileControlsBox?.width ?? 0, 0);
+    for (const tab of await scheduleVariantTabs.getByRole("tab").all()) {
+      const box = await tab.boundingBox();
+      expect(box?.height).toBeGreaterThanOrEqual(44 - 0.01);
+    }
+  }
+
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.locator('[data-calculator-export-actions="desktop"]').getByRole("button", { name: "手动修改排班" }).click();
+  await expect(page).toHaveURL(/\/manual$/);
+  await expect(page.locator('[data-room-title="加工站"] [data-operator-identity="阿米娅"]')).toHaveCount(0);
+});
+
 test("setup exposes and persists only worker-supported rotation profiles", async ({ page }) => {
+  test.slow();
   await mockApis(page);
   await seedV4Session(page);
   let planRequests = 0;
@@ -196,7 +358,7 @@ test("setup exposes and persists only worker-supported rotation profiles", async
   expect(dialogMaterial.texture).toContain("repeating-linear-gradient");
   expect(dialogMaterial.texture).toContain("60px");
   expect(dialogMaterial.shadow).toContain("0px 0px 44px");
-  await expect(dialog).toHaveCSS("width", "880px");
+  await expect(dialog).toHaveCSS("width", "960px");
   const setupPrimaryAction = dialog.getByRole("button", { name: "继续", exact: true });
   await expect(setupPrimaryAction).toHaveCSS("width", "196px");
   await expect(setupPrimaryAction).toHaveCSS("height", "46px");
@@ -213,14 +375,23 @@ test("setup exposes and persists only worker-supported rotation profiles", async
   const stepList = dialog.getByRole("list", { name: "设置步骤" });
   await expect(stepList.locator(":scope > *")).toHaveCount(3);
   expect((await stepList.boundingBox())?.width ?? 0).toBeGreaterThan(600);
-  await expect(dialog).toHaveCSS("height", "660px");
+  await expect(dialog).toHaveCSS("height", "720px");
   const initialStepListBox = await stepList.boundingBox();
   await dialog.getByRole("button", { name: /第 1 步，共 3 步：干员数据/ }).click();
-  await dialog.getByRole("button", { name: "更换", exact: true }).click();
+  const changeBoxButton = dialog.getByRole("button", { name: "更换", exact: true });
+  await expectSetupAction(changeBoxButton);
+  await dialog.getByText("数据管理", { exact: true }).click();
+  await expectSetupAction(dialog.getByRole("button", { name: "清除本地数据", exact: true }));
+  await dialog.getByText("数据管理", { exact: true }).click();
+  await changeBoxButton.click();
   await expect(dialog.locator("#setup-import-options")).toBeVisible();
-  await expect(dialog).toHaveCSS("height", "660px");
+  await expect(dialog).toHaveCSS("height", "720px");
+  await dialog.getByRole("tab", { name: "MAA", exact: true }).click();
+  await dialog.getByRole("button", { name: "粘贴 JSON", exact: true }).click();
+  await expectSetupAction(dialog.getByRole("button", { name: "导入 JSON", exact: true }));
   await dialog.getByRole("tab", { name: "手动选择", exact: true }).click();
   const manualPicker = dialog.locator("[data-manual-operbox-picker]");
+  await expect(manualPicker).toHaveAttribute("data-density", "compact");
   const manualHeading = manualPicker.getByRole("heading", { name: "手动选择干员 Box" });
   await expect(manualHeading).toBeVisible();
   await expect(manualHeading.locator("svg")).toHaveCount(0);
@@ -234,6 +405,7 @@ test("setup exposes and persists only worker-supported rotation profiles", async
   const manualActionBoxes = await Promise.all(manualActionButtons.map((button) => button.boundingBox()));
   expect(new Set(manualActionBoxes.map((box) => Math.round(box?.y ?? -1))).size).toBe(1);
   const manualStageGroup = manualPicker.getByRole("radiogroup").first();
+  await expect(manualStageGroup.locator('[role="radio"] span[aria-hidden="true"]')).toHaveCount(0);
   for (const status of [
     { name: "未拥有", color: "rgb(113, 113, 122)" },
     { name: "精0", color: "rgb(34, 187, 255)" },
@@ -250,14 +422,13 @@ test("setup exposes and persists only worker-supported rotation profiles", async
   await manualPicker.getByRole("button", { name: "全选最高精英", exact: true }).click();
   await expect(manualPicker.getByText("已拥有 425 名", { exact: true })).toBeVisible();
   const manualApplyButtons = manualPicker.locator("[data-manual-operbox-apply]");
-  await expect(manualApplyButtons).toHaveCount(2);
+  await expect(manualApplyButtons).toHaveCount(1);
   for (const manualApplyButton of await manualApplyButtons.all()) {
     await expect(manualApplyButton).toBeEnabled();
-    await expect(manualApplyButton).toHaveCSS("height", "36px");
-    await expect(manualApplyButton).toHaveCSS("border-radius", "18px");
-    await expect(manualApplyButton).toHaveCSS("font-size", "12px");
+    await expectSetupAction(manualApplyButton);
   }
   await page.setViewportSize({ width: 390, height: 844 });
+  await expect(manualApplyButtons.first()).toHaveCSS("height", "44px");
   const narrowActionBoxes = await Promise.all(manualActionButtons.map((button) => button.boundingBox()));
   expect(new Set(narrowActionBoxes.map((box) => Math.round(box?.y ?? -1))).size).toBe(1);
   expect(narrowActionBoxes.every((box) => box !== null && box.x >= 0 && box.x + box.width <= 390)).toBe(true);
@@ -268,6 +439,15 @@ test("setup exposes and persists only worker-supported rotation profiles", async
   expect(layoutStepListBox?.y ?? -1).toBeCloseTo(initialStepListBox?.y ?? -1, 0);
   const completedDataStep = dialog.getByRole("button", { name: /第 1 步，共 3 步：干员数据/ });
   await expect(completedDataStep.locator("svg")).toHaveCount(1);
+
+  await dialog.getByText("高级工具", { exact: true }).click();
+  const importLayoutButton = dialog.locator('[data-setup-action]').filter({ hasText: "导入布局" });
+  await expectSetupAction(importLayoutButton);
+  await expect(dialog.getByRole("button", { name: "导入布局", exact: true })).toHaveCount(1);
+  await expectSetupAction(dialog.getByRole("button", { name: "导出布局", exact: true }));
+  const fileChooserEvent = page.waitForEvent("filechooser");
+  await importLayoutButton.click();
+  await fileChooserEvent;
 
   const selectedPreset = dialog.getByRole("button", { name: /^243/ });
   await expect(selectedPreset).toHaveAttribute("aria-pressed", "true");
@@ -453,8 +633,12 @@ test("calculator owns scheduling controls and training advice uses a single tech
   expect(controlOrder.at(-1)).toContain("生成排班");
   expect(controlOrder.some((label) => label.includes("全角色导入"))).toBe(false);
   const exportOrder = await page.locator("[data-calculator-export-actions]").locator("button").allTextContents();
-  expect(exportOrder).toHaveLength(2);
-  expect(exportOrder.every((label) => label.includes("导出到 MAA"))).toBe(true);
+  expect(exportOrder).toEqual([
+    expect.stringContaining("手动修改排班"),
+    expect.stringContaining("导出到 MAA"),
+    expect.stringContaining("手动修改排班"),
+    expect.stringContaining("导出到 MAA"),
+  ]);
 
   await page.getByRole("button", { name: "练卡建议" }).click();
   await expect(calculatorControls).toHaveCount(0);

@@ -5,6 +5,7 @@ import "overlayscrollbars/overlayscrollbars.css";
 
 import "./globals.css";
 import { TelemetryLoader } from "@/components/telemetry/TelemetryLoader";
+import { LanguageDemoProvider } from "@/language-demo";
 
 const technicalFont = Barlow_Condensed({
   variable: "--font-technical-source",
@@ -47,7 +48,7 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body>
-        {children}
+        <LanguageDemoProvider>{children}</LanguageDemoProvider>
         <TelemetryLoader />
       </body>
     </html>

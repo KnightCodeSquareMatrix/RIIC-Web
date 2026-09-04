@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useLanguageDemo } from "@/language-demo";
 
 export type ImportGuidePage = {
   id: string;
@@ -23,6 +24,8 @@ function clampPage(value: number, totalPages: number) {
 }
 
 export function ImportGuidePager({ pages }: ImportGuidePagerProps) {
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
   const [pageIndex, setPageIndex] = useState(0);
   const pageTitleRef = useRef<HTMLHeadingElement | null>(null);
   const stepNavigationRef = useRef<HTMLDivElement | null>(null);
@@ -95,7 +98,7 @@ export function ImportGuidePager({ pages }: ImportGuidePagerProps) {
 
   return (
     <div className="rounded-[4px] border border-border bg-background" data-help-import-step={pageIndex + 1}>
-      <section aria-label="教程进度" className="border-b border-border bg-muted/20 px-4 py-5 sm:px-5">
+      <section aria-label={en ? "Tutorial progress" : "教程进度"} className="border-b border-border bg-muted/20 px-4 py-5 sm:px-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex min-w-0 items-start gap-3 sm:gap-4">
             <span className="font-number grid size-10 shrink-0 place-items-center bg-foreground text-sm font-semibold text-background sm:size-11">
@@ -103,7 +106,7 @@ export function ImportGuidePager({ pages }: ImportGuidePagerProps) {
             </span>
             <div className="min-w-0">
               <p className="font-number text-xs font-semibold tracking-[0.12em] text-muted-foreground">
-                第 {pageIndex + 1} 步 · 共 {pages.length} 步
+                {en ? `Step ${pageIndex + 1} of ${pages.length}` : `第 ${pageIndex + 1} 步 · 共 ${pages.length} 步`}
               </p>
               <h2
                 className="mt-1 text-lg font-semibold tracking-tight outline-none focus-visible:ring-2 focus-visible:ring-ring sm:text-xl"
@@ -116,12 +119,12 @@ export function ImportGuidePager({ pages }: ImportGuidePagerProps) {
             </div>
           </div>
           <span className="font-number inline-flex min-h-8 items-center text-xs font-semibold text-muted-foreground">
-            {Math.round(progress)}% 完成
+            {Math.round(progress)}% {en ? "complete" : "完成"}
           </span>
         </div>
 
         <div
-          aria-label={`教程进度：第 ${pageIndex + 1} 页，共 ${pages.length} 页`}
+          aria-label={en ? `Tutorial progress: page ${pageIndex + 1} of ${pages.length}` : `教程进度：第 ${pageIndex + 1} 页，共 ${pages.length} 页`}
           aria-valuemax={pages.length}
           aria-valuemin={1}
           aria-valuenow={pageIndex + 1}
@@ -131,9 +134,9 @@ export function ImportGuidePager({ pages }: ImportGuidePagerProps) {
           <div className="h-full bg-[#FFD800] transition-[width] duration-200 motion-reduce:transition-none" style={{ width: `${progress}%` }} />
         </div>
 
-        <nav aria-label="教程步骤导航" className="mt-5" data-help-step-navigation>
-          <p className="sr-only">步骤导航，可点击直接跳转；窄屏可以左右滑动。</p>
-          <p aria-hidden="true" className="mb-2 text-xs font-medium text-muted-foreground lg:hidden">左右滑动查看全部步骤</p>
+        <nav aria-label={en ? "Tutorial step navigation" : "教程步骤导航"} className="mt-5" data-help-step-navigation>
+          <p className="sr-only">{en ? "Select a step to jump directly. Swipe horizontally on narrow screens." : "步骤导航，可点击直接跳转；窄屏可以左右滑动。"}</p>
+          <p aria-hidden="true" className="mb-2 text-xs font-medium text-muted-foreground lg:hidden">{en ? "Swipe to view all steps" : "左右滑动查看全部步骤"}</p>
           <div
             className="max-w-full snap-x snap-proximity overflow-x-auto overscroll-x-contain pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             data-help-step-navigation-scroll
@@ -147,7 +150,7 @@ export function ImportGuidePager({ pages }: ImportGuidePagerProps) {
                 return (
                   <li className="w-52 snap-center lg:w-auto" key={page.id}>
                     <button
-                      aria-label={`第 ${index + 1} 步：${page.title}。${page.summary}`}
+                      aria-label={en ? `Step ${index + 1}: ${page.title}. ${page.summary}` : `第 ${index + 1} 步：${page.title}。${page.summary}`}
                       aria-current={isCurrent ? "step" : undefined}
                       className={cn(
                         "group relative flex min-h-20 w-full cursor-pointer items-start gap-3 overflow-hidden rounded-[4px] border p-3 text-left outline-none transition-[background-color,border-color,transform] duration-200 focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transform-none motion-reduce:transition-none",
@@ -177,7 +180,7 @@ export function ImportGuidePager({ pages }: ImportGuidePagerProps) {
                       <span className="min-w-0">
                         <strong className={cn("block text-sm leading-5 sm:text-base sm:leading-6", isCurrent ? "text-background" : "text-foreground")}>{page.title}</strong>
                         <span className="sr-only">{page.summary}</span>
-                        {isCurrent ? <span className="mt-1 block text-[10px] font-semibold tracking-[0.14em] text-background/60">正在查看</span> : null}
+                        {isCurrent ? <span className="mt-1 block text-[10px] font-semibold tracking-[0.14em] text-background/60">{en ? "CURRENT" : "正在查看"}</span> : null}
                       </span>
                     </button>
                   </li>
@@ -192,23 +195,23 @@ export function ImportGuidePager({ pages }: ImportGuidePagerProps) {
         {currentPage.content}
       </div>
 
-      <nav aria-label="教程翻页" className="flex items-center justify-between gap-3 border-t border-border bg-muted/20 px-4 py-4 sm:px-5">
+      <nav aria-label={en ? "Tutorial pagination" : "教程翻页"} className="flex items-center justify-between gap-3 border-t border-border bg-muted/20 px-4 py-4 sm:px-5">
         <Button type="button" variant="outline" size="lg" disabled={pageIndex === 0} onClick={() => goToPage(pageIndex - 1)}>
           <ArrowLeft className="size-4" aria-hidden="true" />
-          上一页
+          {en ? "Previous" : "上一页"}
         </Button>
-        <span className="hidden text-sm text-muted-foreground sm:inline">第 {pageIndex + 1} / {pages.length} 页</span>
+        <span className="hidden text-sm text-muted-foreground sm:inline">{en ? `Page ${pageIndex + 1} / ${pages.length}` : `第 ${pageIndex + 1} / ${pages.length} 页`}</span>
         {pageIndex === pages.length - 1 ? (
           <Link
             className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground outline-none hover:bg-primary/80 focus-visible:ring-3 focus-visible:ring-ring/50"
             href="/"
           >
-            完成并返回计算器
+            {en ? "Finish and return" : "完成并返回计算器"}
             <ArrowRight className="size-4" aria-hidden="true" />
           </Link>
         ) : (
           <Button type="button" size="lg" onClick={() => goToPage(pageIndex + 1)}>
-            下一页
+            {en ? "Next" : "下一页"}
             <ArrowRight className="size-4" aria-hidden="true" />
           </Button>
         )}

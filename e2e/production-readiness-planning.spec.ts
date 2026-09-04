@@ -331,6 +331,62 @@ test("Skland calculator keeps the schedule visible before and after sidebar navi
   await returnToCalculator("森空岛状态中心", "[data-skland-view-tabs]", "calculator-return-skland-reduced");
 });
 
+test("desktop sidebar state survives navigation and a hard reload without hydration errors", async ({ page, context }) => {
+  await mockApis(page);
+  await seedPreferences(page);
+  await context.addCookies([{ name: "sidebar_state", value: "true", domain: "127.0.0.1", path: "/" }]);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const hydrationErrors: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error" && /hydration|server rendered html/i.test(message.text())) {
+      hydrationErrors.push(message.text());
+    }
+  });
+
+  await page.goto("/");
+  const sidebar = page.locator('[data-slot="sidebar"]:not([data-mobile="true"])');
+  await expect(sidebar).toHaveAttribute("data-state", "expanded");
+
+  await page.getByRole("button", { name: "练卡建议", exact: true }).click();
+  await expect(page).toHaveURL(/\/training$/);
+  await expect(sidebar).toHaveAttribute("data-state", "expanded");
+
+  await page.reload();
+  await expect(sidebar).toHaveAttribute("data-state", "expanded");
+  expect(hydrationErrors).toEqual([]);
+});
+
+test("desktop sidebar defaults open at 1280px and collapsed below it", async ({ page, context }) => {
+  await mockApis(page);
+  await seedPreferences(page);
+  await context.clearCookies();
+  const hydrationErrors: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error" && /hydration|server rendered html/i.test(message.text())) {
+      hydrationErrors.push(message.text());
+    }
+  });
+
+  const sidebar = page.locator('[data-slot="sidebar"]:not([data-mobile="true"])');
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/");
+  await expect(sidebar).toHaveAttribute("data-state", "expanded");
+
+  await page.setViewportSize({ width: 1279, height: 900 });
+  await page.reload();
+  await expect(sidebar).toHaveAttribute("data-state", "collapsed");
+
+  await context.addCookies([{ name: "sidebar_state", value: "true", domain: "127.0.0.1", path: "/" }]);
+  await page.reload();
+  await expect(sidebar).toHaveAttribute("data-state", "expanded");
+
+  await context.addCookies([{ name: "sidebar_state", value: "false", domain: "127.0.0.1", path: "/" }]);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.reload();
+  await expect(sidebar).toHaveAttribute("data-state", "collapsed");
+  expect(hydrationErrors).toEqual([]);
+});
+
 test("100% Skland match does not count fatigue-only notices as adjustments", async ({ page }) => {
   await mockApis(page, {
     sklandConfigured: true,
@@ -400,6 +456,44 @@ test("empty returning calculator shows the empty compact schedule", async ({ pag
   await expect(page.locator("[data-calculator-regenerate-panel]")).toHaveCount(0);
   await expect(page.locator('[data-schedule-view="compact"]')).toBeVisible();
   await expect(page.locator('[data-operator-identity="empty"]').first()).toBeVisible();
+});
+
+test("compact schedule reserves one skeleton card per room while its view loads", async ({ page }) => {
+  await mockApis(page);
+  await seedV4Session(page);
+  await page.setViewportSize({ width: 768, height: 900 });
+  await page.goto("/");
+  const listView = page.locator('[data-schedule-view="list"]');
+  await expect(listView).toBeVisible();
+  const roomCount = await listView.locator("[data-room-group]").count();
+
+  let releaseCompactChunk!: () => void;
+  const compactChunkGate = new Promise<void>((resolve) => {
+    releaseCompactChunk = resolve;
+  });
+  let compactChunkRequested = false;
+  await page.route("**/_next/static/chunks/**", async (route) => {
+    const response = await route.fetch();
+    const body = await response.body();
+    if (body.toString("utf8").includes("data-compact-schedule-view")) {
+      compactChunkRequested = true;
+      await compactChunkGate;
+    }
+    await route.fulfill({ response, body });
+  });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect.poll(() => compactChunkRequested).toBe(true);
+  const loadingView = page.locator('[data-schedule-view="compact"]');
+  const skeleton = loadingView.locator("[data-compact-schedule-loading]");
+  await expect(loadingView).toHaveAttribute("data-schedule-view-transition", "skeleton");
+  await expect(skeleton).toBeVisible();
+  await expect(skeleton.locator("[data-compact-room-skeleton]")).toHaveCount(roomCount);
+  expect(await loadingView.evaluate((element) => element.getAnimations().length)).toBe(0);
+
+  releaseCompactChunk();
+  await expect(page.locator("[data-compact-schedule-view]")).toBeVisible();
+  await expect(skeleton).toHaveCount(0);
 });
 
 test("mobile list follows the in-game assignment overview without rendering the compact view", async ({ page }) => {
@@ -566,26 +660,17 @@ test("plan completion reveals status, metrics, and schedule once without resetti
   await page.waitForTimeout(320);
   await expect(board.locator('[data-operator-identity="凯尔希"]').first()).toBeVisible();
   await expect(board.locator('[data-operator-identity="阿米娅"], [data-operator-identity="贝洛内"]')).toHaveCount(0);
-  if (browserName === "webkit") {
-    await armTransientStyleCapture(page, '[data-schedule-view="compact"]', "compact-view");
-  } else {
-    await armMotionCapture(page, '[data-schedule-view="compact"]', "compact-view", 280);
-  }
-
   await page.getByRole("tab", { name: "一图流布局" }).click();
   await expect(board).toHaveAttribute("data-motion-sentinel", "stable");
   expect(await board.evaluate((element) => element.getAnimations().filter((animation) => animation.playState === "running").length)).toBe(0);
   const compactView = board.locator('[data-schedule-view="compact"]');
   await expect(compactView).toBeVisible();
+  await expect(compactView).toHaveAttribute("data-schedule-view-transition", "skeleton");
+  expect(await compactView.evaluate((element) => element.getAnimations().length)).toBe(0);
   const compactTrainingRoom = compactView.locator('[data-room-group="training"]');
   await expect(compactTrainingRoom).toBeVisible();
   await expect(compactTrainingRoom.locator('[data-position="训练位"]')).toContainText("Training-B");
   await expect(compactView.locator(".compact-auxiliary-grid")).toHaveCSS("grid-template-columns", /px/);
-  if (browserName === "webkit") {
-    await expectCapturedStyleMotion(page, "compact-view");
-  } else {
-    await expectCapturedMotion(page, "compact-view", 280);
-  }
   const auxiliaryGrid = compactView.locator(".compact-auxiliary-grid");
   await expect.poll(() => auxiliaryGrid.evaluate((element) => ({
     columns: getComputedStyle(element).gridTemplateColumns.split(" ").length,
@@ -871,9 +956,10 @@ test("shared action buttons keep their geometry after WebKit interactions", asyn
   await expectButtonGeometryStable(planButton);
 });
 
-test("tooltips wait once and then open adjacent help instantly within the provider window", async ({ page, browserName }) => {
+test("tooltips wait once and then open adjacent help instantly within the provider window", async ({ page, browserName, context }) => {
   await mockApis(page);
   await seedPreferences(page);
+  await context.addCookies([{ name: "sidebar_state", value: "false", domain: "127.0.0.1", path: "/" }]);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
 

@@ -10,13 +10,16 @@ import { MOTION_DURATION, MOTION_EASE_OUT } from "@/motion";
 import { roomVisualFor } from "@/room-visuals";
 import type { DisplayError } from "@/types";
 import { solverDiagnosticFor } from "@/solver-diagnostic";
+import { useLanguageDemo } from "@/language-demo";
 
 const SUCCESS_SWEEP_COLOR = roomVisualFor("power").accent;
 
 export type ActivityPhase = "running" | "queued" | "success" | "error";
+export type ActivityKind = "schedule" | "progression-adjustment";
 
 export interface Activity {
   id: number;
+  kind: ActivityKind;
   phase: ActivityPhase;
   error: DisplayError | null;
   queuePosition?: number | null;
@@ -39,6 +42,7 @@ export function usePlanActivity({
   queuePosition = null,
   etaSeconds = null,
   buffered = false,
+  kind = "schedule",
 }: {
   loading: boolean;
   error: DisplayError | null;
@@ -48,6 +52,7 @@ export function usePlanActivity({
   queuePosition?: number | null;
   etaSeconds?: number | null;
   buffered?: boolean;
+  kind?: ActivityKind;
 }) {
   const [activity, setActivity] = useState<Activity | null>(null);
   const wasLoading = useRef(false);
@@ -58,6 +63,7 @@ export function usePlanActivity({
       sequence.current += 1;
       setActivity({
         id: sequence.current,
+        kind,
         phase: queued ? "queued" : "running",
         error: null,
         queuePosition,
@@ -74,19 +80,21 @@ export function usePlanActivity({
     } else if (!loading && wasLoading.current) {
       const id = sequence.current;
       setActivity(error
-        ? { id, phase: "error", error }
+        ? { id, kind, phase: "error", error }
         : completed
-          ? { id, phase: "success", error: null, queuePosition: null, etaSeconds: null }
+          ? { id, kind, phase: "success", error: null, queuePosition: null, etaSeconds: null }
           : null);
     }
     wasLoading.current = loading;
-  }, [buffered, completed, error, etaSeconds, loading, queued, queuePosition]);
+  }, [buffered, completed, error, etaSeconds, kind, loading, queued, queuePosition]);
 
   return activity;
 }
 
 export function LiveActivity({ activity, onRetry, onCopyDiagnostic, retryCountdownSeconds = 0 }: LiveActivityProps) {
   const reduceMotion = useReducedMotion();
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
   const [copied, setCopied] = useState(false);
   const [dismissed, setDismissed] = useState<{ id: number; phase: ActivityPhase } | null>(null);
 
@@ -112,14 +120,19 @@ export function LiveActivity({ activity, onRetry, onCopyDiagnostic, retryCountdo
     setCopied(false);
   }, [activity]);
 
+  const diagnostic = activity?.error ? solverDiagnosticFor(activity.error, en) : null;
+  const progressionAdjustment = activity?.kind === "progression-adjustment";
   const label = activity?.phase === "running"
-    ? "正在生成排班"
+    ? progressionAdjustment
+      ? (en ? "Adjusting progression" : "正在调整练度")
+      : (en ? "Generating schedule" : "正在生成排班")
     : activity?.phase === "queued"
-      ? "正在排队"
+      ? (en ? "Queued" : "正在排队")
     : activity?.phase === "success"
-      ? "排班已生成"
-      : activity?.error?.message ?? "排班生成失败";
-  const diagnostic = activity?.error ? solverDiagnosticFor(activity.error) : null;
+      ? progressionAdjustment
+        ? (en ? "Progression adjustment complete" : "调整练度已完成")
+        : (en ? "Schedule generated" : "排班已生成")
+      : diagnostic?.title ?? activity?.error?.message ?? (en ? "Schedule generation failed" : "排班生成失败");
   const hidden = Boolean(
     activity && dismissed && dismissed.id === activity.id && dismissed.phase === activity.phase,
   );
@@ -130,6 +143,7 @@ export function LiveActivity({ activity, onRetry, onCopyDiagnostic, retryCountdo
         <motion.aside
           key={activity.id}
           data-slot="live-activity"
+          data-activity-kind={activity.kind}
           data-activity-phase={activity.phase}
           data-activity-view="expanded"
           className={cn(
@@ -185,29 +199,35 @@ export function LiveActivity({ activity, onRetry, onCopyDiagnostic, retryCountdo
                 {activity.phase === "queued" ? (
                   <span className="text-sm text-[#313131]/75">
                     {activity.buffered ? (
-                      <>当前进入候选环，名额释放后随机抽取。</>
+                      <>{en ? "You are in the candidate ring. A candidate will be selected randomly when a slot opens." : "当前进入候选环，名额释放后随机抽取。"}</>
                     ) : (
-                      <>前面还有 <strong className="font-semibold">{activity.queuePosition ?? "—"}</strong> 人，预计 <strong className="font-semibold">{formatDuration(activity.etaSeconds)}</strong></>
+                      <>{en ? "Ahead: " : "前面还有 "}<strong className="font-semibold">{activity.queuePosition ?? "—"}</strong>{en ? ". Estimated wait: " : " 人，预计 "}<strong className="font-semibold">{formatDuration(activity.etaSeconds, en)}</strong></>
                     )}
                   </span>
                 ) : activity.phase === "running" ? (
                   <span className="text-sm text-[#313131]/70">
-                    正在调用排班服务，请稍候。
+                    {progressionAdjustment
+                      ? (en ? "Re-solving with the adjusted operator roster. Please wait." : "正在使用调整后的干员练度重新求解，请稍候。")
+                      : (en ? "Calling the scheduling service. Please wait." : "正在调用排班服务，请稍候。")}
                     {activity.queuePosition != null ? (
                       <>
-                        {" "}当前排队第 <strong className="font-semibold">{activity.queuePosition}</strong> 位，预计 <strong className="font-semibold">{formatDuration(activity.etaSeconds)}</strong>
+                        {en ? " Queue position: " : " 当前排队第 "}<strong className="font-semibold">{activity.queuePosition}</strong>{en ? ". Estimated wait: " : " 位，预计 "}<strong className="font-semibold">{formatDuration(activity.etaSeconds, en)}</strong>
                       </>
                     ) : null}
                   </span>
                 ) : (
                   <span className={cn("text-xs", activity.phase === "error" ? "text-red-800/70" : "text-[#313131]/58")}>
-                    {activity.phase === "success" ? "三班结果已更新，可以查看或导出。" : `${activity.error?.code ?? "AIC-PLAN"}${activity.error?.requestId ? ` · ${activity.error.requestId}` : ""}`}
+                    {activity.phase === "success"
+                      ? progressionAdjustment
+                        ? (en ? "The adjusted schedule is ready for comparison." : "调整后的排班已生成，可以切换对比。")
+                        : (en ? "The three-shift result is ready to view or export." : "三班结果已更新，可以查看或导出。")
+                      : `${activity.error?.code ?? "AIC-PLAN"}${activity.error?.requestId ? ` · ${activity.error.requestId}` : ""}`}
                   </span>
                 )}
               </span>
               {activity.phase === "queued" ? (
                 <span className="mt-1 block text-sm text-[#313131]/58">
-                  页面会自动更新，无需重复提交。
+                  {en ? "This page updates automatically. Do not submit again." : "页面会自动更新，无需重复提交。"}
                 </span>
               ) : null}
               {diagnostic ? <span className="mt-1 block text-xs text-red-900">{diagnostic.suggestion}</span> : null}
@@ -216,7 +236,7 @@ export function LiveActivity({ activity, onRetry, onCopyDiagnostic, retryCountdo
                 <span className="flex shrink-0 items-center gap-1 max-sm:basis-full max-sm:justify-end">
                 {activity.error?.retryable ? (
                   <Button type="button" size="sm" variant="ghost" className="h-9 text-red-900 hover:bg-red-100 hover:text-red-950" onClick={onRetry} disabled={retryCountdownSeconds > 0}>
-                    {retryCountdownSeconds > 0 ? `${retryCountdownSeconds} 秒后重试` : "重试"}
+                    {retryCountdownSeconds > 0 ? `${en ? "Retry in" : ""} ${retryCountdownSeconds} ${en ? "s" : "秒后重试"}`.trim() : (en ? "Retry" : "重试")}
                   </Button>
                 ) : null}
                 <Button
@@ -229,17 +249,17 @@ export function LiveActivity({ activity, onRetry, onCopyDiagnostic, retryCountdo
                     setCopied(true);
                   }}
                 >
-                  {copied ? "已复制" : "复制诊断"}
+                  {copied ? (en ? "Copied" : "已复制") : (en ? "Copy diagnostics" : "复制诊断")}
                 </Button>
                 </span>
               ) : null}
               <button
                 type="button"
                 onClick={() => setDismissed({ id: activity.id, phase: activity.phase })}
-                aria-label="关闭提示"
+                aria-label={en ? "Dismiss notification" : "关闭提示"}
                 className="h-8 shrink-0 px-2 text-xs text-[#313131]/48 outline-none transition-colors hover:bg-black/5 hover:text-[#313131] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#FFD800] max-sm:ml-auto"
               >
-                关闭
+                {en ? "Dismiss" : "关闭"}
               </button>
             </div>
           </div>
@@ -270,10 +290,10 @@ export function LiveActivity({ activity, onRetry, onCopyDiagnostic, retryCountdo
   );
 }
 
-function formatDuration(seconds: number | null | undefined): string {
+function formatDuration(seconds: number | null | undefined, en = false): string {
   const total = Math.max(0, Math.round(seconds ?? 0));
   const minutes = Math.floor(total / 60);
   const rest = total % 60;
-  if (minutes <= 0) return `${rest} 秒`;
-  return `${minutes} 分 ${rest} 秒`;
+  if (minutes <= 0) return `${rest} ${en ? "s" : "秒"}`;
+  return `${minutes} ${en ? "min" : "分"} ${rest} ${en ? "s" : "秒"}`;
 }

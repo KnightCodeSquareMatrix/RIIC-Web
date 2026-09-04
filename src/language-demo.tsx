@@ -1,12 +1,30 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import type { EnglishCatalog } from "./language-demo-data";
 
 export type DemoLocale = "zh" | "en";
 
 const STORAGE_KEY = "infra-demo-locale";
 const DEFAULT_LOCALE: DemoLocale = process.env.NEXT_PUBLIC_DEFAULT_LOCALE === "en" ? "en" : "zh";
+const ROUTE_TITLES: Record<string, { zh: string; en: string }> = {
+  "/": { zh: "可露希尔基建终端", en: "Closure Infrastructure Terminal" },
+  "/training": { zh: "练卡建议 · 可露希尔基建终端", en: "Training Advice · Closure Infrastructure Terminal" },
+  "/skills": { zh: "技能查询 · 可露希尔基建终端", en: "Skill Reference · Closure Infrastructure Terminal" },
+  "/skland": { zh: "森空岛状态 · 可露希尔基建终端", en: "Skland Status · Closure Infrastructure Terminal" },
+  "/account": { zh: "账号管理 · 可露希尔基建终端", en: "Account · Closure Infrastructure Terminal" },
+  "/account/reset-password": { zh: "重置密码 · 可露希尔基建终端", en: "Reset Password · Closure Infrastructure Terminal" },
+  "/help": { zh: "使用帮助 · 可露希尔基建终端", en: "Help Center · Closure Infrastructure Terminal" },
+  "/help/import-operators": { zh: "导入干员 Box · 使用帮助", en: "Import Operator Box · Help Center" },
+  "/help/owned-operators": { zh: "核对干员数据 · 使用帮助", en: "Check Operator Data · Help Center" },
+  "/about": { zh: "关于我们 · 可露希尔基建终端", en: "About · Closure Infrastructure Terminal" },
+  "/terms": { zh: "服务条款 · 可露希尔基建终端", en: "Terms of Service · Closure Infrastructure Terminal" },
+  "/privacy": { zh: "隐私政策 · 可露希尔基建终端", en: "Privacy Policy · Closure Infrastructure Terminal" },
+  "/admin": { zh: "管理后台 · 可露希尔基建终端", en: "Administration · Closure Infrastructure Terminal" },
+  "/admin/users": { zh: "用户管理 · 管理后台", en: "Users · Administration" },
+  "/admin/issues": { zh: "求解问题 · 管理后台", en: "Solver Issues · Administration" },
+};
 let englishCatalog: EnglishCatalog | null = null;
 let englishCatalogRequest: Promise<EnglishCatalog> | null = null;
 
@@ -25,6 +43,7 @@ const LanguageDemoContext = createContext<{
 } | null>(null);
 
 export function LanguageDemoProvider({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
   const [locale, setLocaleState] = useState<DemoLocale>(DEFAULT_LOCALE);
   const [, setEnglishSkillVersion] = useState(0);
 
@@ -38,12 +57,20 @@ export function LanguageDemoProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const en = locale === "en";
     document.documentElement.lang = en ? "en" : "zh-CN";
-    document.title = en ? "Closure Infrastructure Terminal" : "可露希尔基建终端";
+    const title = ROUTE_TITLES[pathname] ?? ROUTE_TITLES["/"];
+    const expectedTitle = en ? title.en : title.zh;
+    const syncTitle = () => {
+      if (document.title !== expectedTitle) document.title = expectedTitle;
+    };
+    syncTitle();
+    const titleObserver = new MutationObserver(syncTitle);
+    titleObserver.observe(document.head, { childList: true, subtree: true, characterData: true });
     const description = document.querySelector<HTMLMetaElement>('meta[name="description"]');
     if (description) description.content = en
       ? "Import operator data, generate multi-shift infrastructure schedules, and export to MAA."
       : "导入干员数据，生成三班排班并导出到 MAA。";
-  }, [locale]);
+    return () => titleObserver.disconnect();
+  }, [locale, pathname]);
 
   useEffect(() => {
     if (locale !== "en" || englishCatalog) return;

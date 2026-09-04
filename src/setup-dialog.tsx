@@ -1,7 +1,7 @@
 "use client";
 
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { Check, Database, FileJson, ListChecks, ScanLine, Trash2, Upload } from "lucide-react";
+import { Check, Database, FileJson, ListChecks, Minus, Plus, ScanLine, Trash2, Upload } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { SetupActionButton } from "@/components/setup/SetupActionButton";
 import { RotationSettings } from "@/components/RotationSettings";
 import { FiammettaSettings } from "@/components/FiammettaSettings";
 import { WizardSteps } from "@/components/interior/wizard-steps";
@@ -32,6 +33,7 @@ const PANEL_TRANSITION = { type: "spring", stiffness: 420, damping: 38, mass: 0.
 type OperatorInputMode = "skland" | "maa" | "manual";
 
 type SetupDialogProps = {
+  mode?: "calculator" | "manual";
   open: boolean;
   onOpenChange: (open: boolean) => void;
   operbox: OperBoxEntry[] | null;
@@ -59,6 +61,8 @@ type SetupDialogProps = {
   configurationKey: string;
   rotationProfile: RotationProfile;
   onRotationProfileChange: (value: RotationProfile) => void;
+  manualShiftDurations?: number[];
+  onManualShiftDurationsChange?: (durations: number[]) => void;
   fiammettaEnabled: boolean;
   onFiammettaEnabledChange: (enabled: boolean) => void;
   onPresetSelect: (preset: PresetDef) => void;
@@ -88,6 +92,7 @@ function formatSyncTime(timestamp: number | null | undefined, en: boolean): stri
 }
 
 export function SetupDialog({
+  mode = "calculator",
   open,
   onOpenChange,
   operbox,
@@ -115,6 +120,8 @@ export function SetupDialog({
   configurationKey,
   rotationProfile,
   onRotationProfileChange,
+  manualShiftDurations = [12, 6, 6],
+  onManualShiftDurationsChange,
   fiammettaEnabled,
   onFiammettaEnabledChange,
   onPresetSelect,
@@ -156,6 +163,22 @@ export function SetupDialog({
       ? "243 full E2 sample"
       : persistedDataLabel;
   const reducedMotion = useReducedMotion();
+
+  function updateManualShiftCount(count: number) {
+    if (!onManualShiftDurationsChange) return;
+    const nextCount = Math.max(1, Math.min(12, Math.trunc(count || 1)));
+    onManualShiftDurationsChange(Array.from(
+      { length: nextCount },
+      (_, index) => manualShiftDurations[index] ?? 12,
+    ));
+  }
+
+  function updateManualShiftDuration(index: number, duration: number) {
+    if (!onManualShiftDurationsChange || !Number.isFinite(duration)) return;
+    onManualShiftDurationsChange(manualShiftDurations.map((current, candidate) => (
+      candidate === index ? Math.max(0.25, Math.round(duration * 100) / 100) : current
+    )));
+  }
 
   useEffect(() => {
     const justOpened = open && !wasOpenRef.current;
@@ -271,7 +294,7 @@ export function SetupDialog({
       }
       onOpenChange(nextOpen);
     }}>
-      <DialogContent data-setup-dialog className="h-[min(660px,calc(100dvh-1rem))] max-w-[calc(100%-1rem)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-[24px] p-0 sm:max-w-[min(880px,calc(100%-2rem))] sm:rounded-[32px]">
+      <DialogContent data-setup-dialog className="h-[min(720px,calc(100dvh-1rem))] max-w-[calc(100%-1rem)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-[24px] p-0 sm:max-w-[min(960px,calc(100%-2rem))] sm:rounded-[32px]">
         <Tabs
           value={step === "facilities" ? "layout" : step}
           onValueChange={(value) => {
@@ -330,16 +353,15 @@ export function SetupDialog({
                         </p>
                       </div>
                     </div>
-                    <Button
+                    <SetupActionButton
                       type="button"
-                      variant="ghost"
-                      className="h-10 shrink-0"
+                      className="shrink-0"
                       aria-expanded={showImportOptions}
                       aria-controls="setup-import-options"
                       onClick={() => setShowImportOptions((current) => !current)}
                     >
                       {showImportOptions ? (en ? "Collapse" : "收起") : (en ? "Change" : "更换")}
-                    </Button>
+                    </SetupActionButton>
                   </section>
                 ) : null}
 
@@ -436,9 +458,9 @@ export function SetupDialog({
                               aria-invalid={Boolean(inputError)}
                               aria-describedby={inputError ? "setup-box-error" : undefined}
                             />
-                            <Button type="button" variant="outline" className="h-10 w-full" disabled={!maaPaste.trim()} onClick={() => void importMaaPaste()}>
+                            <SetupActionButton type="button" className="w-full" disabled={!maaPaste.trim()} onClick={() => void importMaaPaste()}>
                               {en ? "Import JSON" : "导入 JSON"}
-                            </Button>
+                            </SetupActionButton>
                           </div>
                         ) : null}
                       </TabsContent>
@@ -454,7 +476,15 @@ export function SetupDialog({
                           </Alert>
                         ) : (
                           <Suspense fallback={<div className="grid min-h-40 place-items-center border border-dashed border-border text-sm text-muted-foreground">{en ? "Loading operator roster" : "正在加载干员列表"}</div>}>
-                            <ManualOperboxPicker operbox={boxSource === "sample" ? null : operbox} onApply={applyManualBox} />
+                            <ManualOperboxPicker
+                              compact
+                              operbox={operbox}
+                              title={en ? "Build your operator BOX" : "手动选择干员 Box"}
+                              description={en
+                                ? "Ownership and elite stages are shared with Adjust progression."
+                                : "持有与精英阶段会同步用于排班和调整练度。"}
+                              onApply={applyManualBox}
+                            />
                           </Suspense>
                         )}
                       </TabsContent>
@@ -475,9 +505,9 @@ export function SetupDialog({
                   <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">{en ? "Data management" : "数据管理"}</summary>
                   <div className="flex flex-wrap items-center justify-between gap-3 py-3">
                     <span className="text-xs text-muted-foreground">{en ? <>Data is stored in this browser for <span className="font-number">30</span> days.</> : <>数据在此浏览器保存 <span className="font-number">30</span> 天。</>}</span>
-                    <Button type="button" variant="outline" className="min-h-11" onClick={() => setClearConfirmOpen(true)}>
+                    <SetupActionButton type="button" variant="destructive" onClick={() => setClearConfirmOpen(true)}>
                       <Trash2 />{en ? "Clear local data" : "清除本地数据"}
-                    </Button>
+                    </SetupActionButton>
                   </div>
                 </details>
               </motion.div>
@@ -496,7 +526,7 @@ export function SetupDialog({
                     ref={basicsPanelRef}
                     data-setup-layout-basics
                     role="region"
-                    aria-label={en ? "Layout and rotations" : "布局与换班"}
+                    aria-label={mode === "manual" ? (en ? "Layout and shifts" : "布局与班次") : (en ? "Layout and rotations" : "布局与换班")}
                     tabIndex={-1}
                     className="grid gap-6 px-4 py-5 outline-none sm:px-7 sm:py-6"
                     initial={reducedMotion ? false : { x: stepDirection * 28, opacity: 0 }}
@@ -509,7 +539,35 @@ export function SetupDialog({
                     </section>
 
                     <div className="pt-1">
-                      <RotationSettings value={rotationProfile} onChange={onRotationProfileChange} />
+                      {mode === "manual" ? (
+                        <section className="grid gap-4" aria-labelledby="manual-shift-settings-title" data-manual-shift-settings>
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                              <h3 id="manual-shift-settings-title" className="text-sm font-semibold">{en ? "Manual shifts" : "手动班次"}</h3>
+                              <p className="mt-1 text-xs text-muted-foreground">{en ? "Durations are independent and do not need to add up to 24 hours." : "每班时长相互独立，不要求合计为 24 小时。"}</p>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Button type="button" size="icon-sm" variant="outline" aria-label={en ? "Remove one shift" : "减少一个班次"} disabled={manualShiftDurations.length <= 1} onClick={() => updateManualShiftCount(manualShiftDurations.length - 1)}><Minus /></Button>
+                              <label className="flex items-center gap-2 text-sm">
+                                <span>{en ? "Shifts" : "班次数"}</span>
+                                <input className="h-9 w-16 rounded-[4px] border border-input bg-background px-2 text-center font-number" type="number" min="1" max="12" step="1" value={manualShiftDurations.length} onChange={(event) => updateManualShiftCount(Number(event.target.value))} />
+                              </label>
+                              <Button type="button" size="icon-sm" variant="outline" aria-label={en ? "Add one shift" : "增加一个班次"} disabled={manualShiftDurations.length >= 12} onClick={() => updateManualShiftCount(manualShiftDurations.length + 1)}><Plus /></Button>
+                            </div>
+                          </div>
+                          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                            {manualShiftDurations.map((duration, index) => (
+                              <label key={index} className="flex min-h-11 items-center justify-between gap-3 border border-border/70 bg-muted/25 px-3 py-2 text-sm">
+                                <span>{en ? `Shift ${index + 1}` : `班次 ${index + 1}`}</span>
+                                <span className="flex items-center gap-1.5">
+                                  <input aria-label={en ? `Shift ${index + 1} duration` : `班次 ${index + 1} 时长`} className="h-8 w-20 rounded-[4px] border border-input bg-background px-2 text-right font-number" type="number" min="0.25" step="0.25" value={duration} onChange={(event) => updateManualShiftDuration(index, Number(event.target.value))} />
+                                  <span className="text-xs text-muted-foreground">{en ? "h" : "小时"}</span>
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                        </section>
+                      ) : <RotationSettings value={rotationProfile} onChange={onRotationProfileChange} />}
                     </div>
 
                     <div className="border-t border-border/70 pt-5">
@@ -518,13 +576,17 @@ export function SetupDialog({
                         operbox={operbox}
                         rotation={rotationProfile}
                         onEnabledChange={onFiammettaEnabledChange}
+                        mode={mode}
                       />
                     </div>
 
                     <details className="setup-quiet-details pt-1">
                       <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">{en ? "Advanced tools" : "高级工具"}</summary>
                       <div className="grid gap-2 py-3 sm:grid-cols-2">
-                        <Label pressable className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-[4px] border border-dashed text-sm font-medium text-muted-foreground transition-[color,border-color,background-color] duration-[var(--motion-duration-state)] ease-[var(--motion-ease-out)] hover:border-primary hover:bg-muted/40 hover:text-primary">
+                        <SetupActionButton
+                          asLabel
+                          className="w-full cursor-pointer"
+                        >
                           <Upload className="size-4" />{en ? "Import layout" : "导入布局"}
                           <input
                             className="sr-only"
@@ -536,10 +598,10 @@ export function SetupDialog({
                               event.currentTarget.value = "";
                             }}
                           />
-                        </Label>
-                        <Button type="button" variant="outline" className="min-h-11 w-full" onClick={onDownloadLayout}>
+                        </SetupActionButton>
+                        <SetupActionButton type="button" className="w-full" onClick={onDownloadLayout}>
                           <FileJson />{en ? "Export layout" : "导出布局"}
-                        </Button>
+                        </SetupActionButton>
                         {resultClearWarningDismissed ? (
                           <Button type="button" variant="ghost" className="min-h-11 w-fit" onClick={onRestoreResultClearWarning}>
                             {en ? "Restore change warning" : "恢复切换提示"}

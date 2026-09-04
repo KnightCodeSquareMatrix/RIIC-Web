@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
+import { useLanguageDemo } from "@/language-demo";
 
 type ImportMethod = "skland" | "maa";
 
@@ -14,18 +15,18 @@ type ImportMethodChoiceProps = {
 const methods = [
   {
     id: "skland",
-    label: "森空岛",
-    description: "用森空岛 App 扫码并同步当前角色。",
+    zh: ["森空岛", "用森空岛 App 扫码并同步当前角色。"],
+    en: ["Skland", "Scan with the Skland app and sync the current character."],
   },
   {
     id: "maa",
-    label: "MAA",
-    description: "从 MAA 导出干员 Box 文件后上传。",
+    zh: ["MAA", "从 MAA 导出干员 Box 文件后上传。"],
+    en: ["MAA", "Export an Operator Box file from MAA, then upload it."],
   },
 ] satisfies Array<{
   id: ImportMethod;
-  label: string;
-  description: string;
+  zh: [string, string];
+  en: [string, string];
 }>;
 
 function parseMethod(value: string | null): ImportMethod | null {
@@ -33,6 +34,8 @@ function parseMethod(value: string | null): ImportMethod | null {
 }
 
 export function ImportMethodChoice({ sklandContent, maaContent }: ImportMethodChoiceProps) {
+  const { locale } = useLanguageDemo();
+  const en = locale === "en";
   const [selectedMethod, setSelectedMethod] = useState<ImportMethod | null>(null);
 
   useEffect(() => {
@@ -62,16 +65,18 @@ export function ImportMethodChoice({ sklandContent, maaContent }: ImportMethodCh
     window.history.replaceState({}, "", url);
   }
 
-  const selectedLabel = methods.find((method) => method.id === selectedMethod)?.label;
+  const selectedMethodData = methods.find((method) => method.id === selectedMethod);
+  const selectedLabel = selectedMethodData ? (en ? selectedMethodData.en[0] : selectedMethodData.zh[0]) : undefined;
 
   return (
     <section className="grid gap-6" aria-labelledby="import-method-choice-title" data-help-import-method-picker>
       <fieldset className="grid gap-4 rounded-[4px] border border-border bg-card p-4 sm:p-5">
-        <legend className="px-1 text-xl font-semibold" id="import-method-choice-title">选择导入方式</legend>
-        <p className="text-sm leading-6 text-muted-foreground">选择你实际使用的一种方式，下方只显示对应教程；选错时可直接改选。</p>
+        <legend className="px-1 text-xl font-semibold" id="import-method-choice-title">{en ? "Choose an import method" : "选择导入方式"}</legend>
+        <p className="text-sm leading-6 text-muted-foreground">{en ? "Choose the method you use. Only its instructions will appear below, and you can switch at any time." : "选择你实际使用的一种方式，下方只显示对应教程；选错时可直接改选。"}</p>
         <div className="grid gap-3 sm:grid-cols-2">
           {methods.map((method) => {
             const isSelected = method.id === selectedMethod;
+            const [label, description] = en ? method.en : method.zh;
 
             return (
               <label
@@ -91,15 +96,15 @@ export function ImportMethodChoice({ sklandContent, maaContent }: ImportMethodCh
                   value={method.id}
                 />
                 <span className="min-w-0">
-                  <strong className="block text-lg leading-6">{method.label}</strong>
-                  <span className={cn("mt-1 block text-sm leading-5 text-muted-foreground", isSelected && "text-background/75")}>{method.description}</span>
+                  <strong className="block text-lg leading-6">{label}</strong>
+                  <span className={cn("mt-1 block text-sm leading-5 text-muted-foreground", isSelected && "text-background/75")}>{description}</span>
                   <span className={cn("mt-2 block text-xs font-semibold text-muted-foreground", isSelected && "text-amber-300")}>
-                    {isSelected ? "当前显示" : "选择此方式"}
+                    {isSelected ? (en ? "Currently shown" : "当前显示") : (en ? "Choose this method" : "选择此方式")}
                   </span>
                 </span>
                 {isSelected ? (
                   <span className="absolute right-3 top-3 bg-[#FFD800] px-1.5 py-0.5 text-[10px] font-semibold text-black">
-                    已选
+                    {en ? "SELECTED" : "已选"}
                   </span>
                 ) : null}
               </label>
@@ -109,7 +114,7 @@ export function ImportMethodChoice({ sklandContent, maaContent }: ImportMethodCh
       </fieldset>
 
       <p className="sr-only" aria-live="polite">
-        {selectedLabel ? `已选择${selectedLabel}，下方显示${selectedLabel}教程。` : "尚未选择导入方式。"}
+        {selectedLabel ? (en ? `${selectedLabel} selected. Its instructions are shown below.` : `已选择${selectedLabel}，下方显示${selectedLabel}教程。`) : (en ? "No import method selected." : "尚未选择导入方式。")}
       </p>
 
       {selectedMethod ? (
@@ -118,8 +123,8 @@ export function ImportMethodChoice({ sklandContent, maaContent }: ImportMethodCh
         </div>
       ) : (
         <div className="rounded-[4px] border border-dashed border-border bg-muted/25 px-5 py-10 text-center" data-help-import-choice-empty>
-          <p className="font-semibold text-foreground">请先选择 MAA 或森空岛</p>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">选择后，这里会显示对应截图与操作步骤。</p>
+          <p className="font-semibold text-foreground">{en ? "Choose MAA or Skland first" : "请先选择 MAA 或森空岛"}</p>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">{en ? "Screenshots and instructions for that method will appear here." : "选择后，这里会显示对应截图与操作步骤。"}</p>
         </div>
       )}
     </section>

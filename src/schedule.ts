@@ -15,6 +15,8 @@ export interface RoomRow {
   product?: string;
   operators: string[];
   operatorSlots: RoomOperatorSlot[];
+  /** Fixed-position slots used by editors; unlike operatorSlots, empty gaps are preserved. */
+  slotAssignments?: Array<RoomOperatorSlot | undefined>;
   positionSlots?: RoomPositionSlot[];
   autofill: boolean;
   efficiency?: RoomEfficiency;
@@ -350,7 +352,7 @@ export function planToRows(
   const roomsByGroup = plan.rooms && typeof plan.rooms === "object" ? plan.rooms : {};
   for (const group of GROUP_ORDER) {
     if (group === "training") {
-      const layoutRoom = layoutRoomMap.get("training_room");
+      const layoutRoom = layout?.rooms.find((room) => room.kind === "training_room");
       if (!layoutRoom) continue;
       const positionSlots = trainingPositionSlots(trainingShift);
       const operatorSlots = positionSlots.flatMap((positionSlot) => positionSlot.slot ? [positionSlot.slot] : []);

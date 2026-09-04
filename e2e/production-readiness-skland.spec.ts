@@ -739,6 +739,62 @@ test("an in-flight Skland restore cannot replace a newly imported MAA BOX", asyn
   await expect(reopenedDialog.getByText("1 名干员 · 1 名可用", { exact: true })).toBeVisible();
 });
 
+test("an in-flight Skland restore cannot replace a locally selected layout", async ({ page }) => {
+  let releaseFullRestore!: () => void;
+  let markFullRestoreStarted!: () => void;
+  const fullRestoreGate = new Promise<void>((resolve) => { releaseFullRestore = resolve; });
+  const fullRestoreStarted = new Promise<void>((resolve) => { markFullRestoreStarted = resolve; });
+
+  await mockApis(page, {
+    sklandConfigured: true,
+    sklandSnapshot: authenticatedSklandSnapshot,
+  });
+  await page.route(/\/api\/skland\/accounts(?:[/?]|$)/, async (route) => {
+    const url = new URL(route.request().url());
+    const isFullRestore = route.request().method() === "GET" && !url.searchParams.has("mode");
+    if (isFullRestore) {
+      markFullRestoreStarted();
+      await fullRestoreGate;
+    }
+    await route.fallback();
+  });
+  await seedV4Session(page, undefined, {
+    boxSource: "skland",
+    operbox: [authenticatedSklandSnapshot.operbox[0]],
+  });
+  await page.goto("/");
+  await fullRestoreStarted;
+
+  await page.getByRole("button", { name: "配置Box与布局" }).first().click();
+  const dialog = page.getByRole("dialog", { name: "排班设置" });
+  await dialog.getByRole("button", { name: "继续", exact: true }).click();
+  const selectedLayout = dialog.getByRole("button", { name: /^252/ });
+  await selectedLayout.click();
+  await expect(selectedLayout).toHaveAttribute("aria-pressed", "true");
+
+  const fullRestoreResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return response.request().method() === "GET"
+      && url.pathname === "/api/skland/accounts"
+      && !url.searchParams.has("mode");
+  });
+  releaseFullRestore();
+  await fullRestoreResponse;
+  await page.waitForTimeout(100);
+
+  await expect(selectedLayout).toHaveAttribute("aria-pressed", "true");
+  await dialog.getByRole("button", { name: "检查设施", exact: true }).click();
+  await dialog.getByRole("button", { name: "完成", exact: true }).click();
+
+  const planRequest = page.waitForRequest((request) => (
+    request.method() === "POST" && new URL(request.url()).pathname === "/api/plan"
+  ));
+  await page.getByRole("button", { name: "生成排班", exact: true }).click();
+  const submitted = await planRequest;
+  const payload = submitted.postDataJSON() as { layout?: { template?: string } };
+  expect(payload.layout?.template).toBe("252");
+});
+
 test("Skland status center loads full status on demand and deletion preserves non-Skland data", async ({ page }) => {
   const statusMethods: string[] = [];
   let fullSessionRequests = 0;

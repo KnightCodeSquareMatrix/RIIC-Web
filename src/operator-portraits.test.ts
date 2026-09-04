@@ -5,13 +5,16 @@ import sourceManifest from "./generated/arkntools/source.json" with { type: "jso
 import {
   OPERATOR_CATALOG,
   PROFESSION_LABELS,
+  PROFESSION_LABELS_ENGLISH,
   buildingSkillUnlockLabel,
+  buildingSkillUnlockLabelEnglish,
   buildingSkillUnlockPrefix,
   isBuildingSkillEnhanced,
   operatorBuildingSkillList,
   operatorPortraitFor,
   operatorPresentationFor,
   operatorProfessionFor,
+  operatorProfessionLabelEnglishForCode,
   operatorProfessionPresentation,
 } from "./operatorPortraits.ts";
 
@@ -48,6 +51,13 @@ test("resolves numeric profession codes to labeled icons for every cataloged ope
   }
   assert.equal(operatorProfessionFor("不存在的干员"), undefined);
   assert.equal(operatorProfessionPresentation("不存在的干员"), undefined);
+});
+
+test("maps numeric profession codes to English labels", () => {
+  assert.equal(operatorProfessionLabelEnglishForCode(1), "Guard");
+  assert.equal(operatorProfessionLabelEnglishForCode(8), "Vanguard");
+  assert.equal(PROFESSION_LABELS_ENGLISH[6], "Caster");
+  assert.equal(operatorProfessionLabelEnglishForCode(undefined), undefined);
 });
 
 test("marks the higher-index skill of a same-prefix pair as enhanced", () => {
@@ -103,6 +113,10 @@ test("renders the elite-2 提升 label for enhanced skills", () => {
   assert.equal(buildingSkillUnlockLabel(2, 1, true), "精英 2 提升");
   assert.equal(buildingSkillUnlockLabel(2, 3, true), "精英 2 · 等级 3 提升");
   assert.equal(buildingSkillUnlockPrefix(2, 1), "精英 2 ");
+  assert.equal(buildingSkillUnlockLabelEnglish(0, 1), "Initial unlock");
+  assert.equal(buildingSkillUnlockLabelEnglish(0, 3), "Level 3 unlock");
+  assert.equal(buildingSkillUnlockLabelEnglish(2, 1), "Elite 2 unlock");
+  assert.equal(buildingSkillUnlockLabelEnglish(2, 3, true), "Elite 2 · Level 3 upgrade");
 
   // operatorPresentationFor 的展示结果带上 enhanced 标记
   assert.equal(operatorPresentationFor({ name: "折光", skill: 2 }).buildingSkill?.enhanced, true);

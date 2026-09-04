@@ -43,13 +43,24 @@ export function rotationOption(profile: RotationProfile): RotationOption {
   return ROTATION_OPTIONS.find((option) => option.profile === profile) ?? ROTATION_OPTIONS[0];
 }
 
-export function rotationDescription(profile: RotationProfile): string {
+export function rotationDurations(profile: RotationProfile): number[] {
+  const current = ROTATION_OPTIONS.find((option) => option.profile === profile);
+  return [...(current?.durations ?? LEGACY_ROTATION_OPTIONS[profile as keyof typeof LEGACY_ROTATION_OPTIONS].durations)];
+}
+
+export function rotationDescription(profile: RotationProfile, en = false): string {
   const current = ROTATION_OPTIONS.find((option) => option.profile === profile);
   const option = current ?? LEGACY_ROTATION_OPTIONS[profile as keyof typeof LEGACY_ROTATION_OPTIONS];
-  return `${option.label} · ${option.durations.join("/")} 小时`;
+  const englishLabel: Record<RotationProfile, string> = {
+    abc_12_6_6: "Three shifts per day",
+    main_backup_12_12: "Primary / backup rotation",
+    abc_12_12_12: "Two changes per day",
+    fiammetta_8_8_4_4: "Fiammetta rotation",
+    abyssal_7_5_7_5: "Abyssal Hunters rotation",
+  };
+  return `${en ? englishLabel[profile] : option.label} · ${option.durations.join("/")} ${en ? "hours" : "小时"}`;
 }
 
 export function rotationShiftCount(profile: RotationProfile): number {
-  const current = ROTATION_OPTIONS.find((option) => option.profile === profile);
-  return (current?.durations ?? LEGACY_ROTATION_OPTIONS[profile as keyof typeof LEGACY_ROTATION_OPTIONS].durations).length;
+  return rotationDurations(profile).length;
 }
