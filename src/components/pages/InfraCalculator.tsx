@@ -357,6 +357,9 @@ export interface InfraCalculatorProps {
   onStartPersonalFlow: () => void;
   onDismissOnboarding: () => void;
   onOpenSetup: () => void;
+  upgradeSimulationOpen: boolean;
+  onOpenUpgradeSimulation: () => void;
+  onUpgradeSimulationOpenChange: (open: boolean) => void;
   onRun: () => void;
   onSimulateUpgrades: (trialOperbox: OperBoxEntry[]) => Promise<PublicPlanData>;
   upgradeComparison: { trial: PublicPlanData } | null;
@@ -383,7 +386,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     feedbackResult,
     operbox,
     sampleLoading, loading, canRun, runCooldownSeconds, hasBox, hasPersonalBox, feedbackDisabledForSampleBox, plannerReady, websiteAuthenticated, showOnboarding, taskQueue, animatePlanEntrance, animateEmptyScheduleEntrance, onPlanEntranceConsumed, requiresAccount = false, accountControl,
-    onRunSampleTrial, onStartPersonalFlow, onDismissOnboarding, onOpenSetup, onRun, onSimulateUpgrades, upgradeComparison, scheduleVariant, onScheduleVariantChange, onUpgradeTrialReady, onCancelRun,
+    onRunSampleTrial, onStartPersonalFlow, onDismissOnboarding, onOpenSetup, upgradeSimulationOpen, onOpenUpgradeSimulation, onUpgradeSimulationOpenChange, onRun, onSimulateUpgrades, upgradeComparison, scheduleVariant, onScheduleVariantChange, onUpgradeTrialReady, onCancelRun,
     onSetActiveShift, onMarkIssue, onPerformanceIssue,
     onFactoryRecipeChange, onTradeOrderChange,
     onDownloadMaa,
@@ -564,7 +567,15 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                   <div className="flex min-w-0 items-center justify-end gap-2 max-sm:justify-self-end">
                     {operbox && scheduleResult ? (
                       <Suspense fallback={<Button type="button" variant="outline" size="sm" className="h-9 min-h-0 max-sm:h-11" disabled><FlaskConical />{en ? "Adjust progression" : "调整练度"}</Button>}>
-                        <UpgradeSimulationDialog operbox={operbox} baseline={result ?? scheduleResult} onSimulate={onSimulateUpgrades} onTrialReady={onUpgradeTrialReady} />
+                        <UpgradeSimulationDialog
+                          operbox={operbox}
+                          baseline={result ?? scheduleResult}
+                          open={upgradeSimulationOpen}
+                          onOpen={onOpenUpgradeSimulation}
+                          onOpenChange={onUpgradeSimulationOpenChange}
+                          onSimulate={onSimulateUpgrades}
+                          onTrialReady={onUpgradeTrialReady}
+                        />
                       </Suspense>
                     ) : null}
                     <RunButton canRun={canRun} hasBox={hasBox} plannerReady={plannerReady} requiresAccount={requiresAccount} runCooldownSeconds={runCooldownSeconds} onRun={onRun} />

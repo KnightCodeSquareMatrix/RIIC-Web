@@ -133,7 +133,7 @@ const ProductChangeConfirmModal = lazy(() => loadComponents().then((module) => (
 type ProductChange =
   | { type: "factory"; roomId: string; recipe: FactoryRecipe }
   | { type: "trade"; roomId: string; order: TradeOrder };
-type WebsiteAuthIntent = "account" | "run" | "setup" | "skland";
+type WebsiteAuthIntent = "account" | "run" | "setup" | "skland" | "upgrade";
 
 type SklandFullRestoreResult =
   | { session: SklandSessionData; error?: never }
@@ -290,6 +290,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   const [sklandError, setSklandError] = useState<DisplayError | null>(null);
   const [sklandBusy, setSklandBusy] = useState(false);
   const [setupOpen, setSetupOpen] = useState(false);
+  const [upgradeSimulationOpen, setUpgradeSimulationOpen] = useState(false);
   const [setupMounted, setSetupMounted] = useState(false);
   const [issueModalMounted, setIssueModalMounted] = useState(false);
   const [productModalMounted, setProductModalMounted] = useState(false);
@@ -1259,6 +1260,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
 
   function clearPlanResult() {
     setResult(null);
+    setUpgradeSimulationOpen(false);
     setActiveShift(0);
     clearIssueState();
   }
@@ -1480,6 +1482,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       websiteAuthIntentRef.current = null;
       websiteAuthReturnFocusRef.current = null;
       setWebsiteAuthDialogOpen(false);
+      setUpgradeSimulationOpen(false);
       router.push(workbenchHref("calculator"));
       setSklandAccounts([]);
       setSklandActiveAccountId(null);
@@ -1512,6 +1515,14 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     openSetup();
   }
 
+  function handleProtectedUpgradeSimulation() {
+    if (!websiteSession) {
+      requestWebsiteAccount("upgrade");
+      return;
+    }
+    setUpgradeSimulationOpen(true);
+  }
+
   function handleProtectedRun() {
     if (hasPersonalBox && !websiteSession) {
       requestWebsiteAccount("run");
@@ -1533,6 +1544,10 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     }
     if (intent === "run") {
       if (cliReady) void handleRun();
+      return;
+    }
+    if (intent === "upgrade") {
+      setUpgradeSimulationOpen(true);
       return;
     }
     router.push(workbenchHref(intent === "skland" ? "skland" : "account"));
@@ -1787,6 +1802,9 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       onStartPersonalFlow: handleStartPersonalFlow,
       onDismissOnboarding: dismissOnboarding,
       onOpenSetup: handleProtectedSetup,
+      upgradeSimulationOpen,
+      onOpenUpgradeSimulation: handleProtectedUpgradeSimulation,
+      onUpgradeSimulationOpenChange: setUpgradeSimulationOpen,
       onRun: handleProtectedRun,
       onSimulateUpgrades: handleSimulateUpgrades,
       upgradeComparison: upgradeComparison?.baseline === result ? { trial: upgradeComparison.trial } : null,
