@@ -39,7 +39,7 @@ import { demoRoomTitle, useLanguageDemo } from "@/language-demo";
 export interface CompactScheduleViewProps {
   rows: RoomRow[];
   layout: BaseBlueprint;
-  currentMoraleByOperator?: ReadonlyMap<string, number>;
+  eliteByOperator?: ReadonlyMap<string, number>;
   activeShift: number;
   activePlan?: MaaPlan;
   shiftDirection: ShiftDirection;
@@ -66,7 +66,7 @@ function CompactRoomCard({
   visual,
   efficiency,
   slots,
-  currentMoraleByOperator,
+  eliteByOperator,
   shiftDirection,
   onIssue,
   feedbackDisabled = false,
@@ -80,7 +80,7 @@ function CompactRoomCard({
   visual: ReturnType<typeof roomVisualFor>;
   efficiency: ReturnType<typeof presentRoomEfficiency>;
   slots: { slot: RoomRow["operatorSlots"][number] | undefined; positionLabel?: string }[];
-  currentMoraleByOperator?: ReadonlyMap<string, number>;
+  eliteByOperator?: ReadonlyMap<string, number>;
   shiftDirection: ShiftDirection;
   onIssue?: (row: RoomRow) => void;
   feedbackDisabled?: boolean;
@@ -170,7 +170,7 @@ function CompactRoomCard({
     <OperatorSlot
       key={`${row.key}-${index}`}
       slot={slot}
-      currentMorale={slot ? currentMoraleByOperator?.get(slot.name) : undefined}
+      elite={slot ? eliteByOperator?.get(slot.name) : undefined}
       autofill={row.group === "dormitory" && row.autofill}
       compactView
       showSkillTooltip
@@ -271,7 +271,7 @@ function CompactFeedbackButton({ row, disabled, onIssue }: { row: RoomRow; disab
 }
 
 export function CompactScheduleView(props: CompactScheduleViewProps) {
-  const { rows, layout, currentMoraleByOperator, shiftDirection, onIssue, feedbackDisabled = false, onSlotClick } = props;
+  const { rows, layout, eliteByOperator, shiftDirection, onIssue, feedbackDisabled = false, onSlotClick } = props;
   const { locale } = useLanguageDemo();
 
   if (rows.length === 0) {
@@ -313,7 +313,7 @@ export function CompactScheduleView(props: CompactScheduleViewProps) {
         visual={visual}
         efficiency={efficiency}
         slots={slots}
-        currentMoraleByOperator={currentMoraleByOperator}
+        eliteByOperator={eliteByOperator}
         shiftDirection={shiftDirection}
         onIssue={onIssue}
         feedbackDisabled={feedbackDisabled}
