@@ -263,7 +263,15 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     currentBoxSourceRef.current = resolvedSource;
     setBoxSourceState(resolvedSource);
   }, []);
-  const [layoutDirty, setLayoutDirty] = useState(false);
+  const [layoutDirty, setLayoutDirtyState] = useState(false);
+  const currentLayoutDirtyRef = useRef(layoutDirty);
+  const setLayoutDirty = useCallback<Dispatch<SetStateAction<boolean>>>((nextDirty) => {
+    const resolvedDirty = typeof nextDirty === "function"
+      ? nextDirty(currentLayoutDirtyRef.current)
+      : nextDirty;
+    currentLayoutDirtyRef.current = resolvedDirty;
+    setLayoutDirtyState(resolvedDirty);
+  }, []);
   const [layoutSource, setLayoutSource] = useState<"local" | "skland">("local");
   const [localLayoutBackup, setLocalLayoutBackup] = useState<BaseBlueprint | null>(null);
   const [rotationProfile, setRotationProfile] = useState<RotationProfile>(DEFAULT_ROTATION_PROFILE);
@@ -288,7 +296,6 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   const initialLayoutForRestore = useRef(defaultLayout);
   const initialBoxSource = useRef(boxSource);
   const initialOperbox = useRef(operbox);
-  const initialLayoutDirty = useRef(layoutDirty);
   const initialLayoutSource = useRef<"local" | "skland">("local");
   const initialLocalLayoutBackup = useRef<BaseBlueprint | null>(null);
   const skipNextPersistence = useRef(false);
@@ -625,7 +632,6 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
         initialLayoutForRestore.current = restoredLayout;
         initialBoxSource.current = restoredBoxSource;
         initialOperbox.current = restoredOperbox;
-        initialLayoutDirty.current = restored.layoutDirty;
         initialLayoutSource.current = restoredLayoutSource;
         initialLocalLayoutBackup.current = CLIENT_SKLAND_ENABLED ? restored.localLayoutBackup : null;
       }
@@ -634,7 +640,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     } finally {
       setHasRestoredSession(true);
     }
-  }, [locale, setBoxSource, setOperbox]);
+  }, [locale, setBoxSource, setLayoutDirty, setOperbox]);
 
   useEffect(() => {
     if (!hasRestoredSession || typeof window === "undefined") return;
@@ -797,7 +803,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
             setBoxSource("skland");
           }
           if (
-            !initialLayoutDirty.current
+            !currentLayoutDirtyRef.current
             && (initialBoxSource.current === "skland" || !initialOperbox.current)
             && session.scheduleSnapshot.infrastructure.layoutSuggestion
           ) {
