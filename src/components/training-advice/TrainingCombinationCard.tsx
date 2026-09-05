@@ -4,7 +4,13 @@ import { lazy, Suspense } from "react";
 
 import { loadClientFeature } from "@/client-lazy-loader";
 import { InfraTechnicalCard } from "@/components/InfraTechnicalCard";
-import { operatorBuildingSkillList, operatorPortraitFor } from "@/operatorPortraits";
+import {
+  operatorBuildingSkillList,
+  operatorPortraitFor,
+  operatorProfessionFor,
+  operatorProfessionLabelEnglishForCode,
+  operatorProfessionPresentation,
+} from "@/operatorPortraits";
 import { cn } from "@/lib/utils";
 import type { TrainingCombination, TrainingAdviceMember } from "@/types";
 import { demoOperatorName, useLanguageDemo } from "@/language-demo";
@@ -62,6 +68,22 @@ function MemberRow({ member }: { member: TrainingAdviceMember }) {
       ? "border-white/20 bg-white/10 text-white"
       : "border-white/10 bg-white/5 text-white/65";
   const hasSkills = operatorBuildingSkillList(member.operator).length > 0;
+  const professionCode = operatorProfessionFor(member.operator);
+  const profession = operatorProfessionPresentation(member.operator);
+  const professionLabel = en
+    ? operatorProfessionLabelEnglishForCode(professionCode)
+    : profession?.label;
+  const professionHeader = profession && professionLabel ? (
+    <span
+      className="flex w-full items-center gap-2 border-b border-background/15 pb-2"
+      data-operator-profession
+    >
+      <img src={profession.icon} alt="" aria-hidden="true" className="size-7 shrink-0 object-contain" />
+      <span className="text-xs font-semibold text-background/85">
+        {professionLabel}
+      </span>
+    </span>
+  ) : null;
   const content = (
     <>
       <span className="size-8 shrink-0 overflow-hidden border border-white/10 bg-[#272A2B]">
@@ -85,7 +107,7 @@ function MemberRow({ member }: { member: TrainingAdviceMember }) {
   if (!hasSkills) return <div className={cardClassName}>{content}</div>;
   return (
     <Suspense fallback={cardButton}>
-      <OperatorSkillTooltip name={member.operator} trigger={cardButton} />
+      <OperatorSkillTooltip name={member.operator} trigger={cardButton} header={professionHeader} />
     </Suspense>
   );
 }

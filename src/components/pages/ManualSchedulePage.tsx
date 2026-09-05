@@ -1,12 +1,12 @@
 "use client";
 
 import { ArrowLeft, Download, Search, Settings2, Sparkles, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 
 import type { FactoryRecipe, TradeOrder } from "@/blueprint";
+import { loadClientFeature } from "@/client-lazy-loader";
 import { ScheduleBoard, ShiftTabs } from "@/components";
 import { FiammettaTargetChip } from "@/components/FiammettaTargetChip";
-import { OperatorSkillTooltip } from "@/components/OperatorSkillTooltip";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -36,6 +36,10 @@ import { operatorPortraitFor } from "@/operatorPortraits";
 import { addOperatorPresentations } from "@/schedule-presentation";
 import { planToRows, type RoomRow } from "@/schedule";
 import type { BaseBlueprint, OperBoxEntry } from "@/types";
+
+const OperatorSkillTooltip = lazy(() => loadClientFeature("operatorSkillTooltip").then((module) => ({
+  default: module.OperatorSkillTooltip,
+})));
 
 export interface ManualSchedulePageProps {
   layout: BaseBlueprint;
@@ -100,7 +104,11 @@ function ManualOperatorChoice({
       </span>
     </button>
   );
-  return <OperatorSkillTooltip name={operator.name} trigger={card} delay={300} disabled={tooltipDisabled} />;
+  return (
+    <Suspense fallback={card}>
+      <OperatorSkillTooltip name={operator.name} trigger={card} delay={300} disabled={tooltipDisabled} />
+    </Suspense>
+  );
 }
 
 export function ManualSchedulePage({

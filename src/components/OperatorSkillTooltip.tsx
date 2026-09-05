@@ -1,6 +1,14 @@
 "use client";
 
-import { cloneElement, useEffect, useState, type KeyboardEventHandler, type MouseEventHandler, type ReactElement } from "react";
+import {
+  cloneElement,
+  useEffect,
+  useState,
+  type KeyboardEventHandler,
+  type MouseEventHandler,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { RichTextHoverTerms } from "@/components/RichTextInteractive";
@@ -26,6 +34,7 @@ export function OperatorSkillTooltip({
   contextLabel,
   currentElite,
   currentLevel,
+  header,
   delay,
   disabled,
 }: {
@@ -35,6 +44,8 @@ export function OperatorSkillTooltip({
   contextLabel?: string;
   currentElite?: number | null;
   currentLevel?: number;
+  /** 可选的业务上下文头部；具体内容由调用方负责，避免进入所有 Tooltip 消费页面。 */
+  header?: ReactNode;
   delay?: number;
   disabled?: boolean;
 }) {
@@ -75,6 +86,7 @@ export function OperatorSkillTooltip({
           {contextLabel}
         </span>
       ) : null}
+      {header}
       {skills.map((sourceSkill) => (
         <SkillBlock
           key={sourceSkill.id}
