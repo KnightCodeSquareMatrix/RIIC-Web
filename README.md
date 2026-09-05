@@ -17,6 +17,7 @@
 - `development` 发布通道可从侧栏新建 1–12 班的手动排班，分别设置每班时长、逐房安排当前 Box 中的干员、按班选择菲亚梅塔换心情目标、处理重复进驻并导出 MAA JSON；已有求解结果也可通过“手动修改排班”转为草稿继续编辑。`production` 的 `/manual` 暂时显示“手动排班待开发”，不会加载编辑器
 - 登录网站账号后，在同一布局下假设干员持有或精英化变化，对比完整试算排班且不覆盖当前 Box 或班表
 - 按练度与基建收益查看练卡建议
+- 从当前 Box 中选择已拥有的精二干员，生成单技能专精的省操作／极速方案和换教官时间表；样例 Box 可匿名使用，个人 Box 需登录网站账号
 - 查询基建技能与适用设施
 - 对比当前进驻与排班计划，并导出 MAA JSON
 - 可选的森空岛扫码或凭证导入授权、状态同步、网站账号和云端工作区
@@ -137,7 +138,7 @@ cp .env.example .env.local
 
 ## 文档索引
 
-- 使用与数据：[键盘和移动端操作](./docs/keyboard-shortcuts.md)、[预计日产物计算逻辑](./docs/计算逻辑.md)、[森空岛数据能力矩阵](./docs/SKLAND_DATA_CAPABILITIES.md)
+- 使用与数据：[键盘和移动端操作](./docs/keyboard-shortcuts.md)、[专精规划](./docs/MASTERY_PLANNER.md)、[预计日产物计算逻辑](./docs/计算逻辑.md)、[森空岛数据能力矩阵](./docs/SKLAND_DATA_CAPABILITIES.md)
 - 求解器与协议：[Frontend Serve Guide](./docs/FRONTEND_SERVE_GUIDE.md)、[`final_efficiency` 接入口径](./docs/TRADE_PRODUCTION_CONTRACT_GAP.md)、[本地求解器目录](./bin/README.md)
 - 部署与仓库管理：[PostgreSQL 部署模板](./deploy/postgres/README.md)、[systemd runtime settings](./deploy/SYSTEMD.md)、[公开仓库管理清单](./docs/REPOSITORY_ADMIN_CHECKLIST.md)
 - 贡献与发布：[参与贡献](./CONTRIBUTING.md)、[公开仓库迁移说明](./MIGRATION.md)、[Changelog](./CHANGELOG.md)、[Contributors](./CONTRIBUTORS.md)

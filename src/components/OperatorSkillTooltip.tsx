@@ -24,6 +24,8 @@ export function OperatorSkillTooltip({
   trigger,
   highlightedSkillIds = [],
   contextLabel,
+  currentElite,
+  currentLevel,
   delay,
   disabled,
 }: {
@@ -31,6 +33,8 @@ export function OperatorSkillTooltip({
   trigger: ReactElement;
   highlightedSkillIds?: readonly string[];
   contextLabel?: string;
+  currentElite?: number | null;
+  currentLevel?: number;
   delay?: number;
   disabled?: boolean;
 }) {
@@ -77,6 +81,11 @@ export function OperatorSkillTooltip({
           locale={locale}
           skill={demoBuildingSkill(sourceSkill.id, locale, sourceSkill) as BuildingSkillPresentation}
           highlighted={highlighted.has(sourceSkill.id)}
+          unlocked={currentElite === undefined
+            ? undefined
+            : currentElite !== null
+              && (sourceSkill.elite < currentElite
+                || (sourceSkill.elite === currentElite && sourceSkill.level <= (currentLevel ?? 1)))}
         />
       ))}
     </TooltipContent>
@@ -99,15 +108,27 @@ export function OperatorSkillTooltip({
   );
 }
 
-function SkillBlock({ skill, locale, highlighted }: { skill: BuildingSkillPresentation; locale: "zh" | "en"; highlighted: boolean }) {
+function SkillBlock({ skill, locale, highlighted, unlocked }: { skill: BuildingSkillPresentation; locale: "zh" | "en"; highlighted: boolean; unlocked?: boolean }) {
   return (
-    <div className={cn("min-w-0", highlighted && "border-l-2 border-[#FFD501] pl-2")}>
+    <div className={cn("min-w-0", highlighted && "border-l-2 border-[#FFD501] pl-2", unlocked === false && "grayscale opacity-70")} data-skill-unlocked={unlocked === undefined ? undefined : String(unlocked)}>
       <span className="flex flex-wrap items-center gap-1.5 font-semibold">
         <img src={skill.icon} alt="" aria-hidden="true" className="size-7 shrink-0 object-contain" />
         <span>{skill.name}</span>
         {highlighted ? (
           <span className="rounded-sm bg-[#FFD501] px-1.5 py-0.5 text-[10px] font-bold text-[#202223]">
             {locale === "en" ? "THIS TARGET" : "本次目标"}
+          </span>
+        ) : null}
+        {unlocked !== undefined ? (
+          <span className={cn(
+            "rounded-sm border px-1.5 py-0.5 text-[10px] font-bold",
+            unlocked
+              ? "border-emerald-400/35 bg-emerald-400/15 text-emerald-200"
+              : "border-background/20 bg-background/10 text-background/65",
+          )}>
+            {unlocked
+              ? (locale === "en" ? "UNLOCKED" : "已解锁")
+              : (locale === "en" ? "LOCKED" : "未解锁")}
           </span>
         ) : null}
       </span>

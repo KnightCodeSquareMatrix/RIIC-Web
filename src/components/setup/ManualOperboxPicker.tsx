@@ -8,13 +8,11 @@ import {
   useRef,
   useState,
 } from "react";
-import { Check, RotateCcw, Search } from "lucide-react";
+import { Check, RotateCcw } from "lucide-react";
 
 import fullOperboxJson from "../../../fixtures/operbox_full_e2.json" with { type: "json" };
 import operatorCatalogJson from "../../generated/arkntools/operator-catalog.json" with { type: "json" };
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { LoadMore } from "@/components/ui/load-more";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SetupActionButton } from "@/components/setup/SetupActionButton";
 import { demoOperatorName, useLanguageDemo, type DemoLocale } from "@/language-demo";
@@ -25,12 +23,10 @@ import {
   maxEliteForRarity,
   type ManualOperboxStage,
 } from "@/manual-operbox";
-import { PROFESSION_LABELS, PROFESSION_LABELS_ENGLISH } from "@/operator-presentation";
+import { OperatorSearch, OperatorRarityFilter, OperatorProfessionFilter, OperatorRosterGrid, OPERATOR_PAGE_SIZE } from "@/components/operators/OperatorPickerParts";
 import type { OperBoxEntry } from "@/types";
 
-const PAGE_SIZE = 48;
-const RARITIES = [6, 5, 4, 3, 2, 1] as const;
-const PROFESSIONS = [8, 1, 3, 2, 6, 4, 5, 7] as const;
+const PAGE_SIZE = OPERATOR_PAGE_SIZE;
 
 type CatalogOperator = {
   id: string;
@@ -309,36 +305,7 @@ export function ManualOperboxPicker({
     resetListView();
   }
 
-  const rarityTabs = (
-    <Tabs
-      className="min-w-0 shrink-0"
-      value={rarity}
-      onValueChange={(value) => {
-        setRarity(value);
-        resetListView();
-      }}
-    >
-      <TabsList
-        aria-label={en ? "Filter by rarity" : "星级筛选"}
-        className="max-w-full justify-start overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-      >
-        <TabsTrigger value="all" disabled={applyDisabled}>
-          {en ? "All" : "全部"}
-        </TabsTrigger>
-        {RARITIES.map((value) => (
-          <TabsTrigger
-            key={value}
-            value={String(value)}
-            className="font-number"
-            aria-label={en ? `${value}-star operators` : `${value} 星干员`}
-            disabled={applyDisabled}
-          >
-            {value}★
-          </TabsTrigger>
-        ))}
-      </TabsList>
-    </Tabs>
-  );
+  const rarityTabs = <OperatorRarityFilter value={rarity} disabled={applyDisabled} onChange={(value) => { setRarity(value); resetListView(); }} />;
 
   const rosterScopeTabs = hasScheduledOperators ? (
     <Tabs
@@ -387,27 +354,7 @@ export function ManualOperboxPicker({
     </Tabs>
   ) : null;
 
-  const professionTabs = showProfessionFilter ? (
-    <Tabs
-      className="min-w-0 shrink-0"
-      value={profession}
-      onValueChange={(value) => {
-        setProfession(value);
-        resetListView();
-      }}
-    >
-      <TabsList aria-label={en ? "Filter by profession" : "职业筛选"}>
-        <TabsTrigger value="all" disabled={applyDisabled}>
-          {en ? "All" : "全部"}
-        </TabsTrigger>
-        {PROFESSIONS.map((value) => (
-          <TabsTrigger key={value} value={String(value)} disabled={applyDisabled}>
-            {en ? PROFESSION_LABELS_ENGLISH[value] : PROFESSION_LABELS[value]}
-          </TabsTrigger>
-        ))}
-      </TabsList>
-    </Tabs>
-  ) : null;
+  const professionTabs = showProfessionFilter ? <OperatorProfessionFilter value={profession} disabled={applyDisabled} onChange={(value) => { setProfession(value); resetListView(); }} /> : null;
 
   const resolvedDescription = description === undefined
     ? (en
@@ -453,19 +400,7 @@ export function ManualOperboxPicker({
       ) : null}
 
       <div className={cn("grid gap-2", compact ? "lg:grid-cols-[minmax(14rem,1fr)_auto]" : "sm:grid-cols-[minmax(0,1fr)_auto]")}>
-        <label className="relative min-w-0">
-          <Search className={cn("pointer-events-none absolute left-3 size-4 text-muted-foreground", compact ? "top-2.5 max-sm:top-3.5" : "top-3.5")} aria-hidden="true" />
-          <Input
-            value={query}
-            onChange={(event) => {
-              setQuery(event.target.value);
-              resetListView();
-            }}
-            className={cn("pl-9", compact ? "h-9 max-sm:h-11" : "h-11")}
-            placeholder={en ? "Search operator" : "搜索干员"}
-            aria-label={en ? "Search operator" : "搜索干员"}
-          />
-        </label>
+        <OperatorSearch value={query} compact={compact} onChange={(value) => { setQuery(value); resetListView(); }} />
         <div className={cn("flex flex-nowrap items-center", compact ? "gap-1.5" : "gap-2")} data-manual-operbox-actions>
           <SetupActionButton
             type="button"
@@ -558,7 +493,7 @@ export function ManualOperboxPicker({
 
       {filteredOperators.length ? (
         <>
-          <div className={cn("grid md:grid-cols-2", compact ? "gap-2" : "gap-3")}>
+          <OperatorRosterGrid compact={compact} hasMore={visibleLimit < filteredOperators.length} onLoadMore={() => setVisibleLimit((current) => current + PAGE_SIZE)}>
             {filteredOperators.slice(0, visibleLimit).map((operator) => (
               <ManualOperatorCard
                 key={operator.id}
@@ -570,27 +505,7 @@ export function ManualOperboxPicker({
                 onStageChange={handleStageChange}
               />
             ))}
-          </div>
-          <LoadMore
-            auto={false}
-            className={compact ? "min-h-9" : undefined}
-            hasMore={visibleLimit < filteredOperators.length}
-            onLoad={() => {
-              setVisibleLimit((current) => current + PAGE_SIZE);
-              return true;
-            }}
-            labels={en ? {
-              idle: "Show more operators",
-              loading: "Loading",
-              error: "Failed, try again",
-              end: "All matching operators shown",
-            } : {
-              idle: "显示更多干员",
-              loading: "正在加载",
-              error: "加载失败，点击重试",
-              end: "已显示全部符合条件的干员",
-            }}
-          />
+          </OperatorRosterGrid>
           {!compact ? (
             <div className="flex justify-end">
               <SetupActionButton
