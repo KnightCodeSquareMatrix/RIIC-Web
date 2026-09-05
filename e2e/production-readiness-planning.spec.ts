@@ -211,7 +211,7 @@ test("operator skill terms reveal square hover cards on pointer and keyboard foc
   await operatorPortrait.hover({ position: { x: 8, y: Math.max(8, (portraitBox?.height ?? 80) / 2) } });
   const skillTooltip = page.locator('[data-slot="tooltip-content"][data-open]');
   await expect(skillTooltip).toBeVisible({ timeout: 10_000 });
-  await expect(skillTooltip.locator('[data-skill-unlocked="false"]')).toHaveCSS("opacity", "0.4");
+  await expect(skillTooltip.locator('[data-skill-unlocked="false"]')).toHaveCSS("opacity", "0.7");
   await expect(skillTooltip.locator('[data-skill-unlocked="false"]')).toHaveCSS("filter", "grayscale(1)");
   const termTrigger = skillTooltip.locator(".riic-term-hover > .riic-term").first();
   const termCard = skillTooltip.locator(".riic-term-hover-card").first();

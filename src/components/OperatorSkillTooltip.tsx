@@ -123,7 +123,7 @@ function SkillBlock({
     <div className={cn(
       "min-w-0 transition-[filter,opacity] duration-200 motion-reduce:transition-none",
       highlighted && "border-l-2 border-[#FFD501] pl-2",
-      unlocked === false && "grayscale opacity-40",
+      unlocked === false && "grayscale opacity-70",
     )} data-skill-unlocked={unlocked === undefined ? undefined : String(unlocked)}>
       <span className="flex flex-wrap items-center gap-1.5 font-semibold">
         <img src={skill.icon} alt="" aria-hidden="true" className="size-7 shrink-0 object-contain" />
