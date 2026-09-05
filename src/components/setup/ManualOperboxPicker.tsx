@@ -22,6 +22,7 @@ import { demoOperatorName, useLanguageDemo, type DemoLocale } from "@/language-d
 import { cn } from "@/lib/utils";
 import {
   buildManualOperbox,
+  manualLevelFor,
   manualStageForEntry,
   maxEliteForRarity,
   type ManualOperboxStage,
@@ -121,6 +122,8 @@ const ManualOperatorCard = memo(function ManualOperatorCard({
   const en = locale === "en";
   const displayName = demoOperatorName(operator.name, locale);
   const maxElite = maxEliteForRarity(operator.rarity);
+  const selectedElite = stage === "none" ? null : stage === "e2" ? 2 : stage === "e1" ? 1 : 0;
+  const selectedLevel = selectedElite === null ? undefined : manualLevelFor(operator.rarity, selectedElite);
   const identity = (
     <button
       type="button"
@@ -173,7 +176,16 @@ const ManualOperatorCard = memo(function ManualOperatorCard({
         ? "grid grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-x-2 gap-y-2 p-2 [contain-intrinsic-size:4.5rem] sm:grid-cols-[2.5rem_minmax(6.5rem,0.72fr)_minmax(13rem,1.28fr)]"
         : "grid gap-3 p-3 [contain-intrinsic-size:8.5rem]",
     )}>
-      <OperatorSkillTooltip name={operator.name} trigger={identity} delay={400} />
+      <OperatorSkillTooltip
+        name={operator.name}
+        trigger={identity}
+        contextLabel={selectedElite === null
+          ? (en ? "Current selection: Unowned" : "当前选择：未拥有")
+          : (en ? `Current selection: E${selectedElite} Lv.${selectedLevel}` : `当前选择：精${selectedElite} Lv.${selectedLevel}`)}
+        currentElite={selectedElite}
+        currentLevel={selectedLevel}
+        delay={400}
+      />
 
       <div
         role="radiogroup"

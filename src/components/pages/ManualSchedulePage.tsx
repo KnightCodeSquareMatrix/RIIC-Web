@@ -139,6 +139,12 @@ export function ManualSchedulePage({
   ), [operbox]);
   const canPersistDraft = ownedOperators.length > 0;
   const ownedFingerprint = ownedOperators.map((operator) => operator.name).join("\0");
+  const eliteByOperator = useMemo(() => new Map(
+    ownedOperators.map((operator) => [operator.name, operator.elite]),
+  ), [ownedOperators]);
+  const levelByOperator = useMemo(() => new Map(
+    ownedOperators.map((operator) => [operator.name, operator.level]),
+  ), [ownedOperators]);
 
   useEffect(() => {
     if (restored) return;
@@ -344,6 +350,8 @@ export function ManualSchedulePage({
         rows={rows}
         layout={layout}
         planRevision={`manual-${activeShift}`}
+        eliteByOperator={eliteByOperator}
+        levelByOperator={levelByOperator}
         activeShift={activeShift}
         activePlan={activePlan}
         searchQuery={scheduleQuery}
