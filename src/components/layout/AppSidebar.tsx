@@ -2,6 +2,7 @@
 
 import {
   Calculator,
+  BookOpen,
   CircleHelp,
   Cloud,
   GraduationCap,
@@ -81,6 +82,7 @@ export function AppSidebar({ page, onPageChange }: AppSidebarProps) {
     calculator: "Infrastructure Calculator",
     manual: "Manual Scheduling",
     training: "Training Advice",
+    mastery: "Mastery Planner",
     skills: "Skill Search",
     skland: "Skland Status",
     account: "Account",
@@ -89,6 +91,7 @@ export function AppSidebar({ page, onPageChange }: AppSidebarProps) {
     calculator: "基建计算器",
     manual: "手动排班",
     training: "练卡建议",
+    mastery: "专精规划",
     skills: "技能查询",
     skland: "森空岛状态中心",
     account: "账号管理",
@@ -105,6 +108,7 @@ export function AppSidebar({ page, onPageChange }: AppSidebarProps) {
             <AppNavigationItem page={page} target="calculator" label={labels.calculator} icon={Calculator} onPageChange={onPageChange} />
             <AppNavigationItem page={page} target="manual" label={labels.manual} icon={SquarePen} onPageChange={onPageChange} />
             <AppNavigationItem page={page} target="training" label={labels.training} icon={GraduationCap} onPageChange={onPageChange} />
+            <AppNavigationItem page={page} target="mastery" label={labels.mastery} icon={BookOpen} onPageChange={onPageChange} />
             <AppNavigationItem page={page} target="skill-query" label={labels.skills} icon={Search} onPageChange={onPageChange} />
             {CLIENT_SKLAND_ENABLED ? (
               <AppNavigationItem page={page} target="skland" label={labels.skland} icon={Cloud} onPageChange={onPageChange} />
