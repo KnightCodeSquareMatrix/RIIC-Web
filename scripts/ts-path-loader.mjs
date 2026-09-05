@@ -18,7 +18,7 @@ export async function resolve(specifier, context, nextResolve) {
   let target;
   if (specifier.startsWith("@/")) {
     target = path.join(cwd(), "src", specifier.slice(2));
-  } else if (specifier.startsWith("./") || specifier.startsWith("../")) {
+  } else if (specifier === "." || specifier === ".." || specifier.startsWith("./") || specifier.startsWith("../")) {
     const parent = context.parentURL ? fileURLToPath(context.parentURL) : cwd();
     target = path.resolve(path.dirname(parent), specifier);
   } else {
