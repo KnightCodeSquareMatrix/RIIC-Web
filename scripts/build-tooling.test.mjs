@@ -160,7 +160,7 @@ test("CI enforces route and document preload JavaScript budgets after building",
   assert.match(budgetCheck, /MAX_SECONDARY_ROUTE_INITIAL_JS_BYTES = 1_582_000/);
   assert.match(budgetCheck, /MAX_MANUAL_ROUTE_INITIAL_JS_BYTES = 1_602_000/);
   assert.match(budgetCheck, /MAX_DOCUMENT_INITIAL_JS_FILES = 18/);
-  assert.match(budgetCheck, /WORKBENCH_ROUTES = \["\/", "\/manual", "\/training", "\/skills", "\/skland", "\/account"\]/);
+  assert.match(budgetCheck, /WORKBENCH_ROUTES = \["\/", "\/manual", "\/training", "\/mastery", "\/skills", "\/skland", "\/account"\]/);
   assert.match(budgetCheck, /firstLoadUncompressedJsBytes/);
   assert.match(budgetCheck, /\.next\/server\/app\/index\.html/);
   assert.match(budgetCheck, /gzipSync/);
@@ -377,6 +377,18 @@ test("asset synchronization isolates untrusted generation from repository write 
   assert.match(publish, /git restore --source "refs\/remotes\/origin\/\$SOURCE_BRANCH" --staged --worktree --/);
   assert.match(publish, /git restore --source[^\n]+[\s\S]+fixtures\/operbox_full_e2\.json/);
   assert.doesNotMatch(publish, /npm (?:ci|run)|node scripts\//);
+});
+
+test("mastery generated data follows every managed-resource publication and parity gate", async () => {
+  const workflow = await readRepoFile(".github/workflows/sync-arkntools-assets.yml");
+  assert.match(workflow, /npm run assets:mastery -- \.tmp\/arknights-game-resource\/gamedata\/excel\/character_table\.json/);
+  const guards = workflow.match(/public\/images\/operator-portraits\/\*\|[^\n]+;;/g) ?? [];
+  assert.equal(guards.length, 4);
+  for (const guard of guards) assert.match(guard, /\|src\/generated\/mastery-data\.json\) ;;/);
+  const regularFileChecks = workflow.match(/git ls-files -s --[^\n]+/g) ?? [];
+  assert.equal(regularFileChecks.length, 3);
+  for (const check of regularFileChecks) assert.ok(check.includes("src/generated/mastery-data.json"));
+  assert.match(workflow, /git restore --source[^\n]+[\s\S]*?src\/generated\/arkntools \\\n\s+src\/generated\/mastery-data\.json/);
 });
 
 test("CI browser jobs use the matching pinned Playwright image without runtime apt installs", async () => {

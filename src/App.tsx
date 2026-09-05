@@ -141,7 +141,7 @@ const ManualDraftReplaceDialog = lazy(() => import("@/components/ManualDraftRepl
 type ProductChange =
   | { type: "factory"; roomId: string; recipe: FactoryRecipe }
   | { type: "trade"; roomId: string; order: TradeOrder };
-type WebsiteAuthIntent = "account" | "manual" | "manual-edit" | "run" | "setup" | "skland" | "upgrade";
+type WebsiteAuthIntent = "account" | "manual" | "manual-edit" | "run" | "setup" | "skland" | "upgrade" | "mastery";
 
 type SklandFullRestoreResult =
   | { session: SklandSessionData; error?: never }
@@ -242,6 +242,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   const planClickAtRef = useRef<number | null>(null);
   const websiteAuthReturnFocusRef = useRef<HTMLElement | null>(null);
   const websiteAuthIntentRef = useRef<WebsiteAuthIntent | null>(null);
+  const [masteryPickerRequested, setMasteryPickerRequested] = useState(false);
   const websiteIntentContinuationRef = useRef<(intent: WebsiteAuthIntent) => void>(() => undefined);
   const websiteAuthFocusReturnTimerRef = useRef<number | null>(null);
   const [websiteAuthReloadKey, setWebsiteAuthReloadKey] = useState(0);
@@ -1553,6 +1554,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   async function handleWebsiteSessionChanged(authenticated: boolean) {
     beginSklandStateChange();
     if (!authenticated) {
+      setMasteryPickerRequested(false);
       websiteAuthIntentRef.current = null;
       websiteAuthReturnFocusRef.current = null;
       setWebsiteAuthDialogOpen(false);
@@ -1647,6 +1649,11 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     }
     if (intent === "manual") {
       router.push(workbenchHref("manual"));
+      return;
+    }
+    if (intent === "mastery") {
+      setMasteryPickerRequested(true);
+      router.push(workbenchHref("mastery"));
       return;
     }
     router.push(workbenchHref(intent === "skland" ? "skland" : "account"));
@@ -1952,6 +1959,17 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       trainingAdvice: accountCanUseCurrentBox ? result?.trainingAdvice ?? null : null,
       requiresAccount: !accountCanUseCurrentBox,
       onOpenCalculator: () => navigateToPage("calculator"),
+    },
+    mastery: {
+      operbox: accountCanUseCurrentBox ? operbox : null,
+      sourceName: accountCanUseCurrentBox ? fileName : null,
+      requiresAccount: !websiteSession && !(boxSource === "sample" && hasBox),
+      pending: websiteSessionPending || !hasRestoredSession,
+      identityKey: `${websiteUserId ?? "anonymous"}:${sklandActiveAccountId ?? "local"}`,
+      onOpenSetup: () => { if (!websiteSession) requestWebsiteAccount("setup"); else handleProtectedSetup(); },
+      onRequestAccount: () => requestWebsiteAccount("mastery"),
+      pickerRequested: masteryPickerRequested,
+      onPickerRequestConsumed: () => setMasteryPickerRequested(false),
     },
     account: {
       authenticated: Boolean(websiteSession),
