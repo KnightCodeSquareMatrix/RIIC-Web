@@ -22,7 +22,14 @@ async function openPicker(page: Page, mode: "manual" | "upgrade", mobile: boolea
   await seedV4Session(page, planData, { operbox: ownedBox, boxSource: "maa" });
   await gotoStable(page, "/");
   if (mode === "upgrade") {
-    await page.getByRole("button", { name: "调整练度", exact: true }).click();
+    if (mobile) {
+      await page.getByRole("button", { name: "调整方案", exact: true }).click();
+      await page.getByRole("dialog", { name: "调整当前方案" })
+        .getByRole("button", { name: /修改练度并重新计算/ })
+        .click();
+    } else {
+      await page.getByRole("button", { name: "修改练度并重算", exact: true }).click();
+    }
   } else {
     if (mobile) await page.locator("[data-calculator-more-tools] summary").click();
     await page.getByRole("button", { name: "配置Box与布局", exact: true }).filter({ visible: true }).click();
@@ -36,21 +43,23 @@ async function openPicker(page: Page, mode: "manual" | "upgrade", mobile: boolea
 }
 
 async function chooseRarity(picker: Locator, rarity: number | "all") {
-  const button = picker.getByRole("button", { name: rarity === "all" ? "全部" : `${rarity} 星干员`, exact: true });
-  await button.click();
-  await expect(button).toHaveAttribute("aria-pressed", "true");
+  const tab = picker.getByRole("tablist", { name: "星级筛选", exact: true })
+    .getByRole("tab", { name: rarity === "all" ? "全部" : `${rarity} 星干员`, exact: true });
+  await tab.click();
+  await expect(tab).toHaveAttribute("aria-selected", "true");
 }
 
 async function assertFilterGeometry(picker: Locator) {
-  const filter = picker.getByRole("group", { name: "星级筛选", exact: true });
+  const filter = picker.getByRole("tablist", { name: "星级筛选", exact: true });
   await filter.scrollIntoViewIfNeeded();
   const geometry = await filter.evaluate((element) => {
     const row = element.closest<HTMLElement>("[data-manual-operbox-rarity-filter]");
     const label = row?.querySelector<HTMLElement>(":scope > div:first-child");
     return {
+      viewportWidth: window.innerWidth,
       labelCenter: label ? label.getBoundingClientRect().top + label.getBoundingClientRect().height / 2 : null,
-      options: Array.from(element.querySelectorAll("button")).map((button) => {
-        const rect = button.getBoundingClientRect();
+      options: Array.from(element.querySelectorAll('[role="tab"]')).map((tab) => {
+        const rect = tab.getBoundingClientRect();
         return { width: rect.width, height: rect.height, top: rect.top, center: rect.top + rect.height / 2 };
       }),
     };
@@ -59,10 +68,22 @@ async function assertFilterGeometry(picker: Locator) {
   expect(new Set(geometry.options.map((button) => Math.round(button.top))).size).toBe(1);
   expect(geometry.labelCenter).not.toBeNull();
   expect(geometry.options[0]?.center).toBeCloseTo(geometry.labelCenter ?? 0, 0);
-  for (const button of geometry.options) {
-    expect(button.width).toBeGreaterThanOrEqual(44);
-    expect(button.height).toBeGreaterThanOrEqual(44);
+  for (const tab of geometry.options) {
+    expect(tab.width).toBeGreaterThanOrEqual(geometry.viewportWidth < 640 ? 44 : 28);
+    expect(tab.height).toBeGreaterThanOrEqual(geometry.viewportWidth < 640 ? 44 : 24);
   }
+}
+
+async function assertUpgradeFilterBar(picker: Locator) {
+  const filterBar = picker.locator("[data-upgrade-operbox-filters]");
+  const geometry = await filterBar.getByRole("tablist").evaluateAll((tablists) => tablists.map((tablist) => ({
+    label: tablist.getAttribute("aria-label"),
+    top: Math.round(tablist.getBoundingClientRect().top),
+  })));
+  expect(geometry.map(({ label }) => label)).toEqual(["干员列表范围", "排班班次", "星级筛选", "职业筛选"]);
+  expect(geometry[0]?.top).toBe(geometry[1]?.top);
+  expect(geometry[2]?.top).toBe(geometry[3]?.top);
+  expect(geometry[2]?.top).toBeGreaterThan(geometry[0]?.top ?? 0);
 }
 
 for (const mobile of [false, true]) {
@@ -73,6 +94,15 @@ for (const mobile of [false, true]) {
     test("manual Box combines rarity, search and ownership without losing hidden selections", async ({ page }, testInfo) => {
       test.slow();
       const picker = await openPicker(page, "manual", mobile);
+      await expect(picker).not.toContainText("持有与精英阶段会同步用于排班和调整练度。");
+      const professionFilter = picker.getByRole("tablist", { name: "职业筛选", exact: true });
+      await professionFilter.getByRole("tab", { name: "术师", exact: true }).click();
+      await picker.getByRole("textbox", { name: "搜索干员" }).fill("阿米娅");
+      await expect(picker.getByRole("heading", { name: "阿米娅", exact: true })).toBeVisible();
+      await professionFilter.getByRole("tab", { name: "近卫", exact: true }).click();
+      await expect(picker.getByText("没有符合条件的干员。", { exact: true })).toBeVisible();
+      await professionFilter.getByRole("tab", { name: "全部", exact: true }).click();
+      await picker.getByRole("textbox", { name: "搜索干员" }).fill("");
       for (const rarity of [1, 2, 3, 4, 5, 6]) {
         await chooseRarity(picker, rarity);
         const count = Math.min(48, roster.filter((operator) => operator.rarity === rarity).length);
@@ -109,6 +139,13 @@ for (const mobile of [false, true]) {
     test("upgrade simulation combines rarity and schedule scope and submits the complete Box", async ({ page }, testInfo) => {
       test.slow();
       const picker = await openPicker(page, "upgrade", mobile);
+      await assertUpgradeFilterBar(picker);
+      const professionFilter = picker.getByRole("tablist", { name: "职业筛选", exact: true });
+      await professionFilter.getByRole("tab", { name: "术师", exact: true }).click();
+      await expect(picker.getByRole("heading", { name: "阿米娅", exact: true })).toBeVisible();
+      await professionFilter.getByRole("tab", { name: "近卫", exact: true }).click();
+      await expect(picker.getByText("没有符合条件的干员。", { exact: true })).toBeVisible();
+      await professionFilter.getByRole("tab", { name: "全部", exact: true }).click();
       await chooseRarity(picker, 6);
       await expect(picker.getByText("没有符合条件的干员。", { exact: true })).toBeVisible();
       await picker.getByRole("tab", { name: /未进排班/ }).click();
@@ -123,14 +160,14 @@ for (const mobile of [false, true]) {
       await picker.getByRole("textbox", { name: "搜索干员" }).fill("银灰");
       await expect(picker.getByText("没有符合条件的干员。", { exact: true })).toBeVisible();
       await picker.getByRole("textbox", { name: "搜索干员" }).fill("");
-      await picker.getByRole("button", { name: /^第一班/ }).click();
+      await picker.getByRole("tab", { name: /^第一班/ }).click();
       await expect(picker.locator("article")).toHaveCount(1);
-      await expect(picker.getByRole("button", { name: /^第一班/ })).toHaveAttribute("data-manual-operbox-filter-option", "");
+      await expect(picker.getByRole("tab", { name: /^第一班/ })).toHaveAttribute("data-slot", "tabs-trigger");
       await chooseRarity(picker, 6);
-      await expect(picker.getByRole("button", { name: "6 星干员", exact: true })).toHaveAttribute("data-manual-operbox-filter-option", "");
+      await expect(picker.getByRole("tab", { name: "6 星干员", exact: true })).toHaveAttribute("data-slot", "tabs-trigger");
       await expect(picker.getByText("没有符合条件的干员。", { exact: true })).toBeVisible();
       await chooseRarity(picker, 5);
-      await expect(picker.getByRole("button", { name: /^第一班/ })).toHaveAttribute("aria-pressed", "true");
+      await expect(picker.getByRole("tab", { name: /^第一班/ })).toHaveAttribute("aria-selected", "true");
       await assertFilterGeometry(picker);
       await page.screenshot({ path: testInfo.outputPath(`upgrade-rarity-${device}.png`) });
 
@@ -142,12 +179,12 @@ for (const mobile of [false, true]) {
         await pending;
         await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ success: true, data: planData, requestId }) });
       });
-      await picker.getByRole("button", { name: "按调整重新试算", exact: true }).first().click();
+      await picker.getByRole("button", { name: "保存练度并重新计算", exact: true }).first().click();
       try {
         await expect.poll(() => submitted.length).toBe(roster.length);
         expect(submitted.filter((operator) => operator.own).map((operator) => [operator.name, operator.elite])).toEqual([["银灰", 2], ["阿米娅", 1]]);
-        for (const button of await picker.getByRole("group", { name: "星级筛选", exact: true }).getByRole("button").all()) {
-          await expect(button).toBeDisabled();
+        for (const tab of await picker.getByRole("tablist", { name: "星级筛选", exact: true }).getByRole("tab").all()) {
+          await expect(tab).toBeDisabled();
         }
       } finally {
         releasePlan();
@@ -168,24 +205,25 @@ for (const mode of ["manual", "upgrade"] as const) {
     await page.addInitScript(() => localStorage.setItem("infra-demo-locale", "en"));
     await gotoStable(page, "/");
     if (mode === "upgrade") {
-      await page.getByRole("button", { name: "Adjust progression", exact: true }).click();
+      await page.getByRole("button", { name: "Modify progression & recalculate", exact: true }).click();
     } else {
       await page.getByRole("button", { name: "Configure BOX and base", exact: true }).filter({ visible: true }).click();
       await page.getByRole("button", { name: "Change", exact: true }).click();
       await page.getByRole("tab", { name: "Manual", exact: true }).click();
     }
     const picker = page.locator("[data-manual-operbox-picker]");
-    const filter = picker.getByRole("group", { name: "Filter by rarity", exact: true });
-    const all = filter.getByRole("button", { name: "All", exact: true });
+    const filter = picker.getByRole("tablist", { name: "Filter by rarity", exact: true });
+    const all = filter.getByRole("tab", { name: "All", exact: true });
     await all.focus();
     await all.press("ArrowRight");
-    const sixStar = filter.getByRole("button", { name: "6-star operators", exact: true });
+    const sixStar = filter.getByRole("tab", { name: "6-star operators", exact: true });
     await expect(sixStar).toBeFocused();
     await sixStar.press("Space");
-    await expect(sixStar).toHaveAttribute("aria-pressed", "true");
+    await expect(sixStar).toHaveAttribute("aria-selected", "true");
     if (mode === "upgrade") await expect(picker.getByText("No matching operators.", { exact: true })).toBeVisible();
     else await expect(picker.locator("article")).toHaveCount(48);
-    await sixStar.press("Space");
-    await expect(all).toHaveAttribute("aria-pressed", "true");
+    await sixStar.press("ArrowLeft");
+    await all.press("Space");
+    await expect(all).toHaveAttribute("aria-selected", "true");
   });
 }

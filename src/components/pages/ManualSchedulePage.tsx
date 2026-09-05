@@ -1,10 +1,11 @@
 "use client";
 
-import { Download, HeartPulse, Search, Settings2, Sparkles, X } from "lucide-react";
+import { ArrowLeft, Download, Search, Settings2, Sparkles, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { FactoryRecipe, TradeOrder } from "@/blueprint";
-import { ScheduleBoard } from "@/components";
+import { ScheduleBoard, ShiftTabs } from "@/components";
+import { FiammettaTargetChip } from "@/components/FiammettaTargetChip";
 import { OperatorSkillTooltip } from "@/components/OperatorSkillTooltip";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,7 +17,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { downloadJson } from "@/download";
 import { demoOperatorName, useLanguageDemo } from "@/language-demo";
@@ -45,6 +45,7 @@ export interface ManualSchedulePageProps {
   fiammettaEnabled: boolean;
   initialDraft: ManualScheduleDraft | null;
   onInitialDraftConsumed: () => void;
+  onOpenCalculator: () => void;
   onShiftDurationsChange: (durations: number[]) => void;
   onFiammettaEnabledChange: (enabled: boolean) => void;
   onOpenSetup: () => void;
@@ -61,10 +62,6 @@ type PendingMove = {
   target: Extract<PickerTarget, { kind: "slot" }>;
   conflict: ManualOperatorConflict;
 };
-
-function compactNumber(value: number): string {
-  return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/\.?0+$/, "");
-}
 
 function ManualOperatorChoice({
   operator,
@@ -114,6 +111,7 @@ export function ManualSchedulePage({
   fiammettaEnabled,
   initialDraft,
   onInitialDraftConsumed,
+  onOpenCalculator,
   onShiftDurationsChange,
   onFiammettaEnabledChange,
   onOpenSetup,
@@ -306,6 +304,10 @@ export function ManualSchedulePage({
   }
 
   const fiammettaTarget = draft.shifts[activeShift]?.fiammettaTarget;
+  const fiammettaPortrait = fiammettaTarget ? operatorPortraitFor(fiammettaTarget) : null;
+  const sourceVariantLabel = draft.source?.variant === "progression-adjusted"
+    ? (en ? "Progression-adjusted plan" : "练度调整后方案")
+    : (en ? "Original plan" : "原方案");
   const previousRoomTitle = pendingMove ? rows.find((row) => row.roomId === pendingMove.conflict.roomId)?.title ?? pendingMove.conflict.roomId : "";
   const nextRoomTitle = pendingMove ? rows.find((row) => row.roomId === pendingMove.target.roomId)?.title ?? pendingMove.target.roomId : "";
 
@@ -316,6 +318,11 @@ export function ManualSchedulePage({
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
           <Input value={scheduleQuery} onChange={(event) => setScheduleQuery(event.target.value)} className="pl-9" aria-label={en ? "Search this manual schedule" : "搜索手动排班中的干员或房间"} placeholder={en ? "Search operators or rooms" : "搜索排班中的干员或房间"} />
         </div>
+        {draft.source ? (
+          <Button type="button" variant="ghost" size="sm" onClick={onOpenCalculator}>
+            <ArrowLeft />{en ? "Back to calculation" : "返回计算结果"}
+          </Button>
+        ) : null}
         <Button type="button" variant="outline" size="sm" onClick={onOpenSetup}><Settings2 />{en ? "Configure Box & layout" : "配置 Box 与布局"}</Button>
         <Button type="button" size="sm" onClick={exportMaa}><Download />{en ? "Export MAA" : "导出到 MAA"}</Button>
       </header>
@@ -323,27 +330,15 @@ export function ManualSchedulePage({
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-y border-border/70 bg-muted/25 px-3 py-3">
         <div className="min-w-0">
           <p className="text-sm font-medium">{en ? "Manual draft" : "手动排班草稿"} · <span className="font-number">{layout.template}</span></p>
-          <p className="mt-1 truncate text-xs text-muted-foreground">{sourceName ?? (en ? "Current operator Box" : "当前干员 Box")} · {ownedOperators.length} {en ? "owned" : "名已拥有干员"}</p>
+          <p className="mt-1 truncate text-xs text-muted-foreground" data-manual-draft-source={draft.source?.variant ?? "standalone"}>
+            {draft.source ? (en ? `Based on ${sourceVariantLabel}` : `基于「${sourceVariantLabel}」创建`) : null}
+            {draft.source ? " · " : null}
+            {sourceName ?? (en ? "Current operator Box" : "当前干员 Box")} · {ownedOperators.length} {en ? "owned" : "名已拥有干员"}
+          </p>
         </div>
-        {fiammettaEnabled ? (
-          <Button type="button" variant="outline" size="sm" onClick={() => { setPickerQuery(""); setPicker({ kind: "fiammetta" }); }}>
-            <HeartPulse className="text-[#016E65]" />
-            {fiammettaTarget ? (en ? `Target: ${fiammettaTarget}` : `换心情：${fiammettaTarget}`) : (en ? "Choose morale target" : "选择换心情目标")}
-          </Button>
-        ) : null}
       </div>
 
       {storageWarning ? <p className="mb-3 text-sm text-amber-700" role="status">{storageWarning}</p> : null}
-
-      <div className="mb-4 max-w-full overflow-hidden">
-        <Tabs value={String(activeShift)} onValueChange={(value) => setActiveShift(Number(value))}>
-          <TabsList className="max-w-full justify-start overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" data-manual-shift-tabs>
-            {draft.shifts.map((shift, index) => (
-              <TabsTrigger key={index} value={String(index)}>{en ? `Shift ${index + 1}` : `班次 ${index + 1}`} · <span className="font-number">{compactNumber(shift.durationHours)}h</span></TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-      </div>
 
       <ScheduleBoard
         rows={rows}
@@ -352,6 +347,23 @@ export function ManualSchedulePage({
         activeShift={activeShift}
         activePlan={activePlan}
         searchQuery={scheduleQuery}
+        shiftInfoSlot={(
+          <div className="flex flex-wrap items-center justify-end gap-2 max-sm:w-full max-sm:justify-between" data-shift-actions data-manual-shift-actions>
+            {fiammettaEnabled ? (
+              <FiammettaTargetChip
+                target={fiammettaTarget}
+                portrait={fiammettaPortrait}
+                onClick={() => { setPickerQuery(""); setPicker({ kind: "fiammetta" }); }}
+              />
+            ) : null}
+            <ShiftTabs
+              maaJson={maa}
+              durations={draft.shifts.map((shift) => shift.durationHours)}
+              active={activeShift}
+              onChange={setActiveShift}
+            />
+          </div>
+        )}
         onSlotClick={openSlotPicker}
         onFactoryRecipeChange={onFactoryRecipeChange}
         onTradeOrderChange={onTradeOrderChange}
