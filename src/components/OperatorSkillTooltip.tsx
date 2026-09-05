@@ -10,6 +10,9 @@ import {
   buildingSkillUnlockLabelEnglish,
   buildingSkillUnlockPrefix,
   operatorBuildingSkillList,
+  operatorProfessionFor,
+  operatorProfessionLabelEnglishForCode,
+  operatorProfessionPresentation,
   type BuildingSkillPresentation,
 } from "@/operatorPortraits";
 import { demoBuildingSkill, useLanguageDemo } from "@/language-demo";
@@ -26,6 +29,7 @@ export function OperatorSkillTooltip({
   contextLabel,
   currentElite,
   currentLevel,
+  showProfession = false,
   delay,
   disabled,
 }: {
@@ -35,12 +39,19 @@ export function OperatorSkillTooltip({
   contextLabel?: string;
   currentElite?: number | null;
   currentLevel?: number;
+  /** 在技能列表上方展示干员职业图标与职业名称。 */
+  showProfession?: boolean;
   delay?: number;
   disabled?: boolean;
 }) {
   const { locale } = useLanguageDemo();
   const [open, setOpen] = useState(false);
   const skills = operatorBuildingSkillList(name);
+  const professionCode = showProfession ? operatorProfessionFor(name) : undefined;
+  const profession = showProfession ? operatorProfessionPresentation(name) : undefined;
+  const professionLabel = locale === "en"
+    ? operatorProfessionLabelEnglishForCode(professionCode)
+    : profession?.label;
   useEffect(() => {
     if (disabled) setOpen(false);
   }, [disabled]);
@@ -73,6 +84,17 @@ export function OperatorSkillTooltip({
       {contextLabel ? (
         <span className="border-b border-background/15 pb-1 text-[11px] font-semibold tracking-wide text-background/60">
           {contextLabel}
+        </span>
+      ) : null}
+      {profession && professionLabel ? (
+        <span
+          className="flex w-full items-center gap-2 border-b border-background/15 pb-2"
+          data-operator-profession
+        >
+          <img src={profession.icon} alt="" aria-hidden="true" className="size-7 shrink-0 object-contain" />
+          <span className="text-xs font-semibold text-background/85">
+            {professionLabel}
+          </span>
         </span>
       ) : null}
       {skills.map((sourceSkill) => (
