@@ -1,6 +1,14 @@
 "use client";
 
-import { cloneElement, useEffect, useState, type KeyboardEventHandler, type MouseEventHandler, type ReactElement } from "react";
+import {
+  cloneElement,
+  useEffect,
+  useState,
+  type KeyboardEventHandler,
+  type MouseEventHandler,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { RichTextHoverTerms } from "@/components/RichTextInteractive";
@@ -10,9 +18,6 @@ import {
   buildingSkillUnlockLabelEnglish,
   buildingSkillUnlockPrefix,
   operatorBuildingSkillList,
-  operatorProfessionFor,
-  operatorProfessionLabelEnglishForCode,
-  operatorProfessionPresentation,
   type BuildingSkillPresentation,
 } from "@/operatorPortraits";
 import { demoBuildingSkill, useLanguageDemo } from "@/language-demo";
@@ -29,7 +34,7 @@ export function OperatorSkillTooltip({
   contextLabel,
   currentElite,
   currentLevel,
-  showProfession = false,
+  header,
   delay,
   disabled,
 }: {
@@ -39,19 +44,14 @@ export function OperatorSkillTooltip({
   contextLabel?: string;
   currentElite?: number | null;
   currentLevel?: number;
-  /** 在技能列表上方展示干员职业图标与职业名称。 */
-  showProfession?: boolean;
+  /** 可选的业务上下文头部；具体内容由调用方负责，避免进入所有 Tooltip 消费页面。 */
+  header?: ReactNode;
   delay?: number;
   disabled?: boolean;
 }) {
   const { locale } = useLanguageDemo();
   const [open, setOpen] = useState(false);
   const skills = operatorBuildingSkillList(name);
-  const professionCode = showProfession ? operatorProfessionFor(name) : undefined;
-  const profession = showProfession ? operatorProfessionPresentation(name) : undefined;
-  const professionLabel = locale === "en"
-    ? operatorProfessionLabelEnglishForCode(professionCode)
-    : profession?.label;
   useEffect(() => {
     if (disabled) setOpen(false);
   }, [disabled]);
@@ -86,17 +86,7 @@ export function OperatorSkillTooltip({
           {contextLabel}
         </span>
       ) : null}
-      {profession && professionLabel ? (
-        <span
-          className="flex w-full items-center gap-2 border-b border-background/15 pb-2"
-          data-operator-profession
-        >
-          <img src={profession.icon} alt="" aria-hidden="true" className="size-7 shrink-0 object-contain" />
-          <span className="text-xs font-semibold text-background/85">
-            {professionLabel}
-          </span>
-        </span>
-      ) : null}
+      {header}
       {skills.map((sourceSkill) => (
         <SkillBlock
           key={sourceSkill.id}

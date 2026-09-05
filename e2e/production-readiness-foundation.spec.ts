@@ -1849,7 +1849,7 @@ for (const scenario of [
         .first();
       await combinationMember.hover();
       const profession = page.locator('[data-slot="tooltip-content"][data-open] [data-operator-profession]');
-      await expect(profession).toContainText("职业 · 重装");
+      await expect(profession).toHaveText("重装");
       await expect(profession.locator("img")).toHaveAttribute("src", "/images/profession/重装.webp");
     }
   });
