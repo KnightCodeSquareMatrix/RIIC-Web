@@ -199,7 +199,10 @@ test("operator skill terms reveal square hover cards on pointer and keyboard foc
   await mockApis(page);
   const termPlanData = structuredClone(scheduleVisualPlanData);
   termPlanData.maa.plans[0].rooms.trading[0].operators = [{ name: "陈", skill: 1 }];
-  await seedV4Session(page, termPlanData, { boxSource: "maa" });
+  await seedV4Session(page, termPlanData, {
+    boxSource: "maa",
+    operbox: [{ id: "char_010_chen", name: "陈", elite: 0, level: 1, own: true, potential: 1, rarity: 6 }],
+  });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
 
@@ -208,6 +211,8 @@ test("operator skill terms reveal square hover cards on pointer and keyboard foc
   await operatorPortrait.hover({ position: { x: 8, y: Math.max(8, (portraitBox?.height ?? 80) / 2) } });
   const skillTooltip = page.locator('[data-slot="tooltip-content"][data-open]');
   await expect(skillTooltip).toBeVisible({ timeout: 10_000 });
+  await expect(skillTooltip.locator('[data-skill-unlocked="false"]')).toHaveCSS("opacity", "0.7");
+  await expect(skillTooltip.locator('[data-skill-unlocked="false"]')).toHaveCSS("filter", "grayscale(1)");
   const termTrigger = skillTooltip.locator(".riic-term-hover > .riic-term").first();
   const termCard = skillTooltip.locator(".riic-term-hover-card").first();
 

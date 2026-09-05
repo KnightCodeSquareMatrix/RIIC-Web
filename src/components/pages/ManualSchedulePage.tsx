@@ -100,7 +100,7 @@ function ManualOperatorChoice({
       </span>
     </button>
   );
-  return <OperatorSkillTooltip name={operator.name} trigger={card} delay={1_500} disabled={tooltipDisabled} />;
+  return <OperatorSkillTooltip name={operator.name} trigger={card} delay={300} disabled={tooltipDisabled} />;
 }
 
 export function ManualSchedulePage({
@@ -139,6 +139,12 @@ export function ManualSchedulePage({
   ), [operbox]);
   const canPersistDraft = ownedOperators.length > 0;
   const ownedFingerprint = ownedOperators.map((operator) => operator.name).join("\0");
+  const eliteByOperator = useMemo(() => new Map(
+    ownedOperators.map((operator) => [operator.name, operator.elite]),
+  ), [ownedOperators]);
+  const levelByOperator = useMemo(() => new Map(
+    ownedOperators.map((operator) => [operator.name, operator.level]),
+  ), [ownedOperators]);
 
   useEffect(() => {
     if (restored) return;
@@ -344,6 +350,8 @@ export function ManualSchedulePage({
         rows={rows}
         layout={layout}
         planRevision={`manual-${activeShift}`}
+        eliteByOperator={eliteByOperator}
+        levelByOperator={levelByOperator}
         activeShift={activeShift}
         activePlan={activePlan}
         searchQuery={scheduleQuery}
@@ -380,7 +388,7 @@ export function ManualSchedulePage({
             <Input autoFocus value={pickerQuery} onChange={(event) => setPickerQuery(event.target.value)} className="pl-9" placeholder={en ? "Search operators" : "搜索干员"} aria-label={en ? "Search selectable operators" : "搜索可选干员"} />
           </div>
           <div className="grid max-h-[52svh] grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2" data-manual-operator-picker onScroll={handlePickerScroll}>
-            <TooltipProvider delay={1_500} timeout={0}>
+            <TooltipProvider delay={300} timeout={100}>
               {picker?.kind === "slot" ? (
                 <div className="col-span-full grid grid-cols-2 gap-2">
                   <Button type="button" variant="outline" className="min-w-0 justify-center" onClick={() => chooseOperator(null)}><X />{en ? "Leave empty" : "保持空置"}</Button>

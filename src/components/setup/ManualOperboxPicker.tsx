@@ -16,11 +16,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { LoadMore } from "@/components/ui/load-more";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { OperatorSkillTooltip } from "@/components/OperatorSkillTooltip";
 import { SetupActionButton } from "@/components/setup/SetupActionButton";
 import { demoOperatorName, useLanguageDemo, type DemoLocale } from "@/language-demo";
 import { cn } from "@/lib/utils";
 import {
   buildManualOperbox,
+  manualLevelFor,
   manualStageForEntry,
   maxEliteForRarity,
   type ManualOperboxStage,
@@ -120,6 +122,52 @@ const ManualOperatorCard = memo(function ManualOperatorCard({
   const en = locale === "en";
   const displayName = demoOperatorName(operator.name, locale);
   const maxElite = maxEliteForRarity(operator.rarity);
+  const selectedElite = stage === "none" ? null : stage === "e2" ? 2 : stage === "e1" ? 1 : 0;
+  const selectedLevel = selectedElite === null ? undefined : manualLevelFor(operator.rarity, selectedElite);
+  const identity = (
+    <button
+      type="button"
+      className={cn(
+        "min-w-0 rounded-[4px] text-left outline-none hover:bg-muted/45 focus-visible:ring-2 focus-visible:ring-[#FFD800] focus-visible:ring-offset-2",
+        compact
+          ? "col-span-2 grid grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-2 sm:col-span-2"
+          : "flex items-center gap-3",
+      )}
+      aria-label={en ? `Show ${displayName} infrastructure skills` : `查看${displayName}的基建技能`}
+    >
+      <span className={cn("shrink-0 overflow-hidden border border-border bg-muted", compact ? "size-10" : "size-12 sm:size-14")}>
+        {operator.portrait ? (
+          <img
+            src={operator.portrait}
+            alt={en ? `${displayName} portrait` : `${displayName}头像`}
+            className="size-full object-cover"
+            loading="lazy"
+            decoding="async"
+          />
+        ) : null}
+      </span>
+      <span className="min-w-0">
+        <span className="block truncate text-sm font-semibold">{displayName}</span>
+        <span className={cn("flex min-w-0 flex-wrap items-center gap-1", compact ? "mt-0.5" : "mt-1")}>
+          <span className="font-number text-xs text-muted-foreground">
+            {operator.rarity}★ · {en ? `Up to E${maxElite}` : `最高精${maxElite}`}
+          </span>
+          {scheduledShifts?.map((shift) => (
+            <span
+              key={shift}
+              className={cn(
+                "inline-flex h-4 items-center border px-1 text-[10px] font-semibold leading-none",
+                SHIFT_BADGE_CLASS[(shift - 1) % SHIFT_BADGE_CLASS.length],
+              )}
+              title={shiftLabel(shift, en)}
+            >
+              {shiftLabel(shift, en, true)}
+            </span>
+          ))}
+        </span>
+      </span>
+    </button>
+  );
 
   return (
     <article className={cn(
@@ -128,39 +176,16 @@ const ManualOperatorCard = memo(function ManualOperatorCard({
         ? "grid grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-x-2 gap-y-2 p-2 [contain-intrinsic-size:4.5rem] sm:grid-cols-[2.5rem_minmax(6.5rem,0.72fr)_minmax(13rem,1.28fr)]"
         : "grid gap-3 p-3 [contain-intrinsic-size:8.5rem]",
     )}>
-      <div className={cn("flex min-w-0 items-center", compact ? "contents" : "gap-3")}>
-        <div className={cn("shrink-0 overflow-hidden border border-border bg-muted", compact ? "size-10" : "size-12 sm:size-14")}>
-          {operator.portrait ? (
-            <img
-              src={operator.portrait}
-              alt={en ? `${displayName} portrait` : `${displayName}头像`}
-              className="size-full object-cover"
-              loading="lazy"
-              decoding="async"
-            />
-          ) : null}
-        </div>
-        <div className="min-w-0">
-          <h5 className="truncate text-sm font-semibold">{displayName}</h5>
-          <div className={cn("flex min-w-0 flex-wrap items-center gap-1", compact ? "mt-0.5" : "mt-1")}>
-            <span className="font-number text-xs text-muted-foreground">
-              {operator.rarity}★ · {en ? `Up to E${maxElite}` : `最高精${maxElite}`}
-            </span>
-            {scheduledShifts?.map((shift) => (
-              <span
-                key={shift}
-                className={cn(
-                  "inline-flex h-4 items-center border px-1 text-[10px] font-semibold leading-none",
-                  SHIFT_BADGE_CLASS[(shift - 1) % SHIFT_BADGE_CLASS.length],
-                )}
-                title={shiftLabel(shift, en)}
-              >
-                {shiftLabel(shift, en, true)}
-              </span>
-            ))}
-          </div>
-        </div>
-      </div>
+      <OperatorSkillTooltip
+        name={operator.name}
+        trigger={identity}
+        contextLabel={selectedElite === null
+          ? (en ? "Current selection: Unowned" : "当前选择：未拥有")
+          : (en ? `Current selection: E${selectedElite} Lv.${selectedLevel}` : `当前选择：精${selectedElite} Lv.${selectedLevel}`)}
+        currentElite={selectedElite}
+        currentLevel={selectedLevel}
+        delay={400}
+      />
 
       <div
         role="radiogroup"

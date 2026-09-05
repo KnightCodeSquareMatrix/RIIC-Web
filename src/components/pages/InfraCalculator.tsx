@@ -402,6 +402,13 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     }
     return map;
   }, [operbox]);
+  const levelByOperator = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const entry of operbox ?? []) {
+      if (entry.own) map.set(entry.name, entry.level);
+    }
+    return map;
+  }, [operbox]);
   const [shortcutGuideOpen, setShortcutGuideOpen] = useState(false);
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [planActionsOpen, setPlanActionsOpen] = useState(false);
@@ -652,6 +659,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
               layout={layout}
               planRevision={scheduleResult?.diagnosticId}
               eliteByOperator={eliteByOperator}
+              levelByOperator={levelByOperator}
               activeShift={activeShift}
               shiftDirection={shiftDirection}
               activePlan={activePlan}
