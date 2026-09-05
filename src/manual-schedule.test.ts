@@ -3,14 +3,23 @@ import test from "node:test";
 
 import {
   assignManualOperator,
+  clearManualRoom,
+  clearManualShift,
   createManualScheduleDraft,
   createManualScheduleDraftFromCalculator,
+  layoutFromMaaSchedule,
   loadManualScheduleDraft,
   manualScheduleDraftContentEqual,
+  manualShiftTimeRanges,
   manualScheduleToMaa,
+  normalizeMaaScheduleForManualImport,
+  parseMaaScheduleText,
   reconcileManualScheduleDraft,
   resizeManualScheduleDraft,
+  resizeManualShiftDurations,
   setManualDormAutofill,
+  setManualDroneTarget,
+  updateManualShiftBoundary,
 } from "./manual-schedule.ts";
 import type { BaseBlueprint, OperBoxEntry } from "./types.ts";
 
@@ -37,9 +46,36 @@ test("manual draft defaults to independent 12/6/6 shifts and preserves filled sh
   const assigned = assignManualOperator({
     draft: initial, layout, shiftIndex: 0, roomId: "trade_1", slotIndex: 0, operator: "但书",
   }).draft;
-  const resized = resizeManualScheduleDraft(assigned, [12, 12, 12, 4]);
+  const resized = resizeManualScheduleDraft(assigned, resizeManualShiftDurations([12, 6, 6], 4));
   assert.equal(resized.shifts[0]?.rooms.trade_1?.operators[0], "但书");
-  assert.deepEqual(resized.shifts.map((shift) => shift.durationHours), [12, 12, 12, 4]);
+  assert.deepEqual(resized.shifts.map((shift) => shift.durationHours), [12, 6, 3, 3]);
+});
+
+test("manual shift boundaries use minute precision, stay contiguous and cover one day", () => {
+  const durations = updateManualShiftBoundary("08:15", [12, 6, 6], 0, "19:59");
+  assert.ok(durations);
+  assert.deepEqual(manualShiftTimeRanges("08:15", durations), [
+    { startTime: "08:15", endTime: "19:59", durationMinutes: 705 },
+    { startTime: "20:00", endTime: "02:14", durationMinutes: 375 },
+    { startTime: "02:15", endTime: "08:14", durationMinutes: 360 },
+  ]);
+  assert.equal(updateManualShiftBoundary("08:15", durations, 0, "02:15"), null);
+});
+
+test("legacy manual drafts gain a start time and a 24-hour cycle", () => {
+  const storage = {
+    getItem: () => JSON.stringify({
+      version: 2,
+      activeShift: 0,
+      fiammettaEnabled: false,
+      shifts: [{ durationHours: 9, rooms: {}, fiammettaTarget: null }],
+    }),
+    setItem: () => undefined,
+  };
+  const draft = loadManualScheduleDraft(storage);
+  assert.equal(draft?.version, 3);
+  assert.equal(draft?.startTime, "08:00");
+  assert.equal(draft?.shifts[0]?.durationHours, 24);
 });
 
 test("manual assignment reports a same-shift conflict and moves only after confirmation", () => {
@@ -91,30 +127,58 @@ test("reconcile removes missing rooms and operators no longer owned", () => {
 });
 
 test("dormitories default to autofill and become explicitly empty when cleared", () => {
-  const reconciled = reconcileManualScheduleDraft(createManualScheduleDraft([12]), layout, box);
-  assert.equal(reconciled.version, 2);
+  let reconciled = reconcileManualScheduleDraft(createManualScheduleDraft([12]), layout, box);
+  assert.equal(reconciled.version, 3);
   assert.equal(reconciled.shifts[0]?.rooms.dorm_1?.autofill, true);
   assert.equal(reconciled.shifts[0]?.rooms.dorm_1?.operators.length, 5);
 
-  const cleared = assignManualOperator({
+  reconciled = assignManualOperator({
     draft: reconciled,
     layout,
     shiftIndex: 0,
     roomId: "dorm_1",
     slotIndex: 0,
-    operator: null,
+    operator: "但书",
   }).draft;
+  const autofillDisabled = setManualDormAutofill(reconciled, layout, 0, "dorm_1", false);
+  assert.equal(autofillDisabled.shifts[0]?.rooms.dorm_1?.operators[0], "但书");
+  assert.equal(autofillDisabled.shifts[0]?.rooms.dorm_1?.autofill, false);
+
+  const cleared = clearManualRoom(reconciled, layout, 0, "dorm_1");
+  assert.deepEqual(cleared.shifts[0]?.rooms.dorm_1?.operators, [null, null, null, null, null]);
   assert.equal(cleared.shifts[0]?.rooms.dorm_1?.autofill, false);
 });
 
-test("MAA export keeps arbitrary durations, per-shift Fiammetta targets and dorm autofill", () => {
-  let draft = createManualScheduleDraft([12, 12, 12]);
+test("clearing a shift empties every facility without changing other shifts", () => {
+  let draft = reconcileManualScheduleDraft(createManualScheduleDraft([12, 12]), layout, box);
+  draft = assignManualOperator({ draft, layout, shiftIndex: 0, roomId: "trade_1", slotIndex: 0, operator: "阿米娅" }).draft;
+  draft = assignManualOperator({ draft, layout, shiftIndex: 1, roomId: "trade_1", slotIndex: 0, operator: "阿米娅" }).draft;
+  draft = setManualDroneTarget(draft, layout, 0, "manu_1");
+
+  const cleared = clearManualShift(draft, layout, 0);
+
+  assert.equal(cleared.shifts[0]?.rooms.trade_1?.operators.every((operator) => operator === null), true);
+  assert.equal(cleared.shifts[0]?.rooms.dorm_1?.autofill, false);
+  assert.equal(cleared.shifts[0]?.droneTargetRoomId, null);
+  assert.equal(cleared.shifts[1]?.rooms.trade_1?.operators[0], "阿米娅");
+});
+
+test("MAA export includes contiguous minute periods, per-shift Fiammetta targets and dorm autofill", () => {
+  let draft = createManualScheduleDraft([12, 6, 6], "08:15", "period");
   draft.shifts[0]!.fiammettaTarget = "但书";
   draft = setManualDormAutofill(draft, layout, 0, "dorm_1", true);
+  draft = setManualDroneTarget(draft, layout, 0, "manu_1");
   const maa = manualScheduleToMaa(draft, layout, true);
   assert.equal(maa.planTimes, "3班");
-  assert.deepEqual(maa.plans.map((plan) => plan.duration), [720, 720, 720]);
+  assert.deepEqual(maa.plans.map((plan) => plan.duration), [720, 360, 360]);
+  assert.deepEqual(maa.plans.map((plan) => plan.period), [
+    [["08:15", "20:14"]],
+    [["20:15", "23:59"], ["00:00", "02:14"]],
+    [["02:15", "08:14"]],
+  ]);
   assert.deepEqual(maa.plans[0]?.Fiammetta, { enable: true, target: "但书", order: "pre" });
+  assert.deepEqual(maa.plans[0]?.drones, { enable: true, room: "manufacture", index: 1, rule: "all", order: "pre" });
+  assert.equal(maa.plans[1]?.drones, undefined);
   assert.deepEqual(maa.plans[1]?.Fiammetta, { enable: false, target: "", order: "pre" });
   assert.equal(maa.plans[0]?.rooms.dormitory?.[0]?.autofill, true);
   assert.deepEqual(maa.plans[0]?.rooms.dormitory?.[0]?.operators, []);
@@ -134,6 +198,7 @@ test("calculator results become an editable manual draft with room order, shifts
           name: "班次 1",
           duration: 600,
           Fiammetta: { enable: true, target: ["但书", "巫恋"], order: "pre" },
+          drones: { enable: true, room: "trading", index: 1, order: "pre" },
           rooms: {
             control: [{ operators: [{ name: "菲亚梅塔", skill: 2 }] }],
             trading: [{ operators: ["但书", null, { name: "巫恋" }] }],
@@ -151,11 +216,12 @@ test("calculator results become an editable manual draft with room order, shifts
     ],
   });
 
-  assert.deepEqual(draft.shifts.map((shift) => shift.durationHours), [12, 6]);
+  assert.deepEqual(draft.shifts.map((shift) => shift.durationHours), [12, 12]);
   assert.deepEqual(draft.shifts[0]?.rooms.control?.operators, ["菲亚梅塔", null, null, null, null]);
   assert.deepEqual(draft.shifts[0]?.rooms.trade_1?.operators, ["但书", null, "巫恋"]);
   assert.equal(draft.shifts[0]?.rooms.dorm_1?.autofill, false);
   assert.equal(draft.shifts[0]?.fiammettaTarget, "但书");
+  assert.equal(draft.shifts[0]?.droneTargetRoomId, "trade_1");
   assert.deepEqual(draft.shifts[0]?.rooms.training_room?.operators, ["巫恋", "菲亚梅塔"]);
   assert.deepEqual(draft.shifts[1]?.rooms.manu_1?.operators, ["巫恋", null, null]);
 });
@@ -177,6 +243,12 @@ test("manual draft source survives reconciliation without affecting content equa
 
   assert.equal(reconciled.source?.variant, "progression-adjusted");
   assert.equal(manualScheduleDraftContentEqual(reconciled, sameContent), true);
+  sameContent.startTime = "08:15";
+  assert.equal(manualScheduleDraftContentEqual(reconciled, sameContent), false);
+  sameContent.startTime = reconciled.startTime;
+  sameContent.scheduleMode = "period";
+  assert.equal(manualScheduleDraftContentEqual(reconciled, sameContent), false);
+  sameContent.scheduleMode = reconciled.scheduleMode;
   sameContent.shifts[0]!.durationHours = 10;
   assert.equal(manualScheduleDraftContentEqual(reconciled, sameContent), false);
 });
@@ -202,4 +274,82 @@ test("manual draft loading preserves only valid calculator source metadata", () 
     ...storage,
     getItem: () => JSON.stringify(invalidDraft),
   })?.source, undefined);
+});
+
+test("external MAA schedules import periods, operator groups and operators outside the current Box", () => {
+  const maa = normalizeMaaScheduleForManualImport(parseMaaScheduleText(JSON.stringify({
+    title: "外部排版",
+    plans: [
+      {
+        name: "白班",
+        period: [["08:15", "19:59"]],
+        groups: [{ name: "贸易候选", operators: ["但书", "巫恋"] }],
+        rooms: {
+          trading: [{ operators: ["贸易候选", "巫恋"], use_operator_groups: true }],
+        },
+      },
+      {
+        name: "夜班",
+        period: [["20:00", "23:59"], ["00:00", "08:14"]],
+        rooms: { manufacture: [{ operators: ["未拥有", "巫恋"] }] },
+      },
+    ],
+  })));
+  const imported = reconcileManualScheduleDraft(createManualScheduleDraftFromCalculator({
+    layout,
+    maa,
+    fallbackDurations: [],
+    fiammettaEnabled: false,
+    preferMaaTiming: true,
+    preserveExternalOperators: true,
+  }), layout, box);
+
+  assert.equal(imported.startTime, "08:15");
+  assert.deepEqual(imported.shifts.map((shift) => shift.durationHours), [11.75, 12.25]);
+  assert.deepEqual(imported.shifts[0]?.rooms.trade_1?.operators, ["但书", "巫恋", null]);
+  assert.deepEqual(imported.shifts[1]?.rooms.manu_1?.operators, ["未拥有", "巫恋", null]);
+});
+
+test("timed MAA imports merge midnight ranges and expand reused non-contiguous plans", () => {
+  const normalized = normalizeMaaScheduleForManualImport(parseMaaScheduleText(JSON.stringify({
+    plans: [
+      { name: "A", period: [["18:00", "23:59"], ["00:00", "05:59"], ["12:00", "13:59"]], rooms: { control: [{ operators: ["但书"] }] } },
+      { name: "B", period: [["06:00", "11:59"], ["14:00", "17:59"]], rooms: { control: [{ operators: ["巫恋"] }] } },
+    ],
+  })));
+  assert.equal(normalized.plans.length, 4);
+  assert.deepEqual(normalized.plans.map((plan) => plan.period), [
+    [["18:00", "23:59"], ["00:00", "05:59"]],
+    [["06:00", "11:59"]],
+    [["12:00", "13:59"]],
+    [["14:00", "17:59"]],
+  ]);
+});
+
+test("timed MAA imports reject gaps and overlaps", () => {
+  assert.throws(() => normalizeMaaScheduleForManualImport(parseMaaScheduleText(JSON.stringify({
+    plans: [{ period: [["00:00", "12:00"]], rooms: {} }],
+  }))), /空档/);
+  assert.throws(() => normalizeMaaScheduleForManualImport(parseMaaScheduleText(JSON.stringify({
+    plans: [
+      { period: [["00:00", "12:00"]], rooms: {} },
+      { period: [["12:00", "23:59"]], rooms: {} },
+    ],
+  }))), /重叠/);
+});
+
+test("MAA layout import overrides specified room counts and preserves omitted facilities", () => {
+  const imported = layoutFromMaaSchedule(parseMaaScheduleText(JSON.stringify({
+    plans: [{ rooms: { trading: [{ operators: [] }, { operators: [] }, { operators: [] }] } }],
+  })), layout);
+  assert.equal(imported.rooms.filter((room) => room.kind === "trade_post").length, 3);
+  assert.equal(imported.rooms.filter((room) => room.kind === "factory").length, 1);
+  const importedTrade = imported.rooms.find((room) => room.id === "trade_1");
+  assert.ok(importedTrade?.product && "trade" in importedTrade.product);
+  assert.equal(importedTrade.product.trade.order, "gold");
+});
+
+test("MAA schedule import rejects JSON without valid plans and rooms", () => {
+  assert.throws(() => parseMaaScheduleText("{}"), /plans/);
+  assert.throws(() => parseMaaScheduleText(JSON.stringify({ plans: [{}] })), /rooms/);
 });

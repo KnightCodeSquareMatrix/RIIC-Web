@@ -30,14 +30,25 @@ export function SkillRoomTagBar({ selected, onChange }: SkillRoomTagBarProps) {
     <div aria-label={en ? "Room filters" : "房间筛选"}>
       <div className="mb-1.5 text-xs font-medium text-muted-foreground">{en ? "Facility" : "工作房间"}</div>
       <ToggleGroup
-        value={selected ? [selected] : []}
-        onValueChange={(next) => onChange((next[0] as BuildingRoomPrefix | undefined) ?? null)}
+        value={[selected ?? "all"]}
+        onValueChange={(next) => {
+          const value = next[0];
+          if (!value) return;
+          onChange(value === "all" ? null : value as BuildingRoomPrefix);
+        }}
         variant="outline"
         size="sm"
         spacing={2}
         aria-label={en ? "Facility filters" : "房间筛选"}
         className="w-full flex-wrap"
       >
+        <ToggleGroupItem
+          value="all"
+          aria-label={en ? "Show all facilities" : "显示全部工作房间"}
+          className={SELECTED_TAG_CLASS}
+        >
+          {en ? "All" : "全部"}
+        </ToggleGroupItem>
         {BUILDING_ROOM_PREFIXES.map((prefix) => (
           <ToggleGroupItem
             key={prefix}

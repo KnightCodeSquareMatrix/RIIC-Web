@@ -30,30 +30,35 @@ interface SkillTagBarProps {
 export function SkillTagBar({ tags, selected, onChange }: SkillTagBarProps) {
   const { locale } = useLanguageDemo();
   const en = locale === "en";
-  if (tags.length === 0) return null;
   return (
     <div className="mt-2" aria-label={en ? "Skill tag filters" : "技能标签筛选"}>
       <div className="mb-1.5 text-xs font-medium text-muted-foreground">{en ? "Skill tags" : "技能标签"}</div>
-      <ToggleGroup
-        value={selected ? [selected] : []}
-        onValueChange={(next) => onChange((next[0] as string | undefined) ?? null)}
-        variant="outline"
-        size="sm"
-        spacing={2}
-        aria-label={en ? "Skill tag filters" : "技能标签筛选"}
-        className="w-full flex-wrap"
-      >
-        {tags.map((tag) => (
-          <ToggleGroupItem
-            key={tag}
-            value={tag}
-            aria-label={en ? `Filter ${ENGLISH_SKILL_TAGS[tag] ?? tag}` : `筛选${tag}`}
-            className={SELECTED_TAG_CLASS}
-          >
-            {en ? ENGLISH_SKILL_TAGS[tag] ?? tag : tag}
-          </ToggleGroupItem>
-        ))}
-      </ToggleGroup>
+      {tags.length > 0 ? (
+        <ToggleGroup
+          value={selected ? [selected] : []}
+          onValueChange={(next) => onChange((next[0] as string | undefined) ?? null)}
+          variant="outline"
+          size="sm"
+          spacing={2}
+          aria-label={en ? "Skill tag filters" : "技能标签筛选"}
+          className="w-full flex-wrap"
+        >
+          {tags.map((tag) => (
+            <ToggleGroupItem
+              key={tag}
+              value={tag}
+              aria-label={en ? `Filter ${ENGLISH_SKILL_TAGS[tag] ?? tag}` : `筛选${tag}`}
+              className={SELECTED_TAG_CLASS}
+            >
+              {en ? ENGLISH_SKILL_TAGS[tag] ?? tag : tag}
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+      ) : (
+        <div className="flex h-8 items-center text-xs text-muted-foreground" data-empty-skill-tags>
+          {en ? "No available tags" : "暂无可选标签"}
+        </div>
+      )}
     </div>
   );
 }
