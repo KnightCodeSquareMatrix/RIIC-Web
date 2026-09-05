@@ -1,9 +1,10 @@
 "use client";
 
-import { Download, Ellipsis, FlaskConical, HeartPulse, Keyboard, Loader2, PencilLine, Play, RefreshCw, Search, Settings2, X } from "lucide-react";
+import { ArrowRight, Download, Ellipsis, FlaskConical, HeartPulse, Keyboard, Loader2, PencilLine, Play, RefreshCw, Search, Settings2, SlidersHorizontal, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { ScheduleBoard, ShiftTabs } from "@/components";
+import { FiammettaTargetChip } from "@/components/FiammettaTargetChip";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -20,7 +21,7 @@ import { PlanResultSummarySkeleton } from "@/components/PlanResultSummarySkeleto
 import type { FactoryRecipe, TradeOrder } from "@/blueprint";
 import { loadClientFeature } from "@/client-lazy-loader";
 import { cn } from "@/lib/utils";
-import { demoOperatorName, useLanguageDemo } from "@/language-demo";
+import { useLanguageDemo } from "@/language-demo";
 import type { ShiftDirection } from "@/motion";
 import { onboardingStepStatuses, shouldShowAnonymousSampleTrial } from "@/onboarding";
 import type { RoomRow } from "@/schedule";
@@ -403,6 +404,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
   }, [operbox]);
   const [shortcutGuideOpen, setShortcutGuideOpen] = useState(false);
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
+  const [planActionsOpen, setPlanActionsOpen] = useState(false);
   const [operatorQuery, setOperatorQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [shiftDirection, setShiftDirection] = useState<ShiftDirection>(0);
@@ -425,27 +427,46 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     setShiftDirection(nextShift === activeShift ? 0 : nextShift > activeShift ? 1 : -1);
     onSetActiveShift(nextShift);
   };
-  const renderExportActions = (placement: "desktop" | "mobile") => (
+  const visibleVariantLabel = scheduleVariant === "trial" && upgradeComparison
+    ? (en ? "progression-adjusted plan" : "练度调整后方案")
+    : (en ? "original plan" : "原方案");
+  const openProgressionAction = () => {
+    setPlanActionsOpen(false);
+    onOpenUpgradeSimulation();
+  };
+  const openManualAction = () => {
+    setPlanActionsOpen(false);
+    onEditManualSchedule();
+  };
+  const renderPlanActions = (placement: "desktop" | "mobile") => placement === "desktop" ? (
     <div
-      className={placement === "desktop"
-        ? "hidden items-center gap-2 md:flex"
-        : "flex min-w-0 items-center justify-end gap-2"}
+      className="hidden flex-wrap items-center justify-end gap-2 md:flex"
       data-calculator-export-actions={placement}
+      data-calculator-plan-actions={placement}
     >
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        aria-label={en ? "Edit manually" : "手动修改排班"}
-        onClick={onEditManualSchedule}
-      >
-        <PencilLine />
-        <span className={placement === "mobile" ? "sr-only sm:not-sr-only" : undefined}>
-          {en ? "Edit manually" : "手动修改排班"}
-        </span>
+      {operbox ? (
+        <Button type="button" size="sm" variant="outline" onClick={onOpenUpgradeSimulation}>
+          <FlaskConical />{en ? "Modify progression & recalculate" : "修改练度并重算"}
+        </Button>
+      ) : null}
+      <Button type="button" size="sm" variant="outline" onClick={onEditManualSchedule}>
+        <PencilLine />{en ? "Edit the current plan" : "基于当前方案编辑"}<ArrowRight />
       </Button>
       <Button type="button" size="sm" variant="outline" disabled={!result?.maa} onClick={onDownloadMaa}>
         <Download />{en ? "Export to MAA" : "导出到 MAA"}
+      </Button>
+    </div>
+  ) : (
+    <div
+      className="flex min-w-0 flex-1 items-center justify-end gap-2"
+      data-calculator-export-actions={placement}
+      data-calculator-plan-actions={placement}
+    >
+      <Button type="button" size="sm" variant="outline" className="min-w-0 flex-1" onClick={() => setPlanActionsOpen(true)}>
+        <SlidersHorizontal />{en ? "Adjust plan" : "调整方案"}
+      </Button>
+      <Button type="button" size="sm" variant="outline" disabled={!result?.maa} onClick={onDownloadMaa}>
+        <Download />{en ? "Export MAA" : "导出到 MAA"}
       </Button>
     </div>
   );
@@ -584,19 +605,6 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                   </div>
                 ) : (
                   <div className="flex min-w-0 items-center justify-end gap-2 max-sm:justify-self-end">
-                    {operbox && scheduleResult ? (
-                      <Suspense fallback={<Button type="button" variant="outline" size="sm" className="h-9 min-h-0 max-sm:h-11" disabled><FlaskConical />{en ? "Adjust progression" : "调整练度"}</Button>}>
-                        <UpgradeSimulationDialog
-                          operbox={operbox}
-                          baseline={result ?? scheduleResult}
-                          open={upgradeSimulationOpen}
-                          onOpen={onOpenUpgradeSimulation}
-                          onOpenChange={onUpgradeSimulationOpenChange}
-                          onSimulate={onSimulateUpgrades}
-                          onTrialReady={onUpgradeTrialReady}
-                        />
-                      </Suspense>
-                    ) : null}
                     <RunButton canRun={canRun} hasBox={hasBox} plannerReady={plannerReady} requiresAccount={requiresAccount} runCooldownSeconds={runCooldownSeconds} onRun={onRun} />
                   </div>
                 )}
@@ -656,21 +664,16 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                   onValueChange={(value) => onScheduleVariantChange(value as "baseline" | "trial")}
                 >
                   <TabsList className="grid w-full grid-cols-2 sm:inline-flex sm:w-fit" aria-label={en ? "Schedule variant" : "排班方案切换"}>
-                    <TabsTrigger value="baseline">{en ? "Current plan" : "当前方案"}</TabsTrigger>
-                    <TabsTrigger value="trial">{en ? "Adjusted progression" : "调整练度方案"}</TabsTrigger>
+                    <TabsTrigger value="baseline">{en ? "Original plan" : "原方案"}</TabsTrigger>
+                    <TabsTrigger value="trial">{en ? "Progression adjusted" : "练度调整后"}</TabsTrigger>
                   </TabsList>
                 </Tabs>
               ) : undefined}
-              mobileActionsSlot={renderExportActions("mobile")}
+              mobileActionsSlot={scheduleResult ? renderPlanActions("mobile") : undefined}
               shiftInfoSlot={(
                 <div className="flex flex-wrap items-center justify-end gap-2 max-sm:w-full max-sm:justify-between" data-shift-actions>
                   {fiammettaTarget ? (
-                    <span className="flex h-7 items-center gap-1 rounded-[min(var(--radius-md),12px)] border border-[#016E65]/30 bg-[#016E65]/10 px-2.5 text-[0.8rem] text-[#016E65] shadow-xs max-sm:h-11" title={en ? `Fiammetta restores ${demoOperatorName(fiammettaTarget, locale)}` : `菲亚梅塔恢复 ${fiammettaTarget}`}>
-                      <span className="size-5 shrink-0 overflow-hidden rounded-full border border-[#016E65]/25 bg-[#272A2B]">
-                        {fiammettaPortrait ? <img src={fiammettaPortrait} alt="" className="size-full object-cover" /> : <HeartPulse className="m-1 size-3 text-[#016E65]" />}
-                      </span>
-                      <span className="whitespace-nowrap"><span className="text-[#016E65]/70">{en ? "Morale recovery" : "换心情"}</span> {demoOperatorName(fiammettaTarget, locale)}</span>
-                    </span>
+                    <FiammettaTargetChip target={fiammettaTarget} portrait={fiammettaPortrait} />
                   ) : null}
                   <ShiftTabs
                     maaJson={scheduleResult?.maa}
@@ -679,7 +682,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                     closest={closestComparison?.planIndex}
                     onChange={handleSetActiveShift}
                   />
-                  {renderExportActions("desktop")}
+                  {scheduleResult ? renderPlanActions("desktop") : null}
                 </div>
               )}
               onIssue={onMarkIssue}
@@ -714,6 +717,62 @@ export function InfraCalculator(props: InfraCalculatorProps) {
           </div>
         </aside>
       ) : null}
+      {operbox && scheduleResult ? (
+        <Suspense fallback={null}>
+          <UpgradeSimulationDialog
+            operbox={operbox}
+            baseline={result ?? scheduleResult}
+            open={upgradeSimulationOpen}
+            showTrigger={false}
+            onOpen={onOpenUpgradeSimulation}
+            onOpenChange={onUpgradeSimulationOpenChange}
+            onSimulate={onSimulateUpgrades}
+            onTrialReady={onUpgradeTrialReady}
+          />
+        </Suspense>
+      ) : null}
+      <Dialog open={planActionsOpen} onOpenChange={setPlanActionsOpen}>
+        <DialogContent className="gap-5 max-sm:bottom-0 max-sm:top-auto max-sm:max-w-none max-sm:translate-y-0 max-sm:rounded-t-[24px] max-sm:rounded-b-none sm:max-w-lg sm:p-6" data-plan-actions-dialog>
+          <DialogHeader className="gap-1.5 px-1 sm:px-2">
+            <DialogTitle className="text-lg font-semibold">{en ? "Adjust this plan" : "调整当前方案"}</DialogTitle>
+            <DialogDescription className="text-sm leading-6">
+              {en
+                ? `You are viewing the ${visibleVariantLabel}. Choose whether to change the inputs and recalculate, or edit this result directly.`
+                : `当前正在查看「${visibleVariantLabel}」。请选择修改输入并重新计算，或直接编辑这份结果。`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2 px-1 sm:px-2">
+            {operbox ? (
+              <button
+                type="button"
+                className="group flex min-h-20 w-full items-center gap-3 rounded-[var(--radius-md)] border border-border bg-background px-4 py-3 text-left outline-none transition-colors hover:border-foreground/40 hover:bg-muted/45 focus-visible:ring-2 focus-visible:ring-[#FFD800]"
+                onClick={openProgressionAction}
+                data-plan-action="progression"
+              >
+                <span className="grid size-10 shrink-0 place-items-center rounded-[var(--radius-sm)] bg-[#313131] text-[#FFD800]" aria-hidden="true"><FlaskConical className="size-5" /></span>
+                <span className="min-w-0 flex-1">
+                  <strong className="block text-sm font-semibold">{en ? "Modify progression and recalculate" : "修改练度并重新计算"}</strong>
+                  <span className="mt-1 block text-xs leading-5 text-muted-foreground">{en ? "Update the current BOX, keep the original plan, and create a comparison." : "更新当前 BOX，保留原方案，并生成一份可对比的新方案。"}</span>
+                </span>
+                <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="group flex min-h-20 w-full items-center gap-3 rounded-[var(--radius-md)] border border-border bg-background px-4 py-3 text-left outline-none transition-colors hover:border-foreground/40 hover:bg-muted/45 focus-visible:ring-2 focus-visible:ring-[#FFD800]"
+              onClick={openManualAction}
+              data-plan-action="manual"
+            >
+              <span className="grid size-10 shrink-0 place-items-center rounded-[var(--radius-sm)] bg-muted text-foreground" aria-hidden="true"><PencilLine className="size-5" /></span>
+              <span className="min-w-0 flex-1">
+                <strong className="block text-sm font-semibold">{en ? "Edit the current plan manually" : "基于当前方案手动编辑"}</strong>
+                <span className="mt-1 block text-xs leading-5 text-muted-foreground">{en ? "Copy the plan you are viewing and continue in Manual Scheduling." : "复制当前正在查看的方案，并进入手动排班工作台。"}</span>
+              </span>
+              <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
       <Suspense fallback={null}>
         <ShortcutGuideDialog open={shortcutGuideOpen} onOpenChange={setShortcutGuideOpen} />
         <Dialog open={cancelConfirmOpen} onOpenChange={setCancelConfirmOpen}>
