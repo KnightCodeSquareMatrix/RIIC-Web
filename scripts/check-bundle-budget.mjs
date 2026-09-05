@@ -10,7 +10,10 @@ const MAX_SKLAND_DISABLED_ROUTE_INITIAL_JS_BYTES = 1_167_000;
 // The language switch, protected manual-scheduling entry, and compact bilingual shell copy
 // are part of the initial graph; the full editor and schedule conversion logic stay in
 // on-demand chunks. Keep roughly 8 KB of raw headroom over the verified enabled build.
-const MAX_SKLAND_ENABLED_ROUTE_INITIAL_JS_BYTES = 1_203_000;
+// The changelog sidebar entry and localized route title add a small shell increment.
+// Verified with database-backed changelog/admin: 1,204,039 raw route bytes.
+// Release content, notification dialog and admin editor remain outside the initial graph.
+const MAX_SKLAND_ENABLED_ROUTE_INITIAL_JS_BYTES = 1_205_000;
 // Task progress UI and training tooltips add intentional code to secondary workbench routes.
 // The manual editor owns a larger independent page chunk, so track it separately while
 // keeping each ceiling narrow enough to flag unrelated bundle growth.
@@ -18,7 +21,8 @@ const MAX_SECONDARY_ROUTE_INITIAL_JS_BYTES = 1_582_000;
 const MAX_MANUAL_ROUTE_INITIAL_JS_BYTES = 1_602_000;
 const MAX_SKLAND_ROUTE_INITIAL_JS_BYTES = 1_642_000;
 const MAX_SKLAND_DISABLED_DOCUMENT_INITIAL_JS_BYTES = 1_280_000;
-const MAX_SKLAND_ENABLED_DOCUMENT_INITIAL_JS_BYTES = 1_316_000;
+// Verified document graph: 1,316,633 raw / 420,767 gzip bytes, still 17 chunks.
+const MAX_SKLAND_ENABLED_DOCUMENT_INITIAL_JS_BYTES = 1_317_000;
 const MAX_SKLAND_DISABLED_DOCUMENT_INITIAL_GZIP_JS_BYTES = 416_000;
 const MAX_SKLAND_ENABLED_DOCUMENT_INITIAL_GZIP_JS_BYTES = 422_000;
 const MAX_DOCUMENT_INITIAL_JS_FILES = 18;
@@ -89,6 +93,12 @@ const initialScriptBodies = await Promise.all(uniqueInitialScriptPaths.map(async
   const relativePath = pathname.slice("/_next/".length);
   return readFile(new URL(relativePath, buildRootUrl));
 }));
+for (const marker of ["data-release-dialog", "data-release-notes", "data-admin-changelog"]) {
+  assert.ok(
+    !initialScriptBodies.some((body) => body.includes(marker)),
+    `release content or dialog leaked into the initial document graph: ${marker}`,
+  );
+}
 const documentInitialJsBytes = initialScriptBodies.reduce((total, body) => total + body.byteLength, 0);
 const documentInitialGzipJsBytes = initialScriptBodies.reduce(
   (total, body) => total + gzipSync(body, { level: 9 }).byteLength,

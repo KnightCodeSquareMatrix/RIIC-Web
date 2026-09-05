@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useLanguageDemo } from "@/language-demo";
+import { requestAdminData as requestData } from "@/lib/admin-request";
 import {
   BUILDING_SKILL_CATALOG,
   OPERATOR_CATALOG,
@@ -32,7 +33,6 @@ import type {
   AdminSkillAnnotationData,
   AdminSkillAnnotationListData,
   AdminSkillAnnotationMutationData,
-  ApiResponse,
 } from "@/types";
 
 type EditorState = {
@@ -52,20 +52,6 @@ const EMPTY_EDITOR: EditorState = {
 };
 
 const operatorById = new Map(OPERATOR_CATALOG.map((operator) => [operator.id, operator]));
-
-async function requestData<T>(url: string, init: RequestInit | undefined, fallback: string): Promise<T> {
-  const response = await fetch(url, { cache: "no-store", ...init });
-  let body: ApiResponse<T>;
-  try {
-    body = await response.json() as ApiResponse<T>;
-  } catch {
-    throw new Error(fallback);
-  }
-  if (!response.ok || !body.success) {
-    throw new Error(body.success ? fallback : body.error.message || fallback);
-  }
-  return body.data;
-}
 
 function operatorSearchText(operator: OperatorAssetRecord): string {
   return [
