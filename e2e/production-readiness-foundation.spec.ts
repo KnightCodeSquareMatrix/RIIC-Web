@@ -1841,5 +1841,16 @@ for (const scenario of [
     await expect(page.getByText("独立推荐", { exact: true })).toBeVisible();
     await expect(page.getByText("待核对", { exact: true }).first()).toBeVisible();
     await expect(page.getByText(/needs_review|originium_shards|standalone/, { exact: false })).toHaveCount(0);
+
+    if (scenario.status === "shown") {
+      const combinationMember = page
+        .locator('[data-slot="training-combination-card"]')
+        .getByRole("button")
+        .first();
+      await combinationMember.hover();
+      const profession = page.locator('[data-slot="tooltip-content"][data-open] [data-operator-profession]');
+      await expect(profession).toHaveText("重装");
+      await expect(profession.locator("img")).toHaveAttribute("src", "/images/profession/重装.webp");
+    }
   });
 }
