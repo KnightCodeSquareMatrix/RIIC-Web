@@ -1523,6 +1523,13 @@ export function OperatorSlot({
                     <span className="font-number"><AnimatedText value={currentMorale} trend={shiftDirection} /></span>
                   </span>
                 ) : null}
+                {slot.portraitAlert === "missing-power-efficiency" ? (
+                  <span
+                    className="pointer-events-none absolute inset-0 z-30 bg-red-600/45 mix-blend-color"
+                    aria-hidden="true"
+                    data-operator-portrait-alert="missing-power-efficiency"
+                  />
+                ) : null}
               </>
             ) : autofill ? (
               <span className="flex h-full items-center justify-center text-xs font-semibold tracking-[0.14em] text-white/55">

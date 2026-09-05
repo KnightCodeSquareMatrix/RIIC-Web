@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { presentRoomEfficiency } from "./efficiency.ts";
 import { planToRows } from "./schedule.ts";
-import type { BaseBlueprint, MaaPlan, TrainingRoomShift } from "./types.ts";
+import type { BaseBlueprint, MaaPlan, RotationShift, TrainingRoomShift } from "./types.ts";
 
 const layout: BaseBlueprint = {
   template: "243",
@@ -52,4 +53,54 @@ test("keeps each training shift independent and preserves an empty leading posit
 test("also adds the training room while only a layout is available", () => {
   const row = planToRows(undefined, undefined, layout).find((candidate) => candidate.group === "training");
   assert.deepEqual(row?.positionSlots?.map((position) => position.positionLabel), ["训练位", "协助位"]);
+});
+
+test("shows zero efficiency and marks Lancet-2 when its power room omits total efficiency", () => {
+  const powerLayout: BaseBlueprint = {
+    template: "243",
+    drone_cap: 235,
+    scenario: {},
+    rooms: [
+      { id: "power_1", kind: "power_plant", level: 3 },
+      { id: "power_2", kind: "power_plant", level: 3 },
+    ],
+  };
+  const powerPlan: MaaPlan = {
+    name: "第一班",
+    rooms: {
+      power: [
+        { operators: ["Castle-3"] },
+        { operators: ["Lancet-2"] },
+      ],
+    },
+  };
+  const shift: RotationShift = {
+    index: 0,
+    duration_hours: 12,
+    active_teams: [],
+    resting_team: "",
+    scores: {
+      trade_score: 0,
+      manu_prod_sum: 0,
+      power_charge_sum: 0,
+      room_lines: [
+        { room_id: "power_1", order_multiplier: 1 },
+        { room_id: "power_2", order_multiplier: 1 },
+      ],
+    },
+    weighted_trade: 0,
+    weighted_manu: 0,
+    weighted_power: 0,
+  };
+
+  const rows = planToRows(powerPlan, shift, powerLayout);
+  const firstPower = rows.find((row) => row.roomId === "power_1");
+  const lancetPower = rows.find((row) => row.roomId === "power_2");
+
+  assert.equal(firstPower?.efficiency?.total_efficiency, undefined);
+  assert.equal(presentRoomEfficiency("power", firstPower?.efficiency), null);
+  assert.equal(firstPower?.operatorSlots[0]?.portraitAlert, undefined);
+  assert.equal(lancetPower?.efficiency?.total_efficiency, 0);
+  assert.equal(presentRoomEfficiency("power", lancetPower?.efficiency)?.primaryValue, "0%");
+  assert.equal(lancetPower?.operatorSlots[0]?.portraitAlert, "missing-power-efficiency");
 });
