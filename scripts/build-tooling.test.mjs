@@ -501,6 +501,7 @@ test("heavy account, operator, and scrollbar modules stay behind runtime boundar
   const schedule = await readRepoFile("src/schedule.ts");
   const components = await readRepoFile("src/components.tsx");
   const scrollbar = await readRepoFile("src/components/ui/page-scrollbar.tsx");
+  const manualPage = await readRepoFile("src/components/pages/ManualSchedulePage.tsx");
 
   assert.match(app, /useWebsiteSession/);
   assert.doesNotMatch(app, /authClient\.useSession/);
@@ -510,6 +511,9 @@ test("heavy account, operator, and scrollbar modules stay behind runtime boundar
   assert.doesNotMatch(schedule, /operatorPresentationFor/);
   assert.doesNotMatch(components, /from "@\/operatorPortraits"/);
   assert.match(scrollbar, /import\("overlayscrollbars"\)/);
+  assert.match(manualPage, /const OperatorSkillTooltip = lazy\(\(\) => import\("@\/components\/OperatorSkillTooltip"\)/);
+  assert.doesNotMatch(manualPage, /import \{ OperatorSkillTooltip \} from/);
+  assert.match(manualPage, /<Suspense fallback=\{card\}><OperatorSkillTooltip/);
 });
 
 test("versioned product assets receive immutable cache headers", async () => {
