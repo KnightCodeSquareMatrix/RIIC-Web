@@ -2,6 +2,23 @@
 
 All notable changes to RIIC-Web are documented in this file.
 
+## [0.5.1] - 2026-09-05
+
+### Added
+
+- Solved schedules now offer two clearly separated actions: update operator progression and recalculate, or copy the currently viewed result into Manual Scheduling for direct editing.
+- Manual drafts created from a solved schedule identify whether they came from the original or progression-adjusted result, link back to the calculator, and ask before replacing a different saved draft.
+
+### Changed
+
+- Schedule Settings and progression recalculation now share the same rarity, profession, schedule-scope, and shift controls, with the schedule filters and operator filters arranged in two compact rows.
+- “Owned only” and “Select all at max elite” use compact toggle controls; turning off max elite restores the exact Box configuration from before it was enabled.
+- Manual Scheduling now shares the calculator's layout and shift controls, and shows the morale-recovery target immediately to the left of the shift selector.
+
+### Fixed
+
+- Mobile plan actions now explain whether an action changes the calculation input or edits only the displayed result, avoiding accidental navigation to the wrong workflow.
+
 ## [0.5.0] - 2026-09-05
 
 ### Added
