@@ -180,6 +180,15 @@
     "rarity": 5
   },
   {
+    "id": "char_1015_aglna2",
+    "name": "予愿安洁莉娜",
+    "elite": 2,
+    "level": 90,
+    "own": true,
+    "potential": 6,
+    "rarity": 6
+  },
+  {
     "id": "char_4165_ctrail",
     "name": "云迹",
     "elite": 2,
@@ -295,6 +304,15 @@
     "own": true,
     "potential": 6,
     "rarity": 6
+  },
+  {
+    "id": "char_4234_pedro",
+    "name": "佩德洛",
+    "elite": 2,
+    "level": 80,
+    "own": true,
+    "potential": 6,
+    "rarity": 5
   },
   {
     "id": "char_4194_rmixer",
@@ -657,6 +675,15 @@
     "rarity": 4
   },
   {
+    "id": "char_4237_jcinta",
+    "name": "嘉辛塔",
+    "elite": 2,
+    "level": 80,
+    "own": true,
+    "potential": 6,
+    "rarity": 5
+  },
+  {
     "id": "char_365_aprl",
     "name": "四月",
     "elite": 2,
@@ -722,6 +749,15 @@
   {
     "id": "char_4043_erato",
     "name": "埃拉托",
+    "elite": 2,
+    "level": 80,
+    "own": true,
+    "potential": 6,
+    "rarity": 5
+  },
+  {
+    "id": "char_4218_aigis",
+    "name": "埃癸斯",
     "elite": 2,
     "level": 80,
     "own": true,
@@ -1024,6 +1060,15 @@
     "own": true,
     "potential": 6,
     "rarity": 6
+  },
+  {
+    "id": "char_4219_yukari",
+    "name": "岳羽由加莉",
+    "elite": 2,
+    "level": 80,
+    "own": true,
+    "potential": 6,
+    "rarity": 5
   },
   {
     "id": "char_173_slchan",
@@ -1422,6 +1467,15 @@
     "rarity": 6
   },
   {
+    "id": "char_4236_tmslot",
+    "name": "时隙",
+    "elite": 2,
+    "level": 80,
+    "own": true,
+    "potential": 6,
+    "rarity": 5
+  },
+  {
     "id": "char_4071_peper",
     "name": "明椒",
     "elite": 2,
@@ -1546,6 +1600,15 @@
     "own": true,
     "potential": 6,
     "rarity": 4
+  },
+  {
+    "id": "char_4230_mcnist",
+    "name": "机械师",
+    "elite": 2,
+    "level": 90,
+    "own": true,
+    "potential": 6,
+    "rarity": 6
   },
   {
     "id": "char_4105_almond",
@@ -2304,6 +2367,15 @@
     "rarity": 5
   },
   {
+    "id": "char_4235_thumpy",
+    "name": "珊比",
+    "elite": 2,
+    "level": 90,
+    "own": true,
+    "potential": 6,
+    "rarity": 6
+  },
+  {
     "id": "char_1033_swire2",
     "name": "琳琅诗怀雅",
     "elite": 2,
@@ -2558,6 +2630,15 @@
   {
     "id": "char_1016_agoat2",
     "name": "纯烬艾雅法拉",
+    "elite": 2,
+    "level": 90,
+    "own": true,
+    "potential": 6,
+    "rarity": 6
+  },
+  {
+    "id": "char_4217_makoto",
+    "name": "结城理",
     "elite": 2,
     "level": 90,
     "own": true,
@@ -2988,6 +3069,15 @@
     "rarity": 6
   },
   {
+    "id": "char_4220_kormr",
+    "name": "虎狼丸",
+    "elite": 0,
+    "level": 30,
+    "own": true,
+    "potential": 6,
+    "rarity": 1
+  },
+  {
     "id": "char_489_serum",
     "name": "蚀清",
     "elite": 2,
@@ -3130,6 +3220,15 @@
     "own": true,
     "potential": 6,
     "rarity": 5
+  },
+  {
+    "id": "char_4229_aphris",
+    "name": "谬因",
+    "elite": 2,
+    "level": 90,
+    "own": true,
+    "potential": 6,
+    "rarity": 6
   },
   {
     "id": "char_452_bstalk",
@@ -3755,69 +3854,6 @@
   {
     "id": "char_486_takila",
     "name": "龙舌兰",
-    "elite": 2,
-    "level": 80,
-    "own": true,
-    "potential": 6,
-    "rarity": 5
-  },
-  {
-    "id": "char_1015_aglna2",
-    "name": "予愿安洁莉娜",
-    "elite": 2,
-    "level": 90,
-    "own": true,
-    "potential": 6,
-    "rarity": 6
-  },
-  {
-    "id": "char_4229_aphris",
-    "name": "谬因",
-    "elite": 2,
-    "level": 90,
-    "own": true,
-    "potential": 6,
-    "rarity": 6
-  },
-  {
-    "id": "char_4230_mcnist",
-    "name": "机械师",
-    "elite": 2,
-    "level": 90,
-    "own": true,
-    "potential": 6,
-    "rarity": 6
-  },
-  {
-    "id": "char_4234_pedro",
-    "name": "佩德洛",
-    "elite": 2,
-    "level": 80,
-    "own": true,
-    "potential": 6,
-    "rarity": 5
-  },
-  {
-    "id": "char_4235_thumpy",
-    "name": "珊比",
-    "elite": 2,
-    "level": 90,
-    "own": true,
-    "potential": 6,
-    "rarity": 6
-  },
-  {
-    "id": "char_4236_tmslot",
-    "name": "时隙",
-    "elite": 2,
-    "level": 80,
-    "own": true,
-    "potential": 6,
-    "rarity": 5
-  },
-  {
-    "id": "char_4237_jcinta",
-    "name": "嘉辛塔",
     "elite": 2,
     "level": 80,
     "own": true,
