@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Download, Search, Settings2, Sparkles, X } from "lucide-react";
+import { Download, Search, Settings2, Sparkles, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { FactoryRecipe, TradeOrder } from "@/blueprint";
@@ -320,7 +320,7 @@ export function ManualSchedulePage({
         </div>
         {draft.source ? (
           <Button type="button" variant="ghost" size="sm" onClick={onOpenCalculator}>
-            <ArrowLeft />{en ? "Back to calculation" : "返回计算结果"}
+            {en ? "Back to calculation" : "返回计算结果"}
           </Button>
         ) : null}
         <Button type="button" variant="outline" size="sm" onClick={onOpenSetup}><Settings2 />{en ? "Configure Box & layout" : "配置 Box 与布局"}</Button>
