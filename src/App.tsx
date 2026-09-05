@@ -68,9 +68,10 @@ import { normalizeOperboxEntries } from "./operbox-normalization";
 import { upgradeSimulationBoxSource } from "./upgrade-simulation";
 import {
   DEFAULT_MANUAL_SHIFT_DURATIONS,
+  DEFAULT_MANUAL_SHIFT_START_TIME,
   MANUAL_SCHEDULE_STORAGE_KEY,
 } from "./manual-schedule-config";
-import type { ManualScheduleDraft } from "./manual-schedule";
+import type { ManualScheduleDraft, ManualScheduleMode } from "./manual-schedule";
 import { effectiveFiammettaSetting, resolvePlanPresentationLayout } from "./plan-presentation";
 import {
   applyLocalLayoutPatch,
@@ -286,6 +287,8 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   const [fiammettaEnabled, setFiammettaEnabled] = useState(false);
   const [manualFiammettaEnabled, setManualFiammettaEnabled] = useState(false);
   const [manualShiftDurations, setManualShiftDurations] = useState<number[]>([...DEFAULT_MANUAL_SHIFT_DURATIONS]);
+  const [manualShiftStartTime, setManualShiftStartTime] = useState(DEFAULT_MANUAL_SHIFT_START_TIME);
+  const [manualScheduleMode, setManualScheduleMode] = useState<ManualScheduleMode>("sequential");
   const [manualDraftHandoff, setManualDraftHandoff] = useState<ManualScheduleDraft | null>(null);
   const [pendingManualDraftReplacement, setPendingManualDraftReplacement] = useState<ManualScheduleDraft | null>(null);
   const [inputMode, setInputMode] = useState<"skland" | "maa" | "manual">(CLIENT_SKLAND_ENABLED ? "skland" : "maa");
@@ -1161,6 +1164,8 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   function openManualScheduleDraft(draft: ManualScheduleDraft) {
     setPendingManualDraftReplacement(null);
     setManualShiftDurations(draft.shifts.map((shift) => shift.durationHours));
+    setManualShiftStartTime(draft.startTime);
+    setManualScheduleMode(draft.scheduleMode);
     setManualFiammettaEnabled(draft.fiammettaEnabled);
     setManualDraftHandoff(draft);
     try {
@@ -1424,6 +1429,15 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     showResultClearNotice(locale === "en" ? `Layout ${nextPreset.label}` : `布局 ${nextPreset.label}`);
     setPreset(nextPreset);
     setLayout(buildBlueprint(nextPreset));
+    setLayoutDirty(true);
+    setLayoutSource("local");
+    setLocalLayoutBackup(null);
+    clearPlanResult();
+  }
+
+  function handleManualImportedLayout(nextLayout: BaseBlueprint) {
+    setLayout(structuredClone(nextLayout));
+    setPreset(PRESETS.find((candidate) => candidate.label === nextLayout.template) ?? preset);
     setLayoutDirty(true);
     setLayoutSource("local");
     setLocalLayoutBackup(null);
@@ -1749,6 +1763,8 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       setFileName(null);
       setBoxSource("sample");
       setManualShiftDurations([...DEFAULT_MANUAL_SHIFT_DURATIONS]);
+      setManualShiftStartTime(DEFAULT_MANUAL_SHIFT_START_TIME);
+      setManualScheduleMode("sequential");
       setManualFiammettaEnabled(false);
       setManualDraftHandoff(null);
       setLayoutDirty(false);
@@ -1935,11 +1951,16 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       operbox: accountCanUseCurrentBox ? operbox : null,
       sourceName: accountCanUseCurrentBox ? fileName : null,
       shiftDurations: manualShiftDurations,
+      shiftStartTime: manualShiftStartTime,
+      scheduleMode: manualScheduleMode,
       fiammettaEnabled: effectiveManualFiammettaEnabled,
       initialDraft: accountCanUseCurrentBox ? manualDraftHandoff : null,
       onInitialDraftConsumed: () => setManualDraftHandoff(null),
       onOpenCalculator: () => navigateToPage("calculator"),
       onShiftDurationsChange: setManualShiftDurations,
+      onShiftStartTimeChange: setManualShiftStartTime,
+      onScheduleModeChange: setManualScheduleMode,
+      onImportedLayoutChange: handleManualImportedLayout,
       onFiammettaEnabledChange: setManualFiammettaEnabled,
       onOpenSetup: handleManualSetup,
       onFactoryRecipeChange: handleFactoryRecipeChange,
@@ -2147,11 +2168,15 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
         presets={PRESETS}
         preset={preset}
         layout={layout}
-        configurationKey={setupMode === "manual" ? `${setupConfigurationKey}:${manualShiftDurations.join(",")}:${manualFiammettaEnabled}` : setupConfigurationKey}
+        configurationKey={setupMode === "manual" ? `${setupConfigurationKey}:${manualScheduleMode}:${manualShiftStartTime}:${manualShiftDurations.join(",")}:${manualFiammettaEnabled}` : setupConfigurationKey}
         rotationProfile={setupMode === "manual" ? DEFAULT_ROTATION_PROFILE : rotationProfile}
         onRotationProfileChange={handleRotationProfileChange}
         manualShiftDurations={manualShiftDurations}
         onManualShiftDurationsChange={setManualShiftDurations}
+        manualShiftStartTime={manualShiftStartTime}
+        onManualShiftStartTimeChange={setManualShiftStartTime}
+        manualScheduleMode={manualScheduleMode}
+        onManualScheduleModeChange={setManualScheduleMode}
         fiammettaEnabled={setupMode === "manual" ? effectiveManualFiammettaEnabled : effectiveFiammettaEnabled}
         onFiammettaEnabledChange={setupMode === "manual" ? setManualFiammettaEnabled : handleFiammettaEnabledChange}
         onPresetSelect={handlePresetSelect}

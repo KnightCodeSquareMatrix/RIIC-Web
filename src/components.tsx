@@ -10,7 +10,10 @@ import {
   RotateCcw,
   Save,
   Smile,
+  Sparkles,
+  Trash2,
   Upload,
+  Zap,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { CSSProperties, ChangeEvent, DragEvent, lazy, ReactElement, ReactNode, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -734,6 +737,8 @@ export function ShiftTabs({
   maaJson,
   rotation,
   durations,
+  labels,
+  wrap = false,
   active,
   closest,
   onChange,
@@ -741,6 +746,8 @@ export function ShiftTabs({
   maaJson?: MaaJson;
   rotation?: RotationJson;
   durations?: readonly number[];
+  labels?: readonly { content: ReactNode; ariaLabel: string }[];
+  wrap?: boolean;
   active: number;
   closest?: number;
   onChange: (index: number) => void;
@@ -760,7 +767,12 @@ export function ShiftTabs({
   return (
     <Tabs value={String(active)} onValueChange={(value) => onChange(Number(value))} className="max-w-full">
       <TabsList
-        className="max-w-full justify-start overflow-x-auto overflow-y-hidden tracking-[0.01em] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className={cn(
+          "max-w-full justify-start tracking-[0.01em]",
+          wrap
+            ? "h-auto flex-wrap overflow-visible"
+            : "overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+        )}
         data-shift-tabs
         data-ui-number-font
       >
@@ -774,13 +786,14 @@ export function ShiftTabs({
               : shiftTabLabel(shift, index);
           const originalTeamSummary = shiftTeamSummary(shift, rotation?.profile ?? DEFAULT_ROTATION_PROFILE);
           const teamSummary = en && originalTeamSummary ? originalTeamSummary.replaceAll("主力", "Main").replaceAll("替补", "Backup").replaceAll("上班", "working").replaceAll("休息", "resting") : originalTeamSummary;
+          const customLabel = labels?.[index];
           return (
             <TabsTrigger
               key={`${plan.name}-${index}`}
               value={String(index)}
-              aria-label={teamSummary ? `${label}${en ? ", " : "，"}${teamSummary}` : label}
+              aria-label={customLabel?.ariaLabel ?? (teamSummary ? `${label}${en ? ", " : "，"}${teamSummary}` : label)}
             >
-              {label}
+              {customLabel?.content ?? label}
               {closest === index ? <span className="rounded-full bg-primary/10 px-1.5 text-xs text-primary max-md:hidden">{en ? "Closest" : "最接近"}</span> : null}
             </TabsTrigger>
           );
@@ -1216,6 +1229,7 @@ function OperatorSlotShell({
   centerFrameInList,
   compactFactory,
   compactView,
+  editableAppearance = true,
   editableHint,
   frameClassName,
   frameContent,
@@ -1224,6 +1238,7 @@ function OperatorSlotShell({
   label,
   labelClassName,
   positionLabel,
+  selected = false,
   title,
   onActivate,
 }: {
@@ -1231,6 +1246,7 @@ function OperatorSlotShell({
   centerFrameInList: boolean;
   compactFactory: boolean;
   compactView: boolean;
+  editableAppearance?: boolean;
   editableHint?: string;
   frameClassName: string;
   frameContent?: ReactNode;
@@ -1240,6 +1256,7 @@ function OperatorSlotShell({
   label: ReactNode;
   labelClassName: string;
   positionLabel?: string;
+  selected?: boolean;
   title?: string;
   onActivate?: () => void;
 }) {
@@ -1249,7 +1266,7 @@ function OperatorSlotShell({
         "relative aspect-square h-[var(--operator-slot-size)] min-w-0 shrink-0 overflow-hidden border-2 max-sm:border",
         frameClassName,
         frameFocusable && "cursor-help outline-none transition-[border-color,box-shadow] hover:border-white/90 focus-visible:border-[#FFD501] focus-visible:ring-2 focus-visible:ring-[#FFD501]/70",
-        onActivate && "border-[#FFD800] shadow-[0_0_0_1px_rgba(255,216,0,0.42),0_0_12px_rgba(255,216,0,0.2)]",
+        onActivate && editableAppearance && "border-[#FFD800] shadow-[0_0_0_1px_rgba(255,216,0,0.42),0_0_12px_rgba(255,216,0,0.2)]",
         centerFrameInList && "max-sm:h-auto max-sm:w-full sm:absolute sm:left-0 sm:top-1/2 sm:-translate-y-1/2",
       )}
       aria-label={ariaLabel}
@@ -1274,12 +1291,15 @@ function OperatorSlotShell({
           : "[--operator-slot-size:clamp(70px,7.3vw,80px)] max-sm:[--operator-slot-size:clamp(56px,16vw,76px)]",
         compactFactory && "min-[1800px]:[--operator-slot-size:70px]",
         centerFrameInList && "max-sm:w-full sm:relative sm:h-full sm:w-[var(--operator-slot-size)]",
-        onActivate && "cursor-pointer rounded-[4px] outline-none focus-visible:ring-2 focus-visible:ring-[#FFD800] focus-visible:ring-offset-2 focus-visible:ring-offset-[#313131]",
+        onActivate && "cursor-pointer rounded-[4px] outline-none focus-visible:ring-2 focus-visible:ring-[#FFD800]",
+        onActivate && editableAppearance && "focus-visible:ring-offset-2 focus-visible:ring-offset-[#313131]",
+        selected && "bg-[#FFD501]/20 ring-2 ring-[#FFD501]",
       )}
       data-position={positionLabel || undefined}
       title={title}
       role={onActivate ? "button" : undefined}
       tabIndex={onActivate ? 0 : undefined}
+      aria-pressed={onActivate ? selected : undefined}
       onClick={onActivate}
       onKeyDown={onActivate ? (event) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -1367,6 +1387,39 @@ function BuildingSkillBadge({
   );
 }
 
+function SmoothOperatorPortrait({
+  src,
+  alt,
+  size,
+}: {
+  src: string;
+  alt: string;
+  size: number;
+}) {
+  const [loaded, setLoaded] = useState(false);
+  return (
+    <>
+      {!loaded ? (
+        <span className="absolute inset-0 animate-pulse bg-gradient-to-br from-white/5 via-white/14 to-white/5 motion-reduce:animate-none" aria-hidden="true" />
+      ) : null}
+      <img
+        src={src}
+        alt={alt}
+        width={size}
+        height={size}
+        loading="lazy"
+        decoding="async"
+        onLoad={() => setLoaded(true)}
+        onError={() => setLoaded(true)}
+        className={cn(
+          "absolute inset-0 h-full w-full object-cover outline outline-1 -outline-offset-1 outline-black/10 transition-opacity duration-300 dark:outline-white/10 motion-reduce:transition-none",
+          loaded ? "opacity-100" : "opacity-0",
+        )}
+      />
+    </>
+  );
+}
+
 export function OperatorSlot({
   slot,
   currentMorale,
@@ -1375,6 +1428,7 @@ export function OperatorSlot({
   autofill = false,
   compactFactory = false,
   compactView = false,
+  selectionMode = false,
   centerFrameInList = false,
   shiftDirection = 0,
   transitionDelay = 0,
@@ -1382,9 +1436,11 @@ export function OperatorSlot({
   positionLabel,
   showSkillTooltip = false,
   skillTooltipFocusable = false,
+  tooltipDisabled = false,
   skillTooltipHighlightIds = [],
   skillTooltipContextLabel,
   searchQuery = "",
+  selected = false,
   onActivate,
 }: {
   slot: RoomRow["operatorSlots"][number] | undefined;
@@ -1396,6 +1452,8 @@ export function OperatorSlot({
   autofill?: boolean;
   compactFactory?: boolean;
   compactView?: boolean;
+  /** 选择器样式：保留点击与技能提示，但不显示排班卡片的“可编辑”标记和常驻黄框。 */
+  selectionMode?: boolean;
   centerFrameInList?: boolean;
   shiftDirection?: ShiftDirection;
   transitionDelay?: number;
@@ -1405,10 +1463,13 @@ export function OperatorSlot({
   showSkillTooltip?: boolean;
   /** 让头像进入键盘焦点顺序；仅用于需要主动查看技能的界面，避免排班图产生过多 Tab 停靠点。 */
   skillTooltipFocusable?: boolean;
+  /** 滚动等临时交互期间关闭技能提示，避免 tooltip 跟随已移动的头像。 */
+  tooltipDisabled?: boolean;
   /** 练卡建议等场景中，需要在技能 tooltip 内强调的技能。 */
   skillTooltipHighlightIds?: readonly string[];
   skillTooltipContextLabel?: string;
   searchQuery?: string;
+  selected?: boolean;
   onActivate?: () => void;
 }) {
   const shouldReduceMotion = useReducedMotion();
@@ -1441,7 +1502,8 @@ export function OperatorSlot({
       centerFrameInList={centerFrameInList}
       compactFactory={compactFactory}
       compactView={compactView}
-      editableHint={onActivate ? (locale === "en" ? "EDIT" : "可编辑") : undefined}
+      editableAppearance={!selectionMode}
+      editableHint={onActivate && !selectionMode ? (locale === "en" ? "EDIT" : "可编辑") : undefined}
       frameClassName={frameClassName}
       frameContent={
         <AnimatePresence initial={false} mode="sync">
@@ -1470,14 +1532,10 @@ export function OperatorSlot({
               <>
                 {slot.portrait ? (
                   <>
-                    <img
+                    <SmoothOperatorPortrait
                       src={slot.portrait}
                       alt={displayName ?? slot.name}
-                      width={portraitSize}
-                      height={portraitSize}
-                      loading="lazy"
-                      decoding="async"
-                      className="absolute inset-0 h-full w-full object-cover outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10"
+                      size={portraitSize}
                     />
                     {profession ? (
                       <img
@@ -1544,16 +1602,18 @@ export function OperatorSlot({
             contextLabel={skillTooltipContextLabel}
             currentElite={elite}
             currentLevel={operatorLevel}
+            disabled={tooltipDisabled || undefined}
           />
         </Suspense>
       ) : undefined}
       label={slot ? <AnimatedText value={displayName ?? slot.name} trend={shiftDirection} /> : autofill ? (locale === "en" ? "Auto-fill" : "自动补位") : (locale === "en" ? "Slot" : "占")}
       labelClassName={slot
-        ? (searchMatched ? "bg-[#FFD501] px-1 text-[#202020]" : "text-white")
+        ? (searchMatched ? "bg-[#FFD501] px-1 text-[#202020]" : selectionMode ? "text-popover-foreground" : "text-white")
         : autofill
           ? "text-white/55"
           : "text-transparent select-none"}
       positionLabel={displayPositionLabel}
+      selected={selected}
       title={suppressNativeTitles ? undefined : displayName ?? slot?.label}
       onActivate={onActivate}
     />
@@ -1569,6 +1629,7 @@ export function ScheduleBoard({
   eliteByOperator,
   levelByOperator,
   viewControlsSlot,
+  viewModeActionSlot,
   mobileActionsSlot,
   shiftInfoSlot,
   activeShift,
@@ -1582,6 +1643,10 @@ export function ScheduleBoard({
   onTradeOrderChange,
   onViewModeChange,
   onSlotClick,
+  onClearRoom,
+  onDormAutofillChange,
+  droneTargetRoomId,
+  onDroneTargetChange,
 }: {
   rows: RoomRow[];
   layout: BaseBlueprint;
@@ -1591,6 +1656,7 @@ export function ScheduleBoard({
   /** 按干员名查当前等级，用于技能解锁状态。 */
   levelByOperator?: ReadonlyMap<string, number>;
   viewControlsSlot?: ReactNode;
+  viewModeActionSlot?: ReactNode;
   mobileActionsSlot?: ReactNode;
   shiftInfoSlot?: ReactNode;
   activeShift: number;
@@ -1604,6 +1670,10 @@ export function ScheduleBoard({
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
   onViewModeChange?: (viewMode: "list" | "compact") => void;
   onSlotClick?: (row: RoomRow, slotIndex: number) => void;
+  onClearRoom?: (row: RoomRow) => void;
+  onDormAutofillChange?: (row: RoomRow, enabled: boolean) => void;
+  droneTargetRoomId?: string | null;
+  onDroneTargetChange?: (row: RoomRow) => void;
 }) {
   const { locale } = useLanguageDemo();
   const en = locale === "en";
@@ -1614,9 +1684,31 @@ export function ScheduleBoard({
   const [CompactScheduleView, setCompactScheduleView] = useState<CompactScheduleComponent | null>(null);
   const [compactScheduleLoadFailed, setCompactScheduleLoadFailed] = useState(false);
   const preferredViewMode = useRef<ScheduleViewMode | null>(null);
+  const scheduleBoardRef = useRef<HTMLDivElement | null>(null);
   const shouldReduceMotion = useReducedMotion();
+  const editableSchedule = Boolean(onSlotClick || onClearRoom || onDormAutofillChange || onDroneTargetChange);
 
   useLayoutEffect(() => {
+    const board = scheduleBoardRef.current;
+    if (editableSchedule && board) {
+      const syncEditableViewMode = (width: number) => {
+        const canUseCompactLayout = width >= 1_040;
+        setSupportsCompactLayout(canUseCompactLayout);
+        const nextViewMode = canUseCompactLayout
+          ? (preferredViewMode.current ?? "compact")
+          : "list";
+        setViewMode(nextViewMode);
+        onViewModeChange?.(nextViewMode);
+      };
+      syncEditableViewMode(board.getBoundingClientRect().width);
+      const observer = new ResizeObserver((entries) => {
+        const width = entries[0]?.contentRect.width;
+        if (typeof width === "number") syncEditableViewMode(width);
+      });
+      observer.observe(board);
+      return () => observer.disconnect();
+    }
+
     const mq = window.matchMedia("(min-width: 1024px)");
     const syncViewMode = (canUseCompactLayout: boolean) => {
       setSupportsCompactLayout(canUseCompactLayout);
@@ -1631,7 +1723,7 @@ export function ScheduleBoard({
     const handler = (event: MediaQueryListEvent) => syncViewMode(event.matches);
     mq.addEventListener("change", handler);
     return () => mq.removeEventListener("change", handler);
-  }, [onViewModeChange]);
+  }, [editableSchedule, onViewModeChange]);
 
   useEffect(() => {
     if (viewMode !== "compact" || CompactScheduleView || compactScheduleLoadFailed) return;
@@ -1708,7 +1800,7 @@ export function ScheduleBoard({
   }
 
   return (
-    <div className="flex flex-col gap-7">
+    <div ref={scheduleBoardRef} className="flex flex-col gap-7">
       <div className="flex flex-wrap items-center justify-between gap-3 max-sm:flex-col max-sm:items-stretch" data-schedule-toolbar>
         <div className="flex flex-wrap items-center gap-2 max-sm:w-full" data-schedule-view-controls>
           {supportsCompactLayout && viewMode ? (
@@ -1729,6 +1821,7 @@ export function ScheduleBoard({
             </Tabs>
           ) : null}
           {viewControlsSlot}
+          {viewMode === "compact" ? viewModeActionSlot : null}
           {viewMode === "list" && hiddenAuxiliaryCount ? (
             <Button type="button" variant="ghost" size="sm" onClick={restoreHiddenAuxiliaryGroups}>
               {en ? "Restore hidden" : "恢复已隐藏"}{en ? " (" : "（"}<span className="font-number">{hiddenAuxiliaryCount}</span>{en ? ")" : "）"}
@@ -1747,9 +1840,15 @@ export function ScheduleBoard({
                 </motion.span>
                 {allAuxiliaryCollapsed ? (en ? "Expand auxiliary facilities" : "展开辅助设施") : (en ? "Collapse auxiliary facilities" : "一键折叠辅助设施")}
               </Button>
+              {viewModeActionSlot}
               {mobileActionsSlot ? <div className="min-w-0 flex-1 md:hidden">{mobileActionsSlot}</div> : null}
             </div>
-          ) : mobileActionsSlot ? <div className="w-full md:hidden">{mobileActionsSlot}</div> : null}
+          ) : (
+            <>
+              {viewMode === "list" ? viewModeActionSlot : null}
+              {mobileActionsSlot ? <div className="w-full md:hidden">{mobileActionsSlot}</div> : null}
+            </>
+          )}
         </div>
         {shiftInfoSlot ? <div className="min-w-0 max-sm:w-full">{shiftInfoSlot}</div> : null}
       </div>
@@ -1901,6 +2000,50 @@ export function ScheduleBoard({
                                 {demoRoomTitle(row.title, row.group, locale)}
                               </div>
                               <LevelDiamonds level={row.level} maxLevel={layoutRoom ? maxRoomLevel(layoutRoom.kind) : row.level} />
+                              {row.group === "dormitory" && onDormAutofillChange ? (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  aria-pressed={row.autofill}
+                                  aria-label={en ? `${demoRoomTitle(row.title, row.group, locale)} auto-fill` : `${row.title} 自动补位`}
+                                  className={cn(
+                                    "ml-1 h-7 border px-2 text-xs text-white hover:text-white",
+                                    row.autofill ? "border-[#FFD800]/70 bg-[#FFD800]/18" : "border-white/15 bg-[#3C3C3C]/55",
+                                  )}
+                                  onClick={() => onDormAutofillChange(row, !row.autofill)}
+                                >
+                                  <Sparkles className="size-3.5" />{en ? "Auto-fill" : "自动补位"}
+                                </Button>
+                              ) : null}
+                              {(row.group === "trading" || row.group === "manufacture") && onDroneTargetChange ? (
+                                <Tooltip>
+                                  <TooltipTrigger
+                                    render={
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        aria-pressed={droneTargetRoomId === row.roomId}
+                                        aria-label={en ? `${demoRoomTitle(row.title, row.group, locale)} drone acceleration` : `${row.title} 无人机加速`}
+                                        className={cn(
+                                          "ml-auto h-7 border px-2 text-xs text-white hover:text-white",
+                                          droneTargetRoomId === row.roomId ? "border-[#FFD800]/70 bg-[#FFD800]/18" : "border-white/15 bg-[#3C3C3C]/55",
+                                        )}
+                                        onClick={() => onDroneTargetChange(row)}
+                                      >
+                                        <Zap className="size-3.5" aria-hidden="true" />
+                                        <span className="sm:hidden">{en ? "Drones" : "无人机"}</span>
+                                      </Button>
+                                    }
+                                  />
+                                  <TooltipContent side="left">
+                                    {droneTargetRoomId === row.roomId
+                                      ? (en ? "Disable drone acceleration" : "取消当前班次无人机加速")
+                                      : (en ? "Use drones here for this shift" : "当前班次在此使用无人机")}
+                                  </TooltipContent>
+                                </Tooltip>
+                              ) : null}
                             </div>
                           </div>
                           {efficiency ? (
@@ -1915,6 +2058,11 @@ export function ScheduleBoard({
                           onFactoryRecipeChange={onFactoryRecipeChange}
                           onTradeOrderChange={onTradeOrderChange}
                         />
+                        {onClearRoom && row.group === "power" && !efficiency ? (
+                          <div className="font-technical text-xs tracking-[0.01em] text-white/38">
+                            {en ? "Awaiting schedule" : "等待排班"}
+                          </div>
+                        ) : null}
                       </div>
                     </div>
 
@@ -1965,10 +2113,30 @@ export function ScheduleBoard({
                       )}
                     </div>
 
+                    {onClearRoom ? <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <span className="absolute right-2 top-2 z-20">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 border border-white/10 bg-[#3C3C3C]/55 px-2 text-xs text-white/70 hover:bg-[#4B4B4B] hover:text-white max-sm:h-11"
+                              aria-label={en ? `Clear ${demoRoomTitle(row.title, row.group, locale)}` : `一键清空${row.title}`}
+                              onClick={() => onClearRoom(row)}
+                            >
+                              <Trash2 className="size-3.5" /><span className="sm:hidden">{en ? "Clear" : "一键清空"}</span>
+                            </Button>
+                          </span>
+                        }
+                      />
+                      <TooltipContent side="left">{en ? "Clear this facility" : "一键清空当前设施"}</TooltipContent>
+                    </Tooltip> : null}
+
                     {onIssue ? <Tooltip>
                       <TooltipTrigger
                         render={
-                          <span className="absolute right-2 top-2 z-10">
+                          <span className={cn("absolute top-2 z-10", onClearRoom ? "right-24" : "right-2")}>
                           <Button
                             id={scheduleIssueTriggerId(row)}
                             type="button"
@@ -2011,6 +2179,10 @@ export function ScheduleBoard({
               onIssue={onIssue}
               feedbackDisabled={feedbackDisabled}
               onSlotClick={onSlotClick}
+              onClearRoom={onClearRoom}
+              onDormAutofillChange={onDormAutofillChange}
+              droneTargetRoomId={droneTargetRoomId}
+              onDroneTargetChange={onDroneTargetChange}
             />
           ) : compactScheduleLoadFailed ? (
             <div className="grid min-h-[420px] place-items-center border-y border-destructive/35 text-sm text-destructive" role="alert">

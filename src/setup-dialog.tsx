@@ -18,6 +18,14 @@ import { WizardSteps } from "@/components/interior/wizard-steps";
 import { hasSetupConfigurationChanged } from "@/setup-configuration";
 import { useWebsiteSession } from "@/website-session";
 import { useLanguageDemo } from "@/language-demo";
+import {
+  formatManualShiftDuration,
+  manualShiftTimeRanges,
+  resizeManualShiftDurations,
+  updateManualShiftBoundary,
+  type ManualScheduleMode,
+} from "@/manual-schedule";
+import { DEFAULT_MANUAL_SHIFT_START_TIME } from "@/manual-schedule-config";
 
 import type { FactoryRecipe, PowerBudget, TradeOrder } from "./blueprint";
 import { FileDrop, LayoutEditor, PresetSelector } from "./components";
@@ -63,6 +71,10 @@ type SetupDialogProps = {
   onRotationProfileChange: (value: RotationProfile) => void;
   manualShiftDurations?: number[];
   onManualShiftDurationsChange?: (durations: number[]) => void;
+  manualShiftStartTime?: string;
+  onManualShiftStartTimeChange?: (startTime: string) => void;
+  manualScheduleMode?: ManualScheduleMode;
+  onManualScheduleModeChange?: (mode: ManualScheduleMode) => void;
   fiammettaEnabled: boolean;
   onFiammettaEnabledChange: (enabled: boolean) => void;
   onPresetSelect: (preset: PresetDef) => void;
@@ -122,6 +134,10 @@ export function SetupDialog({
   onRotationProfileChange,
   manualShiftDurations = [12, 6, 6],
   onManualShiftDurationsChange,
+  manualShiftStartTime = DEFAULT_MANUAL_SHIFT_START_TIME,
+  onManualShiftStartTimeChange,
+  manualScheduleMode = "sequential",
+  onManualScheduleModeChange,
   fiammettaEnabled,
   onFiammettaEnabledChange,
   onPresetSelect,
@@ -163,21 +179,17 @@ export function SetupDialog({
       ? "243 full E2 sample"
       : persistedDataLabel;
   const reducedMotion = useReducedMotion();
+  const manualShiftRanges = manualShiftTimeRanges(manualShiftStartTime, manualShiftDurations);
 
   function updateManualShiftCount(count: number) {
     if (!onManualShiftDurationsChange) return;
-    const nextCount = Math.max(1, Math.min(12, Math.trunc(count || 1)));
-    onManualShiftDurationsChange(Array.from(
-      { length: nextCount },
-      (_, index) => manualShiftDurations[index] ?? 12,
-    ));
+    onManualShiftDurationsChange(resizeManualShiftDurations(manualShiftDurations, count));
   }
 
-  function updateManualShiftDuration(index: number, duration: number) {
-    if (!onManualShiftDurationsChange || !Number.isFinite(duration)) return;
-    onManualShiftDurationsChange(manualShiftDurations.map((current, candidate) => (
-      candidate === index ? Math.max(0.25, Math.round(duration * 100) / 100) : current
-    )));
+  function updateManualShiftEnd(index: number, endTime: string) {
+    if (!onManualShiftDurationsChange) return;
+    const next = updateManualShiftBoundary(manualShiftStartTime, manualShiftDurations, index, endTime);
+    if (next) onManualShiftDurationsChange(next);
   }
 
   useEffect(() => {
@@ -540,10 +552,45 @@ export function SetupDialog({
                     <div className="pt-1">
                       {mode === "manual" ? (
                         <section className="grid gap-4" aria-labelledby="manual-shift-settings-title" data-manual-shift-settings>
+                          <div>
+                            <h3 className="text-sm font-semibold">{en ? "Schedule mode" : "排班模式"}</h3>
+                            <div className="mt-2 grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label={en ? "Schedule mode" : "排班模式"}>
+                              <Button
+                                type="button"
+                                variant={manualScheduleMode === "sequential" ? "default" : "outline"}
+                                className="h-auto min-h-16 items-start justify-start px-4 py-3 text-left"
+                                role="radio"
+                                aria-checked={manualScheduleMode === "sequential"}
+                                onClick={() => onManualScheduleModeChange?.("sequential")}
+                              >
+                                <span>
+                                  <span className="block font-semibold">{en ? "Sequential rotation (default)" : "顺序轮换（默认）"}</span>
+                                  <span className="mt-1 block text-xs font-normal opacity-75">{en ? "After one run finishes, MAA advances to the next shift." : "每次换班执行完成后，MAA 自动进入下一班。"}</span>
+                                </span>
+                              </Button>
+                              <Button
+                                type="button"
+                                variant={manualScheduleMode === "period" ? "default" : "outline"}
+                                className="h-auto min-h-16 items-start justify-start px-4 py-3 text-left"
+                                role="radio"
+                                aria-checked={manualScheduleMode === "period"}
+                                onClick={() => onManualScheduleModeChange?.("period")}
+                              >
+                                <span>
+                                  <span className="block font-semibold">{en ? "Time ranges" : "时间区间"}</span>
+                                  <span className="mt-1 block text-xs font-normal opacity-75">{en ? "MAA selects the shift matching the current time." : "MAA 根据当前时间自动选择对应班次。"}</span>
+                                </span>
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="border-t border-border/70" />
                           <div className="flex flex-wrap items-center justify-between gap-3">
                             <div>
                               <h3 id="manual-shift-settings-title" className="text-sm font-semibold">{en ? "Manual shifts" : "手动班次"}</h3>
-                              <p className="mt-1 text-xs text-muted-foreground">{en ? "Durations are independent and do not need to add up to 24 hours." : "每班时长相互独立，不要求合计为 24 小时。"}</p>
+                              <p className="mt-1 text-xs text-muted-foreground">{manualScheduleMode === "period"
+                                ? (en ? "Choose consecutive shift times. The final shift closes the 24-hour cycle automatically." : "设置连续的换班时间；后一班自动衔接前一班，最后一班自动闭合为 24 小时。")
+                                : (en ? "Only the shift order is exported; time ranges are omitted." : "只导出班次顺序，不写入时间区间。")}</p>
+                              {manualScheduleMode === "period" ? <p className="mt-1 text-xs font-medium text-foreground">{en ? "Total: 24 hours" : "合计：24 小时"}</p> : null}
                             </div>
                             <div className="flex items-center gap-1">
                               <Button type="button" size="icon-sm" variant="outline" aria-label={en ? "Remove one shift" : "减少一个班次"} disabled={manualShiftDurations.length <= 1} onClick={() => updateManualShiftCount(manualShiftDurations.length - 1)}><Minus /></Button>
@@ -554,17 +601,45 @@ export function SetupDialog({
                               <Button type="button" size="icon-sm" variant="outline" aria-label={en ? "Add one shift" : "增加一个班次"} disabled={manualShiftDurations.length >= 12} onClick={() => updateManualShiftCount(manualShiftDurations.length + 1)}><Plus /></Button>
                             </div>
                           </div>
-                          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                            {manualShiftDurations.map((duration, index) => (
-                              <label key={index} className="flex min-h-11 items-center justify-between gap-3 border border-border/70 bg-muted/25 px-3 py-2 text-sm">
-                                <span>{en ? `Shift ${index + 1}` : `班次 ${index + 1}`}</span>
-                                <span className="flex items-center gap-1.5">
-                                  <input aria-label={en ? `Shift ${index + 1} duration` : `班次 ${index + 1} 时长`} className="h-8 w-20 rounded-[4px] border border-input bg-background px-2 text-right font-number" type="number" min="0.25" step="0.25" value={duration} onChange={(event) => updateManualShiftDuration(index, Number(event.target.value))} />
-                                  <span className="text-xs text-muted-foreground">{en ? "h" : "小时"}</span>
-                                </span>
-                              </label>
+                          {manualScheduleMode === "period" ? <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                            {manualShiftRanges.map((range, index) => (
+                              <div key={index} className="grid min-h-20 gap-2 border border-border/70 bg-muted/25 px-3 py-2 text-sm">
+                                <div className="flex items-center justify-between gap-3">
+                                  <span>{en ? `Shift ${index + 1}` : `班次 ${index + 1}`}</span>
+                                  <span className="text-xs text-muted-foreground">{en ? `(${formatManualShiftDuration(range.durationMinutes, true)})` : `（${formatManualShiftDuration(range.durationMinutes, false)}）`}</span>
+                                </div>
+                                <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                                  <label className="grid gap-1 text-xs text-muted-foreground">
+                                    <span>{en ? "Start" : "开始"}</span>
+                                    <input
+                                      aria-label={en ? `Shift ${index + 1} start time` : `班次 ${index + 1} 开始时间`}
+                                      className="h-9 min-w-0 rounded-[4px] border border-input bg-background px-2 font-number disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
+                                      type="time"
+                                      step="60"
+                                      value={range.startTime}
+                                      disabled={index > 0}
+                                      onChange={(event) => {
+                                        if (event.target.value) onManualShiftStartTimeChange?.(event.target.value);
+                                      }}
+                                    />
+                                  </label>
+                                  <span className="mt-5 text-muted-foreground" aria-hidden="true">→</span>
+                                  <label className="grid gap-1 text-xs text-muted-foreground">
+                                    <span>{en ? "End" : "结束"}</span>
+                                    <input
+                                      aria-label={en ? `Shift ${index + 1} end time` : `班次 ${index + 1} 结束时间`}
+                                      className="h-9 min-w-0 rounded-[4px] border border-input bg-background px-2 font-number disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
+                                      type="time"
+                                      step="60"
+                                      value={range.endTime}
+                                      disabled={index === manualShiftRanges.length - 1}
+                                      onChange={(event) => updateManualShiftEnd(index, event.target.value)}
+                                    />
+                                  </label>
+                                </div>
+                              </div>
                             ))}
-                          </div>
+                          </div> : null}
                         </section>
                       ) : <RotationSettings value={rotationProfile} onChange={onRotationProfileChange} />}
                     </div>

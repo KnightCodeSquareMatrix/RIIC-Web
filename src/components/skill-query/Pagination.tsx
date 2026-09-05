@@ -12,16 +12,17 @@ interface PaginationProps {
   page: number;
   pageCount: number;
   onPageChange: (page: number) => void;
+  alwaysVisible?: boolean;
 }
 
-export function Pagination({ page, pageCount, onPageChange }: PaginationProps) {
+export function Pagination({ page, pageCount, onPageChange, alwaysVisible = false }: PaginationProps) {
   const { locale } = useLanguageDemo();
   const en = locale === "en";
   const [draft, setDraft] = useState(String(page));
 
   useEffect(() => setDraft(String(page)), [page]);
 
-  if (pageCount <= 1) return null;
+  if (pageCount <= 1 && !alwaysVisible) return null;
 
   function commit() {
     const parsed = Number(draft);
