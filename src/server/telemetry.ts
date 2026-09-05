@@ -20,6 +20,8 @@ const ALLOWED_NAMES = new Set([
   "plan_response",
   "plan_render",
   "plan_result",
+  "upgrade_simulation_submit",
+  "upgrade_simulation_response",
   "page_view",
   "js_error",
   "api_error",

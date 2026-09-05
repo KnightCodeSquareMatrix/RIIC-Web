@@ -34,11 +34,18 @@ export interface ManualShift {
   fiammettaTarget: string | null;
 }
 
+export interface ManualScheduleSource {
+  kind: "calculator";
+  variant: "baseline" | "progression-adjusted";
+  createdAt: string;
+}
+
 export interface ManualScheduleDraft {
   version: 2;
   activeShift: number;
   fiammettaEnabled: boolean;
   shifts: ManualShift[];
+  source?: ManualScheduleSource;
 }
 
 export interface ManualOperatorConflict {
@@ -100,6 +107,7 @@ export function createManualScheduleDraftFromCalculator(input: {
   fallbackDurations: readonly number[];
   fiammettaEnabled: boolean;
   trainingRoomShifts?: readonly TrainingRoomShift[];
+  source?: ManualScheduleSource;
 }): ManualScheduleDraft {
   const planCount = input.maa?.plans.length ?? 0;
   const durations = Array.from(
@@ -114,6 +122,7 @@ export function createManualScheduleDraftFromCalculator(input: {
   );
   const draft = createManualScheduleDraft(durations);
   draft.fiammettaEnabled = input.fiammettaEnabled;
+  if (input.source) draft.source = { ...input.source };
 
   input.maa?.plans.forEach((plan, shiftIndex) => {
     const shift = draft.shifts[shiftIndex];
@@ -179,11 +188,25 @@ export function loadManualScheduleDraft(storage: StorageLike): ManualScheduleDra
     const activeShift = "activeShift" in value && Number.isInteger(value.activeShift)
       ? Math.max(0, Math.min(shifts.length - 1, Number(value.activeShift)))
       : 0;
+    const rawSource = "source" in value && value.source && typeof value.source === "object"
+      ? value.source as Partial<ManualScheduleSource>
+      : null;
+    const source = rawSource?.kind === "calculator"
+      && (rawSource.variant === "baseline" || rawSource.variant === "progression-adjusted")
+      && typeof rawSource.createdAt === "string"
+      && Number.isFinite(Date.parse(rawSource.createdAt))
+      ? {
+          kind: "calculator" as const,
+          variant: rawSource.variant,
+          createdAt: new Date(rawSource.createdAt).toISOString(),
+        }
+      : undefined;
     return {
       version: 2,
       activeShift,
       fiammettaEnabled: "fiammettaEnabled" in value && value.fiammettaEnabled === true,
       shifts,
+      ...(source ? { source } : {}),
     };
   } catch {
     return null;
@@ -208,6 +231,7 @@ export function resizeManualScheduleDraft(
     activeShift: Math.min(draft.activeShift, shifts.length - 1),
     fiammettaEnabled: draft.fiammettaEnabled,
     shifts,
+    ...(draft.source ? { source: { ...draft.source } } : {}),
   };
 }
 
@@ -221,6 +245,7 @@ export function reconcileManualScheduleDraft(
     version: 2,
     activeShift: Math.min(Math.max(0, draft.activeShift), Math.max(0, draft.shifts.length - 1)),
     fiammettaEnabled: draft.fiammettaEnabled === true,
+    ...(draft.source ? { source: { ...draft.source } } : {}),
     shifts: draft.shifts.map((shift) => ({
       durationHours: finitePositive(shift.durationHours, 12),
       fiammettaTarget: shift.fiammettaTarget && (!owned || owned.has(shift.fiammettaTarget))
@@ -242,6 +267,19 @@ export function reconcileManualScheduleDraft(
       })),
     })),
   };
+}
+
+export function manualScheduleDraftContentEqual(
+  left: ManualScheduleDraft,
+  right: ManualScheduleDraft,
+): boolean {
+  return JSON.stringify({
+    fiammettaEnabled: left.fiammettaEnabled,
+    shifts: left.shifts,
+  }) === JSON.stringify({
+    fiammettaEnabled: right.fiammettaEnabled,
+    shifts: right.shifts,
+  });
 }
 
 export function findManualOperatorConflict(

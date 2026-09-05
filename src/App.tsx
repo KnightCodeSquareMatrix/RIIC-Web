@@ -135,6 +135,9 @@ const IssueNoteModal = lazy(() => loadComponents().then((module) => ({ default: 
 const ProductChangeConfirmModal = lazy(() => loadComponents().then((module) => ({
   default: module.ProductChangeConfirmModal,
 })));
+const ManualDraftReplaceDialog = lazy(() => import("@/components/ManualDraftReplaceDialog").then((module) => ({
+  default: module.ManualDraftReplaceDialog,
+})));
 type ProductChange =
   | { type: "factory"; roomId: string; recipe: FactoryRecipe }
   | { type: "trade"; roomId: string; order: TradeOrder };
@@ -284,6 +287,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   const [manualFiammettaEnabled, setManualFiammettaEnabled] = useState(false);
   const [manualShiftDurations, setManualShiftDurations] = useState<number[]>([...DEFAULT_MANUAL_SHIFT_DURATIONS]);
   const [manualDraftHandoff, setManualDraftHandoff] = useState<ManualScheduleDraft | null>(null);
+  const [pendingManualDraftReplacement, setPendingManualDraftReplacement] = useState<ManualScheduleDraft | null>(null);
   const [inputMode, setInputMode] = useState<"skland" | "maa" | "manual">(CLIENT_SKLAND_ENABLED ? "skland" : "maa");
   const [maaPaste, setMaaPaste] = useState("");
   const [sklandScheduleSnapshot, setSklandScheduleSnapshot] = useState<SklandScheduleSnapshot | null>(null);
@@ -1154,6 +1158,24 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     downloadJson("arknights-infra-schedule-maa.json", result.maa);
   }
 
+  function openManualScheduleDraft(draft: ManualScheduleDraft) {
+    setPendingManualDraftReplacement(null);
+    setManualShiftDurations(draft.shifts.map((shift) => shift.durationHours));
+    setManualFiammettaEnabled(draft.fiammettaEnabled);
+    setManualDraftHandoff(draft);
+    try {
+      window.localStorage.setItem(MANUAL_SCHEDULE_STORAGE_KEY, JSON.stringify(draft));
+    } catch {
+      // The manual page remains usable; it will surface its existing storage warning.
+    }
+    navigateToPage("manual");
+  }
+
+  function confirmManualDraftReplacement() {
+    if (!pendingManualDraftReplacement) return;
+    openManualScheduleDraft(pendingManualDraftReplacement);
+  }
+
   async function handleEditManualSchedule() {
     if (!scheduleResult) {
       navigateToPage("manual");
@@ -1161,7 +1183,8 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     }
     const {
       createManualScheduleDraftFromCalculator,
-      persistManualScheduleDraft,
+      loadManualScheduleDraft,
+      manualScheduleDraftContentEqual,
       reconcileManualScheduleDraft,
     } = await import("./manual-schedule");
     const resultDurations = scheduleResult.rotation.shifts
@@ -1174,17 +1197,27 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       fallbackDurations: durations,
       fiammettaEnabled: effectiveFiammettaEnabled,
       trainingRoomShifts: scheduleResult.trainingRoom?.shifts,
+      source: {
+        kind: "calculator",
+        variant: scheduleVariant === "trial" && upgradeComparison?.baseline === result
+          ? "progression-adjusted"
+          : "baseline",
+        createdAt: new Date().toISOString(),
+      },
     }), layout, operbox);
 
-    setManualShiftDurations(draft.shifts.map((shift) => shift.durationHours));
-    setManualFiammettaEnabled(draft.fiammettaEnabled);
-    setManualDraftHandoff(draft);
+    let existingDraft: ManualScheduleDraft | null = null;
     try {
-      persistManualScheduleDraft(window.localStorage, draft);
+      existingDraft = loadManualScheduleDraft(window.localStorage);
     } catch {
-      // The manual page remains usable; it will surface its existing storage warning.
+      existingDraft = null;
     }
-    navigateToPage("manual");
+    if (existingDraft && !manualScheduleDraftContentEqual(existingDraft, draft)) {
+      setPendingManualDraftReplacement(draft);
+      return;
+    }
+
+    openManualScheduleDraft(draft);
   }
 
   function clearIssueState() {
@@ -1905,6 +1938,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       fiammettaEnabled: effectiveManualFiammettaEnabled,
       initialDraft: accountCanUseCurrentBox ? manualDraftHandoff : null,
       onInitialDraftConsumed: () => setManualDraftHandoff(null),
+      onOpenCalculator: () => navigateToPage("calculator"),
       onShiftDurationsChange: setManualShiftDurations,
       onFiammettaEnabledChange: setManualFiammettaEnabled,
       onOpenSetup: handleManualSetup,
@@ -2154,6 +2188,11 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
         busy={loading && Boolean(pendingProductChange)}
         onConfirm={() => void confirmScheduleProductChange()}
         onCancel={() => setPendingProductChange(null)}
+      /></Suspense> : null}
+      {pendingManualDraftReplacement ? <Suspense fallback={null}><ManualDraftReplaceDialog
+        draft={pendingManualDraftReplacement}
+        onCancel={() => setPendingManualDraftReplacement(null)}
+        onConfirm={confirmManualDraftReplacement}
       /></Suspense> : null}
       </SidebarInset>
     </SidebarProvider>
