@@ -85,7 +85,7 @@ function MemberRow({ member }: { member: TrainingAdviceMember }) {
   if (!hasSkills) return <div className={cardClassName}>{content}</div>;
   return (
     <Suspense fallback={cardButton}>
-      <OperatorSkillTooltip name={member.operator} trigger={cardButton} />
+      <OperatorSkillTooltip name={member.operator} trigger={cardButton} showProfession />
     </Suspense>
   );
 }
