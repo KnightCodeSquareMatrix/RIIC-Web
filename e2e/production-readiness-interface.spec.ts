@@ -527,8 +527,8 @@ test("setup exposes and persists only worker-supported rotation profiles", async
   expect(requestedSourceName).toBe("手动选择的 Box");
   expect(requestedBoxSource).toBe("maa");
   expect(Array.isArray(requestedOperbox)).toBe(true);
-  expect(requestedOperbox).toHaveLength(425);
-  expect(new Set((requestedOperbox as Array<{ id: string }>).map((operator) => operator.id)).size).toBe(425);
+  expect(requestedOperbox).toHaveLength(fullOperatorCount);
+  expect(new Set((requestedOperbox as Array<{ id: string }>).map((operator) => operator.id)).size).toBe(fullOperatorCount);
   expect((requestedOperbox as Array<{ own: boolean }>).every((operator) => operator.own)).toBe(true);
   const persisted = await page.evaluate(() => JSON.parse(
     window.localStorage.getItem("arknights-infra-calc-session-v5") ?? "{}"
@@ -536,7 +536,7 @@ test("setup exposes and persists only worker-supported rotation profiles", async
   expect(persisted.rotationProfile).toBe("abc_12_12_12");
   expect(persisted.sourceName).toBe("手动选择的 Box");
   expect(persisted.boxSource).toBe("maa");
-  expect(persisted.operbox).toHaveLength(425);
+  expect(persisted.operbox).toHaveLength(fullOperatorCount);
 });
 
 test("layout level controls clamp edits and expose the power-safe 342 defaults", async ({ page }) => {
