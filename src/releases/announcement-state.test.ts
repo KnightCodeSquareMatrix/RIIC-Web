@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isReleaseUnread, readSeenRelease, rememberRelease, RELEASE_SEEN_KEY } from "./announcement-state.ts";
+import { isReleaseUnread, readSeenRelease, releaseSeenKey, rememberRelease, RELEASE_SEEN_KEY } from "./announcement-state.ts";
 import { releaseHistory } from "./history.ts";
 import { latestRelease } from "./latest.ts";
 
@@ -35,6 +35,22 @@ test("acknowledgement touches only the release key and preserves newer acknowled
   assert.equal(readSeenRelease(storage), "0.7.0");
   assert.equal(values.get("box"), "original");
   assert.equal(values.size, 2);
+});
+
+test("the one-time announcement revision ignores old production markers then stays seen", () => {
+  const values = new Map([["riic-release-seen-v2:production", "0.6.1"]]);
+  const storage = {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => { values.set(key, value); },
+  };
+  const activeKey = releaseSeenKey("production");
+  assert.equal(activeKey, "riic-release-seen-v3:production");
+  assert.equal(releaseSeenKey("development"), "riic-release-seen-v2:development");
+  assert.equal(releaseSeenKey("local"), "riic-release-seen-v2:local");
+  assert.equal(isReleaseUnread("0.6.1", readSeenRelease(storage, activeKey)), true);
+  rememberRelease(storage, "0.6.1", activeKey);
+  assert.equal(isReleaseUnread("0.6.1", readSeenRelease(storage, activeKey)), false);
+  assert.equal(values.get("riic-release-seen-v2:production"), "0.6.1");
 });
 
 test("unavailable or full browser storage does not throw", () => {

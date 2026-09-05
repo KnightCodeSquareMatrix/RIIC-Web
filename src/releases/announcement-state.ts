@@ -3,8 +3,14 @@ import type { ReleaseEnvironment } from "./types.ts";
 export const RELEASE_SEEN_KEY = "riic-release-seen-v1";
 export const RELEASE_SEEN_EVENT = "riic-release-seen";
 
+// Revision 3 intentionally gives every production browser one fresh v0.6.1
+// announcement. Once acknowledged, the new marker keeps later reloads and
+// redeployments quiet exactly as before.
+const PRODUCTION_RELEASE_SEEN_STORAGE_REVISION = 3;
+
 export function releaseSeenKey(environment: ReleaseEnvironment): string {
-  return `riic-release-seen-v2:${environment}`;
+  const revision = environment === "production" ? PRODUCTION_RELEASE_SEEN_STORAGE_REVISION : 2;
+  return `riic-release-seen-v${revision}:${environment}`;
 }
 
 type ReleaseStorage = Pick<Storage, "getItem" | "setItem">;
@@ -46,8 +52,7 @@ const sessionSeen = new Map<ReleaseEnvironment, string>();
 export function isBrowserReleaseUnread(version: string, environment: ReleaseEnvironment): boolean {
   if (!isReleaseUnread(version, sessionSeen.get(environment) ?? null)) return false;
   try {
-    const seen = readSeenRelease(window.localStorage, releaseSeenKey(environment))
-      ?? (environment === "production" ? readSeenRelease(window.localStorage) : null);
+    const seen = readSeenRelease(window.localStorage, releaseSeenKey(environment));
     return isReleaseUnread(version, seen);
   }
   catch { return true; }
