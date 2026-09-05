@@ -292,6 +292,8 @@ test("progression adjustments sync back to the schedule settings manual BOX", as
   await expect(setupDialog.getByRole("tab", { name: "手动选择", exact: true })).toHaveAttribute("aria-selected", "true");
   const manualPicker = setupDialog.locator("[data-manual-operbox-picker]");
   await manualPicker.getByRole("textbox", { name: "搜索干员" }).fill("阿米娅");
+  await manualPicker.getByRole("button", { name: "查看阿米娅的基建技能", exact: true }).hover();
+  await expect(page.locator('[data-slot="tooltip-content"]')).toBeVisible();
   await expect(manualPicker.getByRole("radiogroup", { name: "阿米娅持有与精英阶段" }).getByRole("radio", { name: "精1", exact: true })).toBeChecked();
   await setupDialog.getByRole("button", { name: "Close" }).click();
 
