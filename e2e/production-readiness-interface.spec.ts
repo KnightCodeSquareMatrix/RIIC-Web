@@ -293,7 +293,13 @@ test("progression adjustments sync back to the schedule settings manual BOX", as
   const manualPicker = setupDialog.locator("[data-manual-operbox-picker]");
   await manualPicker.getByRole("textbox", { name: "搜索干员" }).fill("阿米娅");
   await manualPicker.getByRole("button", { name: "查看阿米娅的基建技能", exact: true }).hover();
-  await expect(page.locator('[data-slot="tooltip-content"]')).toBeVisible();
+  const manualSkillTooltip = page.locator('[data-slot="tooltip-content"]');
+  await expect(manualSkillTooltip).toBeVisible();
+  await expect(manualSkillTooltip.getByText("当前选择：精1 Lv.70", { exact: true })).toBeVisible();
+  await expect(manualSkillTooltip.getByText("已解锁", { exact: true })).toBeVisible();
+  await expect(manualSkillTooltip.getByText("未解锁", { exact: true })).toBeVisible();
+  await expect(manualSkillTooltip.locator('[data-skill-unlocked="false"]')).toHaveCSS("opacity", "0.4");
+  await expect(manualSkillTooltip.locator('[data-skill-unlocked="false"]')).toHaveCSS("filter", "grayscale(1)");
   await expect(manualPicker.getByRole("radiogroup", { name: "阿米娅持有与精英阶段" }).getByRole("radio", { name: "精1", exact: true })).toBeChecked();
   await setupDialog.getByRole("button", { name: "Close" }).click();
 
