@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Bug, Gauge, House, MessageSquareText, UsersRound } from "lucide-react";
+import { BookOpen, Bug, Gauge, House, MessageSquareText, UsersRound } from "lucide-react";
 import { usePathname } from "next/navigation";
 
 import { buttonVariants } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { useLanguageDemo } from "@/language-demo";
 const ITEMS = [
   { href: "/admin", zh: "运行概览", en: "Overview", icon: Gauge },
   { href: "/admin/skills", zh: "技能注释", en: "Skill notes", icon: MessageSquareText },
+  { href: "/admin/changelog", zh: "更新日志", en: "Changelog", icon: BookOpen },
   { href: "/admin/issues", zh: "求解器问题", en: "Solver issues", icon: Bug },
   { href: "/admin/users", zh: "用户管理", en: "Users", icon: UsersRound },
 ] as const;

@@ -2,6 +2,23 @@
 
 All notable changes to RIIC-Web are documented in this file.
 
+## [0.6.1] - 2026-09-05
+
+### Added
+
+- A bilingual changelog page is available from the sidebar and shares its release presentation with the version announcement dialog.
+- Administrators can create drafts, preview page and dialog layouts, publish or withdraw releases, and control whether a release triggers a notification.
+
+### Changed
+
+- Release drafts and published snapshots are stored independently in PostgreSQL and isolated by production, development, and local environments.
+- Version announcements wait until the workbench is ready, remember acknowledgement per environment, synchronize across tabs, and do not repeat for same-version edits or rollbacks.
+
+### For contributors
+
+- Migration `0015_release_notes.sql` creates the release-note store and imports the existing public release history.
+- Validation, API, PostgreSQL integration, browser-flow, bundle-budget, and deployment-boundary coverage protect the changelog workflow.
+
 ## [0.6.0] - 2026-09-05
 
 ### Added
