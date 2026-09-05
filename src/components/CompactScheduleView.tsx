@@ -40,6 +40,7 @@ export interface CompactScheduleViewProps {
   rows: RoomRow[];
   layout: BaseBlueprint;
   eliteByOperator?: ReadonlyMap<string, number>;
+  levelByOperator?: ReadonlyMap<string, number>;
   activeShift: number;
   activePlan?: MaaPlan;
   shiftDirection: ShiftDirection;
@@ -67,6 +68,7 @@ function CompactRoomCard({
   efficiency,
   slots,
   eliteByOperator,
+  levelByOperator,
   shiftDirection,
   onIssue,
   feedbackDisabled = false,
@@ -81,6 +83,7 @@ function CompactRoomCard({
   efficiency: ReturnType<typeof presentRoomEfficiency>;
   slots: { slot: RoomRow["operatorSlots"][number] | undefined; positionLabel?: string }[];
   eliteByOperator?: ReadonlyMap<string, number>;
+  levelByOperator?: ReadonlyMap<string, number>;
   shiftDirection: ShiftDirection;
   onIssue?: (row: RoomRow) => void;
   feedbackDisabled?: boolean;
@@ -171,6 +174,7 @@ function CompactRoomCard({
       key={`${row.key}-${index}`}
       slot={slot}
       elite={slot ? eliteByOperator?.get(slot.name) : undefined}
+      operatorLevel={slot ? levelByOperator?.get(slot.name) : undefined}
       autofill={row.group === "dormitory" && row.autofill}
       compactView
       showSkillTooltip
@@ -271,7 +275,7 @@ function CompactFeedbackButton({ row, disabled, onIssue }: { row: RoomRow; disab
 }
 
 export function CompactScheduleView(props: CompactScheduleViewProps) {
-  const { rows, layout, eliteByOperator, shiftDirection, onIssue, feedbackDisabled = false, onSlotClick } = props;
+  const { rows, layout, eliteByOperator, levelByOperator, shiftDirection, onIssue, feedbackDisabled = false, onSlotClick } = props;
   const { locale } = useLanguageDemo();
 
   if (rows.length === 0) {
@@ -314,6 +318,7 @@ export function CompactScheduleView(props: CompactScheduleViewProps) {
         efficiency={efficiency}
         slots={slots}
         eliteByOperator={eliteByOperator}
+        levelByOperator={levelByOperator}
         shiftDirection={shiftDirection}
         onIssue={onIssue}
         feedbackDisabled={feedbackDisabled}

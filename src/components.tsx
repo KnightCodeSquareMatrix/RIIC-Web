@@ -1371,6 +1371,7 @@ export function OperatorSlot({
   slot,
   currentMorale,
   elite,
+  operatorLevel,
   autofill = false,
   compactFactory = false,
   compactView = false,
@@ -1390,6 +1391,8 @@ export function OperatorSlot({
   currentMorale?: number;
   /** 干员精英化等级（0/1/2），传入后会在头像左下角显示对应角标。 */
   elite?: number;
+  /** 干员当前等级，用于判断带等级要求的基建技能是否已解锁。 */
+  operatorLevel?: number;
   autofill?: boolean;
   compactFactory?: boolean;
   compactView?: boolean;
@@ -1539,6 +1542,8 @@ export function OperatorSlot({
             trigger={frame}
             highlightedSkillIds={skillTooltipHighlightIds}
             contextLabel={skillTooltipContextLabel}
+            currentElite={elite}
+            currentLevel={operatorLevel}
           />
         </Suspense>
       ) : undefined}
@@ -1562,6 +1567,7 @@ export function ScheduleBoard({
   layout,
   planRevision,
   eliteByOperator,
+  levelByOperator,
   viewControlsSlot,
   mobileActionsSlot,
   shiftInfoSlot,
@@ -1582,6 +1588,8 @@ export function ScheduleBoard({
   planRevision?: string;
   /** 按干员名查精英化等级（0/1/2），用于在排班头像左下角显示角标。 */
   eliteByOperator?: ReadonlyMap<string, number>;
+  /** 按干员名查当前等级，用于技能解锁状态。 */
+  levelByOperator?: ReadonlyMap<string, number>;
   viewControlsSlot?: ReactNode;
   mobileActionsSlot?: ReactNode;
   shiftInfoSlot?: ReactNode;
@@ -1939,6 +1947,7 @@ export function ScheduleBoard({
                             key={`${row.key}-${index}`}
                             slot={slot}
                             elite={slot ? eliteByOperator?.get(slot.name) : undefined}
+                            operatorLevel={slot ? levelByOperator?.get(slot.name) : undefined}
                             autofill={row.group === "dormitory" && row.autofill}
                             compactFactory={compactFactoryRoom}
                             centerFrameInList
@@ -1995,6 +2004,7 @@ export function ScheduleBoard({
               rows={visibleRows}
               layout={layout}
               eliteByOperator={eliteByOperator}
+              levelByOperator={levelByOperator}
               activeShift={activeShift}
               activePlan={activePlan}
               shiftDirection={shiftDirection}
