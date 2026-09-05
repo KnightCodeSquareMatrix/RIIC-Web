@@ -2,6 +2,21 @@
 
 All notable changes to RIIC-Web are documented in this file.
 
+## [0.6.0] - 2026-09-05
+
+### Added
+
+- Plan skill mastery from the new sidebar entry at `/mastery`, using owned Elite 2 operators from the current Box with search, rarity and profession filters.
+- Compare low-interaction and fastest trainer plans, including stage handoffs, inherited halving effects, environment bonuses and a configurable handoff buffer.
+- Follow a stage-by-stage timeline, inspect each trainer's unlocked infrastructure skills and copy the operation checklist. Calculations run locally without changing the Box or invoking the base-schedule solver.
+- Read the new Mastery Planner guide for supported effects, calculation assumptions and data maintenance.
+
+### Changed
+
+- Mastery selection and manual Box editing reuse the same search and filter controls while retaining their separate selection and progression-editing behavior.
+- Trainer skill details load on demand so the new planner and existing pages remain within the current download budgets.
+- Mastery rules are checked against the pinned operator data during resource synchronization; input or Box changes invalidate old plans before recalculation.
+
 ## [0.5.1] - 2026-09-05
 
 ### Added
