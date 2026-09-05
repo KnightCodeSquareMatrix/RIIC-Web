@@ -37,6 +37,7 @@ export function UpgradeSimulationDialog({
   baseline,
   open,
   disabled = false,
+  showTrigger = true,
   onOpen,
   onOpenChange,
   onSimulate,
@@ -46,6 +47,7 @@ export function UpgradeSimulationDialog({
   baseline: PublicPlanData;
   open: boolean;
   disabled?: boolean;
+  showTrigger?: boolean;
   onOpen: () => void;
   onOpenChange: (open: boolean) => void;
   onSimulate: (trialOperbox: OperBoxEntry[]) => Promise<PublicPlanData>;
@@ -79,8 +81,8 @@ export function UpgradeSimulationDialog({
     if (pendingRef.current) return;
     if (!hasOperboxEliteStateChange(operbox, nextBox)) {
       setError(en
-        ? "Change at least one operator's ownership or elite stage before running the simulation."
-        : "请至少调整一名干员的精英化状态后再运行试算。");
+        ? "Change at least one operator's ownership or elite stage before recalculating."
+        : "请至少修改一名干员的持有或精英化状态后再重新计算。");
       return;
     }
 
@@ -96,7 +98,7 @@ export function UpgradeSimulationDialog({
     } catch (reason) {
       setError(reason instanceof Error
         ? reason.message
-        : en ? "Progression adjustment failed. Please try again later." : "调整练度试算失败，请稍后重试。");
+        : en ? "Recalculation with the updated progression failed. Please try again later." : "使用修改后的练度重新计算失败，请稍后重试。");
     } finally {
       pendingRef.current = false;
       setPending(false);
@@ -105,52 +107,55 @@ export function UpgradeSimulationDialog({
 
   return (
     <>
-      <Button type="button" variant="outline" size="sm" className="h-9 min-h-0 max-sm:h-11" disabled={disabled} onClick={onOpen}>
-        <FlaskConical />{en ? "Adjust progression" : "调整练度"}
-      </Button>
+      {showTrigger ? (
+        <Button type="button" variant="outline" size="sm" className="h-9 min-h-0 max-sm:h-11" disabled={disabled} onClick={onOpen}>
+          <FlaskConical />{en ? "Modify progression and recalculate" : "修改练度并重算"}
+        </Button>
+      ) : null}
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent data-upgrade-simulation-dialog className="h-[min(720px,calc(100dvh-1rem))] max-w-[calc(100%-1rem)] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden rounded-[24px] p-0 sm:max-w-[min(1060px,calc(100%-2rem))] sm:rounded-[32px]" aria-describedby="upgrade-simulation-description">
           <DialogHeader className="border-b border-border/70 px-4 py-3 pr-14 sm:flex-row sm:items-center sm:gap-5 sm:px-6 sm:py-4 sm:pr-16">
             <DialogTitle className="shrink-0 text-lg">
-              {en ? "Same-layout progression adjustment" : "同布局调整练度"}
+              {en ? "Modify progression and recalculate" : "修改练度并重新计算"}
             </DialogTitle>
             <DialogDescription id="upgrade-simulation-description" className="max-w-3xl leading-5">
               {en
-                ? "Adjust ownership or elite stage and solve with the same base layout. Successful changes sync to the manual BOX; the current schedule stays available for comparison."
-                : "调整干员持有或精英化状态，按当前布局重新求解；成功后同步到手动 BOX，当前班表保留用于对比。"}
+                ? "Update ownership or elite stage and recalculate with the same layout. After success, the current BOX is updated and the original plan remains available for comparison."
+                : "修改干员持有或精英化状态，并按当前布局重新计算；成功后会更新当前 BOX，同时保留原方案用于对比。"}
             </DialogDescription>
           </DialogHeader>
           <ScrollArea className="min-h-0" viewportClassName="overflow-x-hidden">
             <div className="px-4 py-3 sm:px-6 sm:py-4">
               <ManualOperboxPicker
                 compact
+                showProfessionFilter
                 operbox={operbox}
                 scheduledOperatorNames={scheduledOperatorNames}
                 scheduledOperatorShifts={scheduledOperatorShifts}
                 scheduledShiftCount={Math.min(3, baseline.maa.plans.length)}
-                title={en ? "Operators for this simulation" : "本次试算干员"}
+                title={en ? "Operators for this recalculation" : "本次重新计算使用的干员"}
                 description={en
-                  ? "Change at least one operator; this selection is shared with Schedule Settings."
-                  : "至少调整一名干员；这里的选择会与排班设置同步。"}
+                  ? "Change at least one operator. These updates are saved to the same BOX used by Schedule Settings."
+                  : "请至少修改一名干员；这里的修改会保存到排班设置使用的同一个 BOX。"}
                 applyLabel={pending
                   ? (en ? "Solving again…" : "正在重新求解…")
-                  : (en ? "Solve with adjustments" : "按调整重新试算")}
+                  : (en ? "Save progression and recalculate" : "保存练度并重新计算")}
                 applyDisabled={pending}
                 onApply={(entries) => void apply(entries)}
               />
               {pending ? (
                 <p className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="size-4 animate-spin" />
-                  {en ? "Solving again with the same layout…" : "正在按同一布局重新求解…"}
+                  {en ? "Recalculating with the updated progression and same layout…" : "正在使用修改后的练度按同一布局重新计算…"}
                 </p>
               ) : null}
               {error ? <p className="mt-3 border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive" role="alert">{error}</p> : null}
               {trial ? (
-                <section className="mt-3 flex flex-wrap items-center gap-3 border border-primary/25 bg-primary/5 px-3 py-2.5" aria-label={en ? "Progression adjustment result" : "调整练度结果"}>
+                <section className="mt-3 flex flex-wrap items-center gap-3 border border-primary/25 bg-primary/5 px-3 py-2.5" aria-label={en ? "Progression recalculation result" : "练度重新计算结果"}>
                   <div className="min-w-48 flex-1">
-                    <h3 className="font-semibold">{en ? "Simulation complete" : "试算完成"}</h3>
+                    <h3 className="font-semibold">{en ? "Recalculation complete" : "重新计算完成"}</h3>
                     <p className="mt-0.5 text-xs text-muted-foreground">
-                      {en ? "The manual BOX is synced. Switch between both schedules on the main screen." : "手动 BOX 已同步，可在主界面切换当前方案与调整练度方案。"}
+                      {en ? "The BOX is updated. Switch between the original and progression-adjusted plans on the main screen." : "当前 BOX 已更新，可在主界面切换原方案与练度调整后方案。"}
                     </p>
                   </div>
                   <dl className="grid w-full grid-cols-3 divide-x divide-primary/15 border border-primary/15 bg-background sm:w-auto">
