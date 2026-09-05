@@ -1,5 +1,8 @@
 import { expect, test, type Locator } from "@playwright/test";
+import arkntoolsSource from "../src/generated/arkntools/source.json" with { type: "json" };
 import { requestId, diagnosticId, waitForOwnAnimations, gotoStable, expectVisibleNumbersUseNumberFont, profile, planData, scheduleVisualPlanData, sampleData, authenticatedSklandSnapshot, mockApis, openSklandOverview, seedPreferences, seedV4Session } from "./production-readiness.fixture";
+
+const fullOperatorCount = arkntoolsSource.counts.operators;
 
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/auth/get-session", (route) => route.fulfill({
