@@ -5,9 +5,8 @@ import {
   useCallback,
   useDeferredValue,
   useMemo,
+  useRef,
   useState,
-  type KeyboardEvent as ReactKeyboardEvent,
-  type ReactNode,
 } from "react";
 import { Check, RotateCcw, Search } from "lucide-react";
 
@@ -26,21 +25,24 @@ import {
   maxEliteForRarity,
   type ManualOperboxStage,
 } from "@/manual-operbox";
+import { PROFESSION_LABELS, PROFESSION_LABELS_ENGLISH } from "@/operator-presentation";
 import type { OperBoxEntry } from "@/types";
 
 const PAGE_SIZE = 48;
 const RARITIES = [6, 5, 4, 3, 2, 1] as const;
-const FILTER_BUTTON_CLASS = "min-h-11 min-w-11 shrink-0 border px-2 font-number";
+const PROFESSIONS = [8, 1, 3, 2, 6, 4, 5, 7] as const;
 
 type CatalogOperator = {
   id: string;
   order: number;
   portrait: string;
+  profession: number;
 };
 
 type ManualRosterOperator = OperBoxEntry & {
   order: number;
   portrait: string;
+  profession: number;
 };
 
 const CATALOG_BY_ID = new Map(
@@ -52,6 +54,7 @@ const MANUAL_ROSTER: ManualRosterOperator[] = (fullOperboxJson as OperBoxEntry[]
     ...operator,
     order: CATALOG_BY_ID.get(operator.id)?.order ?? 0,
     portrait: CATALOG_BY_ID.get(operator.id)?.portrait ?? "",
+    profession: CATALOG_BY_ID.get(operator.id)?.profession ?? 0,
   }))
   .sort((left, right) => right.rarity - left.rarity || right.order - left.order || left.name.localeCompare(right.name, "zh-CN"));
 
@@ -74,52 +77,6 @@ function shiftLabel(shift: number, en: boolean, short = false): string {
   if (en) return short ? `S${shift}` : `Shift ${shift}`;
   if (short) return `${shift}班`;
   return ["第一班", "第二班", "第三班"][shift - 1] ?? `第${shift}班`;
-}
-
-function moveFilterFocus(event: ReactKeyboardEvent<HTMLDivElement>) {
-  if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
-  const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>("button:not(:disabled)"));
-  const currentIndex = buttons.indexOf(document.activeElement as HTMLButtonElement);
-  if (currentIndex < 0 || buttons.length === 0) return;
-  event.preventDefault();
-  const nextIndex = event.key === "Home"
-    ? 0
-    : event.key === "End"
-      ? buttons.length - 1
-      : (currentIndex + (event.key === "ArrowRight" ? 1 : -1) + buttons.length) % buttons.length;
-  buttons[nextIndex]?.focus();
-}
-
-function FilterButton({
-  pressed,
-  disabled = false,
-  selectedClassName,
-  ariaLabel,
-  children,
-  onClick,
-}: {
-  pressed: boolean;
-  disabled?: boolean;
-  selectedClassName?: string;
-  ariaLabel?: string;
-  children: ReactNode;
-  onClick: () => void;
-}) {
-  return (
-    <Button
-      type="button"
-      size="sm"
-      variant={pressed ? "secondary" : "ghost"}
-      className={cn(FILTER_BUTTON_CLASS, pressed ? selectedClassName : "border-transparent")}
-      data-manual-operbox-filter-option=""
-      aria-pressed={pressed}
-      aria-label={ariaLabel}
-      disabled={disabled}
-      onClick={onClick}
-    >
-      {children}
-    </Button>
-  );
 }
 
 function initialStages(operbox: OperBoxEntry[] | null): Record<string, ManualOperboxStage> {
@@ -258,27 +215,32 @@ export function ManualOperboxPicker({
   scheduledOperatorShifts,
   scheduledShiftCount = 0,
   compact = false,
+  showProfessionFilter = false,
 }: {
   operbox: OperBoxEntry[] | null;
   onApply: (entries: OperBoxEntry[]) => void;
   title?: string;
-  description?: string;
+  description?: string | null;
   applyLabel?: string;
   applyDisabled?: boolean;
   scheduledOperatorNames?: readonly string[];
   scheduledOperatorShifts?: Readonly<Record<string, readonly number[]>>;
   scheduledShiftCount?: number;
   compact?: boolean;
+  showProfessionFilter?: boolean;
 }) {
   const { locale } = useLanguageDemo();
   const en = locale === "en";
   const [query, setQuery] = useState("");
   const [onlyOwned, setOnlyOwned] = useState(false);
   const [rarity, setRarity] = useState("all");
+  const [profession, setProfession] = useState("all");
   const [rosterScope, setRosterScope] = useState<"scheduled" | "other">("scheduled");
   const [scheduledShift, setScheduledShift] = useState<"all" | number>("all");
   const [visibleLimit, setVisibleLimit] = useState(PAGE_SIZE);
   const [stages, setStages] = useState<Record<string, ManualOperboxStage>>(() => initialStages(operbox));
+  const [allMaximumStages, setAllMaximumStages] = useState(false);
+  const stagesBeforeAllMaximum = useRef<Record<string, ManualOperboxStage> | null>(null);
   const deferredQuery = useDeferredValue(query.trim().toLocaleLowerCase(locale === "en" ? "en-US" : "zh-CN"));
   const scheduledNames = useMemo(() => new Set([
     ...(scheduledOperatorNames ?? []),
@@ -293,6 +255,8 @@ export function ManualOperboxPicker({
   }), [scheduledOperatorShifts, scheduledShiftCount]);
 
   const handleStageChange = useCallback((id: string, stage: ManualOperboxStage) => {
+    stagesBeforeAllMaximum.current = null;
+    setAllMaximumStages(false);
     setStages((current) => ({ ...current, [id]: stage }));
   }, []);
 
@@ -309,12 +273,13 @@ export function ManualOperboxPicker({
     if (rosterScope === "scheduled" && scheduledShift !== "all" && !scheduledOperatorShifts?.[operator.name]?.includes(scheduledShift)) return false;
     if (onlyOwned && stage === "none") return false;
     if (rarity !== "all" && operator.rarity !== Number(rarity)) return false;
+    if (showProfessionFilter && profession !== "all" && operator.profession !== Number(profession)) return false;
     if (!deferredQuery) return true;
     const displayName = demoOperatorName(operator.name, locale).toLocaleLowerCase(locale === "en" ? "en-US" : "zh-CN");
     return operator.name.toLocaleLowerCase("zh-CN").includes(deferredQuery)
       || displayName.includes(deferredQuery)
       || operator.id.toLocaleLowerCase("en-US").includes(deferredQuery);
-  }), [deferredQuery, hasScheduledOperators, locale, onlyOwned, rarity, rosterScope, scheduledNames, scheduledOperatorShifts, scheduledShift, stages]);
+  }), [deferredQuery, hasScheduledOperators, locale, onlyOwned, profession, rarity, rosterScope, scheduledNames, scheduledOperatorShifts, scheduledShift, showProfessionFilter, stages]);
 
   function resetListView() {
     setVisibleLimit(PAGE_SIZE);
@@ -325,16 +290,141 @@ export function ManualOperboxPicker({
     onApply(buildManualOperbox(MANUAL_ROSTER, stages));
   }
 
+  function toggleAllMaximumStages() {
+    if (allMaximumStages) {
+      const previousStages = stagesBeforeAllMaximum.current;
+      stagesBeforeAllMaximum.current = null;
+      setAllMaximumStages(false);
+      if (previousStages) setStages(previousStages);
+      resetListView();
+      return;
+    }
+
+    stagesBeforeAllMaximum.current = stages;
+    setStages(Object.fromEntries(
+      MANUAL_ROSTER.map((operator) => [operator.id, maximumStageForRarity(operator.rarity)]),
+    ));
+    setAllMaximumStages(true);
+    setOnlyOwned(false);
+    resetListView();
+  }
+
+  const rarityTabs = (
+    <Tabs
+      className="min-w-0 shrink-0"
+      value={rarity}
+      onValueChange={(value) => {
+        setRarity(value);
+        resetListView();
+      }}
+    >
+      <TabsList
+        aria-label={en ? "Filter by rarity" : "星级筛选"}
+        className="max-w-full justify-start overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        <TabsTrigger value="all" disabled={applyDisabled}>
+          {en ? "All" : "全部"}
+        </TabsTrigger>
+        {RARITIES.map((value) => (
+          <TabsTrigger
+            key={value}
+            value={String(value)}
+            className="font-number"
+            aria-label={en ? `${value}-star operators` : `${value} 星干员`}
+            disabled={applyDisabled}
+          >
+            {value}★
+          </TabsTrigger>
+        ))}
+      </TabsList>
+    </Tabs>
+  );
+
+  const rosterScopeTabs = hasScheduledOperators ? (
+    <Tabs
+      className="shrink-0"
+      value={rosterScope}
+      onValueChange={(value) => {
+        const nextScope = value as "scheduled" | "other";
+        setRosterScope(nextScope);
+        if (nextScope === "other") setScheduledShift("all");
+        resetListView();
+      }}
+    >
+      <TabsList aria-label={en ? "Operator list scope" : "干员列表范围"}>
+        <TabsTrigger value="scheduled">
+          {en ? "In schedule" : "进入排班"}<span className="font-number opacity-65">{scheduledNames.size}</span>
+        </TabsTrigger>
+        <TabsTrigger value="other">
+          {en ? "Not scheduled" : "未进排班"}<span className="font-number opacity-65">{MANUAL_ROSTER.length - scheduledNames.size}</span>
+        </TabsTrigger>
+      </TabsList>
+    </Tabs>
+  ) : null;
+
+  const scheduledShiftTabs = compact && rosterScope === "scheduled" && scheduledShiftCount > 0 ? (
+    <Tabs
+      className="shrink-0 border-l border-border/70 pl-2"
+      value={String(scheduledShift)}
+      onValueChange={(value) => {
+        setScheduledShift(value === "all" ? "all" : Number(value));
+        resetListView();
+      }}
+    >
+      <TabsList aria-label={en ? "Schedule shift" : "排班班次"}>
+        <TabsTrigger value="all">
+          {en ? "All shifts" : "全部班次"}
+        </TabsTrigger>
+        {shiftCounts.map((count, index) => {
+          const shift = index + 1;
+          return (
+            <TabsTrigger key={shift} value={String(shift)}>
+              {shiftLabel(shift, en)}<span className="font-number opacity-65">{count}</span>
+            </TabsTrigger>
+          );
+        })}
+      </TabsList>
+    </Tabs>
+  ) : null;
+
+  const professionTabs = showProfessionFilter ? (
+    <Tabs
+      className="min-w-0 shrink-0"
+      value={profession}
+      onValueChange={(value) => {
+        setProfession(value);
+        resetListView();
+      }}
+    >
+      <TabsList aria-label={en ? "Filter by profession" : "职业筛选"}>
+        <TabsTrigger value="all" disabled={applyDisabled}>
+          {en ? "All" : "全部"}
+        </TabsTrigger>
+        {PROFESSIONS.map((value) => (
+          <TabsTrigger key={value} value={String(value)} disabled={applyDisabled}>
+            {en ? PROFESSION_LABELS_ENGLISH[value] : PROFESSION_LABELS[value]}
+          </TabsTrigger>
+        ))}
+      </TabsList>
+    </Tabs>
+  ) : null;
+
+  const resolvedDescription = description === undefined
+    ? (en
+        ? "Choose ownership and elite stage. Levels use each stage cap so level-gated infrastructure skills remain available."
+        : "选择持有状态与精英阶段；等级按该阶段上限估算，避免漏掉有等级要求的基建技能。")
+    : description;
+
   return (
     <div className={cn("grid", compact ? "gap-2.5" : "gap-4")} data-manual-operbox-picker data-density={compact ? "compact" : "comfortable"}>
       <div className={cn("flex flex-wrap justify-between gap-3 border-b border-border/70", compact ? "items-center pb-2.5" : "items-start pb-4")}>
         <div className={cn("min-w-0", compact && "flex flex-1 flex-wrap items-baseline gap-x-3 gap-y-1 max-sm:w-full max-sm:flex-none")}>
           <h4 className="shrink-0 text-sm font-semibold">{title ?? (en ? "Build your operator Box" : "手动选择干员 Box")}</h4>
-          <p className={cn("max-w-2xl text-xs text-muted-foreground", compact ? "leading-4" : "mt-1 leading-5")}>
-            {description ?? (en
-              ? "Choose ownership and elite stage. Levels use each stage cap so level-gated infrastructure skills remain available."
-              : "选择持有状态与精英阶段；等级按该阶段上限估算，避免漏掉有等级要求的基建技能。")}
-          </p>
+          {resolvedDescription ? (
+            <p className={cn("max-w-2xl text-xs text-muted-foreground", compact ? "leading-4" : "mt-1 leading-5")}>
+              {resolvedDescription}
+            </p>
+          ) : null}
           {compact ? (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs" aria-live="polite">
               <strong className="font-number text-foreground">{en ? `${ownedCount} owned` : `已拥有 ${ownedCount} 名`}</strong>
@@ -376,11 +466,11 @@ export function ManualOperboxPicker({
             aria-label={en ? "Search operator" : "搜索干员"}
           />
         </label>
-        <div className={cn("grid grid-cols-3", compact ? "gap-1.5" : "gap-2")} data-manual-operbox-actions>
-          <Button
+        <div className={cn("flex flex-nowrap items-center", compact ? "gap-1.5" : "gap-2")} data-manual-operbox-actions>
+          <SetupActionButton
             type="button"
             variant={onlyOwned ? "default" : "outline"}
-            className={cn("min-w-0 overflow-hidden px-2 text-ellipsis text-xs sm:px-3", compact ? "h-9" : "min-h-11 sm:text-sm")}
+            className="min-w-[92px] px-2 text-[11px] font-normal max-sm:min-w-[92px] sm:min-w-[104px] sm:px-2 sm:text-xs"
             aria-pressed={onlyOwned}
             onClick={() => {
               setOnlyOwned((current) => !current);
@@ -388,27 +478,24 @@ export function ManualOperboxPicker({
             }}
           >
             {en ? "Owned only" : "只看已拥有"}
-          </Button>
-          <Button
+          </SetupActionButton>
+          <SetupActionButton
             type="button"
-            variant="outline"
-            className={cn("min-w-0 overflow-hidden px-2 text-ellipsis text-xs sm:px-3", compact ? "h-9" : "min-h-11 sm:text-sm")}
-            onClick={() => {
-              setStages(Object.fromEntries(
-                MANUAL_ROSTER.map((operator) => [operator.id, maximumStageForRarity(operator.rarity)]),
-              ));
-              setOnlyOwned(false);
-              resetListView();
-            }}
+            variant={allMaximumStages ? "default" : "outline"}
+            className="min-w-[104px] px-2 text-[11px] font-normal max-sm:min-w-[104px] sm:min-w-[116px] sm:px-2 sm:text-xs"
+            aria-pressed={allMaximumStages}
+            onClick={toggleAllMaximumStages}
           >
             {en ? "Select all at max elite" : "全选最高精英"}
-          </Button>
+          </SetupActionButton>
           <Button
             type="button"
             variant="ghost"
             className={cn("min-w-0 overflow-hidden px-2 text-ellipsis text-xs sm:px-3", compact ? "h-9" : "min-h-11 sm:text-sm")}
             disabled={!ownedCount}
             onClick={() => {
+              stagesBeforeAllMaximum.current = null;
+              setAllMaximumStages(false);
               setStages(Object.fromEntries(MANUAL_ROSTER.map((operator) => [operator.id, "none"])));
               setOnlyOwned(false);
               resetListView();
@@ -419,90 +506,55 @@ export function ManualOperboxPicker({
         </div>
       </div>
 
-      <div className="flex min-w-0 items-center gap-1" data-manual-operbox-rarity-filter>
-        <div className="shrink-0 text-xs font-medium text-muted-foreground">{en ? "Rarity" : "星级"}</div>
+      {compact && hasScheduledOperators ? (
         <div
-          role="group"
-          aria-label={en ? "Filter by rarity" : "星级筛选"}
-          className="flex min-w-0 flex-1 flex-nowrap gap-0.5 overflow-x-auto"
-          onKeyDown={moveFilterFocus}
+          className="grid min-w-0 gap-1.5"
+          data-upgrade-operbox-filters
         >
-          <FilterButton
-            pressed={rarity === "all"}
-            disabled={applyDisabled}
-            selectedClassName={SHIFT_BADGE_CLASS[0]}
-            onClick={() => {
-              setRarity("all");
-              resetListView();
-            }}
+          <div
+            className="flex min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto pb-1 [scrollbar-width:thin]"
+            data-upgrade-operbox-schedule-filters
           >
-            {en ? "All" : "全部"}
-          </FilterButton>
-          {RARITIES.map((value) => (
-            <FilterButton
-              key={value}
-              pressed={rarity === String(value)}
-              disabled={applyDisabled}
-              selectedClassName={SHIFT_BADGE_CLASS[0]}
-              ariaLabel={en ? `${value}-star operators` : `${value} 星干员`}
-              onClick={() => {
-                setRarity((current) => current === String(value) ? "all" : String(value));
-                resetListView();
-              }}
-            >
-              {value}★
-            </FilterButton>
-          ))}
+            {rosterScopeTabs}
+            {scheduledShiftTabs}
+          </div>
+          <div
+            className="flex min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto pb-1 [scrollbar-width:thin]"
+            data-upgrade-operbox-operator-filters
+          >
+            <div className="flex shrink-0 items-center gap-1" data-manual-operbox-rarity-filter>
+              <div className="shrink-0 text-xs font-medium text-muted-foreground">{en ? "Rarity" : "星级"}</div>
+              {rarityTabs}
+            </div>
+            {professionTabs ? (
+              <div className="flex shrink-0 items-center gap-1 border-l border-border/70 pl-2" data-manual-operbox-profession-filter>
+                <div className="shrink-0 text-xs font-medium text-muted-foreground">{en ? "Profession" : "职业"}</div>
+                {professionTabs}
+              </div>
+            ) : null}
+          </div>
         </div>
-      </div>
-
-      {hasScheduledOperators ? (
-        <div className={cn(compact ? "flex flex-wrap items-center gap-1.5" : "flex flex-wrap items-center gap-2")}>
-          <Tabs
-            value={rosterScope}
-            onValueChange={(value) => {
-              const nextScope = value as "scheduled" | "other";
-              setRosterScope(nextScope);
-              if (nextScope === "other") setScheduledShift("all");
-              resetListView();
-            }}
-          >
-            <TabsList aria-label={en ? "Operator list scope" : "干员列表范围"}>
-              <TabsTrigger value="scheduled">
-                {en ? "In schedule" : "进入排班"}<span className="font-number opacity-65">{scheduledNames.size}</span>
-              </TabsTrigger>
-              <TabsTrigger value="other">
-                {en ? "Not scheduled" : "未进排班"}<span className="font-number opacity-65">{MANUAL_ROSTER.length - scheduledNames.size}</span>
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-          {compact && rosterScope === "scheduled" && scheduledShiftCount > 0 ? (
-            <div
-              role="group"
-              className="ml-1 flex flex-wrap items-center gap-1 border-l border-border/70 pl-2"
-              aria-label={en ? "Schedule shift" : "排班班次"}
-              onKeyDown={moveFilterFocus}
-            >
-              <FilterButton pressed={scheduledShift === "all"} onClick={() => { setScheduledShift("all"); resetListView(); }}>
-                {en ? "All shifts" : "全部班次"}
-              </FilterButton>
-              {shiftCounts.map((count, index) => {
-                const shift = index + 1;
-                return (
-                  <FilterButton
-                    key={shift}
-                    pressed={scheduledShift === shift}
-                    selectedClassName={SHIFT_BADGE_CLASS[index % SHIFT_BADGE_CLASS.length]}
-                    onClick={() => { setScheduledShift(shift); resetListView(); }}
-                  >
-                    {shiftLabel(shift, en)}<span className="font-number opacity-65">{count}</span>
-                  </FilterButton>
-                );
-              })}
+      ) : (
+        <>
+          <div className="flex min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto pb-1 [scrollbar-width:thin]">
+            <div className="flex shrink-0 items-center gap-1" data-manual-operbox-rarity-filter>
+              <div className="shrink-0 text-xs font-medium text-muted-foreground">{en ? "Rarity" : "星级"}</div>
+              {rarityTabs}
+            </div>
+            {professionTabs ? (
+              <div className="flex shrink-0 items-center gap-1 border-l border-border/70 pl-2" data-manual-operbox-profession-filter>
+                <div className="shrink-0 text-xs font-medium text-muted-foreground">{en ? "Profession" : "职业"}</div>
+                {professionTabs}
+              </div>
+            ) : null}
+          </div>
+          {hasScheduledOperators ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {rosterScopeTabs}
             </div>
           ) : null}
-        </div>
-      ) : null}
+        </>
+      )}
 
       {filteredOperators.length ? (
         <>

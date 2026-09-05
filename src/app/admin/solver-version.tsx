@@ -37,12 +37,9 @@ export function SolverVersion({
       data-admin-solver-status
     >
       <header className="flex flex-wrap items-start justify-between gap-4 border-b px-5 py-5 sm:px-6">
-        <div className="flex gap-3">
-          <span className="pt-0.5 font-mono text-xs text-muted-foreground" aria-hidden="true">01</span>
-          <div>
-            <h2 className="text-lg font-semibold tracking-tight">{en ? "Solver version" : "求解器版本"}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{en ? "Build identity and protocol capabilities currently running on the production worker" : "线上 Worker 当前实际运行的构建身份与协议能力"}</p>
-          </div>
+        <div>
+          <h2 className="text-lg font-semibold tracking-tight">{en ? "Solver version" : "求解器版本"}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{en ? "Build identity and protocol capabilities currently running on the production worker" : "线上 Worker 当前实际运行的构建身份与协议能力"}</p>
         </div>
         <span className={`inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-medium ${plannerReady ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300" : "bg-destructive/10 text-destructive"}`}>
           <span className={`size-1.5 rounded-full ${plannerReady ? "bg-emerald-500" : "bg-destructive"}`} aria-hidden="true" />

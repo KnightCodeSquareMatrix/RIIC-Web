@@ -95,15 +95,12 @@ export function AdminUserManagement() {
   return (
     <section id="users" className="scroll-mt-24 overflow-hidden rounded-2xl border bg-card" data-admin-user-management>
       <header className="border-b px-5 py-5 sm:px-6">
-        <div className="flex gap-3">
-          <span className="pt-0.5 font-mono text-xs text-muted-foreground" aria-hidden="true">03</span>
-          <div>
-            <h2 className="text-lg font-semibold tracking-tight">{en ? "User management" : "用户管理"}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {en ? "Search, suspend, inspect, or revoke sessions." : "搜索、封禁、查看或撤销 Session。"}
-              {canManageAdminRoles === true ? (en ? " The bootstrap administrator can also change administrator roles." : " 初始管理员还可以调整管理员权限。") : canManageAdminRoles === false ? (en ? " Administrator roles can be changed only by the bootstrap administrator." : " 管理员权限只能由初始管理员调整。") : ""}
-            </p>
-          </div>
+        <div>
+          <h2 className="text-lg font-semibold tracking-tight">{en ? "User management" : "用户管理"}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {en ? "Search, suspend, inspect, or revoke sessions." : "搜索、封禁、查看或撤销 Session。"}
+            {canManageAdminRoles === true ? (en ? " The bootstrap administrator can also change administrator roles." : " 初始管理员还可以调整管理员权限。") : canManageAdminRoles === false ? (en ? " Administrator roles can be changed only by the bootstrap administrator." : " 管理员权限只能由初始管理员调整。") : ""}
+          </p>
         </div>
       </header>
 

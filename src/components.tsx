@@ -733,12 +733,14 @@ export function RunButton({
 export function ShiftTabs({
   maaJson,
   rotation,
+  durations,
   active,
   closest,
   onChange,
 }: {
   maaJson?: MaaJson;
   rotation?: RotationJson;
+  durations?: readonly number[];
   active: number;
   closest?: number;
   onChange: (index: number) => void;
@@ -764,7 +766,12 @@ export function ShiftTabs({
       >
         {plans.map((plan, index) => {
           const shift = rotation?.shifts[index];
-          const label = en ? `Shift ${index + 1}${shift ? ` · ${compactNumber(shift.duration_hours)}h` : ""}` : shiftTabLabel(shift, index);
+          const durationHours = shift?.duration_hours ?? durations?.[index];
+          const label = en
+            ? `Shift ${index + 1}${durationHours !== undefined ? ` · ${compactNumber(durationHours)}h` : ""}`
+            : durationHours !== undefined
+              ? `第 ${index + 1} 班 · ${compactNumber(durationHours)}h`
+              : shiftTabLabel(shift, index);
           const originalTeamSummary = shiftTeamSummary(shift, rotation?.profile ?? DEFAULT_ROTATION_PROFILE);
           const teamSummary = en && originalTeamSummary ? originalTeamSummary.replaceAll("主力", "Main").replaceAll("替补", "Backup").replaceAll("上班", "working").replaceAll("休息", "resting") : originalTeamSummary;
           return (

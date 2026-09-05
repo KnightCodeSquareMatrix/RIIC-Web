@@ -5,6 +5,8 @@ import {
   assignManualOperator,
   createManualScheduleDraft,
   createManualScheduleDraftFromCalculator,
+  loadManualScheduleDraft,
+  manualScheduleDraftContentEqual,
   manualScheduleToMaa,
   reconcileManualScheduleDraft,
   resizeManualScheduleDraft,
@@ -156,4 +158,48 @@ test("calculator results become an editable manual draft with room order, shifts
   assert.equal(draft.shifts[0]?.fiammettaTarget, "但书");
   assert.deepEqual(draft.shifts[0]?.rooms.training_room?.operators, ["巫恋", "菲亚梅塔"]);
   assert.deepEqual(draft.shifts[1]?.rooms.manu_1?.operators, ["巫恋", null, null]);
+});
+
+test("manual draft source survives reconciliation without affecting content equality", () => {
+  const original = createManualScheduleDraft([12, 6]);
+  original.source = {
+    kind: "calculator",
+    variant: "progression-adjusted",
+    createdAt: "2026-09-05T00:00:00.000Z",
+  };
+  const reconciled = reconcileManualScheduleDraft(original, layout, box);
+  const sameContent = structuredClone(reconciled);
+  sameContent.source = {
+    kind: "calculator",
+    variant: "baseline",
+    createdAt: "2026-09-05T01:00:00.000Z",
+  };
+
+  assert.equal(reconciled.source?.variant, "progression-adjusted");
+  assert.equal(manualScheduleDraftContentEqual(reconciled, sameContent), true);
+  sameContent.shifts[0]!.durationHours = 10;
+  assert.equal(manualScheduleDraftContentEqual(reconciled, sameContent), false);
+});
+
+test("manual draft loading preserves only valid calculator source metadata", () => {
+  const draft = createManualScheduleDraft([12, 6]);
+  draft.source = {
+    kind: "calculator",
+    variant: "progression-adjusted",
+    createdAt: "2026-09-05T00:00:00.000Z",
+  };
+  const storage = {
+    getItem: () => JSON.stringify(draft),
+    setItem: () => undefined,
+  };
+
+  assert.deepEqual(loadManualScheduleDraft(storage)?.source, draft.source);
+
+  const invalidDraft = structuredClone(draft);
+  assert.ok(invalidDraft.source);
+  invalidDraft.source.createdAt = "not-a-date";
+  assert.equal(loadManualScheduleDraft({
+    ...storage,
+    getItem: () => JSON.stringify(invalidDraft),
+  })?.source, undefined);
 });

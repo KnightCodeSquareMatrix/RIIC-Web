@@ -478,11 +478,10 @@ export function SetupDialog({
                           <Suspense fallback={<div className="grid min-h-40 place-items-center border border-dashed border-border text-sm text-muted-foreground">{en ? "Loading operator roster" : "正在加载干员列表"}</div>}>
                             <ManualOperboxPicker
                               compact
+                              showProfessionFilter
                               operbox={operbox}
                               title={en ? "Build your operator BOX" : "手动选择干员 Box"}
-                              description={en
-                                ? "Ownership and elite stages are shared with Adjust progression."
-                                : "持有与精英阶段会同步用于排班和调整练度。"}
+                              description={null}
                               onApply={applyManualBox}
                             />
                           </Suspense>

@@ -1,5 +1,8 @@
 import { expect, test, type Locator } from "@playwright/test";
+import arkntoolsSource from "../src/generated/arkntools/source.json" with { type: "json" };
 import { requestId, diagnosticId, waitForOwnAnimations, gotoStable, expectVisibleNumbersUseNumberFont, profile, planData, scheduleVisualPlanData, sampleData, authenticatedSklandSnapshot, mockApis, openSklandOverview, seedPreferences, seedV4Session } from "./production-readiness.fixture";
+
+const fullOperatorCount = arkntoolsSource.counts.operators;
 
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/auth/get-session", (route) => route.fulfill({
@@ -225,7 +228,7 @@ test("progression adjustments sync back to the schedule settings manual BOX", as
   await seedV4Session(page, planData, { boxSource: "maa" });
   await page.goto("/");
 
-  await page.getByRole("button", { name: "调整练度", exact: true }).click();
+  await page.getByRole("button", { name: "修改练度并重算", exact: true }).click();
   const adjustmentDialog = page.getByRole("dialog");
   const rosterScopeTabs = adjustmentDialog.getByRole("tablist", { name: "干员列表范围" });
   const scheduledTab = rosterScopeTabs.getByRole("tab", { name: /进入排班/ });
@@ -239,7 +242,7 @@ test("progression adjustments sync back to the schedule settings manual BOX", as
   await adjustmentDialog.getByRole("textbox", { name: "搜索干员" }).fill("阿米娅");
   const adjustmentStage = adjustmentDialog.getByRole("radiogroup", { name: "阿米娅持有与精英阶段" });
   await adjustmentStage.getByRole("radio", { name: "精1", exact: true }).click();
-  await adjustmentDialog.getByRole("button", { name: "按调整重新试算", exact: true }).click();
+  await adjustmentDialog.getByRole("button", { name: "保存练度并重新计算", exact: true }).click();
   const activity = page.locator('[data-slot="live-activity"]');
   await expect(activity).toHaveAttribute("data-activity-phase", "queued");
   await expect(activity).toBeVisible();
@@ -254,27 +257,27 @@ test("progression adjustments sync back to the schedule settings manual BOX", as
 
   const scheduleVariantTabs = page.getByRole("tablist", { name: "排班方案切换" });
   await expect(scheduleVariantTabs).toHaveAttribute("data-slot", "tabs-list");
-  await expect(scheduleVariantTabs.getByRole("tab", { name: "调整练度方案", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(scheduleVariantTabs.getByRole("tab", { name: "练度调整后", exact: true })).toHaveAttribute("aria-selected", "true");
   const scheduleViewControls = page.locator("[data-schedule-view-controls]");
   const scheduleLayoutTabs = scheduleViewControls.getByRole("tablist", { name: "排班布局切换" });
-  await expect(scheduleViewControls).toContainText("当前方案");
+  await expect(scheduleViewControls).toContainText("原方案");
   await expect(scheduleViewControls).toContainText("一图流布局");
   const [variantTabsBox, layoutTabsBox] = await Promise.all([
     scheduleVariantTabs.boundingBox(),
     scheduleLayoutTabs.boundingBox(),
   ]);
   expect(variantTabsBox?.y).toBeCloseTo(layoutTabsBox?.y ?? 0, 0);
-  await expect(page.getByText(/正在查看调整练度方案/)).toHaveCount(0);
+  await expect(page.getByText(/正在查看练度调整后方案/)).toHaveCount(0);
 
   const lmdProduction = page.locator('[data-daily-product="lmd-orders"] [data-animated-value="number"]');
   await expect(lmdProduction).toHaveAttribute("aria-label", "41,200");
   const lmdCalligraph = lmdProduction.locator("[data-calligraph]");
   await expect(lmdCalligraph).toBeVisible();
   await lmdCalligraph.evaluate((element) => element.setAttribute("data-animation-sentinel", "stable"));
-  await scheduleVariantTabs.getByRole("tab", { name: "当前方案", exact: true }).click();
+  await scheduleVariantTabs.getByRole("tab", { name: "原方案", exact: true }).click();
   await expect(lmdCalligraph).toHaveAttribute("data-animation-sentinel", "stable");
   await expect(lmdProduction).toHaveAttribute("aria-label", "34,254");
-  await scheduleVariantTabs.getByRole("tab", { name: "调整练度方案", exact: true }).click();
+  await scheduleVariantTabs.getByRole("tab", { name: "练度调整后", exact: true }).click();
   await expect(lmdCalligraph).toHaveAttribute("data-animation-sentinel", "stable");
   await expect(lmdProduction).toHaveAttribute("aria-label", "41,200");
 
@@ -308,8 +311,9 @@ test("progression adjustments sync back to the schedule settings manual BOX", as
   }
 
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.locator('[data-calculator-export-actions="desktop"]').getByRole("button", { name: "手动修改排班" }).click();
+  await page.locator('[data-calculator-export-actions="desktop"]').getByRole("button", { name: "基于当前方案编辑" }).click();
   await expect(page).toHaveURL(/\/manual$/);
+  await expect(page.locator('[data-manual-draft-source="progression-adjusted"]')).toContainText("基于「练度调整后方案」创建");
   await expect(page.locator('[data-room-title="加工站"] [data-operator-identity="阿米娅"]')).toHaveCount(0);
 });
 
@@ -401,7 +405,15 @@ test("setup exposes and persists only worker-supported rotation profiles", async
     manualPicker.getByRole("button", { name: "全选最高精英", exact: true }),
     manualPicker.getByRole("button", { name: "清空选择", exact: true }),
   ];
-  await expect(manualActions).toHaveCSS("grid-template-columns", /.+ .+ .+/);
+  await expectSetupAction(manualActionButtons[0]);
+  await expectSetupAction(manualActionButtons[1]);
+  await expect(manualActionButtons[0]).toHaveAttribute("aria-pressed", "false");
+  await manualActionButtons[0].click();
+  await expect(manualActionButtons[0]).toHaveAttribute("aria-pressed", "true");
+  await manualActionButtons[0].click();
+  await expect(manualActionButtons[0]).toHaveAttribute("aria-pressed", "false");
+  await expect(manualActions).toHaveCSS("display", "flex");
+  await expect(manualActions).toHaveCSS("flex-wrap", "nowrap");
   const manualActionBoxes = await Promise.all(manualActionButtons.map((button) => button.boundingBox()));
   expect(new Set(manualActionBoxes.map((box) => Math.round(box?.y ?? -1))).size).toBe(1);
   const manualStageGroup = manualPicker.getByRole("radiogroup").first();
@@ -419,8 +431,22 @@ test("setup exposes and persists only worker-supported rotation profiles", async
     await expect(stageButton).toHaveCSS("height", "28px");
     await expect(stageButton).toHaveCSS("border-radius", "4px");
   }
-  await manualPicker.getByRole("button", { name: "全选最高精英", exact: true }).click();
-  await expect(manualPicker.getByText("已拥有 425 名", { exact: true })).toBeVisible();
+  const stagesBeforeAllMaximum = await manualPicker.getByRole("radiogroup").evaluateAll((groups) => groups.map((group) => {
+    const selected = group.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]');
+    return [group.getAttribute("aria-label"), selected?.textContent?.trim() ?? null];
+  }));
+  const ownedSummaryBeforeAllMaximum = await manualPicker.getByText(/^已拥有 \d+ 名$/).textContent();
+  await manualActionButtons[1].click();
+  await expect(manualActionButtons[1]).toHaveAttribute("aria-pressed", "true");
+  await expect(manualPicker.getByText(`已拥有 ${fullOperatorCount} 名`, { exact: true })).toBeVisible();
+  await manualActionButtons[1].click();
+  await expect(manualActionButtons[1]).toHaveAttribute("aria-pressed", "false");
+  await expect(manualPicker.getByText(ownedSummaryBeforeAllMaximum ?? "", { exact: true })).toBeVisible();
+  await expect.poll(() => manualPicker.getByRole("radiogroup").evaluateAll((groups) => groups.map((group) => {
+    const selected = group.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]');
+    return [group.getAttribute("aria-label"), selected?.textContent?.trim() ?? null];
+  }))).toEqual(stagesBeforeAllMaximum);
+  await manualActionButtons[1].click();
   const manualApplyButtons = manualPicker.locator("[data-manual-operbox-apply]");
   await expect(manualApplyButtons).toHaveCount(1);
   for (const manualApplyButton of await manualApplyButtons.all()) {
@@ -634,9 +660,10 @@ test("calculator owns scheduling controls and training advice uses a single tech
   expect(controlOrder.some((label) => label.includes("全角色导入"))).toBe(false);
   const exportOrder = await page.locator("[data-calculator-export-actions]").locator("button").allTextContents();
   expect(exportOrder).toEqual([
-    expect.stringContaining("手动修改排班"),
+    expect.stringContaining("调整方案"),
     expect.stringContaining("导出到 MAA"),
-    expect.stringContaining("手动修改排班"),
+    expect.stringContaining("修改练度并重算"),
+    expect.stringContaining("基于当前方案编辑"),
     expect.stringContaining("导出到 MAA"),
   ]);
 
