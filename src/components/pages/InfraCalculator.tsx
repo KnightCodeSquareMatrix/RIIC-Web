@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Download, Ellipsis, FlaskConical, HeartPulse, Keyboard, Loader2, PencilLine, Play, RefreshCw, Search, Settings2, SlidersHorizontal, X } from "lucide-react";
+import { ArrowRight, Download, Ellipsis, FlaskConical, Keyboard, Loader2, PencilLine, Play, RefreshCw, Search, Settings2, SlidersHorizontal, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { ScheduleBoard, ShiftTabs } from "@/components";
