@@ -1,7 +1,7 @@
 "use client";
 
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { Check, Database, FileJson, ListChecks, Minus, Plus, ScanLine, Trash2, Upload } from "lucide-react";
+import { Check, Database, ExternalLink, FileJson, ListChecks, Minus, Play, Plus, ScanLine, Trash2, Upload } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -422,6 +422,17 @@ export function SetupDialog({
                         ) : null}
                       </TabsContent> : null}
                       <TabsContent value="maa" className="grid gap-3 pt-4">
+                        <a
+                          href="/help/beginner#maa-box-video"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex min-h-11 w-fit items-center gap-2 rounded-[4px] px-2 text-sm font-medium underline underline-offset-4 outline-none hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          <Play className="size-4 shrink-0" aria-hidden="true" />
+                          {en ? "How to get box.json with MAA · Video tutorial" : "如何用 MAA 获取 box.json · 视频教程"}
+                          <ExternalLink className="size-3.5 shrink-0" aria-hidden="true" />
+                          <span className="sr-only">{en ? " (opens in a new tab)" : "（新标签页打开）"}</span>
+                        </a>
                         {!websiteSession ? (
                           <Alert>
                             <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

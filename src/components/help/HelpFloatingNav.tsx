@@ -14,6 +14,7 @@ import { useLanguageDemo } from "@/language-demo";
 
 const helpLinks = [
   { href: "/help", zh: ["帮助首页", "常见问题快速自检"], en: ["Help Home", "Quick troubleshooting"] },
+  { href: "/help/beginner", zh: ["新手教程", "Box、抄作业与换班视频"], en: ["Beginner Tutorials", "Box, scheduling, and shift videos"] },
   { href: "/help/import-operators", zh: ["导入干员数据", "森空岛与 MAA 详细步骤"], en: ["Import Operator Data", "Skland and MAA walkthrough"] },
   { href: "/help/owned-operators", zh: ["切换已有干员", "换回自己的 Box"], en: ["Use Owned Operators", "Restore your own Operator Box"] },
 ];

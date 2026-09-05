@@ -57,6 +57,14 @@ export default function HelpHomePage() {
         </Link>
       </section>
 
+      <Link id="maa-box-video" href="/help/beginner" className="group flex min-h-28 scroll-mt-5 items-center justify-between gap-4 border-y border-border px-3 py-5 outline-none transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring sm:px-5">
+        <span className="min-w-0">
+          <strong className="block text-lg font-semibold">{en ? "Beginner tutorials" : "新手教程"}</strong>
+          <span className="mt-2 block text-sm leading-6 text-muted-foreground">{en ? "Video tutorials for MAA Box export, manual scheduling, shift changes, and Orundum production." : "MAA 获取 Box、手动抄作业、换班与搓玉视频教程。"}</span>
+        </span>
+        <ArrowRight className="size-5 shrink-0 transition-transform group-hover:translate-x-1 motion-reduce:transform-none" aria-hidden="true" />
+      </Link>
+
       <section aria-labelledby="quick-check-title">
         <div className="mb-2 flex min-w-0 items-center gap-2.5">
           <span className="h-5 w-1 shrink-0 bg-[#22BBFF]" aria-hidden="true" />

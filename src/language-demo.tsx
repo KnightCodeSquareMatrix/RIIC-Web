@@ -16,6 +16,7 @@ const ROUTE_TITLES: Record<string, { zh: string; en: string }> = {
   "/account": { zh: "账号管理 · 可露希尔基建终端", en: "Account · Closure Infrastructure Terminal" },
   "/account/reset-password": { zh: "重置密码 · 可露希尔基建终端", en: "Reset Password · Closure Infrastructure Terminal" },
   "/help": { zh: "使用帮助 · 可露希尔基建终端", en: "Help Center · Closure Infrastructure Terminal" },
+  "/help/beginner": { zh: "新手教程 · 使用帮助", en: "Beginner Tutorials · Help Center" },
   "/changelog": { zh: "更新日志 · 可露希尔基建终端", en: "Changelog · Closure Infrastructure Terminal" },
   "/help/import-operators": { zh: "导入干员 Box · 使用帮助", en: "Import Operator Box · Help Center" },
   "/help/owned-operators": { zh: "核对干员数据 · 使用帮助", en: "Check Operator Data · Help Center" },
