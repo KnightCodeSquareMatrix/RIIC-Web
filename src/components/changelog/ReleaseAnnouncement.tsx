@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { isBrowserReleaseUnread, markBrowserReleaseSeen, RELEASE_SEEN_EVENT, RELEASE_SEEN_KEY, releaseSeenKey } from "@/releases/announcement-state";
+import { isBrowserReleaseUnread, markBrowserReleaseSeen, RELEASE_SEEN_EVENT, releaseSeenKey } from "@/releases/announcement-state";
 import type { ReleaseDraft, ReleaseEnvironment } from "@/releases/types";
 import { useReleaseFeed } from "@/releases/use-release-feed";
 import { ReleaseDialog } from "./ReleaseDialog";
@@ -27,7 +27,7 @@ function Announcement({ enabled, latestRelease, environment }: {
       setDismissed(true);
     };
     const onStorage = (event: StorageEvent) => {
-      if (event.key === releaseSeenKey(environment) || event.key === RELEASE_SEEN_KEY || event.key === null) syncSeen();
+      if (event.key === releaseSeenKey(environment) || event.key === null) syncSeen();
     };
     window.addEventListener("storage", onStorage);
     window.addEventListener(RELEASE_SEEN_EVENT, syncSeen);
