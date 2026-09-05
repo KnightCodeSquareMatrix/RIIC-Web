@@ -121,6 +121,15 @@ export function AppSidebar({ page, onPageChange }: AppSidebarProps) {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
+              render={<Link href="/changelog" data-changelog-link />}
+              tooltip={locale === "en" ? "Changelog" : "更新日志"}
+            >
+              <BookOpen className="size-5" />
+              <span>{locale === "en" ? "Changelog" : "更新日志"}</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
               render={<Link href="/help" data-help-link />}
               tooltip={labels.help}
             >

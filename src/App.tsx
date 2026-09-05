@@ -126,6 +126,9 @@ function bindingSummaryFromSession(session: Pick<SklandSessionData, "accounts" |
 const loadWebsiteAccountDialog = () => loadClientFeature("websiteAccountDialog");
 const loadSetupDialog = () => loadClientFeature("setupDialog");
 const loadComponents = () => loadClientFeature("sharedComponents");
+const ReleaseAnnouncement = lazy(() => import("@/components/changelog/ReleaseAnnouncement").then((module) => ({
+  default: module.ReleaseAnnouncement,
+})));
 
 const WebsiteAccountDialog = lazy(() => loadWebsiteAccountDialog().then((module) => ({
   default: module.WebsiteAccountDialog,
@@ -2103,6 +2106,9 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       </footer>
 
       {CLIENT_ACCOUNT_CLOUD_SYNC_ENABLED ? accountCloudWorkspace.syncElement : null}
+      {hasRestoredSession ? <Suspense fallback={null}>
+        <ReleaseAnnouncement enabled={!websiteSessionPending && !websiteAuthDialogOpen && !setupOpen && !issueOpen && !pendingProductChange && !pendingManualDraftReplacement && !loading} />
+      </Suspense> : null}
 
       {websiteAuthDialogMounted ? <Suspense fallback={(
         websiteAuthDialogOpen ? (
