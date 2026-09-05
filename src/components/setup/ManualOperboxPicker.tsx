@@ -470,7 +470,7 @@ export function ManualOperboxPicker({
           <SetupActionButton
             type="button"
             variant={onlyOwned ? "default" : "outline"}
-            className="h-8 min-w-[92px] px-2 text-[11px] font-normal max-sm:min-w-[92px] sm:h-8 sm:min-w-[104px] sm:px-2 sm:text-xs"
+            className="min-w-[92px] px-2 text-[11px] font-normal max-sm:min-w-[92px] sm:min-w-[104px] sm:px-2 sm:text-xs"
             aria-pressed={onlyOwned}
             onClick={() => {
               setOnlyOwned((current) => !current);
@@ -482,7 +482,7 @@ export function ManualOperboxPicker({
           <SetupActionButton
             type="button"
             variant={allMaximumStages ? "default" : "outline"}
-            className="h-8 min-w-[104px] px-2 text-[11px] font-normal max-sm:min-w-[104px] sm:h-8 sm:min-w-[116px] sm:px-2 sm:text-xs"
+            className="min-w-[104px] px-2 text-[11px] font-normal max-sm:min-w-[104px] sm:min-w-[116px] sm:px-2 sm:text-xs"
             aria-pressed={allMaximumStages}
             onClick={toggleAllMaximumStages}
           >
