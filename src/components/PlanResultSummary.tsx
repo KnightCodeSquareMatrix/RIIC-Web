@@ -12,62 +12,18 @@ import { Drawer } from "@/components/ui/drawer";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { estimateDailyProduction, type DailyProductionUnavailableReason } from "@/daily-production";
 import { dailyProductionGroups, type DailyProductionGroup, type ProductionDetailProduct } from "@/daily-production-presentation";
-import { manufacturePoolReady } from "@/efficiency";
 import { cn } from "@/lib/utils";
-import { demoOperatorName, useLanguageDemo } from "@/language-demo";
+import { useLanguageDemo } from "@/language-demo";
 
 const EN_PRODUCT_LABELS: Record<string, string> = { experience: "Experience", "lmd-orders": "LMD", gold: "Pure Gold", orundum: "Orundum", shards: "Originium Shards" };
 function productLabel(product: { id: string; label: string }, en: boolean) { return en ? EN_PRODUCT_LABELS[product.id] ?? product.label : product.label; }
 function productUnit(unit: string, en: boolean) { return en ? ({ "经验": "EXP", "龙门币": "LMD", "合成玉": "Orundum", "枚": "pcs" }[unit] ?? unit) : unit; }
 import { MOTION_DURATION, MOTION_EASE_OUT } from "@/motion";
-import { formatPlanDuration, relativeMetricDelta, type RotationMetricKind } from "@/rotation-presentation";
+import { formatPlanDuration } from "@/rotation-presentation";
 import { countShiftPlacementAdjustments } from "@/skland";
 import type { BaseBlueprint, MaaJson, RotationJson, ShiftComparison, UserProfile } from "@/types";
 
 type DetailSection = "efficiency" | "comparison";
-
-function compactNumber(value: number, digits = 1): string {
-  if (!Number.isFinite(value)) return "—";
-  return Number.isInteger(value) ? String(value) : value.toFixed(digits).replace(/\.?0+$/, "");
-}
-
-function severityClass(severity: "ok" | "warn" | "critical") {
-  if (severity === "critical") return "bg-red-100 text-red-800";
-  if (severity === "warn") return "bg-amber-100 text-amber-800";
-  return "bg-emerald-100 text-emerald-800";
-}
-
-function improvementComparison(delta: number | undefined, en: boolean): {
-  state: "positive" | "negative" | "neutral";
-  description: string;
-  badge: string;
-} {
-  if (delta === undefined || !Number.isFinite(delta)) {
-    return { state: "neutral", description: en ? "No comparable plan" : "暂无可比方案", badge: en ? "No comparison" : "暂无对比" };
-  }
-  const rounded = Math.round(delta * 10) / 10;
-  if (rounded > 0) {
-    return { state: "positive", description: en ? `${compactNumber(rounded)}% above recommendation` : `领先推荐方案 ${compactNumber(rounded)}%`, badge: en ? "Ahead" : "领先" };
-  }
-  if (rounded < 0) {
-    return { state: "negative", description: en ? `${compactNumber(Math.abs(rounded))}% below recommendation` : `距推荐方案 ${compactNumber(Math.abs(rounded))}%`, badge: en ? "Can improve" : "可提升" };
-  }
-  return { state: "neutral", description: en ? "Matches recommendation" : "与推荐方案持平", badge: en ? "Matched" : "持平" };
-}
-
-function domainComparison(gapRatio: number, en: boolean): string {
-  if (!Number.isFinite(gapRatio)) return en ? "No comparable plan" : "暂无可比方案";
-  const rounded = Math.round(gapRatio * 1000) / 10;
-  if (rounded > 0) return en ? `${compactNumber(rounded)}% above recommended team` : `领先推荐组合 ${compactNumber(rounded)}%`;
-  if (rounded < 0) return en ? `${compactNumber(Math.abs(rounded))}% below recommended team` : `距推荐组合 ${compactNumber(Math.abs(rounded))}%`;
-  return en ? "At recommended level" : "已达到推荐水平";
-}
-
-function domainStatus(severity: "ok" | "warn" | "critical", en: boolean): string {
-  if (severity === "critical") return en ? "Adjust first" : "优先调整";
-  if (severity === "warn") return en ? "Can improve" : "可继续优化";
-  return en ? "Good" : "状态良好";
-}
 
 function dailyNumber(value: number | null): string {
   return value === null ? "—" : Math.round(value).toLocaleString("zh-CN");
@@ -120,13 +76,6 @@ export function PlanResultSummary({
   }, [animateOnMount, onEntranceConsumed, planRevision]);
   if (!profile && !rotation) return null;
 
-  const currentRotation = profile?.rotation;
-  const baselineRotation = profile?.baseline_rotation;
-  const efficiencyMetrics = [
-    { kind: "trade" as const, label: en ? "Trading" : "贸易产线", value: rotation?.daily.trade ?? currentRotation?.daily_trade_efficiency ?? currentRotation?.daily_trade, baseline: baselineRotation?.daily_trade_efficiency ?? baselineRotation?.daily_trade },
-    { kind: "manu" as const, label: en ? "Manufacturing" : "制造产线", value: rotation?.daily.manufacture ?? currentRotation?.daily_manufacture_efficiency ?? currentRotation?.daily_manu, baseline: baselineRotation?.daily_manufacture_efficiency ?? baselineRotation?.daily_manu },
-    { kind: "power" as const, label: en ? "Power" : "发电产线", value: rotation?.daily.power ?? currentRotation?.daily_power_efficiency ?? currentRotation?.daily_power, baseline: baselineRotation?.daily_power_efficiency ?? baselineRotation?.daily_power },
-  ].filter((metric): metric is { kind: RotationMetricKind; label: string; value: number; baseline: number | undefined } => typeof metric.value === "number");
   const solverDaily = rotation?.daily?.production ?? null;
   const production = rotation ? estimateDailyProduction({ layout, maa, rotation }) : null;
   const productGroups = dailyProductionGroups(production, solverDaily);
@@ -244,7 +193,7 @@ export function PlanResultSummary({
         </div>
       </motion.section>
 
-      <Drawer open={drawerOpen} onOpenChange={setDrawerOpen} onCloseComplete={handleDrawerCloseComplete} title={en ? "Schedule details" : "排班结果详情"} description={en ? "Review daily output, production improvements, and current staffing match." : "查看日产物、产线提升空间和当前进驻匹配。"} width={560}>
+      <Drawer open={drawerOpen} onOpenChange={setDrawerOpen} onCloseComplete={handleDrawerCloseComplete} title={en ? "Schedule details" : "排班结果详情"} description={en ? "Review daily output and current staffing match." : "查看日产物和当前进驻匹配。"} width={560}>
         <div className="flex h-full min-h-0 flex-col">
           <Tabs value={activeDetailSection} onValueChange={(value) => setDetailSection(value as DetailSection)} className="min-h-0 flex-1 gap-0">
             <TabsList variant="line" className="w-full justify-start gap-1 border-b border-border/70 px-4 py-0" aria-label={en ? "Schedule detail categories" : "结果详情分类"}>
@@ -254,7 +203,7 @@ export function PlanResultSummary({
             <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 pb-6" data-plan-details-section={activeDetailSection}>
               <TabsContent value="efficiency" className="m-0">
                 <motion.div initial={{ opacity: 0, x: shouldReduceMotion ? 0 : -12 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: shouldReduceMotion ? 0 : MOTION_DURATION.state, ease: MOTION_EASE_OUT }}>
-                  <EfficiencyDetails profile={profile} rotation={rotation} layout={layout} metrics={efficiencyMetrics} productGroups={productGroups} en={en} />
+                  <EfficiencyDetails productGroups={productGroups} en={en} />
                 </motion.div>
               </TabsContent>
               {comparison ? (
@@ -342,27 +291,10 @@ function ProductionDetails({ productGroups, en }: { productGroups: DailyProducti
   );
 }
 
-function EfficiencyDetails({ profile, rotation, layout, metrics, productGroups, en }: { profile?: UserProfile; rotation?: RotationJson; layout: BaseBlueprint; metrics: Array<{ kind: RotationMetricKind; label: string; value: number; baseline: number | undefined }>; productGroups: DailyProductionGroup[]; en: boolean }) {
-  const shouldReduceMotion = useReducedMotion();
-  const { locale } = useLanguageDemo();
-  const summary = profile?.summary;
-  const domains = profile?.domains ?? [];
+function EfficiencyDetails({ productGroups, en }: { productGroups: DailyProductionGroup[]; en: boolean }) {
   return (
-    <section className="pt-4" aria-label={en ? "Output and improvement details" : "产出与提升详情"} data-efficiency-details>
+    <section className="pt-4" aria-label={en ? "Daily output details" : "日产物详情"} data-efficiency-details>
       <ProductionDetails productGroups={productGroups} en={en} />
-      <div className="mt-5 border-t border-border/70 pt-4">
-        <h3 className="text-sm font-semibold">{en ? "Production improvements" : "产线提升空间"}</h3>
-      </div>
-      <div className="mt-2 grid gap-2 sm:grid-cols-3" data-efficiency-insights>
-        {metrics.map((metric, index) => {
-          const delta = typeof metric.baseline === "number" ? relativeMetricDelta(metric.value, metric.baseline) : undefined;
-          const comparison = improvementComparison(delta, en);
-          return <motion.article key={metric.kind} className={cn("relative overflow-hidden border px-3 py-3", comparison.state === "neutral" ? "border-border/70 bg-muted/25" : comparison.state === "positive" ? "border-emerald-800/20 bg-emerald-50/55" : "border-red-800/20 bg-red-50/60")} data-insight-state={comparison.state} initial={{ opacity: 0, y: shouldReduceMotion ? 0 : 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: shouldReduceMotion ? 0 : 0.34, delay: shouldReduceMotion ? 0 : index * 0.055, ease: MOTION_EASE_OUT }}><span className={cn("absolute inset-y-0 left-0 w-0.5", comparison.state === "neutral" ? "bg-[#313131]/25" : comparison.state === "positive" ? "bg-emerald-500" : "bg-red-500")} aria-hidden="true" /><span className="block text-[11px] font-semibold tracking-[0.08em] text-muted-foreground">{metric.label}</span><strong className="mt-2 block text-sm leading-5">{comparison.description}</strong><span className={cn("mt-3 inline-flex px-1.5 py-0.5 text-[11px] font-semibold", comparison.state === "neutral" ? "bg-muted text-muted-foreground" : comparison.state === "positive" ? "bg-emerald-700 text-emerald-50" : "bg-red-700 text-red-50")}>{comparison.badge}</span></motion.article>;
-        })}
-      </div>
-      {summary ? <dl className="mt-4 flex flex-wrap gap-x-4 gap-y-1 border-y border-border/70 py-2 text-xs" aria-label={en ? "Account readiness" : "账号准备度"}><div className="flex gap-1"><dt className="text-muted-foreground">{en ? "Candidates" : "候选干员"}</dt><dd className="font-number font-semibold">{en ? "Trade" : "贸易"} {summary.trade_pool_ready} · {en ? "Factory" : "制造"} {manufacturePoolReady(summary) ?? "—"}</dd></div><div className="flex gap-1"><dt className="text-muted-foreground">{en ? "Control" : "中枢"}</dt><dd className="font-number font-semibold">Lv.{layout.rooms.find((room) => room.kind === "control_center")?.level ?? "—"}</dd></div><div className="flex gap-1"><dt className="text-muted-foreground">{en ? "Shifts" : "班次"}</dt><dd className="font-number font-semibold">{rotation?.shifts.length ?? 0}</dd></div><div className="flex gap-1"><dt className="text-muted-foreground">{en ? "Available" : "可用干员"}</dt><dd className="font-number font-semibold">{summary.owned} / {en ? "upgrade" : "进阶"} {summary.tier_up_owned}</dd></div></dl> : null}
-      {domains.length ? <div className="mt-5 border-t border-border/70 pt-4"><h3 className="text-sm font-semibold">{en ? "Facility team improvements" : "设施组合提升空间"}</h3><div className="mt-2 grid gap-1">{[...domains].sort((a, b) => ({ critical: 0, warn: 1, ok: 2 })[a.severity] - ({ critical: 0, warn: 1, ok: 2 })[b.severity]).map((domain) => <div key={domain.id} className="grid gap-2 border-b border-border/60 py-3 text-xs sm:grid-cols-[minmax(0,1fr)_auto]" data-domain-state={domain.severity}><div className="min-w-0"><strong className="block truncate">{domain.label}</strong><span className="mt-0.5 block text-muted-foreground">{en ? "Current operators: " : "当前干员："}{domain.current.operators.length ? domain.current.operators.map((name) => demoOperatorName(name, locale)).join(" / ") : (en ? "No available team" : "暂无可用组合")}</span></div><div className="flex items-center justify-between gap-2 sm:block sm:text-right"><span className="tabular-nums">{domainComparison(domain.gap_ratio, en)}</span><span className={cn("ml-2 px-1.5 py-0.5 font-semibold", severityClass(domain.severity))}>{domainStatus(domain.severity, en)}</span></div></div>)}</div></div> : null}
-      {profile?.flags.length || profile?.narration_hints.length ? <div className="mt-5 flex flex-wrap gap-1.5 border-t border-border/70 pt-4">{[...(profile?.flags ?? []), ...(profile?.narration_hints ?? [])].map((flag) => <span key={flag} className="bg-muted px-2 py-1 text-xs text-muted-foreground">{flag}</span>)}</div> : null}
     </section>
   );
 }

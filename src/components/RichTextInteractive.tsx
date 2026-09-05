@@ -88,18 +88,23 @@ function BuildingTermDialog({
   const { locale } = useLanguageDemo();
   return (
     <Dialog open={termStack.length > 0} onOpenChange={(next) => { if (!next) onClose(); }}>
-      <DialogContent>
-        <DialogHeader className="pb-0 sm:pb-0">
+      <DialogContent
+        className="sm:max-w-[min(560px,calc(100vw-2rem))]"
+        data-building-term-dialog
+      >
+        <DialogHeader className="px-6 pb-1 pt-6 pr-14 sm:px-9 sm:pb-1 sm:pt-8 sm:pr-16">
           <DialogTitle>{locale === "en" ? "Infrastructure terms" : "基建词条"}</DialogTitle>
         </DialogHeader>
-        <DialogBody className="gap-3">
+        <DialogBody className="gap-5 px-6 pb-7 pt-4 sm:px-9 sm:pb-9 sm:pt-5">
           {termStack.map((id) => {
             const term = TERM_CATALOG[id];
             if (!term) return null;
             return (
-              <div key={id} className="min-w-0">
-                <h4 className="font-semibold">{term.name}</h4>
-                <RichTextInteractive text={term.desc} onTermOpen={onTermOpen} />
+              <div key={id} className="min-w-0 space-y-2">
+                <h4 className="text-base font-semibold leading-6">{term.name}</h4>
+                <div className="text-pretty leading-6">
+                  <RichTextInteractive text={term.desc} onTermOpen={onTermOpen} />
+                </div>
               </div>
             );
           })}
