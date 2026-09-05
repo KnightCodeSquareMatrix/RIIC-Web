@@ -17,6 +17,12 @@ for (const mobile of [false,true]) {
       await mockApis(page);
       await seedV4Session(page,null,{operbox:testBox,boxSource:"sample"});
       await gotoStable(page,"/mastery");
+      const unexpectedWrites: string[] = [];
+      page.on("request", (request) => {
+        const path = new URL(request.url()).pathname;
+        if (request.method() !== "GET" && /^\/api\/(?:plan|tasks|workspace)(?:\/|$)/.test(path)) unexpectedWrites.push(path);
+      });
+      const beforeBox = await page.evaluate(() => Object.entries(localStorage).filter(([key]) => /session-v[45]$/.test(key)).map(([,value]) => JSON.parse(value)).find((value) => value.operbox?.some((o: {name:string}) => o.name === "阿米娅"))?.operbox);
       await expect(page.getByRole("heading",{name:"专精规划",exact:true})).toBeVisible();
       await expect(page.locator("[data-mastery-planner] [data-setup-action] svg")).toHaveCount(0);
       await page.getByRole("button",{name:"选择干员",exact:true}).click();
@@ -44,8 +50,20 @@ for (const mobile of [false,true]) {
       await expect(result.locator("[data-setup-action] svg")).toHaveCount(0);
       await expect(result).toContainText("保留艾丽妮，先开启专3，确认减半效果生效。");
       await expect(result).toContainText("减半生效后，立即换为W。");
+      await page.evaluate(() => Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (text: string) => { sessionStorage.setItem("mastery-test-clipboard", text); } } }));
+      await result.getByRole("button",{name:"复制操作清单",exact:true}).click();
+      await expect(result.getByRole("button",{name:"已复制",exact:true})).toBeVisible();
+      await expect(result.locator("[data-setup-action] svg")).toHaveCount(0);
+      const clipboard = await page.evaluate(() => sessionStorage.getItem("mastery-test-clipboard"));
+      expect(clipboard).toContain("埃癸斯 · 省操作 · 17:16:57");
+      expect(clipboard).toContain("先开启专3");
+      expect(clipboard).toContain("中枢加成 +5% · 操作余量 1 分钟");
+      expect(clipboard).toContain("训练室等级满足要求");
       await result.getByRole("tab",{name:"极速",exact:true}).click();
       await expect(result).toContainText("比省操作节省");
+      await page.evaluate(() => Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async () => { throw new Error("Clipboard permission denied"); } } }));
+      await result.getByRole("button",{name:"复制操作清单",exact:true}).click();
+      await expect(page.getByRole("alert").filter({hasText:"复制失败，请检查浏览器剪贴板权限。"})).toBeVisible();
       await page.screenshot({path:testInfo.outputPath("mastery-results.png"),fullPage:true});
       const geometry = await page.evaluate(() => ({width:document.documentElement.clientWidth,scroll:document.documentElement.scrollWidth}));
       expect(geometry.scroll).toBeLessThanOrEqual(geometry.width);
@@ -62,6 +80,8 @@ for (const mobile of [false,true]) {
       const stored = await page.evaluate(() => Object.entries(localStorage).filter(([key]) => /session-v[45]$/.test(key)).map(([,value]) => JSON.parse(value)));
       const saved = stored.find((value) => value.operbox?.some((o: {name:string}) => o.name === "阿米娅"));
       expect(saved.operbox.find((o: {name:string}) => o.name === "阿米娅").elite).toBe(1);
+      expect(saved.operbox).toEqual(beforeBox);
+      expect(unexpectedWrites).toEqual([]);
     });
   });
 }

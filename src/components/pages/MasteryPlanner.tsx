@@ -1,13 +1,13 @@
 "use client";
 
-import { lazy, Suspense, useMemo, useState } from "react";
+import { lazy, Suspense, useMemo, useState, type ComponentProps } from "react";
 import { Timer } from "lucide-react";
 import { calculateMastery, eligibleMasteryTargets, normalizeMasteryBox, availableMasteryEnvironments, formatMasteryTime, MASTERY_ENVIRONMENTS, type MasteryInput, type MasteryResult } from "@/mastery";
 import { masteryClipboard, masteryInstructions } from "@/mastery-presentation";
 import { InfraTechnicalCard, InfraTechnicalHeading } from "@/components/InfraTechnicalCard";
 import { SetupActionButton } from "@/components/setup/SetupActionButton";
 import { OperatorIdentity } from "@/components/operators/OperatorPickerParts";
-import { OperatorSkillTooltip } from "@/components/OperatorSkillTooltip";
+import type { OperatorSkillTooltip } from "@/components/OperatorSkillTooltip";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -16,6 +16,11 @@ import catalog from "@/generated/arkntools/operator-catalog.json";
 import type { OperBoxEntry } from "@/types";
 
 const TargetPicker = lazy(() => import("@/components/mastery/MasteryTargetPicker").then((m) => ({default:m.MasteryTargetPicker})));
+const TrainerSkillTooltip = lazy(() => import("@/components/OperatorSkillTooltip").then((m) => ({ default: m.OperatorSkillTooltip })));
+
+function MasteryTrainerTooltip(props: ComponentProps<typeof OperatorSkillTooltip>) {
+  return <Suspense fallback={props.trigger}><TrainerSkillTooltip {...props} /></Suspense>;
+}
 export interface MasteryPlannerProps {
   operbox: OperBoxEntry[] | null;
   sourceName: string | null;
@@ -130,7 +135,7 @@ export function MasteryPlanner({ operbox, sourceName, requiresAccount, pending, 
           <div className="mb-4 flex flex-wrap gap-3">{plan.stages[index]!.segments.filter((s) => s.trainerId).map((segment,i) => {
             const operator = normalizedBox.find((o) => o.id === segment.trainerId);
             const portrait = catalog.find((o) => o.id === segment.trainerId)?.portrait;
-            return <OperatorSkillTooltip key={`${segment.trainerId}:${i}`} name={segment.trainerName} currentElite={operator?.elite} currentLevel={operator?.level} highlightedSkillIds={segment.skillIds}
+            return <MasteryTrainerTooltip key={`${segment.trainerId}:${i}`} name={segment.trainerName} currentElite={operator?.elite} currentLevel={operator?.level} highlightedSkillIds={segment.skillIds}
               trigger={<button type="button" className="flex min-w-0 items-center gap-2 rounded-[4px] border border-border p-2 text-left" aria-label={en ? `Show ${displayName(segment.trainerName)} infrastructure skills` : `查看${segment.trainerName}的基建技能`}><OperatorIdentity compact name={segment.trainerName} portrait={portrait}><span className="text-xs text-muted-foreground">{en ? "Trainer" : "教官"}</span></OperatorIdentity></button>} />;
           })}</div>
           <ol className="grid gap-3">{steps.map((step,i) => <li key={i} className="grid grid-cols-[5.75rem_minmax(0,1fr)] items-start gap-3 text-sm"><span className="font-number pt-0.5 text-xs text-muted-foreground">+{formatMasteryTime(step.elapsed)}</span><span className={step.kind === "notice" ? "text-muted-foreground" : "font-medium"}>{step.text}</span></li>)}</ol>
