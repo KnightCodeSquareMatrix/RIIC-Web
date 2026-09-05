@@ -196,6 +196,7 @@ test("manual draft loading preserves only valid calculator source metadata", () 
   assert.deepEqual(loadManualScheduleDraft(storage)?.source, draft.source);
 
   const invalidDraft = structuredClone(draft);
+  assert.ok(invalidDraft.source);
   invalidDraft.source.createdAt = "not-a-date";
   assert.equal(loadManualScheduleDraft({
     ...storage,
