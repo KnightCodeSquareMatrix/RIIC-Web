@@ -268,6 +268,8 @@ test("failed artifact writes still publish terminal tasks and log redacted diagn
   assert.ok(calls.includes("task:failed"));
   assert.equal(logs[0].event, "plan_failure_artifact_write_failed");
   assert.equal(logs[1].event, "plan_task_failed");
+  assert.equal(logs[1].code, "AIC-SYS-5000");
+  assert.equal(logs[1].status, 500);
   assert.match(logs[1].message, /solver failed/);
   assert.match(logs[1].cause, /upstream/);
   assert.doesNotMatch(JSON.stringify(logs), /private-test-value|private-test-password|\/private\/server/);

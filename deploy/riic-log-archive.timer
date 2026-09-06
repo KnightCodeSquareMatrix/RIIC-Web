@@ -1,0 +1,11 @@
+[Unit]
+Description=Incrementally archive RIIC journals every fifteen minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=15min
+Persistent=true
+Unit=riic-log-archive.service
+
+[Install]
+WantedBy=timers.target

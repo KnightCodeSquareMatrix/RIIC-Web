@@ -81,7 +81,10 @@ function nonApiResponseError(path: string, response: Response): ApiClientError {
 async function requestData<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(path, init);
+    const headers = new Headers(init?.headers);
+    headers.set("X-RIIC-Client-Version", process.env.APP_CLIENT_BUILD_ID ?? "local-development");
+    headers.set("X-RIIC-Client-Schema", "2");
+    response = await fetch(path, {...init, headers});
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") throw error;
     throw networkError();

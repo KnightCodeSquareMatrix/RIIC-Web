@@ -266,6 +266,6 @@ export async function POST(request: Request) {
       etaSeconds: await currentPlanTaskEtaSeconds(queuePosition),
     }, requestId);
   } catch (error) {
-    return failureResponse(error, requestId, "/api/tasks", startedAt);
+    return failureResponse(error, requestId, "/api/tasks", startedAt, "AIC-SYS-5000", request);
   }
 }

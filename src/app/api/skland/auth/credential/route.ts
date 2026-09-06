@@ -60,6 +60,6 @@ export async function POST(request: Request) {
     setSklandAccountStoreCookies(response, request, completed.next, completed.previous);
     return response;
   } catch (error) {
-    return sklandErrorResponse(error, requestId, "/api/skland/auth/credential", startedAt);
+    return sklandErrorResponse(error, requestId, "/api/skland/auth/credential", startedAt, request);
   }
 }
