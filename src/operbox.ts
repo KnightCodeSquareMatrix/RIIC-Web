@@ -91,10 +91,11 @@ export async function readOperboxText(text: string): Promise<OperBoxEntry[]> {
   }
   if (Array.isArray(parsed)) {
     parsed = parsed.map((row) => {
-      if (!row || typeof row !== "object") return row;
+      if (!row || typeof row !== "object" || Array.isArray(row)) return row;
       const value = row as Record<string, unknown>;
       const rarity = Number(value.rarity);
       const elite = Number(value.elite);
+      if (value.own !== true || !Number.isInteger(rarity) || rarity < 1 || rarity > 6) return row;
       if (Number.isInteger(rarity) && Number.isInteger(elite) && elite > maxEliteForRarity(rarity)) {
         const safeElite = maxEliteForRarity(rarity);
         return { ...value, elite: safeElite, level: manualLevelFor(rarity, safeElite) };

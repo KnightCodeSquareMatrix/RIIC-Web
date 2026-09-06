@@ -16,6 +16,28 @@ const entry = {
   rarity: 6,
 };
 
+test("MAA imports clamp every rarity's stage and level ceiling", async () => {
+  const limits = [[30], [30], [40, 55], [45, 60, 70], [50, 70, 80], [50, 80, 90]];
+  for (const [index, levels] of limits.entries()) {
+    const rarity = index + 1;
+    for (const [elite, maxLevel] of levels.entries()) {
+      const [result] = await readOperboxText(JSON.stringify([{ ...entry, rarity, elite, level: 999 }]));
+      assert.equal(result.elite, elite);
+      assert.equal(result.level, maxLevel);
+    }
+    const [result] = await readOperboxText(JSON.stringify([{ ...entry, rarity, elite: 3, level: 1 }]));
+    assert.equal(result.elite, levels.length - 1);
+    assert.equal(result.level, levels.at(-1));
+  }
+});
+
+test("MAA imports preserve valid levels and unowned placeholders", async () => {
+  const valid = { ...entry, elite: 0, level: 10 };
+  const placeholder = { ...entry, own: false, rarity: 1, elite: -1, level: 0, potential: 0 };
+  assert.deepEqual(await readOperboxText(JSON.stringify([valid])), [valid]);
+  assert.deepEqual(await readOperboxText(JSON.stringify([placeholder])), [placeholder]);
+});
+
 test("JSON imports do not load the XLSX parser", async () => {
   let xlsxRequested = false;
   const file = new File([JSON.stringify([entry])], "operators.json", { type: "application/json" });
