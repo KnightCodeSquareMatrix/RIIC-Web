@@ -256,7 +256,7 @@ export async function executePlanTask(
     });
     if (lease) {
       const activeLease = lease;
-      if (!runStored) {
+      if (!runStored || result.fallbackUsed) {
         await dependencies.releaseCacheLease(activeLease);
       } else {
         const referenceStored = await dependencies.recordCacheReference({
