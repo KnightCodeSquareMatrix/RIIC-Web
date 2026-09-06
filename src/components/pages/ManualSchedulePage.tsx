@@ -2,7 +2,7 @@
 import { localize as localize_components_pages_ManualSchedulePage } from "../../i18n/helpers/components_pages_ManualSchedulePage.ts";
 import { useTranslations, useLocale } from "next-intl";
 
-import { ArrowLeft, Download, Search, Settings2, Sparkles, X } from "lucide-react";
+import { ArrowLeft, Download, Search, Settings2, Sparkles, Upload, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 
 import type { FactoryRecipe, TradeOrder } from "@/blueprint";
@@ -26,34 +26,42 @@ import { useGameCatalog } from "@/i18n/game-data-client";
 import {
   assignManualOperator,
   createManualScheduleDraft,
+  createManualScheduleDraftFromCalculator,
+  formatManualShiftDuration,
+  layoutFromMaaSchedule,
   loadManualScheduleDraft,
+  manualShiftTimeRanges,
   manualScheduleToMaa,
+  normalizeMaaScheduleForManualImport,
+  parseMaaScheduleText,
   persistManualScheduleDraft,
   reconcileManualScheduleDraft,
   resizeManualScheduleDraft,
   setManualDormAutofill,
   type ManualOperatorConflict,
   type ManualScheduleDraft,
+  type ManualScheduleMode,
 } from "@/manual-schedule";
 import { operatorPortraitFor } from "@/operatorPortraits";
 import { addOperatorPresentations } from "@/schedule-presentation";
 import { planToRows, type RoomRow } from "@/schedule";
-import type { BaseBlueprint, OperBoxEntry } from "@/types";
-
-const OperatorSkillTooltip = lazy(() => loadClientFeature("operatorSkillTooltip").then((module) => ({
-  default: module.OperatorSkillTooltip,
-})));
+import type { BaseBlueprint, MaaJson, MaaOperatorSlot, MaaRoom, OperBoxEntry } from "@/types";
 
 export interface ManualSchedulePageProps {
   layout: BaseBlueprint;
   operbox: OperBoxEntry[] | null;
   sourceName: string | null;
   shiftDurations: number[];
+  shiftStartTime: string;
+  scheduleMode: ManualScheduleMode;
   fiammettaEnabled: boolean;
   initialDraft: ManualScheduleDraft | null;
   onInitialDraftConsumed: () => void;
   onOpenCalculator: () => void;
   onShiftDurationsChange: (durations: number[]) => void;
+  onShiftStartTimeChange: (startTime: string) => void;
+  onScheduleModeChange: (mode: ManualScheduleMode) => void;
+  onImportedLayoutChange: (layout: BaseBlueprint) => void;
   onFiammettaEnabledChange: (enabled: boolean) => void;
   onOpenSetup: () => void;
   onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
@@ -69,6 +77,39 @@ type PendingMove = {
   target: Extract<PickerTarget, { kind: "slot" }>;
   conflict: ManualOperatorConflict;
 };
+
+const OperatorSkillTooltip = lazy(() => loadClientFeature("operatorSkillTooltip").then((module) => ({
+  default: module.OperatorSkillTooltip,
+})));
+
+type MaaImportPreview = {
+  fileName: string;
+  draft: ManualScheduleDraft;
+  layout: BaseBlueprint;
+  sourceShiftCount: number;
+  importedShiftCount: number;
+  sourceAssignmentCount: number;
+  importedAssignmentCount: number;
+};
+
+function countDraftAssignments(draft: ManualScheduleDraft): number {
+  return draft.shifts.reduce((total, shift) => total + Object.values(shift.rooms).reduce(
+    (roomTotal, room) => roomTotal + room.operators.filter(Boolean).length,
+    0,
+  ), 0);
+}
+
+function countMaaAssignments(maa: MaaJson): number {
+  return maa.plans.reduce((total, plan) => total + Object.values(plan.rooms).reduce(
+    (roomTotal, rooms) => roomTotal + ((rooms ?? []) as MaaRoom[]).reduce(
+      (groupTotal: number, room: MaaRoom) => groupTotal + (room.operators ?? []).filter((operator: string | MaaOperatorSlot | null) => (
+        typeof operator === "string" ? operator.trim().length > 0 : Boolean(operator?.name?.trim())
+      )).length,
+      0,
+    ),
+    0,
+  ), 0);
+}
 
 function ManualOperatorChoice({
   operator,
@@ -96,7 +137,7 @@ function ManualOperatorChoice({
     >
       <span className="size-12 shrink-0 overflow-hidden border border-border bg-muted sm:size-14">
         {portrait ? (
-          <img src={portrait} alt={localize_components_pages_ManualSchedulePage.text(en, "portrait", { displayName: displayName })} className="size-full object-cover" loading="lazy" decoding="async" />
+          <img src={portrait} alt={localize_components_pages_ManualSchedulePage.text(en, "portrait", { displayName })} className="size-full object-cover" loading="lazy" decoding="async" />
         ) : null}
       </span>
       <span className="min-w-0">
@@ -120,11 +161,16 @@ export function ManualSchedulePage({
   operbox,
   sourceName,
   shiftDurations,
+  shiftStartTime,
+  scheduleMode,
   fiammettaEnabled,
   initialDraft,
   onInitialDraftConsumed,
   onOpenCalculator,
   onShiftDurationsChange,
+  onShiftStartTimeChange,
+  onScheduleModeChange,
+  onImportedLayoutChange,
   onFiammettaEnabledChange,
   onOpenSetup,
   onFactoryRecipeChange,
@@ -133,15 +179,18 @@ export function ManualSchedulePage({
   const intl = useTranslations();
   const locale = useLocale();
   const en = locale === "en";
-  const [draft, setDraft] = useState<ManualScheduleDraft>(() => createManualScheduleDraft(shiftDurations));
+  const [draft, setDraft] = useState<ManualScheduleDraft>(() => createManualScheduleDraft(shiftDurations, shiftStartTime, scheduleMode));
   const [restored, setRestored] = useState(false);
   const [picker, setPicker] = useState<PickerTarget | null>(null);
   const [pickerQuery, setPickerQuery] = useState("");
+  const [maaImportPreview, setMaaImportPreview] = useState<MaaImportPreview | null>(null);
+  const [maaImportError, setMaaImportError] = useState<string | null>(null);
   const [pendingMove, setPendingMove] = useState<PendingMove | null>(null);
   const [storageWarning, setStorageWarning] = useState<string | null>(null);
   const [scheduleQuery, setScheduleQuery] = useState("");
   const [pickerScrolling, setPickerScrolling] = useState(false);
   const pickerScrollTimer = useRef<number | null>(null);
+  const maaImportInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => () => {
     if (pickerScrollTimer.current !== null) window.clearTimeout(pickerScrollTimer.current);
@@ -167,6 +216,8 @@ export function ManualSchedulePage({
         const reconciled = reconcileManualScheduleDraft(saved, layout, operbox);
         setDraft(reconciled);
         onShiftDurationsChange(reconciled.shifts.map((shift) => shift.durationHours));
+        onShiftStartTimeChange(reconciled.startTime);
+        onScheduleModeChange(reconciled.scheduleMode);
         onFiammettaEnabledChange(reconciled.fiammettaEnabled);
       }
     } catch {
@@ -174,7 +225,7 @@ export function ManualSchedulePage({
     }
     if (initialDraft) onInitialDraftConsumed();
     setRestored(true);
-  }, [intl, en, initialDraft, layout, onFiammettaEnabledChange, onInitialDraftConsumed, onShiftDurationsChange, operbox, restored]);
+  }, [intl, initialDraft, layout, onFiammettaEnabledChange, onInitialDraftConsumed, onScheduleModeChange, onShiftDurationsChange, onShiftStartTimeChange, operbox, restored]);
 
   useEffect(() => {
     if (!restored) return;
@@ -185,12 +236,17 @@ export function ManualSchedulePage({
 
   useEffect(() => {
     if (!restored) return;
+    setDraft((current) => current.scheduleMode === scheduleMode ? current : { ...current, scheduleMode });
+  }, [restored, scheduleMode]);
+
+  useEffect(() => {
+    if (!restored) return;
     setDraft((current) => reconcileManualScheduleDraft(
-      resizeManualScheduleDraft(current, shiftDurations),
+      resizeManualScheduleDraft(current, shiftDurations, shiftStartTime),
       layout,
       operbox,
     ));
-  }, [layout, operbox, ownedFingerprint, restored, shiftDurations]);
+  }, [layout, operbox, ownedFingerprint, restored, shiftDurations, shiftStartTime]);
 
   useEffect(() => {
     if (!restored || !canPersistDraft) return;
@@ -203,6 +259,7 @@ export function ManualSchedulePage({
   }, [intl, canPersistDraft, draft, en, restored]);
 
   const activeShift = Math.min(draft.activeShift, Math.max(0, draft.shifts.length - 1));
+  const shiftRanges = manualShiftTimeRanges(draft.startTime, draft.shifts.map((shift) => shift.durationHours));
   const maa = useMemo(() => manualScheduleToMaa(draft, layout, fiammettaEnabled), [draft, fiammettaEnabled, layout]);
   const activePlan = maa.plans[activeShift];
   const trainingRoom = layout.rooms.find((room) => room.kind === "training_room");
@@ -309,6 +366,55 @@ export function ManualSchedulePage({
     downloadJson("arknights-infra-schedule-maa.json", maa);
   }
 
+  async function prepareMaaImport(file: File) {
+    setMaaImportError(null);
+    if (file.size > 5 * 1024 * 1024) {
+      setMaaImportError(intl("components_pages_ManualSchedulePage.scheduleFileTooLarge"));
+      return;
+    }
+    try {
+      const sourceMaa = parseMaaScheduleText(await file.text());
+      const importedMaa = normalizeMaaScheduleForManualImport(sourceMaa);
+      const importedLayout = layoutFromMaaSchedule(importedMaa, layout);
+      const fiammettaImported = importedMaa.plans.some((plan) => plan.Fiammetta?.enable === true);
+      const converted = createManualScheduleDraftFromCalculator({
+        layout: importedLayout,
+        maa: importedMaa,
+        fallbackDurations: [],
+        fiammettaEnabled: fiammettaImported,
+        preferMaaTiming: true,
+        preserveExternalOperators: true,
+      });
+      const reconciled = reconcileManualScheduleDraft(converted, importedLayout, operbox);
+      setMaaImportPreview({
+        fileName: file.name,
+        draft: reconciled,
+        layout: importedLayout,
+        sourceShiftCount: sourceMaa.plans.length,
+        importedShiftCount: reconciled.shifts.length,
+        sourceAssignmentCount: Math.max(countMaaAssignments(sourceMaa), countDraftAssignments(reconciled)),
+        importedAssignmentCount: countDraftAssignments(reconciled),
+      });
+    } catch (error) {
+      setMaaImportError(en
+        ? intl("components_pages_ManualSchedulePage.invalidMaaSchedule")
+        : error instanceof Error ? error.message : intl("components_pages_ManualSchedulePage.invalidMaaSchedule"));
+    }
+  }
+
+  function confirmMaaImport() {
+    if (!maaImportPreview) return;
+    const imported = maaImportPreview.draft;
+    onImportedLayoutChange(maaImportPreview.layout);
+    setDraft(imported);
+    onShiftDurationsChange(imported.shifts.map((shift) => shift.durationHours));
+    onShiftStartTimeChange(imported.startTime);
+    onScheduleModeChange(imported.scheduleMode);
+    onFiammettaEnabledChange(imported.fiammettaEnabled);
+    setMaaImportPreview(null);
+    setMaaImportError(null);
+  }
+
   if (!operbox?.some((operator) => operator.own)) {
     return (
       <section className="flex min-h-[calc(100svh-9rem)] items-center justify-center py-8" aria-labelledby="manual-schedule-empty-title" data-manual-schedule-empty>
@@ -343,8 +449,23 @@ export function ManualSchedulePage({
           </Button>
         ) : null}
         <Button type="button" variant="outline" size="sm" onClick={onOpenSetup}><Settings2 />{intl("components_pages_ManualSchedulePage.configureBoxLayout")}</Button>
+        <Button type="button" variant="outline" size="sm" onClick={() => maaImportInputRef.current?.click()}><Upload />{intl("components_pages_ManualSchedulePage.importScheduleFile")}</Button>
+        <input
+          ref={maaImportInputRef}
+          type="file"
+          accept="application/json,.json"
+          className="sr-only"
+          aria-label={intl("components_pages_ManualSchedulePage.chooseMaaScheduleFile")}
+          onChange={(event) => {
+            const file = event.currentTarget.files?.[0];
+            if (file) void prepareMaaImport(file);
+            event.currentTarget.value = "";
+          }}
+        />
         <Button type="button" size="sm" onClick={exportMaa}><Download />{intl("components_pages_ManualSchedulePage.exportMaa")}</Button>
       </header>
+
+      {maaImportError ? <p className="mb-3 text-sm text-destructive" role="alert">{maaImportError}</p> : null}
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-y border-border/70 bg-muted/25 px-3 py-3">
         <div className="min-w-0">
@@ -374,12 +495,29 @@ export function ManualSchedulePage({
               <FiammettaTargetChip
                 target={fiammettaTarget}
                 portrait={fiammettaPortrait}
-                onClick={() => { setPickerQuery(""); setPicker({ kind: "fiammetta" }); }}
+                onClick={() => {
+                  setPickerQuery("");
+                  setPicker({ kind: "fiammetta" });
+                }}
               />
             ) : null}
             <ShiftTabs
               maaJson={maa}
               durations={draft.shifts.map((shift) => shift.durationHours)}
+              labels={draft.scheduleMode === "period" ? shiftRanges.map((range, index) => ({
+                content: <>
+                  {intl("components_pages_ManualSchedulePage.shift", { shift: index + 1 })}
+                  {" · "}<span className="font-number">{range.startTime}–{range.endTime}</span>
+                  {intl("components_pages_ManualSchedulePage.durationParenthetical", { duration: formatManualShiftDuration(range.durationMinutes, en) })}
+                </>,
+                ariaLabel: intl("components_pages_ManualSchedulePage.shiftRange", {
+                  shift: index + 1,
+                  startTime: range.startTime,
+                  endTime: range.endTime,
+                  duration: formatManualShiftDuration(range.durationMinutes, en),
+                }),
+              })) : undefined}
+              wrap
               active={activeShift}
               onChange={setActiveShift}
             />
@@ -423,6 +561,47 @@ export function ManualSchedulePage({
               {visibleOperators.length === 0 ? <p className="col-span-full py-8 text-center text-sm text-muted-foreground">{intl("components_pages_ManualSchedulePage.noMatchingOperators")}</p> : null}
             </TooltipProvider>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(maaImportPreview)} onOpenChange={(open) => { if (!open) setMaaImportPreview(null); }}>
+        <DialogContent className="max-w-[min(520px,calc(100vw-2rem))]">
+          <DialogHeader>
+            <DialogTitle>{intl("components_pages_ManualSchedulePage.importMaaScheduleQuestion")}</DialogTitle>
+            <DialogDescription>
+              {intl("components_pages_ManualSchedulePage.importMaaScheduleDescription")}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2 px-5 py-2 text-sm sm:px-7">
+            <p className="truncate"><span className="text-muted-foreground">{intl("components_pages_ManualSchedulePage.fileLabel")}</span>{maaImportPreview?.fileName}</p>
+            <p>
+              <span className="text-muted-foreground">{intl("components_pages_ManualSchedulePage.shiftsLabel")}</span>
+              <span className="font-number">{maaImportPreview?.importedShiftCount}</span>
+              {maaImportPreview && maaImportPreview.sourceShiftCount !== maaImportPreview.importedShiftCount ? (
+                <span className="ml-2 text-muted-foreground">
+                  {intl("components_pages_ManualSchedulePage.expandedFromPlans", { count: maaImportPreview.sourceShiftCount })}
+                </span>
+              ) : null}
+            </p>
+            <p>
+              <span className="text-muted-foreground">{intl("components_pages_ManualSchedulePage.assignmentsLabel")}</span>
+              <span className="font-number">{maaImportPreview?.importedAssignmentCount}</span>
+              <span className="text-muted-foreground"> / </span>
+              <span className="font-number">{maaImportPreview?.sourceAssignmentCount}</span>
+              {maaImportPreview && maaImportPreview.sourceAssignmentCount > maaImportPreview.importedAssignmentCount ? (
+                <span className="ml-2 text-amber-700">
+                  {intl("components_pages_ManualSchedulePage.unmappedAssignments", { count: maaImportPreview.sourceAssignmentCount - maaImportPreview.importedAssignmentCount })}
+                </span>
+              ) : null}
+            </p>
+            <p className="text-xs leading-5 text-muted-foreground">
+              {intl("components_pages_ManualSchedulePage.importMaaScheduleDetails")}
+            </p>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => setMaaImportPreview(null)}>{intl("components_pages_ManualSchedulePage.cancel")}</Button>
+            <Button type="button" onClick={confirmMaaImport}><Upload />{intl("components_pages_ManualSchedulePage.replaceDraft")}</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
