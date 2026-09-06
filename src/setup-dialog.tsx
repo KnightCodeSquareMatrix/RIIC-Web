@@ -19,6 +19,14 @@ import { FiammettaSettings } from "@/components/FiammettaSettings";
 import { WizardSteps } from "@/components/interior/wizard-steps";
 import { hasSetupConfigurationChanged } from "@/setup-configuration";
 import { useWebsiteSession } from "@/website-session";
+import {
+  formatManualShiftDuration,
+  manualShiftTimeRanges,
+  resizeManualShiftDurations,
+  updateManualShiftBoundary,
+  type ManualScheduleMode,
+} from "@/manual-schedule";
+import { DEFAULT_MANUAL_SHIFT_START_TIME } from "@/manual-schedule-config";
 
 import type { FactoryRecipe, PowerBudget, TradeOrder } from "./blueprint";
 import { FileDrop, LayoutEditor, PresetSelector } from "./components";
@@ -64,6 +72,10 @@ type SetupDialogProps = {
   onRotationProfileChange: (value: RotationProfile) => void;
   manualShiftDurations?: number[];
   onManualShiftDurationsChange?: (durations: number[]) => void;
+  manualShiftStartTime?: string;
+  onManualShiftStartTimeChange?: (startTime: string) => void;
+  manualScheduleMode?: ManualScheduleMode;
+  onManualScheduleModeChange?: (mode: ManualScheduleMode) => void;
   fiammettaEnabled: boolean;
   onFiammettaEnabledChange: (enabled: boolean) => void;
   onPresetSelect: (preset: PresetDef) => void;
@@ -123,6 +135,10 @@ export function SetupDialog({
   onRotationProfileChange,
   manualShiftDurations = [12, 6, 6],
   onManualShiftDurationsChange,
+  manualShiftStartTime = DEFAULT_MANUAL_SHIFT_START_TIME,
+  onManualShiftStartTimeChange,
+  manualScheduleMode = "sequential",
+  onManualScheduleModeChange,
   fiammettaEnabled,
   onFiammettaEnabledChange,
   onPresetSelect,
@@ -165,21 +181,17 @@ export function SetupDialog({
       ? "243 full E2 sample"
       : persistedDataLabel;
   const reducedMotion = useReducedMotion();
+  const manualShiftRanges = manualShiftTimeRanges(manualShiftStartTime, manualShiftDurations);
 
   function updateManualShiftCount(count: number) {
     if (!onManualShiftDurationsChange) return;
-    const nextCount = Math.max(1, Math.min(12, Math.trunc(count || 1)));
-    onManualShiftDurationsChange(Array.from(
-      { length: nextCount },
-      (_, index) => manualShiftDurations[index] ?? 12,
-    ));
+    onManualShiftDurationsChange(resizeManualShiftDurations(manualShiftDurations, count));
   }
 
-  function updateManualShiftDuration(index: number, duration: number) {
-    if (!onManualShiftDurationsChange || !Number.isFinite(duration)) return;
-    onManualShiftDurationsChange(manualShiftDurations.map((current, candidate) => (
-      candidate === index ? Math.max(0.25, Math.round(duration * 100) / 100) : current
-    )));
+  function updateManualShiftEnd(index: number, endTime: string) {
+    if (!onManualShiftDurationsChange) return;
+    const next = updateManualShiftBoundary(manualShiftStartTime, manualShiftDurations, index, endTime);
+    if (next) onManualShiftDurationsChange(next);
   }
 
   useEffect(() => {
@@ -540,10 +552,45 @@ export function SetupDialog({
                     <div className="pt-1">
                       {mode === "manual" ? (
                         <section className="grid gap-4" aria-labelledby="manual-shift-settings-title" data-manual-shift-settings>
+                          <div>
+                            <h3 className="text-sm font-semibold">{intl("setup_dialog.scheduleMode")}</h3>
+                            <div className="mt-2 grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label={intl("setup_dialog.scheduleMode")}>
+                              <Button
+                                type="button"
+                                variant={manualScheduleMode === "sequential" ? "default" : "outline"}
+                                className="h-auto min-h-16 items-start justify-start px-4 py-3 text-left"
+                                role="radio"
+                                aria-checked={manualScheduleMode === "sequential"}
+                                onClick={() => onManualScheduleModeChange?.("sequential")}
+                              >
+                                <span>
+                                  <span className="block font-semibold">{intl("setup_dialog.sequentialRotation")}</span>
+                                  <span className="mt-1 block text-xs font-normal opacity-75">{intl("setup_dialog.sequentialRotationDescription")}</span>
+                                </span>
+                              </Button>
+                              <Button
+                                type="button"
+                                variant={manualScheduleMode === "period" ? "default" : "outline"}
+                                className="h-auto min-h-16 items-start justify-start px-4 py-3 text-left"
+                                role="radio"
+                                aria-checked={manualScheduleMode === "period"}
+                                onClick={() => onManualScheduleModeChange?.("period")}
+                              >
+                                <span>
+                                  <span className="block font-semibold">{intl("setup_dialog.timeRanges")}</span>
+                                  <span className="mt-1 block text-xs font-normal opacity-75">{intl("setup_dialog.timeRangesDescription")}</span>
+                                </span>
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="border-t border-border/70" />
                           <div className="flex flex-wrap items-center justify-between gap-3">
                             <div>
-                              <h3 id="manual-shift-settings-title" className="text-sm font-semibold">{intl("setup_dialog.manualShifts")}</h3>
-                              <p className="mt-1 text-xs text-muted-foreground">{intl("setup_dialog.durationsAreIndependentAndDoNotNeedToAdd")}</p>
+                               <h3 id="manual-shift-settings-title" className="text-sm font-semibold">{intl("setup_dialog.manualShifts")}</h3>
+                              <p className="mt-1 text-xs text-muted-foreground">{manualScheduleMode === "period"
+                                ? intl("setup_dialog.consecutiveShiftTimes")
+                                : intl("setup_dialog.shiftOrderOnly")}</p>
+                              {manualScheduleMode === "period" ? <p className="mt-1 text-xs font-medium text-foreground">{intl("setup_dialog.total24Hours")}</p> : null}
                             </div>
                             <div className="flex items-center gap-1">
                               <Button type="button" size="icon-sm" variant="outline" aria-label={intl("setup_dialog.removeOneShift")} disabled={manualShiftDurations.length <= 1} onClick={() => updateManualShiftCount(manualShiftDurations.length - 1)}><Minus /></Button>
@@ -554,17 +601,45 @@ export function SetupDialog({
                               <Button type="button" size="icon-sm" variant="outline" aria-label={intl("setup_dialog.addOneShift")} disabled={manualShiftDurations.length >= 12} onClick={() => updateManualShiftCount(manualShiftDurations.length + 1)}><Plus /></Button>
                             </div>
                           </div>
-                          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                            {manualShiftDurations.map((duration, index) => (
-                              <label key={index} className="flex min-h-11 items-center justify-between gap-3 border border-border/70 bg-muted/25 px-3 py-2 text-sm">
-                                <span>{intl("setup_dialog.shift", { value1: index + 1 })}</span>
-                                <span className="flex items-center gap-1.5">
-                                  <input aria-label={intl("setup_dialog.shiftDuration", { value1: index + 1 })} className="h-8 w-20 rounded-[4px] border border-input bg-background px-2 text-right font-number" type="number" min="0.25" step="0.25" value={duration} onChange={(event) => updateManualShiftDuration(index, Number(event.target.value))} />
-                                  <span className="text-xs text-muted-foreground">{intl("setup_dialog.h")}</span>
-                                </span>
-                              </label>
+                          {manualScheduleMode === "period" ? <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                            {manualShiftRanges.map((range, index) => (
+                              <div key={index} className="grid min-h-20 gap-2 border border-border/70 bg-muted/25 px-3 py-2 text-sm">
+                                <div className="flex items-center justify-between gap-3">
+                                  <span>{intl("setup_dialog.shift", { value1: index + 1 })}</span>
+                                  <span className="text-xs text-muted-foreground">{intl("setup_dialog.durationParenthetical", { duration: formatManualShiftDuration(range.durationMinutes, en) })}</span>
+                                </div>
+                                <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                                  <label className="grid gap-1 text-xs text-muted-foreground">
+                                    <span>{intl("setup_dialog.start")}</span>
+                                    <input
+                                      aria-label={intl("setup_dialog.shiftStartTime", { value1: index + 1 })}
+                                      className="h-9 min-w-0 rounded-[4px] border border-input bg-background px-2 font-number disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
+                                      type="time"
+                                      step="60"
+                                      value={range.startTime}
+                                      disabled={index > 0}
+                                      onChange={(event) => {
+                                        if (event.target.value) onManualShiftStartTimeChange?.(event.target.value);
+                                      }}
+                                    />
+                                  </label>
+                                  <span className="mt-5 text-muted-foreground" aria-hidden="true">→</span>
+                                  <label className="grid gap-1 text-xs text-muted-foreground">
+                                    <span>{intl("setup_dialog.end")}</span>
+                                    <input
+                                      aria-label={intl("setup_dialog.shiftEndTime", { value1: index + 1 })}
+                                      className="h-9 min-w-0 rounded-[4px] border border-input bg-background px-2 font-number disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
+                                      type="time"
+                                      step="60"
+                                      value={range.endTime}
+                                      disabled={index === manualShiftRanges.length - 1}
+                                      onChange={(event) => updateManualShiftEnd(index, event.target.value)}
+                                    />
+                                  </label>
+                                </div>
+                              </div>
                             ))}
-                          </div>
+                          </div> : null}
                         </section>
                       ) : <RotationSettings value={rotationProfile} onChange={onRotationProfileChange} />}
                     </div>

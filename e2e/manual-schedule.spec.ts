@@ -62,7 +62,7 @@ test("sidebar resumes an existing manual draft without invoking the solver", asy
   await expect(page.locator('[data-calculator-export-actions="desktop"]')).toHaveCount(0);
   await page.getByRole("button", { name: "手动排班", exact: true }).click();
   await expect(page).toHaveURL(/\/manual$/);
-  await expect(page.getByRole("tab", { name: /第 1 班.*9h/ })).toBeVisible();
+  await expect(page.getByRole("tab", { name: /第 1 班.*24h/ })).toBeVisible();
   await expect(page.locator('[data-room-title="贸易站 1"] [data-operator-identity="阿米娅"]')).toBeVisible();
   expect(planRequests).toBe(0);
 });
@@ -227,14 +227,21 @@ test("manual scheduling configures independent shifts, moves conflicts and enabl
   await setup.getByRole("button", { name: "继续", exact: true }).click();
   await expect(setup.locator("[data-manual-shift-settings]")).toBeVisible();
   await expect(setup.getByRole("combobox", { name: "换班方式" })).toHaveCount(0);
-  await expect(setup.getByLabel("班次 1 时长")).toHaveValue("12");
-  await setup.getByLabel("班次 1 时长").fill("10.5");
+  await expect(setup.getByRole("radio", { name: /顺序轮换/ })).toHaveAttribute("aria-checked", "true");
+  await setup.getByRole("radio", { name: /时间区间/ }).click();
+  await expect(setup.getByLabel("班次 1 开始时间")).toHaveValue("08:00");
+  await setup.getByLabel("班次 1 开始时间").fill("08:15");
+  await setup.getByLabel("班次 1 结束时间").fill("19:59");
+  await expect(setup.getByLabel("班次 2 开始时间")).toHaveValue("20:00");
+  await expect(setup.getByLabel("班次 2 开始时间")).toBeDisabled();
   await setup.getByRole("button", { name: "减少一个班次" }).click();
+  await expect(setup.getByLabel("班次 2 结束时间")).toHaveValue("08:14");
+  await expect(setup.getByLabel("班次 2 结束时间")).toBeDisabled();
   await setup.getByRole("checkbox", { name: /未启用/ }).click();
   await setup.getByRole("button", { name: "继续", exact: true }).click();
   await setup.getByRole("button", { name: "完成", exact: true }).click();
 
-  await expect(page.getByRole("tab", { name: /第 1 班.*10.5h/ })).toBeVisible();
+  await expect(page.getByRole("tab", { name: /班次 1.*08:15至19:59.*11小时45分钟/ })).toBeVisible();
   await expect(page.locator("[data-manual-shift-actions] [data-shift-tabs]").getByRole("tab")).toHaveCount(2);
   const manualShiftActions = page.locator("[data-manual-shift-actions]");
   const moraleTarget = manualShiftActions.getByRole("button", { name: "选择换心情目标" });
@@ -302,7 +309,7 @@ test("manual scheduling configures independent shifts, moves conflicts and enabl
   await page.getByRole("dialog").getByRole("button", { name: "自动补位" }).click();
   await expect(dorm.locator('[data-operator-identity="autofill"]')).toHaveCount(5);
 
-  await page.getByRole("tab", { name: /第 2 班.*6h/ }).click();
+  await page.getByRole("tab", { name: /班次 2.*20:00至08:14.*12小时15分钟/ }).click();
   await expect(factory.locator('[data-operator-identity="阿米娅"]')).toHaveCount(0);
   expect(planRequests).toBe(0);
 
@@ -320,4 +327,33 @@ test("manual scheduling configures independent shifts, moves conflicts and enabl
       for (const room of rooms) expect(room.operators.every((operator) => typeof operator === "string")).toBe(true);
     }
   }
+});
+
+test("manual scheduling previews and imports an external MAA schedule file", async ({ page }) => {
+  await page.goto("/manual");
+  await expect(page.locator('[data-workbench-hydrated="true"]')).toBeVisible();
+  await expect(page.locator("[data-manual-schedule-page]")).toBeVisible();
+
+  const importedSchedule = {
+    title: "外部排版",
+    plans: [
+      { name: "白班", period: [["08:15", "19:59"]], rooms: { control: [{ operators: ["外部测试干员"] }] } },
+      { name: "夜班", period: [["20:00", "23:59"], ["00:00", "08:14"]], rooms: { trading: [{ operators: ["锡兰"] }] } },
+    ],
+  };
+  await page.getByLabel("选择 MAA 排版 JSON 文件").setInputFiles({
+    name: "external-schedule.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify(importedSchedule)),
+  });
+
+  const preview = page.getByRole("dialog", { name: "导入这个 MAA 排版？" });
+  await expect(preview).toContainText("external-schedule.json");
+  await expect(preview).toContainText("干员位置：2 / 2");
+  await preview.getByRole("button", { name: "导入并替换草稿" }).click();
+
+  await expect(page.getByRole("tab", { name: /班次 1.*08:15至19:59.*11小时45分钟/ })).toBeVisible();
+  await expect(page.locator('[data-room-title="控制中枢"] [data-operator-identity="外部测试干员"]')).toBeVisible();
+  await page.getByRole("tab", { name: /班次 2.*20:00至08:14.*12小时15分钟/ }).click();
+  await expect(page.locator('[data-room-title="贸易站 1"] [data-operator-identity="锡兰"]')).toBeVisible();
 });
