@@ -58,6 +58,27 @@ test("legacy preference migrates once; an existing cookie takes precedence", asy
   await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
 });
 
+test("a warm English game catalog does not race workbench hydration", async ({ page, context, baseURL }) => {
+  await context.addCookies([{ name: "riic-locale", value: "en", url: baseURL! }]);
+  const hydrationErrors: string[] = [];
+  page.on("pageerror", (error) => {
+    if (/hydration|React error #418/i.test(error.message)) hydrationErrors.push(error.message);
+  });
+
+  await page.goto("/");
+  // Let the independently loaded game catalog enter the browser cache before
+  // repeatedly hydrating a route that renders localized operator and skill text.
+  await page.waitForTimeout(2_000);
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    await page.goto("/skills");
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    await expect(page.locator("[data-skill-filter-row]")).toHaveCount(4);
+    await page.goto("/");
+  }
+
+  expect(hydrationErrors).toEqual([]);
+});
+
 for (const locale of ["zh", "en"] as const) {
   test(`${locale} public pages render translated headings and metadata`, async ({ page, context, baseURL }) => {
     await context.addCookies([{ name: "riic-locale", value: locale, url: baseURL! }]);

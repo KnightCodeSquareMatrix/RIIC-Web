@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { LoadMore } from "@/components/ui/load-more";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { localizedOperatorName } from "@/i18n/game-data";
+import { useGameCatalog } from "@/i18n/game-data-client";
 import { PROFESSION_LABELS, PROFESSION_LABELS_ENGLISH } from "@/operator-presentation";
 import { cn } from "@/lib/utils";
 
@@ -20,7 +21,8 @@ export function OperatorIdentity({ name, portrait, compact = false, children }: 
 }) {
   const intl = useTranslations();
   const locale = useLocale();
-  const displayName = localizedOperatorName(name, locale);
+  const gameCatalog = useGameCatalog();
+  const displayName = localizedOperatorName(name, locale, gameCatalog);
   return <>
     <span className={cn("shrink-0 overflow-hidden border border-border bg-muted", compact ? "size-10" : "size-12 sm:size-14")}>
       {portrait ? <img src={portrait} alt={intl("components_operators_OperatorPickerParts.portrait", { displayName: displayName })} className="size-full object-cover" loading="lazy" decoding="async" /> : null}
