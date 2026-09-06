@@ -108,6 +108,7 @@ export type PlanTaskPollErrorDecision = {
 export function planTaskPollErrorDecision(
   errorCode: string | null,
   attempt: number,
+  retryAfterMs = 0,
 ): PlanTaskPollErrorDecision {
   if (errorCode === "AIC-REQ-1001") {
     return { kind: "terminal", message: "任务不存在或已过期，请重新生成排班。", clearStoredTask: true };
@@ -115,14 +116,14 @@ export function planTaskPollErrorDecision(
   if (errorCode === "AIC-AUTH-2002") {
     return { kind: "terminal", message: "任务状态异常，请刷新页面后重试。", clearStoredTask: true };
   }
-  if (errorCode === "AIC-AUTH-2001") {
+  if (errorCode === "AIC-AUTH-2001" || errorCode === "AIC-AUTH-2008") {
     return { kind: "pause", message: "登录已过期，请重新登录后刷新页面继续查询。", clearStoredTask: false };
   }
-  if (attempt < PLAN_TASK_POLL_BACKOFF_MS.length) {
+  if (attempt < PLAN_TASK_POLL_BACKOFF_MS.length || retryAfterMs > 0) {
     return {
       kind: "retry",
-      delayMs: PLAN_TASK_POLL_BACKOFF_MS[attempt],
-      nextAttempt: attempt + 1,
+      delayMs: Math.max(PLAN_TASK_POLL_BACKOFF_MS[Math.min(attempt, PLAN_TASK_POLL_BACKOFF_MS.length - 1)], retryAfterMs),
+      nextAttempt: Math.min(attempt + 1, PLAN_TASK_POLL_BACKOFF_MS.length),
       clearStoredTask: false,
     };
   }
@@ -133,12 +134,13 @@ export type PlanTaskPollAttemptEffects = {
   poll: (taskId: string) => Promise<PlanTaskPollData>;
   isCurrent: (taskId: string) => boolean;
   errorCode: (error: unknown) => string | null;
+  retryAfterMs?: (error: unknown) => number;
   finishDone: (result: PublicPlanData | null) => void;
   finishTerminal: (status: "failed" | "cancelled", message: string, notifyFailure: boolean) => void;
   continueActive: (decision: Extract<PlanTaskPollResponseDecision, { kind: "continue" }>) => void;
   schedule: (taskId: string, attempt: number, delayMs: number) => void;
   pause: (message: string) => void;
-  stop: (message: string) => void;
+  stop: (message: string, recoverOnNetwork: boolean) => void;
 };
 
 export async function runPlanTaskPollAttempt(
@@ -163,7 +165,8 @@ export async function runPlanTaskPollAttempt(
     effects.schedule(taskId, 0, decision.delayMs);
   } catch (error) {
     if (!effects.isCurrent(taskId)) return;
-    const decision = planTaskPollErrorDecision(effects.errorCode(error), attempt);
+    const errorCode = effects.errorCode(error);
+    const decision = planTaskPollErrorDecision(errorCode, attempt, effects.retryAfterMs?.(error));
     if (decision.kind === "terminal") {
       effects.finishTerminal("failed", decision.message, true);
       return;
@@ -176,6 +179,6 @@ export async function runPlanTaskPollAttempt(
       effects.schedule(taskId, decision.nextAttempt, decision.delayMs);
       return;
     }
-    effects.stop(decision.message);
+    effects.stop(decision.message, errorCode === null || errorCode === "AIC-SYS-5000");
   }
 }

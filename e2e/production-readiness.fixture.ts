@@ -881,7 +881,7 @@ export async function mockApis(
     contentType: "application/json",
     body: JSON.stringify({ success: true, data: { environment: "local", releases: [] }, requestId }),
   }));
-  await page.route("**/api/health", (route) => route.fulfill({
+  await page.route("**/api/readiness", (route) => route.fulfill({
     status: 200,
     contentType: "application/json",
     headers: { "X-Request-Id": requestId },
