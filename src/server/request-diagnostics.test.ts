@@ -10,10 +10,16 @@ const input={code:"AIC-DATA-8003",status:422,route:"/api/workspace",requestId:"r
 
 test("diagnostics reject the public directory itself as well as descendants and broad roots",()=>{
   const cwd=path.resolve("fixture-app"); const home=path.resolve("fixture-home");
-  for(const root of [cwd,path.join(cwd,"public"),path.join(cwd,"public","logs"),home,path.parse(cwd).root]) {
+  for(const root of [cwd,path.join(cwd,"public"),path.join(cwd,"public","logs"),path.parse(cwd).root]) {
     assert.throws(()=>assertDiagnosticRoot(root,cwd,home));
   }
   assert.doesNotThrow(()=>assertDiagnosticRoot(path.resolve("fixture-private"),cwd,home));
+});
+
+test("an explicitly configured service HOME may hold the dedicated append-only log directory",()=>{
+  const cwd=path.resolve("fixture-app"); const serviceHome=path.resolve("fixture-service-state");
+  assert.doesNotThrow(()=>assertDiagnosticRoot(serviceHome,cwd,serviceHome));
+  assert.throws(()=>assertDiagnosticRoot(path.dirname(serviceHome),cwd,serviceHome));
 });
 
 test("API response keeps its contract while internal logs retain sanitized context",async context=>{

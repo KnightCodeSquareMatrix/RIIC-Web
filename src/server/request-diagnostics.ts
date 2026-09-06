@@ -73,7 +73,10 @@ export function makeDiagnostic(input: {
 
 export function assertDiagnosticRoot(root: string, cwd: string, home: string): void {
   const publicRoot = path.join(cwd,"public");
-  if (!isSafePrivateStorageRoot(root,[cwd,home]) || root === publicRoot || isPrivateStorageChild(publicRoot,root)) {
+  // systemd may deliberately set HOME to BETA_STORAGE_DIR. Only the dedicated
+  // diagnostic-logs child is touched; no operation prunes the configured base.
+  const disallowedRoots = root === path.resolve(home) ? [cwd] : [cwd,home];
+  if (!isSafePrivateStorageRoot(root,disallowedRoots) || root === publicRoot || isPrivateStorageChild(publicRoot,root)) {
     throw new Error("diagnostic_storage_must_be_private");
   }
 }
