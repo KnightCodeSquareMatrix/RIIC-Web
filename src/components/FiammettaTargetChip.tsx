@@ -4,6 +4,7 @@ import { useTranslations, useLocale } from "next-intl";
 import { HeartPulse } from "lucide-react";
 
 import { localizedOperatorName } from "@/i18n/game-data";
+import { useGameCatalog } from "@/i18n/game-data-client";
 
 export interface FiammettaTargetChipProps {
   target?: string | null;
@@ -15,8 +16,9 @@ export interface FiammettaTargetChipProps {
 export function FiammettaTargetChip({ target, portrait, onClick }: FiammettaTargetChipProps) {
   const intl = useTranslations();
   const locale = useLocale();
+  const gameCatalog = useGameCatalog();
 
-  const displayTarget = target ? localizedOperatorName(target, locale) : null;
+  const displayTarget = target ? localizedOperatorName(target, locale, gameCatalog) : null;
   const label = displayTarget
     ? (intl("components_FiammettaTargetChip.moraleRecovery", { displayTarget: displayTarget }))
     : (intl("components_FiammettaTargetChip.chooseMoraleTarget"));

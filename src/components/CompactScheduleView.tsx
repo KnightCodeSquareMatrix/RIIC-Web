@@ -36,6 +36,7 @@ import type { RoomRow } from "@/schedule";
 import type { BaseBlueprint, MaaPlan } from "@/types";
 import type { ShiftDirection } from "@/motion";
 import { localizedRoomTitle } from "@/i18n/game-data";
+import { useGameCatalog } from "@/i18n/game-data-client";
 
 export interface CompactScheduleViewProps {
   rows: RoomRow[];
@@ -95,6 +96,7 @@ function CompactRoomCard({
 }) {
   const intl = useTranslations();
   const locale = useLocale();
+  const gameCatalog = useGameCatalog();
   const en = locale === "en";
   const efficiencyLabel = (label?: string) => en && label ? ({ "纯技能": "Skill", "技能效率": "Skill efficiency", "跨设施": "Cross-facility", "综合加成": "Combined bonus", "仓储上限": "Capacity", "订单机制": "Order mechanic", "总充能": "Total charge" }[label] ?? label) : label;
   const isTrade = layoutRoom?.kind === "trade_post";
@@ -112,7 +114,7 @@ function CompactRoomCard({
   const header = (
     <div className={COMPACT_HEADER_CLASS}>
       <span className="infra-room-accent h-5 w-1 shrink-0 bg-[var(--room-accent)]" aria-hidden="true" />
-      <span className={`${COMPACT_ROOM_TITLE_CLASS} font-number`}>{localizedRoomTitle(row.title, row.group, locale)}</span>
+      <span className={`${COMPACT_ROOM_TITLE_CLASS} font-number`}>{localizedRoomTitle(row.title, row.group, locale, gameCatalog)}</span>
       <LevelDiamonds
         level={row.level}
         maxLevel={layoutRoom ? maxRoomLevel(layoutRoom.kind) : row.level}
@@ -251,8 +253,9 @@ function CompactRoomCard({
 function CompactFeedbackButton({ row, disabled, onIssue }: { row: RoomRow; disabled: boolean; onIssue: (row: RoomRow) => void }) {
   const intl = useTranslations();
   const locale = useLocale();
+  const gameCatalog = useGameCatalog();
 
-  const roomTitle = localizedRoomTitle(row.title, row.group, locale);
+  const roomTitle = localizedRoomTitle(row.title, row.group, locale, gameCatalog);
   return (
     <Tooltip>
       <TooltipTrigger

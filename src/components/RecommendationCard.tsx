@@ -13,6 +13,7 @@ import { operatorPortraitFor, operatorProfessionFor } from "@/operatorPortraits"
 import type { OperBoxEntry, UserProfileAction } from "@/types";
 import { legacyTrainingTarget, trainingAdviceSkillSummary } from "@/components/training-advice/skill-selection";
 import { localizedOperatorName } from "@/i18n/game-data";
+import { useGameCatalog } from "@/i18n/game-data-client";
 
 const DOMAIN_GROUPS: Record<string, string> = { trade: "trading", trading: "trading", manufacture: "manufacture", manu: "manufacture", power: "power", control: "control", general: "training" };
 
@@ -32,9 +33,10 @@ export function RecommendationCard({ action, entry, variant = "full", index = 0,
   const intl = useTranslations();
   const reduceMotion = useReducedMotion();
   const locale = useLocale();
+  const gameCatalog = useGameCatalog();
   const en = locale === "en";
   const priority = action.priority || (intl("components_RecommendationCard.unranked"));
-  const operatorName = localizedOperatorName(action.operator, locale) || (intl("components_RecommendationCard.unknownOperator"));
+  const operatorName = localizedOperatorName(action.operator, locale, gameCatalog) || (intl("components_RecommendationCard.unknownOperator"));
   const isHighPriority = /高|urgent|critical|p0|p1/i.test(priority);
   const skillSummary = trainingAdviceSkillSummary(
     action.operator,

@@ -23,6 +23,7 @@ import {
 import { skillAnnotationKey } from "@/skill-annotations";
 import type { SkillAnnotationData } from "@/types";
 import { localizedBuildingSkill, localizedOperatorName } from "@/i18n/game-data";
+import { useGameCatalog } from "@/i18n/game-data-client";
 
 /** 按「最后一个下划线之前」的前缀分组：同一族（基础 + 提升）分到同一组，行内按 index 升序。 */
 function groupSkillsByPrefix(skills: OperatorBuildingSkillRef[]): OperatorBuildingSkillRef[][] {
@@ -65,7 +66,8 @@ export function SkillResultRow({ operator, annotationIndex }: SkillResultRowProp
   const intl = useTranslations();
   const isMobile = useIsMobile();
   const locale = useLocale();
-  const displayName = localizedOperatorName(operator.name, locale);
+  const gameCatalog = useGameCatalog();
+  const displayName = localizedOperatorName(operator.name, locale, gameCatalog);
   const skills = [...operator.buildingSkills].sort((left, right) => left.index - right.index);
 
   return (
@@ -133,8 +135,9 @@ function SkillColumn({
 }) {
   const intl = useTranslations();
   const locale = useLocale();
+  const gameCatalog = useGameCatalog();
   const sourceSkill = BUILDING_SKILL_CATALOG[id];
-  const skill = sourceSkill ? localizedBuildingSkill(id, locale, sourceSkill) : undefined;
+  const skill = sourceSkill ? localizedBuildingSkill(id, locale, sourceSkill, gameCatalog) : undefined;
 
   if (!skill) {
     return (
@@ -194,6 +197,7 @@ function MobileSkillList({
   const intl = useTranslations();
   const [selected, setSelected] = useState<OperatorBuildingSkillRef | null>(null);
   const locale = useLocale();
+  const gameCatalog = useGameCatalog();
   const en = locale === "en";
 
   return (
@@ -201,7 +205,7 @@ function MobileSkillList({
       {skills.length ? (
         skills.map((ref) => {
           const sourceSkill = BUILDING_SKILL_CATALOG[ref.id];
-          const skill = sourceSkill ? localizedBuildingSkill(ref.id, locale, sourceSkill) : undefined;
+          const skill = sourceSkill ? localizedBuildingSkill(ref.id, locale, sourceSkill, gameCatalog) : undefined;
           const annotation = annotationIndex.get(skillAnnotationKey(operatorId, ref.id))?.note;
           return (
             <button
@@ -253,9 +257,10 @@ function SkillDetailDialog({
 }) {
   const intl = useTranslations();
   const locale = useLocale();
+  const gameCatalog = useGameCatalog();
 
   const sourceSkill = selected ? BUILDING_SKILL_CATALOG[selected.id] : undefined;
-  const skill = selected && sourceSkill ? localizedBuildingSkill(selected.id, locale, sourceSkill) : undefined;
+  const skill = selected && sourceSkill ? localizedBuildingSkill(selected.id, locale, sourceSkill, gameCatalog) : undefined;
   const unlockLabel = selected ? buildingSkillUnlockLabel(selected.elite, selected.level, enhanced) : "";
 
   return (

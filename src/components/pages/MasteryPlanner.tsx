@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { localizedOperatorName } from "@/i18n/game-data";
+import { useGameCatalog } from "@/i18n/game-data-client";
 import catalog from "@/generated/arkntools/operator-catalog.json";
 import type { OperBoxEntry } from "@/types";
 
@@ -39,6 +40,7 @@ export interface MasteryPlannerProps {
 export function MasteryPlanner({ operbox, sourceName, requiresAccount, pending, onOpenSetup, onRequestAccount, pickerRequested, onPickerRequestConsumed }: MasteryPlannerProps) {
   const intl = useTranslations();
   const locale = useLocale();
+  const gameCatalog = useGameCatalog();
   const en = locale === "en";
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -61,7 +63,7 @@ export function MasteryPlanner({ operbox, sourceName, requiresAccount, pending, 
   const signature = JSON.stringify(input);
   const stale = !!calculation && calculation.signature !== signature;
   const plan = !stale ? calculation?.result[mode] : null;
-  const displayName = (name: string) => localizedOperatorName(name,locale);
+  const displayName = (name: string) => localizedOperatorName(name,locale,gameCatalog);
   const conditions = intl("components_pages_MasteryPlanner.assumesSufficientMoraleMaterialsAndTrainingRoomLevelEnvironment");
   const activeEnvironment = environmentKeys.map((key) => `${en ? MASTERY_ENVIRONMENTS[key]!.english : MASTERY_ENVIRONMENTS[key]!.label} ${input.environment[key]}`).join(" · ");
   const settingsSummary = `${intl("components_pages_MasteryPlanner.controlBonus")} ${controlBonus ? "+5%" : "0%"} · ${intl("components_pages_MasteryPlanner.buffer")} ${bufferMinutes} ${intl("components_pages_MasteryPlanner.min")}${activeEnvironment ? ` · ${activeEnvironment}` : ""}`;
