@@ -45,7 +45,7 @@ export async function handleDeleteSklandAccountData(request: Request, route: str
     setSklandAccountStoreCookies(response, request, next, previous);
     return response;
   } catch (error) {
-    return sklandErrorResponse(error, requestId, route, startedAt);
+    return sklandErrorResponse(error, requestId, route, startedAt, request);
   }
 }
 

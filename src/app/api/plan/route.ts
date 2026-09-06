@@ -316,7 +316,7 @@ export async function POST(request: Request) {
   } catch (error) {
     if (cacheLease) await releasePlanCacheLease(cacheLease);
     await recordRun("failed", error instanceof PublicApiError ? error.code : "AIC-SYS-5000");
-    return failureResponse(error, requestId, "/api/plan", startedAt, "AIC-SYS-5000");
+    return failureResponse(error, requestId, "/api/plan", startedAt, "AIC-SYS-5000", request);
   } finally {
     release?.();
   }

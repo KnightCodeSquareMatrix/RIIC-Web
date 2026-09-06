@@ -25,7 +25,7 @@ export async function GET(request: Request) {
     const session = await requireWebsiteSession(request);
     return successResponse(await accountDataConsent(session.user.id), requestId);
   } catch (error) {
-    return failureResponse(error, requestId, "/api/account/data-consent", startedAt);
+    return failureResponse(error, requestId, "/api/account/data-consent", startedAt, "AIC-SYS-5000", request);
   }
 }
 
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
     const body = await readJsonBody(request, 16 * 1024);
     return successResponse(await acceptAccountDataConsent(session.user.id, body), requestId);
   } catch (error) {
-    return failureResponse(error, requestId, "/api/account/data-consent", startedAt);
+    return failureResponse(error, requestId, "/api/account/data-consent", startedAt, "AIC-SYS-5000", request);
   }
 }
 
@@ -54,6 +54,6 @@ export async function DELETE(request: Request) {
     await revokeAccountDataConsentAndPurgeCloudData(session.user.id);
     return successResponse({ revoked: true as const, deleted: true as const }, requestId);
   } catch (error) {
-    return failureResponse(error, requestId, "/api/account/data-consent", startedAt);
+    return failureResponse(error, requestId, "/api/account/data-consent", startedAt, "AIC-SYS-5000", request);
   }
 }
