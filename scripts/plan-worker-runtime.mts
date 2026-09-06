@@ -1,11 +1,14 @@
 import { normalizePersistedPlanData } from "../src/persistence.ts";
 import { PublicApiError } from "../src/server/api-contract.ts";
+import { diagnosticText } from "../src/server/diagnostic-text.ts";
+import { makeDiagnostic, persistDiagnostic } from "../src/server/request-diagnostics.ts";
 import {
   recordPlanRunBestEffort,
   updatePlanRunExecutionBestEffort,
 } from "../src/server/business-records.ts";
 import { getDatabase } from "../src/server/db/index.ts";
 import {
+  assertPlanArtifactStorageReady,
   describePlanArtifact,
   enqueuePlanArtifactFinalization,
   getPlanCacheSolverIdentity,
@@ -271,6 +274,9 @@ export async function executePlanTask(
   } catch (error) {
     if (lease) await dependencies.releaseCacheLease(lease).catch(() => undefined);
     const errorCode = errorCodeOf(error);
+    const diagnosticReason = diagnosticText(artifactResult?.error)
+      ?? diagnosticText(error instanceof Error ? error.message : String(error));
+    const diagnosticCause = diagnosticText(error instanceof Error && error.cause instanceof Error ? error.cause.message : null);
     const deferredArtifact = artifactResult ? await dependencies.describeArtifact(artifactResult) : null;
     const fallbackArtifact = await dependencies.saveFailureArtifact({
       diagnosticId,
@@ -281,11 +287,14 @@ export async function executePlanTask(
       fiammettaEnable: payload.fiammettaEnable,
       dataOwnerTag: payload.dataOwnerTag,
       errorCode,
+      diagnosticReason,
     }).catch((artifactError) => {
       console.error(JSON.stringify({
         level: "error",
         event: "plan_failure_artifact_write_failed",
         taskId: id,
+        diagnosticId,
+        message: diagnosticText(artifactError instanceof Error ? artifactError.message : String(artifactError)),
         errorType: artifactError instanceof Error ? artifactError.name : typeof artifactError,
       }));
       return null;
@@ -304,6 +313,8 @@ export async function executePlanTask(
       fiammettaEnable: payload.fiammettaEnable,
       errorCode,
       executionSource: taskSource === "failed" ? null : taskSource,
+      durationMs: artifactResult?.durationMs ?? Math.round(performance.now() - workerStartedAt),
+      solver: artifactResult?.solver,
       solverDurationMs,
       artifact,
       artifactStatus: deferredArtifact && artifactResult?.artifactEnvelopePath
@@ -312,11 +323,19 @@ export async function executePlanTask(
       createdAt: new Date(),
     });
     await dependencies.completeTask(id, { status: "failed", error: "排班失败，请重试。" });
+    const diagnostic = makeDiagnostic({code:errorCode,status:error instanceof PublicApiError ? error.status : 500,
+      route:"worker/plan",requestId:diagnosticId,reason:diagnosticReason,
+      diagnosticId,error,durationMs:Math.round(performance.now()-workerStartedAt)});
+    persistDiagnostic(diagnostic);
     console.error(JSON.stringify({
+      ...diagnostic,
       level: "error",
       event: "plan_task_failed",
       taskId: id,
+      diagnosticId,
       errorCode,
+      message: diagnosticReason,
+      cause: diagnosticCause,
       errorType: error instanceof Error ? error.name : typeof error,
     }));
     return solverDurationMs === null ? null : Math.max(1, solverDurationMs);
@@ -440,6 +459,7 @@ export async function runPlanWorkerDispatcher(input: {
 export async function runPlanWorker(): Promise<void> {
   const releaseSha = process.env.APP_RELEASE_SHA?.trim() ?? "";
   if (!/^[0-9a-f]{40}$/.test(releaseSha)) throw new Error("APP_RELEASE_SHA must be a full lowercase Git commit SHA.");
+  await assertPlanArtifactStorageReady();
 
   const startedAt = new Date();
   await Promise.all(Array.from(

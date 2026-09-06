@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { makeDiagnostic, persistDiagnostic } from "./request-diagnostics.ts";
 
 import { NextResponse } from "next/server.js";
 
@@ -119,13 +120,17 @@ export function failureResponse(
   requestId: string,
   route: string,
   startedAt: number,
-  fallback: AppErrorCode = "AIC-SYS-5000"
+  fallback: AppErrorCode = "AIC-SYS-5000",
+  request?: Request,
 ): NextResponse<ApiFailure> {
   const known = normalizePublicError(error, fallback);
   const headers: Record<string, string> = { "X-Request-Id": requestId };
   if (known.retryAfter) headers["Retry-After"] = String(known.retryAfter);
 
+  const diagnostic = makeDiagnostic({code:known.code, status:known.status, route, requestId,
+    durationMs:performance.now()-startedAt, error:known, fields:known.fieldErrors, request});
   console.error(JSON.stringify({
+    ...diagnostic,
     level: "error",
     requestId,
     code: known.code,
@@ -133,6 +138,7 @@ export function failureResponse(
     status: known.status,
     durationMs: Math.max(0, Math.round(performance.now() - startedAt)),
   }));
+  persistDiagnostic(diagnostic);
 
   return NextResponse.json(
     {

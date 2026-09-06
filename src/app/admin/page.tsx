@@ -3,6 +3,7 @@ import { getHealth } from "@/server/infra";
 import { AdminSolverMetrics } from "./users/solver-metrics-client";
 import { SolverVersion } from "./solver-version";
 import { LocalizedText } from "@/components/LocalizedText";
+import { DiagnosticsPanel } from "./diagnostics-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,7 @@ export default async function AdminPage() {
         solverFingerprint={health.serve?.fingerprint ?? null}
       />
       <AdminSolverMetrics />
+      <DiagnosticsPanel />
     </main>
   );
 }

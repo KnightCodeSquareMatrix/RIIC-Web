@@ -68,7 +68,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       ...(task.status === "failed" ? { error: task.error } : {}),
     }, requestId);
   } catch (error) {
-    return failureResponse(error, requestId, `/api/tasks/${(await params).id}`, startedAt);
+    return failureResponse(error, requestId, `/api/tasks/${(await params).id}`, startedAt, "AIC-SYS-5000", request);
   }
 }
 
@@ -86,6 +86,6 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       reason: result === "cancelled" ? null : result,
     }, requestId);
   } catch (error) {
-    return failureResponse(error, requestId, `/api/tasks/${(await params).id}`, startedAt);
+    return failureResponse(error, requestId, `/api/tasks/${(await params).id}`, startedAt, "AIC-SYS-5000", request);
   }
 }

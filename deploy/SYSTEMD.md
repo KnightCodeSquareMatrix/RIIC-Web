@@ -1,5 +1,42 @@
 # systemd runtime settings
 
+## Persistent Worker diagnostics
+
+The Worker must explicitly set an absolute `BETA_STORAGE_DIR` equal to its website's persistent storage directory. Services do not inherit each other's environment. Without this setting, a standalone working directory resolves the fallback under the immutable release, which `ProtectSystem=strict` cannot write. Temporary solver output is not a substitute for persistent diagnostic records.
+
+Install the matching drop-in before deploying a release, then let deployment restart the Worker:
+
+```bash
+sudo install -D -o root -g root -m 0644 deploy/plan-worker-storage-dev.conf /etc/systemd/system/arknights-infra-dev-worker.service.d/50-persistent-storage.conf
+sudo install -D -o root -g root -m 0644 deploy/plan-worker-storage.conf /etc/systemd/system/arknights-infra-worker.service.d/50-persistent-storage.conf
+sudo systemctl daemon-reload
+```
+
+Adapt service names and paths together for other installations. Keep `ReadWritePaths` restricted to that environment's persistent directory and keep it owned by the non-root application user. Do not loosen `ProtectSystem`. Before warming solver lanes, publishing readiness, or claiming tasks, the Worker validates storage boundaries and writes, syncs, and removes a private probe file. Missing or unwritable storage therefore blocks the new release's readiness instead of silently losing failure attachments. Existing lost temporary files cannot be recovered by this configuration change.
+
+## Diagnostic logs and non-destructive journal archives
+
+The admin diagnostics panel groups events without removing individual records. New API and Worker diagnostics are appended to `BETA_STORAGE_DIR/diagnostic-logs/YYYY-MM-DD.ndjson` (private directory, mode 0700; files 0600). Records include sanitized exception chains, validation fields, request IDs and release identity. No credentials, request bodies or full BOX snapshots are copied. This directory is **not** part of the 30-day business/private-record cleanup. The reader is bounded to 16 MiB and explicitly labels incomplete results. A missing storage configuration is shown as unavailable, never as a healthy zero-error result.
+
+Keep systemd journals as the original source, including historical events and framework errors. Install the incremental archive timer once as root:
+
+The sample service uses Node.js 22 at `/usr/local/bin/node`; adjust that executable to the host's verified Node installation if necessary.
+
+```bash
+sudo install -D -o root -g root -m 0644 scripts/archive-journals.mjs /usr/local/lib/riic/archive-journals.mjs
+sudo install -D -o root -g root -m 0644 deploy/riic-log-archive.service /etc/systemd/system/riic-log-archive.service
+sudo install -D -o root -g root -m 0644 deploy/riic-log-archive.timer /etc/systemd/system/riic-log-archive.timer
+sudo systemctl daemon-reload
+sudo systemctl start riic-log-archive.service
+sudo systemctl enable --now riic-log-archive.timer
+```
+
+The first run copies all currently available journals for both environments' web and Worker units; subsequent runs copy incremental periods with a one-second overlap. Gzip segments are immutable, private, root-owned files in `/var/lib/riic-log-archive`. Checkpoints advance only after gzip output and the journal producer both succeed and the output is synced. Failed partial files remain for investigation. The archiver never calls `vacuum`, rotates source journals, prunes archives, or deletes database records. Inspect health with `systemctl status riic-log-archive.timer`, `journalctl -u riic-log-archive.service`, and `df -h /var/lib/riic-log-archive`. Less than 2 GiB free emits `log_archive_low_disk`; provision more storage or an explicitly approved archive destination, **not automatic deletion**. Manual runs must use the service's `flock` command to avoid concurrent checkpoints.
+
+This preserves logs that still exist when archiving starts; it cannot restore already expired historical logs. Automatic application deployment does not install root-owned service units or overwrite this archive. User-initiated data deletion and the existing TTL of private BOX data, telemetry event rows and reproduction attachments are unchanged. Do not conflate retaining operational logs with retaining users' private data forever.
+
+## Graceful website shutdown behavior
+
 Next.js owns `SIGINT` and `SIGTERM` so that it can stop accepting new requests and drain in-flight requests before exiting. Its standalone server exits with status `130` or `143` after that graceful shutdown.
 
 Install [`next-graceful-exit.conf`](./next-graceful-exit.conf) as a drop-in for every website service, then reload systemd:
