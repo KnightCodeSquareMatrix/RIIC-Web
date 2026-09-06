@@ -54,6 +54,13 @@ test("aggregation counts all occurrences and retains individual original records
   assert.equal(report.total,2);assert.equal(report.groups.length,1);assert.equal(report.groups[0].count,2);assert.equal(report.recent.length,2);
 });
 
+test("resource identifiers do not split endpoint groups or enter durable route labels",()=>{
+  const first=makeDiagnostic({...input,route:"/api/tasks/private-task-a?token=secret"});
+  const second=makeDiagnostic({...input,route:"/api/tasks/private-task-b"});
+  assert.equal(first.route,"/api/tasks/[id]"); assert.equal(first.fingerprint,second.fingerprint);
+  assert.doesNotMatch(JSON.stringify(first),/private-task|secret/);
+});
+
 test("append-only diagnostic storage survives repeated reads and UTC midnight",async()=>{
   const root=await mkdtemp(path.join(tmpdir(),"riic-diagnostics-"));
   const previous=process.env.BETA_STORAGE_DIR;

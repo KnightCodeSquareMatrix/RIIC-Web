@@ -52,7 +52,9 @@ export function makeDiagnostic(input: {
     path: identifier(field.path), code: identifier(field.code), message: diagnosticSummary(field.message),
   }));
   const reason = fields[0]?.message || causes.at(-1) || input.code;
-  const route = identifier(input.route.split("?")[0]);
+  const route = identifier(input.route.split("?")[0].replace(
+    /(\/(?:tasks|saved-plans|plans|users|feedback|plan-runs|accounts|skill-annotations)\/)[^/]+/g,"$1[id]",
+  ));
   const method = identifier(input.request?.method);
   const category = diagnosticCategory(input.code, input.status);
   const fingerprint = createHash("sha256").update(JSON.stringify([category, input.code, route, method,
