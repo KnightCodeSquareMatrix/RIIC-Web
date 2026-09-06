@@ -133,7 +133,22 @@ type PlanRequestOptions = {
   signal?: AbortSignal;
 };
 
-export function computePlan(payload: {
+async function operboxPreflightError(value: unknown, code: "AIC-BOX-1101" | "AIC-DATA-8003"): Promise<ApiClientError | null> {
+  // Keep progression data out of the cold-start API bundle; load it only for uploads.
+  const { assertOperbox } = await import("./operbox.ts");
+  try {
+    assertOperbox(value);
+    return null;
+  } catch (cause) {
+    return new ApiClientError({
+      code,
+      message: cause instanceof Error ? cause.message : "干员练度数据无效，请检查后重新导入。",
+      retryable: false,
+    });
+  }
+}
+
+export async function computePlan(payload: {
   layout: BaseBlueprint;
   operbox: OperBoxEntry[];
   sourceName: string | null;
@@ -141,6 +156,8 @@ export function computePlan(payload: {
   rotation: RotationProfile;
   fiammetta_enable?: boolean;
 }, options: PlanRequestOptions = {}): Promise<PublicPlanData> {
+  const invalid = payload.boxSource === "sample" ? null : await operboxPreflightError(payload.operbox, "AIC-BOX-1101");
+  if (invalid) return Promise.reject(invalid);
   const requestPayload = payload.boxSource === "sample"
     ? { layout: payload.layout, sourceName: payload.sourceName, boxSource: payload.boxSource, rotation: payload.rotation, fiammetta_enable: payload.fiammetta_enable }
     : payload;
@@ -175,7 +192,7 @@ export type PlanTaskPollData = {
   error?: string | null;
 };
 
-export function submitPlanTask(payload: {
+export async function submitPlanTask(payload: {
   layout: BaseBlueprint;
   operbox: OperBoxEntry[];
   sourceName: string | null;
@@ -183,6 +200,8 @@ export function submitPlanTask(payload: {
   rotation: RotationProfile;
   fiammetta_enable?: boolean;
 }): Promise<PlanTaskSubmitData> {
+  const invalid = payload.boxSource === "sample" ? null : await operboxPreflightError(payload.operbox, "AIC-BOX-1101");
+  if (invalid) return Promise.reject(invalid);
   const requestPayload = payload.boxSource === "sample"
     ? { layout: payload.layout, sourceName: payload.sourceName, boxSource: payload.boxSource, rotation: payload.rotation, fiammetta_enable: payload.fiammetta_enable }
     : payload;
@@ -298,7 +317,9 @@ export function getCloudWorkspace(signal?: AbortSignal): Promise<CloudWorkspaceD
   return requestData("/api/workspace", { signal });
 }
 
-export function putCloudWorkspace(payload: CloudWorkspacePutRequest, signal?: AbortSignal): Promise<CloudWorkspaceData> {
+export async function putCloudWorkspace(payload: CloudWorkspacePutRequest, signal?: AbortSignal): Promise<CloudWorkspaceData> {
+  const invalid = "state" in payload && payload.state.boxSource === "maa" ? await operboxPreflightError(payload.operbox, "AIC-DATA-8003") : null;
+  if (invalid) return Promise.reject(invalid);
   return requestData("/api/workspace", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
