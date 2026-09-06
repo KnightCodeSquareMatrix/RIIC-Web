@@ -12,6 +12,7 @@ const outputFileTracingExcludes = [
 const uncachedDocumentRoutes = [
   "/",
   "/about",
+  "/changelog",
   "/account",
   "/account/reset-password",
   "/admin/users",

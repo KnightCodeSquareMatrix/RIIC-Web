@@ -1219,13 +1219,9 @@ test("two-shift output drives product estimates, room formulas, and profile deta
   await expect(detailsSheet).not.toContainText("拆分为前端估算，总量以求解器为准");
   await expect(detailsSheet.getByText(/限制环节：/)).toHaveCount(1);
   await expect(detailsSheet.locator("[data-production-method]")).toHaveCount(0);
-  await expect(detailsSheet.getByRole("heading", { name: "产线提升空间" })).toBeVisible();
-  await expect(detailsSheet.getByText("贸易产线", { exact: true }).locator("..")).toContainText("领先推荐方案 6.4%");
-  await expect(detailsSheet.getByText("制造产线", { exact: true }).locator("..")).toContainText("领先推荐方案 7.9%");
-  await expect(detailsSheet.locator('[data-efficiency-insights] [data-insight-state="positive"]')).toHaveCount(3);
-  await expect(detailsSheet.getByRole("heading", { name: "设施组合提升空间" })).toBeVisible();
-  await expect(detailsSheet.getByText("领先推荐组合 10.7%", { exact: true })).toBeVisible();
-  await expect(detailsSheet.getByText("状态良好", { exact: true })).toBeVisible();
+  await expect(detailsSheet.getByRole("heading", { name: "产线提升空间" })).toHaveCount(0);
+  await expect(detailsSheet.locator("[data-efficiency-insights]")).toHaveCount(0);
+  await expect(detailsSheet.getByRole("heading", { name: "设施组合提升空间" })).toHaveCount(0);
   await expect(detailsSheet.getByText("下一步建议", { exact: true })).toHaveCount(0);
   await expect(detailsSheet.getByText("原效率与基准", { exact: true })).toHaveCount(0);
   await expect(detailsSheet.getByText("领域指标", { exact: true })).toHaveCount(0);

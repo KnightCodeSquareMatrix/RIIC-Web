@@ -15,7 +15,8 @@ const MAX_SKLAND_DISABLED_ROUTE_INITIAL_JS_BYTES = 1_257_000;
 // are part of the initial graph; the full editor and schedule conversion logic stay in
 // on-demand chunks. Keep roughly 8 KB of raw headroom over the verified enabled build.
 const MAX_SKLAND_ENABLED_ROUTE_INITIAL_JS_BYTES = 1_293_000;
-// Task progress UI and training tooltips add intentional code to secondary workbench routes.
+// The changelog entry, next-intl runtime, task progress UI, and training tooltips add
+// intentional code to workbench routes. Release content and the admin editor remain lazy.
 // The manual editor owns a larger independent page chunk, so track it separately while
 // keeping each ceiling narrow enough to flag unrelated bundle growth.
 const MAX_SECONDARY_ROUTE_INITIAL_JS_BYTES = 1_672_000;
@@ -96,6 +97,12 @@ const initialScriptBodies = await Promise.all(uniqueInitialScriptPaths.map(async
   const relativePath = pathname.slice("/_next/".length);
   return readFile(new URL(relativePath, buildRootUrl));
 }));
+for (const marker of ["data-release-dialog", "data-release-notes", "data-admin-changelog"]) {
+  assert.ok(
+    !initialScriptBodies.some((body) => body.includes(marker)),
+    `release content or dialog leaked into the initial document graph: ${marker}`,
+  );
+}
 const documentInitialJsBytes = initialScriptBodies.reduce((total, body) => total + body.byteLength, 0);
 const documentInitialGzipJsBytes = initialScriptBodies.reduce(
   (total, body) => total + gzipSync(body, { level: 9 }).byteLength,

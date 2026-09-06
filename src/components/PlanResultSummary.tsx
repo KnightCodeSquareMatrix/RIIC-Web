@@ -14,9 +14,7 @@ import { Drawer } from "@/components/ui/drawer";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { estimateDailyProduction, type DailyProductionUnavailableReason } from "@/daily-production";
 import { dailyProductionGroups, type DailyProductionGroup, type ProductionDetailProduct } from "@/daily-production-presentation";
-import { manufacturePoolReady } from "@/efficiency";
 import { cn } from "@/lib/utils";
-import { localizedOperatorName } from "@/i18n/game-data";
 
 const PRODUCT_KEYS = { experience: "productExperience", "lmd-orders": "productLmd", gold: "productGold", orundum: "productOrundum", shards: "productShards" } as const;
 function productLabel(product: { id: string; label: string }, en: boolean) {
@@ -29,54 +27,11 @@ function productUnit(unit: string, en: boolean) {
   return en && key ? localize_components_PlanResultSummary.text(en, key) : unit;
 }
 import { MOTION_DURATION, MOTION_EASE_OUT } from "@/motion";
-import { formatPlanDuration, relativeMetricDelta, type RotationMetricKind } from "@/rotation-presentation";
+import { formatPlanDuration } from "@/rotation-presentation";
 import { countShiftPlacementAdjustments } from "@/skland";
 import type { BaseBlueprint, MaaJson, RotationJson, ShiftComparison, UserProfile } from "@/types";
 
 type DetailSection = "efficiency" | "comparison";
-
-function compactNumber(value: number, digits = 1): string {
-  if (!Number.isFinite(value)) return "—";
-  return Number.isInteger(value) ? String(value) : value.toFixed(digits).replace(/\.?0+$/, "");
-}
-
-function severityClass(severity: "ok" | "warn" | "critical") {
-  if (severity === "critical") return "bg-red-100 text-red-800";
-  if (severity === "warn") return "bg-amber-100 text-amber-800";
-  return "bg-emerald-100 text-emerald-800";
-}
-
-function improvementComparison(delta: number | undefined, en: boolean): {
-  state: "positive" | "negative" | "neutral";
-  description: string;
-  badge: string;
-} {
-  if (delta === undefined || !Number.isFinite(delta)) {
-    return { state: "neutral", description: localize_components_PlanResultSummary.text(en, "noComparablePlan"), badge: localize_components_PlanResultSummary.text(en, "noComparison") };
-  }
-  const rounded = Math.round(delta * 10) / 10;
-  if (rounded > 0) {
-    return { state: "positive", description: localize_components_PlanResultSummary.text(en, "aboveRecommendation", { value1: compactNumber(rounded) }), badge: localize_components_PlanResultSummary.text(en, "ahead") };
-  }
-  if (rounded < 0) {
-    return { state: "negative", description: localize_components_PlanResultSummary.text(en, "belowRecommendation", { value1: compactNumber(Math.abs(rounded)) }), badge: localize_components_PlanResultSummary.text(en, "canImprove") };
-  }
-  return { state: "neutral", description: localize_components_PlanResultSummary.text(en, "matchesRecommendation"), badge: localize_components_PlanResultSummary.text(en, "matched") };
-}
-
-function domainComparison(gapRatio: number, en: boolean): string {
-  if (!Number.isFinite(gapRatio)) return localize_components_PlanResultSummary.text(en, "noComparablePlan");
-  const rounded = Math.round(gapRatio * 1000) / 10;
-  if (rounded > 0) return localize_components_PlanResultSummary.text(en, "aboveRecommendedTeam", { value1: compactNumber(rounded) });
-  if (rounded < 0) return localize_components_PlanResultSummary.text(en, "belowRecommendedTeam", { value1: compactNumber(Math.abs(rounded)) });
-  return localize_components_PlanResultSummary.text(en, "atRecommendedLevel");
-}
-
-function domainStatus(severity: "ok" | "warn" | "critical", en: boolean): string {
-  if (severity === "critical") return localize_components_PlanResultSummary.text(en, "adjustFirst");
-  if (severity === "warn") return localize_components_PlanResultSummary.text(en, "canImprove2");
-  return localize_components_PlanResultSummary.text(en, "good");
-}
 
 function dailyNumber(value: number | null): string {
   return value === null ? "—" : Math.round(value).toLocaleString("zh-CN");
@@ -130,13 +85,6 @@ export function PlanResultSummary({
   }, [animateOnMount, onEntranceConsumed, planRevision]);
   if (!profile && !rotation) return null;
 
-  const currentRotation = profile?.rotation;
-  const baselineRotation = profile?.baseline_rotation;
-  const efficiencyMetrics = [
-    { kind: "trade" as const, label: intl("components_PlanResultSummary.trading"), value: rotation?.daily.trade ?? currentRotation?.daily_trade_efficiency ?? currentRotation?.daily_trade, baseline: baselineRotation?.daily_trade_efficiency ?? baselineRotation?.daily_trade },
-    { kind: "manu" as const, label: intl("components_PlanResultSummary.manufacturing"), value: rotation?.daily.manufacture ?? currentRotation?.daily_manufacture_efficiency ?? currentRotation?.daily_manu, baseline: baselineRotation?.daily_manufacture_efficiency ?? baselineRotation?.daily_manu },
-    { kind: "power" as const, label: intl("components_PlanResultSummary.power"), value: rotation?.daily.power ?? currentRotation?.daily_power_efficiency ?? currentRotation?.daily_power, baseline: baselineRotation?.daily_power_efficiency ?? baselineRotation?.daily_power },
-  ].filter((metric): metric is { kind: RotationMetricKind; label: string; value: number; baseline: number | undefined } => typeof metric.value === "number");
   const solverDaily = rotation?.daily?.production ?? null;
   const production = rotation ? estimateDailyProduction({ layout, maa, rotation }) : null;
   const productGroups = dailyProductionGroups(production, solverDaily);
@@ -264,7 +212,7 @@ export function PlanResultSummary({
             <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 pb-6" data-plan-details-section={activeDetailSection}>
               <TabsContent value="efficiency" className="m-0">
                 <motion.div initial={{ opacity: 0, x: shouldReduceMotion ? 0 : -12 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: shouldReduceMotion ? 0 : MOTION_DURATION.state, ease: MOTION_EASE_OUT }}>
-                  <EfficiencyDetails profile={profile} rotation={rotation} layout={layout} metrics={efficiencyMetrics} productGroups={productGroups} en={en} />
+                  <EfficiencyDetails productGroups={productGroups} en={en} />
                 </motion.div>
               </TabsContent>
               {comparison ? (
@@ -352,28 +300,10 @@ function ProductionDetails({ productGroups, en }: { productGroups: DailyProducti
   );
 }
 
-function EfficiencyDetails({ profile, rotation, layout, metrics, productGroups, en }: { profile?: UserProfile; rotation?: RotationJson; layout: BaseBlueprint; metrics: Array<{ kind: RotationMetricKind; label: string; value: number; baseline: number | undefined }>; productGroups: DailyProductionGroup[]; en: boolean }) {
-  const intl = useTranslations();
-  const shouldReduceMotion = useReducedMotion();
-  const locale = useLocale();
-  const summary = profile?.summary;
-  const domains = profile?.domains ?? [];
+function EfficiencyDetails({ productGroups, en }: { productGroups: DailyProductionGroup[]; en: boolean }) {
   return (
-    <section className="pt-4" aria-label={intl("components_PlanResultSummary.outputAndImprovementDetails")} data-efficiency-details>
+    <section className="pt-4" aria-label={localize_components_PlanResultSummary.text(en, "outputAndImprovementDetails")} data-efficiency-details>
       <ProductionDetails productGroups={productGroups} en={en} />
-      <div className="mt-5 border-t border-border/70 pt-4">
-        <h3 className="text-sm font-semibold">{intl("components_PlanResultSummary.productionImprovements")}</h3>
-      </div>
-      <div className="mt-2 grid gap-2 sm:grid-cols-3" data-efficiency-insights>
-        {metrics.map((metric, index) => {
-          const delta = typeof metric.baseline === "number" ? relativeMetricDelta(metric.value, metric.baseline) : undefined;
-          const comparison = improvementComparison(delta, en);
-          return <motion.article key={metric.kind} className={cn("relative overflow-hidden border px-3 py-3", comparison.state === "neutral" ? "border-border/70 bg-muted/25" : comparison.state === "positive" ? "border-emerald-800/20 bg-emerald-50/55" : "border-red-800/20 bg-red-50/60")} data-insight-state={comparison.state} initial={{ opacity: 0, y: shouldReduceMotion ? 0 : 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: shouldReduceMotion ? 0 : 0.34, delay: shouldReduceMotion ? 0 : index * 0.055, ease: MOTION_EASE_OUT }}><span className={cn("absolute inset-y-0 left-0 w-0.5", comparison.state === "neutral" ? "bg-[#313131]/25" : comparison.state === "positive" ? "bg-emerald-500" : "bg-red-500")} aria-hidden="true" /><span className="block text-[11px] font-semibold tracking-[0.08em] text-muted-foreground">{metric.label}</span><strong className="mt-2 block text-sm leading-5">{comparison.description}</strong><span className={cn("mt-3 inline-flex px-1.5 py-0.5 text-[11px] font-semibold", comparison.state === "neutral" ? "bg-muted text-muted-foreground" : comparison.state === "positive" ? "bg-emerald-700 text-emerald-50" : "bg-red-700 text-red-50")}>{comparison.badge}</span></motion.article>;
-        })}
-      </div>
-      {summary ? <dl className="mt-4 flex flex-wrap gap-x-4 gap-y-1 border-y border-border/70 py-2 text-xs" aria-label={intl("components_PlanResultSummary.accountReadiness")}><div className="flex gap-1"><dt className="text-muted-foreground">{intl("components_PlanResultSummary.candidates")}</dt><dd className="font-number font-semibold">{intl("components_PlanResultSummary.trade")} {summary.trade_pool_ready} · {intl("components_PlanResultSummary.factory")} {manufacturePoolReady(summary) ?? "—"}</dd></div><div className="flex gap-1"><dt className="text-muted-foreground">{intl("components_PlanResultSummary.control")}</dt><dd className="font-number font-semibold">Lv.{layout.rooms.find((room) => room.kind === "control_center")?.level ?? "—"}</dd></div><div className="flex gap-1"><dt className="text-muted-foreground">{intl("components_PlanResultSummary.shifts")}</dt><dd className="font-number font-semibold">{rotation?.shifts.length ?? 0}</dd></div><div className="flex gap-1"><dt className="text-muted-foreground">{intl("components_PlanResultSummary.available")}</dt><dd className="font-number font-semibold">{summary.owned} / {intl("components_PlanResultSummary.upgrade")} {summary.tier_up_owned}</dd></div></dl> : null}
-      {domains.length ? <div className="mt-5 border-t border-border/70 pt-4"><h3 className="text-sm font-semibold">{intl("components_PlanResultSummary.facilityTeamImprovements")}</h3><div className="mt-2 grid gap-1">{[...domains].sort((a, b) => ({ critical: 0, warn: 1, ok: 2 })[a.severity] - ({ critical: 0, warn: 1, ok: 2 })[b.severity]).map((domain) => <div key={domain.id} className="grid gap-2 border-b border-border/60 py-3 text-xs sm:grid-cols-[minmax(0,1fr)_auto]" data-domain-state={domain.severity}><div className="min-w-0"><strong className="block truncate">{domain.label}</strong><span className="mt-0.5 block text-muted-foreground">{intl("components_PlanResultSummary.currentOperators")}{domain.current.operators.length ? domain.current.operators.map((name) => localizedOperatorName(name, locale)).join(" / ") : (intl("components_PlanResultSummary.noAvailableTeam"))}</span></div><div className="flex items-center justify-between gap-2 sm:block sm:text-right"><span className="tabular-nums">{domainComparison(domain.gap_ratio, en)}</span><span className={cn("ml-2 px-1.5 py-0.5 font-semibold", severityClass(domain.severity))}>{domainStatus(domain.severity, en)}</span></div></div>)}</div></div> : null}
-      {profile?.flags.length || profile?.narration_hints.length ? <div className="mt-5 flex flex-wrap gap-1.5 border-t border-border/70 pt-4">{[...(profile?.flags ?? []), ...(profile?.narration_hints ?? [])].map((flag) => <span key={flag} className="bg-muted px-2 py-1 text-xs text-muted-foreground">{flag}</span>)}</div> : null}
     </section>
   );
 }

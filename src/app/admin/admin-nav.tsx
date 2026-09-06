@@ -3,7 +3,7 @@ import { useTranslations, useLocale } from "next-intl";
 import { messageRecord } from "@/i18n/translate";
 
 import Link from "next/link";
-import { Bug, Gauge, House, MessageSquareText, UsersRound } from "lucide-react";
+import { BookOpen, Bug, Gauge, House, MessageSquareText, UsersRound } from "lucide-react";
 import { usePathname } from "next/navigation";
 
 import { buttonVariants } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 const ITEMS = [
   { href: "/admin", zh: messageRecord("zh", "app_admin_admin_nav_content").value, en: messageRecord("en", "app_admin_admin_nav_content").value, icon: Gauge },
   { href: "/admin/skills", zh: messageRecord("zh", "app_admin_admin_nav_content2").value, en: messageRecord("en", "app_admin_admin_nav_content2").value, icon: MessageSquareText },
+  { href: "/admin/changelog", zh: messageRecord("zh", "app_admin_admin_nav_content5").value, en: messageRecord("en", "app_admin_admin_nav_content5").value, icon: BookOpen },
   { href: "/admin/issues", zh: messageRecord("zh", "app_admin_admin_nav_content3").value, en: messageRecord("en", "app_admin_admin_nav_content3").value, icon: Bug },
   { href: "/admin/users", zh: messageRecord("zh", "app_admin_admin_nav_content4").value, en: messageRecord("en", "app_admin_admin_nav_content4").value, icon: UsersRound },
 ] as const;

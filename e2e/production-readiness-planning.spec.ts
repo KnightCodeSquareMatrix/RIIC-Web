@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { requestId, diagnosticId, expectUnifiedDialogTypography, expectUnifiedDialogAction, expectButtonGeometryStable, armEndingTransitionCapture, expectCapturedExitDuration, armMotionCapture, armMotionCollectionCapture, expectCapturedMotion, expectCapturedMotionDelays, armTransientStyleCapture, expectCapturedStyleMotion, waitForOwnAnimations, planData, twoShiftPlanData, scheduleVisualPlanData, productChangePlanData, motionPlanData, authenticatedSklandSnapshot, mockApis, navigateToPrimaryPage, seedPreferences, seedV4Session } from "./production-readiness.fixture";
+import type { PublicPlanData } from "../src/types";
 
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/auth/get-session", (route) => route.fulfill({
@@ -222,6 +223,29 @@ test("operator skill terms reveal square hover cards on pointer and keyboard foc
   await expect(termCard).toHaveCSS("border-radius", "0px");
   await termTrigger.focus();
   await expect(termCard).toBeVisible();
+});
+
+test("Lancet-2 power rooms without total efficiency render zero with a red portrait filter", async ({ page }) => {
+  await mockApis(page);
+  const lancetPlanData = structuredClone(scheduleVisualPlanData) as PublicPlanData;
+  lancetPlanData.maa.plans[0]!.rooms.power = [
+    { operators: ["Castle-3"] },
+    { operators: ["Lancet-2"] },
+  ];
+  lancetPlanData.rotation.shifts[0]!.scores.room_lines = [
+    ...lancetPlanData.rotation.shifts[0]!.scores.room_lines.filter((line) => line.room_id !== "power_1" && line.room_id !== "power_2"),
+    { room_id: "power_1", order_multiplier: 1 },
+    { room_id: "power_2", order_multiplier: 1 },
+  ];
+  await seedV4Session(page, lancetPlanData, { boxSource: "maa" });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+
+  const ordinaryPowerRoom = page.locator('[data-room-title="发电站 1"]');
+  const lancetPowerRoom = page.locator('[data-room-title="发电站 2"]');
+  await expect(lancetPowerRoom.locator("[data-room-primary-efficiency]")).toHaveText("0%");
+  await expect(lancetPowerRoom.locator('[data-operator-identity="Lancet-2"] [data-operator-portrait-alert="missing-power-efficiency"]')).toBeVisible();
+  await expect(ordinaryPowerRoom.locator('[data-operator-portrait-alert="missing-power-efficiency"]')).toHaveCount(0);
 });
 
 test("Skland calculator keeps the schedule visible before and after sidebar navigation", async ({ page }) => {
