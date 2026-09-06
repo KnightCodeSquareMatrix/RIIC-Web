@@ -2,6 +2,8 @@ import type { OperBoxEntry } from "./types.ts";
 import { normalizeOperboxEntries } from "./operbox-normalization.ts";
 import { manualLevelFor, maxEliteForRarity } from "./manual-operbox.ts";
 import operatorRarities from "./generated/arkntools/operator-rarities.json" with { type: "json" };
+import operatorCatalog from "./generated/arkntools/operator-catalog.json" with { type: "json" };
+const RARITY_BY_NAME = new Map((operatorCatalog as Array<{ id: string; name?: string; rarity?: number }>).filter((item) => item.name && item.rarity).map((item) => [item.name!, item.rarity!]));
 
 function pickValue(row: Record<string, unknown>, keys: string[]): unknown {
   for (const key of keys) {
@@ -97,7 +99,7 @@ export async function readOperboxText(text: string): Promise<OperBoxEntry[]> {
       const id = typeof value.id === "string" ? value.id.trim() : "";
       const canonicalId = id.startsWith("char_") ? id : `char_${id}`;
       const canonicalRarity = Object.hasOwn(operatorRarities, canonicalId) ? operatorRarities[canonicalId as keyof typeof operatorRarities] : undefined;
-      const normalizedRarity = canonicalRarity ?? rarity;
+      const normalizedRarity = canonicalRarity ?? RARITY_BY_NAME.get(String(value.name)) ?? rarity;
       const elite = Number(value.elite);
       if (value.own !== true || !Number.isInteger(normalizedRarity) || normalizedRarity < 1 || normalizedRarity > 6) return row;
       if (Number.isInteger(elite) && elite > maxEliteForRarity(normalizedRarity)) {
