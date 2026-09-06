@@ -36,7 +36,7 @@ function identifier(value: unknown, fallback = "unknown"): string {
 
 export function makeDiagnostic(input: {
   code: string; status: number; route: string; requestId: string; durationMs: number;
-  error?: unknown; fields?: Array<{path: string; code: string; message: string}>;
+  error?: unknown; reason?: unknown; fields?: Array<{path: string; code: string; message: string}>;
   request?: Request; diagnosticId?: string;
 }, now = new Date()): DiagnosticRecord {
   const causes: string[] = [];
@@ -51,7 +51,7 @@ export function makeDiagnostic(input: {
   const fields = (input.fields ?? []).slice(0, 8).map(field => ({
     path: identifier(field.path), code: identifier(field.code), message: diagnosticSummary(field.message),
   }));
-  const reason = fields[0]?.message || causes.at(-1) || input.code;
+  const reason = diagnosticSummary(input.reason) || fields[0]?.message || causes.at(-1) || input.code;
   const route = identifier(input.route.split("?")[0].replace(
     /(\/(?:tasks|saved-plans|plans|users|feedback|plan-runs|accounts|skill-annotations)\/)[^/]+/g,"$1[id]",
   ));

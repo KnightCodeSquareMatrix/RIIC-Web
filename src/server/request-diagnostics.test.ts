@@ -61,6 +61,13 @@ test("resource identifiers do not split endpoint groups or enter durable route l
   assert.doesNotMatch(JSON.stringify(first),/private-task|secret/);
 });
 
+test("solver artifact reasons remain specific even when the public error is generic",()=>{
+  const record=makeDiagnostic({...input,code:"AIC-PLAN-3004",status:502,
+    error:new PublicApiError("AIC-PLAN-3004"),reason:"assignment room trade_2 exceeds capacity 2 token=PRIVATE"});
+  assert.match(record.reason,/assignment room trade_2 exceeds capacity 2/);
+  assert.doesNotMatch(record.reason,/PRIVATE/);
+});
+
 test("append-only diagnostic storage survives repeated reads and UTC midnight",async()=>{
   const root=await mkdtemp(path.join(tmpdir(),"riic-diagnostics-"));
   const previous=process.env.BETA_STORAGE_DIR;
