@@ -43,6 +43,7 @@
   "dependencies": {
     "@base-ui/react": "^1.6.0",
     "@better-auth/drizzle-adapter": "^1.6.29",
+    "@swc/helpers": "0.5.23",
     "better-auth": "^1.6.29",
     "calligraph": "^1.4.1",
     "class-variance-authority": "^0.7.1",
