@@ -1,5 +1,10 @@
-import { pageMetadata } from "@/i18n/metadata";
-import PageClient from "./page-client";
+"use client";
+
+import Link from "next/link";
+import { ArrowLeft, ArrowRight, ExternalLink } from "lucide-react";
+import { TutorialVideo } from "@/components/help/TutorialVideo";
+import { MaaBoxVideo } from "@/components/help/MaaBoxVideo";
+import { useLocale } from "next-intl";
 
 const bilibiliTutorials = [
   {
@@ -31,12 +36,8 @@ const bilibiliTutorials = [
   },
 ];
 
-export default PageClient;
-export function generateMetadata() { return pageMetadata("help"); }
-
-/*
-export function BeginnerTutorialPage() {
-  const { locale } = useLanguageDemo();
+export default function BeginnerTutorialPage() {
+  const locale = useLocale();
   const en = locale === "en";
 
   return (
@@ -95,5 +96,3 @@ export function BeginnerTutorialPage() {
     </article>
   );
 }
-*/
-
