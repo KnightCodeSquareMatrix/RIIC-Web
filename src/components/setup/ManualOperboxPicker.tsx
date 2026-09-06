@@ -89,11 +89,10 @@ function initialStages(operbox: OperBoxEntry[] | null): Record<string, ManualOpe
   );
 }
 
-function stageLabel(stage: ManualOperboxStage, locale: AppLocale): string {
+function stageLabel(stage: ManualOperboxStage, locale: AppLocale, rarity?: number): string {
   const en = locale === "en";
   if (stage === "none") return localize_components_setup_ManualOperboxPicker.text(en, "unowned");
-  if (stage === "e0") return localize_components_setup_ManualOperboxPicker.text(en, "e0");
-  if (stage === "e1") return localize_components_setup_ManualOperboxPicker.text(en, "e1");
+  if (stage === "e0") return rarity !== undefined && rarity <= 2 ? (locale === "en" ? "E0 level 30" : "精0 30级") : localize_components_setup_ManualOperboxPicker.text(en, "e0");`n  if (stage === "e1") return localize_components_setup_ManualOperboxPicker.text(en, "e1");
   return localize_components_setup_ManualOperboxPicker.text(en, "e2");
 }
 
@@ -193,7 +192,7 @@ const ManualOperatorCard = memo(function ManualOperatorCard({
               aria-checked={selected}
               aria-label={disabled
                 ? (localize_components_setup_ManualOperboxPicker.text(en, "isUnavailableForStarOperators", { value1: stageLabel(option, locale), rarity: operator.rarity }))
-                : stageLabel(option, locale)}
+                : stageLabel(option, locale, operator.rarity)}
               title={disabled ? (localize_components_setup_ManualOperboxPicker.text(en, "unavailableForStarOperators", { rarity: operator.rarity })) : undefined}
               disabled={disabled}
               onClick={() => onStageChange(operator.id, option)}
@@ -206,7 +205,7 @@ const ManualOperatorCard = memo(function ManualOperatorCard({
               )}
             >
               <span className="inline-flex items-center justify-center">
-                {stageLabel(option, locale)}
+                {stageLabel(option, locale, operator.rarity)}
               </span>
             </Button>
           );
