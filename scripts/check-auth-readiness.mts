@@ -2,6 +2,7 @@ import nextEnv from "@next/env";
 import { Pool } from "pg";
 
 import { requireAuthBaseUrl, requireAuthSecret } from "../src/server/auth/config.ts";
+import { requireAuthEmailConfig } from "../src/server/auth/email-config.ts";
 
 const { loadEnvConfig } = nextEnv;
 
@@ -11,9 +12,7 @@ const databaseUrl = process.env.DATABASE_URL?.trim();
 if (!databaseUrl) throw new Error("DATABASE_URL is required for authentication readiness checks.");
 requireAuthSecret();
 requireAuthBaseUrl();
-if (!process.env.RESEND_API_KEY?.trim() || !process.env.AUTH_EMAIL_FROM?.trim()) {
-  throw new Error("RESEND_API_KEY and AUTH_EMAIL_FROM are required for authentication readiness checks.");
-}
+requireAuthEmailConfig();
 
 const expectedTables = ["account", "rateLimit", "session", "skland_binding", "user", "verification"];
 const expectedBusinessTables = [
