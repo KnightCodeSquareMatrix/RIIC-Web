@@ -1,4 +1,6 @@
 "use client";
+import { localize as localize_components_ui_live_activity } from "../../i18n/helpers/components_ui_live_activity.ts";
+import { useTranslations, useLocale } from "next-intl";
 
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
@@ -10,7 +12,6 @@ import { MOTION_DURATION, MOTION_EASE_OUT } from "@/motion";
 import { roomVisualFor } from "@/room-visuals";
 import type { DisplayError } from "@/types";
 import { solverDiagnosticFor } from "@/solver-diagnostic";
-import { useLanguageDemo } from "@/language-demo";
 
 const SUCCESS_SWEEP_COLOR = roomVisualFor("power").accent;
 
@@ -92,8 +93,9 @@ export function usePlanActivity({
 }
 
 export function LiveActivity({ activity, onRetry, onCopyDiagnostic, retryCountdownSeconds = 0 }: LiveActivityProps) {
+  const intl = useTranslations();
   const reduceMotion = useReducedMotion();
-  const { locale } = useLanguageDemo();
+  const locale = useLocale();
   const en = locale === "en";
   const [copied, setCopied] = useState(false);
   const [dismissed, setDismissed] = useState<{ id: number; phase: ActivityPhase } | null>(null);
@@ -124,15 +126,15 @@ export function LiveActivity({ activity, onRetry, onCopyDiagnostic, retryCountdo
   const progressionAdjustment = activity?.kind === "progression-adjustment";
   const label = activity?.phase === "running"
     ? progressionAdjustment
-      ? (en ? "Adjusting progression" : "正在调整练度")
-      : (en ? "Generating schedule" : "正在生成排班")
+      ? (intl("components_ui_live_activity.adjustingProgression"))
+      : (intl("components_ui_live_activity.generatingSchedule"))
     : activity?.phase === "queued"
-      ? (en ? "Queued" : "正在排队")
+      ? (intl("components_ui_live_activity.queued"))
     : activity?.phase === "success"
       ? progressionAdjustment
-        ? (en ? "Progression adjustment complete" : "调整练度已完成")
-        : (en ? "Schedule generated" : "排班已生成")
-      : diagnostic?.title ?? activity?.error?.message ?? (en ? "Schedule generation failed" : "排班生成失败");
+        ? (intl("components_ui_live_activity.progressionAdjustmentComplete"))
+        : (intl("components_ui_live_activity.scheduleGenerated"))
+      : diagnostic?.title ?? activity?.error?.message ?? (intl("components_ui_live_activity.scheduleGenerationFailed"));
   const hidden = Boolean(
     activity && dismissed && dismissed.id === activity.id && dismissed.phase === activity.phase,
   );
@@ -199,19 +201,19 @@ export function LiveActivity({ activity, onRetry, onCopyDiagnostic, retryCountdo
                 {activity.phase === "queued" ? (
                   <span className="text-sm text-[#313131]/75">
                     {activity.buffered ? (
-                      <>{en ? "You are in the candidate ring. A candidate will be selected randomly when a slot opens." : "当前进入候选环，名额释放后随机抽取。"}</>
+                      <>{intl("components_ui_live_activity.youAreInTheCandidateRingACandidateWill")}</>
                     ) : (
-                      <>{en ? "Ahead: " : "前面还有 "}<strong className="font-semibold">{activity.queuePosition ?? "—"}</strong>{en ? ". Estimated wait: " : " 人，预计 "}<strong className="font-semibold">{formatDuration(activity.etaSeconds, en)}</strong></>
+                      <>{intl("components_ui_live_activity.ahead")}<strong className="font-semibold">{activity.queuePosition ?? "—"}</strong>{intl("components_ui_live_activity.estimatedWait")}<strong className="font-semibold">{formatDuration(activity.etaSeconds, en)}</strong></>
                     )}
                   </span>
                 ) : activity.phase === "running" ? (
                   <span className="text-sm text-[#313131]/70">
                     {progressionAdjustment
-                      ? (en ? "Re-solving with the adjusted operator roster. Please wait." : "正在使用调整后的干员练度重新求解，请稍候。")
-                      : (en ? "Calling the scheduling service. Please wait." : "正在调用排班服务，请稍候。")}
+                      ? (intl("components_ui_live_activity.reSolvingWithTheAdjustedOperatorRosterPleaseWait"))
+                      : (intl("components_ui_live_activity.callingTheSchedulingServicePleaseWait"))}
                     {activity.queuePosition != null ? (
                       <>
-                        {en ? " Queue position: " : " 当前排队第 "}<strong className="font-semibold">{activity.queuePosition}</strong>{en ? ". Estimated wait: " : " 位，预计 "}<strong className="font-semibold">{formatDuration(activity.etaSeconds, en)}</strong>
+                        {intl("components_ui_live_activity.queuePosition")}<strong className="font-semibold">{activity.queuePosition}</strong>{intl("components_ui_live_activity.estimatedWait2")}<strong className="font-semibold">{formatDuration(activity.etaSeconds, en)}</strong>
                       </>
                     ) : null}
                   </span>
@@ -219,15 +221,15 @@ export function LiveActivity({ activity, onRetry, onCopyDiagnostic, retryCountdo
                   <span className={cn("text-xs", activity.phase === "error" ? "text-red-800/70" : "text-[#313131]/58")}>
                     {activity.phase === "success"
                       ? progressionAdjustment
-                        ? (en ? "The adjusted schedule is ready for comparison." : "调整后的排班已生成，可以切换对比。")
-                        : (en ? "The three-shift result is ready to view or export." : "三班结果已更新，可以查看或导出。")
+                        ? (intl("components_ui_live_activity.theAdjustedScheduleIsReadyForComparison"))
+                        : (intl("components_ui_live_activity.theThreeShiftResultIsReadyToViewOr"))
                       : `${activity.error?.code ?? "AIC-PLAN"}${activity.error?.requestId ? ` · ${activity.error.requestId}` : ""}`}
                   </span>
                 )}
               </span>
               {activity.phase === "queued" ? (
                 <span className="mt-1 block text-sm text-[#313131]/58">
-                  {en ? "This page updates automatically. Do not submit again." : "页面会自动更新，无需重复提交。"}
+                  {intl("components_ui_live_activity.thisPageUpdatesAutomaticallyDoNotSubmitAgain")}
                 </span>
               ) : null}
               {diagnostic ? <span className="mt-1 block text-xs text-red-900">{diagnostic.suggestion}</span> : null}
@@ -236,7 +238,7 @@ export function LiveActivity({ activity, onRetry, onCopyDiagnostic, retryCountdo
                 <span className="flex shrink-0 items-center gap-1 max-sm:basis-full max-sm:justify-end">
                 {activity.error?.retryable ? (
                   <Button type="button" size="sm" variant="ghost" className="h-9 text-red-900 hover:bg-red-100 hover:text-red-950" onClick={onRetry} disabled={retryCountdownSeconds > 0}>
-                    {retryCountdownSeconds > 0 ? `${en ? "Retry in" : ""} ${retryCountdownSeconds} ${en ? "s" : "秒后重试"}`.trim() : (en ? "Retry" : "重试")}
+                    {retryCountdownSeconds > 0 ? `${intl("components_ui_live_activity.retryIn")} ${retryCountdownSeconds} ${intl("components_ui_live_activity.s")}`.trim() : (intl("components_ui_live_activity.retry"))}
                   </Button>
                 ) : null}
                 <Button
@@ -249,17 +251,17 @@ export function LiveActivity({ activity, onRetry, onCopyDiagnostic, retryCountdo
                     setCopied(true);
                   }}
                 >
-                  {copied ? (en ? "Copied" : "已复制") : (en ? "Copy diagnostics" : "复制诊断")}
+                  {copied ? (intl("components_ui_live_activity.copied")) : (intl("components_ui_live_activity.copyDiagnostics"))}
                 </Button>
                 </span>
               ) : null}
               <button
                 type="button"
                 onClick={() => setDismissed({ id: activity.id, phase: activity.phase })}
-                aria-label={en ? "Dismiss notification" : "关闭提示"}
+                aria-label={intl("components_ui_live_activity.dismissNotification")}
                 className="h-8 shrink-0 px-2 text-xs text-[#313131]/48 outline-none transition-colors hover:bg-black/5 hover:text-[#313131] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#FFD800] max-sm:ml-auto"
               >
-                {en ? "Dismiss" : "关闭"}
+                {intl("components_ui_live_activity.dismiss")}
               </button>
             </div>
           </div>
@@ -294,6 +296,6 @@ function formatDuration(seconds: number | null | undefined, en = false): string 
   const total = Math.max(0, Math.round(seconds ?? 0));
   const minutes = Math.floor(total / 60);
   const rest = total % 60;
-  if (minutes <= 0) return `${rest} ${en ? "s" : "秒"}`;
-  return `${minutes} ${en ? "min" : "分"} ${rest} ${en ? "s" : "秒"}`;
+  if (minutes <= 0) return `${rest} ${localize_components_ui_live_activity.text(en, "s2")}`;
+  return `${minutes} ${localize_components_ui_live_activity.text(en, "min")} ${rest} ${localize_components_ui_live_activity.text(en, "s2")}`;
 }

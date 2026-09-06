@@ -20,6 +20,10 @@ const lines = readline.createInterface({ input: process.stdin, crlfDelay: Infini
 
 lines.on("line", async (line) => {
   const request = JSON.parse(line);
+  if (request.method === "env") {
+    process.stdout.write(JSON.stringify({id:request.id,ok:true,result:{rayon:process.env.RAYON_NUM_THREADS}})+"\n");
+    return;
+  }
   if (request.method === "hang") {
     process.stdout.write("hung stdout\n");
     process.stderr.write("hung stderr\n");
@@ -49,7 +53,7 @@ lines.on("line", async (line) => {
 });
 `;
 
-async function createTestClient(context: test.TestContext) {
+async function createTestClient(context: test.TestContext, childEnv?: Record<string,string>) {
   const root = await mkdtemp(path.join(tmpdir(), "arkinfra-serve-client-"));
   const workerPath = path.join(root, "fake-worker.mjs");
   await writeFile(workerPath, FAKE_WORKER, "utf8");
@@ -59,6 +63,7 @@ async function createTestClient(context: test.TestContext) {
     timeoutMs: 3_000,
     serveArgs: [workerPath],
     cwd: () => root,
+    childEnv,
   });
   context.after(async () => {
     client.stop();
@@ -76,6 +81,25 @@ test("matches only object responses with the current id and a boolean ok", () =>
   assert.equal(parseMatchingServeResponse('{"id":8,"ok":true}', 7), null);
   assert.equal(parseMatchingServeResponse('{"id":7,"ok":"true"}', 7), null);
   assert.deepEqual(parseMatchingServeResponse('{"id":7,"ok":false}', 7), { id: 7, ok: false });
+});
+
+test("fallback thread limits are scoped to its child process",async context=>{
+  const previous=process.env.RAYON_NUM_THREADS;
+  const {client}=await createTestClient(context,{RAYON_NUM_THREADS:"1"});
+  assert.deepEqual((await client.send("env",{})).response.result,{rayon:"1"});
+  assert.equal(process.env.RAYON_NUM_THREADS,previous);
+});
+
+test("termination waits for the actual process to disappear before fallback",async context=>{
+  const {client}=await createTestClient(context);
+  await client.send("ok",{});
+  const pid=client.info().pid;
+  assert.ok(pid);
+  const hanging=client.send("hang",{});
+  const rejected=assert.rejects(hanging,/isolated/);
+  await client.stopAndWait("isolated");
+  await rejected;
+  assert.throws(()=>process.kill(pid,0));
 });
 
 test("buffers split NDJSON lines and accepts CRLF", () => {

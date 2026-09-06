@@ -1,8 +1,10 @@
 "use client";
+import { useTranslations, useLocale } from "next-intl";
 
 import { HeartPulse } from "lucide-react";
 
-import { demoOperatorName, useLanguageDemo } from "@/language-demo";
+import { localizedOperatorName } from "@/i18n/game-data";
+import { useGameCatalog } from "@/i18n/game-data-client";
 
 export interface FiammettaTargetChipProps {
   target?: string | null;
@@ -12,14 +14,16 @@ export interface FiammettaTargetChipProps {
 
 /** Shared morale-recovery target used beside schedule shift controls. */
 export function FiammettaTargetChip({ target, portrait, onClick }: FiammettaTargetChipProps) {
-  const { locale } = useLanguageDemo();
-  const en = locale === "en";
-  const displayTarget = target ? demoOperatorName(target, locale) : null;
+  const intl = useTranslations();
+  const locale = useLocale();
+  const gameCatalog = useGameCatalog();
+
+  const displayTarget = target ? localizedOperatorName(target, locale, gameCatalog) : null;
   const label = displayTarget
-    ? (en ? `Morale recovery ${displayTarget}` : `换心情 ${displayTarget}`)
-    : (en ? "Choose morale target" : "选择换心情目标");
+    ? (intl("components_FiammettaTargetChip.moraleRecovery", { displayTarget: displayTarget }))
+    : (intl("components_FiammettaTargetChip.chooseMoraleTarget"));
   const title = displayTarget
-    ? (en ? `Fiammetta restores ${displayTarget}` : `菲亚梅塔恢复 ${displayTarget}`)
+    ? (intl("components_FiammettaTargetChip.fiammettaRestores", { displayTarget: displayTarget }))
     : label;
   const className = "flex h-7 items-center gap-1 rounded-[min(var(--radius-md),12px)] border border-[#016E65]/30 bg-[#016E65]/10 px-2.5 text-[0.8rem] text-[#016E65] shadow-xs max-sm:h-11";
   const content = (
@@ -30,7 +34,7 @@ export function FiammettaTargetChip({ target, portrait, onClick }: FiammettaTarg
           : <HeartPulse className="m-1 size-3 text-[#016E65]" />}
       </span>
       {displayTarget ? (
-        <span className="whitespace-nowrap"><span className="text-[#016E65]/70">{en ? "Morale recovery" : "换心情"}</span> {displayTarget}</span>
+        <span className="whitespace-nowrap"><span className="text-[#016E65]/70">{intl("components_FiammettaTargetChip.moraleRecovery2")}</span> {displayTarget}</span>
       ) : (
         <span className="whitespace-nowrap">{label}</span>
       )}

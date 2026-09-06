@@ -1,4 +1,8 @@
 "use client";
+import { localize as authText } from "../../i18n/helpers/AuthValidation.ts";
+import { localize as localize_components_auth_WebsiteAccountPanel } from "../../i18n/helpers/components_auth_WebsiteAccountPanel.ts";
+import { useTranslations, useLocale } from "next-intl";
+import { messageRecord } from "@/i18n/translate";
 
 import Link from "next/link";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
@@ -14,7 +18,6 @@ import {
 } from "lucide-react";
 
 import {
-  WEBSITE_ACCOUNT_NAME_HINT,
   WEBSITE_ACCOUNT_NAME_MAX_LENGTH,
   WEBSITE_ACCOUNT_NAME_MIN_LENGTH,
   validateWebsiteAccountName,
@@ -41,22 +44,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
 import { PRIVACY_VERSION, TERMS_VERSION } from "@/legal-policy";
-import { isStrongPassword, PASSWORD_STRENGTH_ERROR } from "@/password-strength";
+import { isStrongPassword } from "@/password-strength";
 import { clearLocalProductData } from "@/persistence";
 import { CloudDataPanel } from "@/components/cloud/CloudDataPanel";
 import type { CloudWorkspaceData, SavedPlanData } from "@/types";
 import { useWebsiteSession } from "@/website-session";
-import { useLanguageDemo } from "@/language-demo";
 
 type AuthMode = "signin" | "signup" | "forgot";
 type AuthStep = "details" | "verify" | "complete";
 type AccountAction = "signout" | "sessions" | "delete";
-
-const MODE_COPY: Record<AuthMode, { title: string; description: string }> = {
-  signin: { title: "登录网站账号", description: "继续使用受账号保护的数据导入与排班功能。" },
-  signup: { title: "创建网站账号", description: "填写账号信息后，我们会向邮箱发送 6 位验证码。" },
-  forgot: { title: "找回密码", description: "输入注册邮箱，我们会发送一封 1 小时内有效的重置邮件。" },
-};
 
 const AUTH_INPUT_CLASS = "border-[#d5d7da] bg-white shadow-none dark:border-[#d5d7da] dark:bg-white dark:text-[#242424] dark:placeholder:text-[#737373]";
 const AUTH_PASSWORD_TOGGLE_CLASS = "text-[#737373] hover:text-[#242424] dark:text-[#737373] dark:hover:text-[#242424]";
@@ -69,11 +65,10 @@ interface WebsiteAccountPanelProps {
   onCloudDataChanged?: () => void;
 }
 
-const PASSWORD_STRENGTH_ERROR_EN = "Use at least 10 characters with letters, numbers, and mixed case or a symbol. Avoid common or repeated patterns.";
-const WEBSITE_ACCOUNT_NAME_HINT_EN = "2–20 characters using Chinese characters, letters, numbers, spaces, underscores, or hyphens.";
+const WEBSITE_ACCOUNT_NAME_HINT_EN = authText.text("en", "nameHint");
 
 function errorMessage(value: unknown, en: boolean): string {
-  return value instanceof Error ? value.message : en ? "Something went wrong. Try again later." : "操作失败，请稍后重试。";
+  return value instanceof Error ? value.message : localize_components_auth_WebsiteAccountPanel.text(en, "somethingWentWrongTryAgainLater");
 }
 
 function localizedWebsiteAccountName(value: unknown, en: boolean) {
@@ -84,14 +79,14 @@ function localizedWebsiteAccountName(value: unknown, en: boolean) {
 function localizedPasswordConfirmationError(password: string, confirmation: string, en: boolean): string | null {
   const error = passwordConfirmationError(password, confirmation);
   if (!error || !en) return error;
-  return confirmation ? "Passwords do not match." : "Enter your password again.";
+  return authText.text(en, confirmation ? "passwordMismatch" : "passwordRepeat");
 }
 
 function formatSessionExpiry(value: unknown, locale: "zh" | "en"): string | null {
   if (!(value instanceof Date) && typeof value !== "string") return null;
   const date = value instanceof Date ? value : new Date(value);
   if (!Number.isFinite(date.getTime())) return null;
-  return new Intl.DateTimeFormat(locale === "en" ? "en-US" : "zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(date);
+  return new Intl.DateTimeFormat((locale === "en" ? "en-US" : "zh-CN"), { dateStyle: "medium", timeStyle: "short" }).format(date);
 }
 
 export function WebsiteAccountPanel({
@@ -101,13 +96,10 @@ export function WebsiteAccountPanel({
   onRestoreSavedPlan,
   onCloudDataChanged,
 }: WebsiteAccountPanelProps) {
-  const { locale } = useLanguageDemo();
+  const intl = useTranslations();
+  const locale = useLocale();
   const en = locale === "en";
-  const modeCopy = en ? {
-    signin: { title: "Sign in", description: "Continue with protected data import and scheduling." },
-    signup: { title: "Create account", description: "Enter your details and we will email a 6-digit code." },
-    forgot: { title: "Reset password", description: "Enter your email to receive a reset link valid for one hour." },
-  } : MODE_COPY;
+  const modeCopy = messageRecord(en, "components_auth_WebsiteAccountPanel_labels");
   const { data: session, isPending, refetch } = useWebsiteSession();
   const [mode, setMode] = useState<AuthMode>("signin");
   const [step, setStep] = useState<AuthStep>("details");
@@ -157,7 +149,7 @@ export function WebsiteAccountPanel({
 
   async function sendVerificationCode() {
     if (!email.trim()) {
-      setError(en ? "Enter the email address you want to verify." : "请先输入要验证的邮箱。");
+      setError(intl("components_auth_WebsiteAccountPanel.enterTheEmailAddressYouWantToVerify"));
       return;
     }
     setBusy(true);
@@ -174,7 +166,7 @@ export function WebsiteAccountPanel({
       setOtpStatus("idle");
       otpRef.current?.clear();
       setResendSeconds(60);
-      setMessage(en ? "Verification code sent. Complete verification within 10 minutes." : "验证码已发送，请在 10 分钟内完成验证。");
+      setMessage(intl("components_auth_WebsiteAccountPanel.verificationCodeSentCompleteVerificationWithin10Minutes"));
     } catch (caught) {
       setError(errorMessage(caught, en));
     } finally {
@@ -191,7 +183,7 @@ export function WebsiteAccountPanel({
     }
     if (mode === "signup") {
       if (!isStrongPassword(password)) {
-        setPasswordStrengthError(en ? PASSWORD_STRENGTH_ERROR_EN : PASSWORD_STRENGTH_ERROR);
+        setPasswordStrengthError(authText.text(en, "passwordWeak"));
         return;
       }
       setPasswordStrengthError(null);
@@ -213,7 +205,7 @@ export function WebsiteAccountPanel({
         });
         if (result.error) throw new Error(result.error.message);
         setStep("complete");
-        setMessage(en ? "If this email is registered, a reset message will arrive shortly." : "如果这个邮箱已注册，重置邮件会很快送达。");
+        setMessage(intl("components_auth_WebsiteAccountPanel.ifThisEmailIsRegisteredAResetMessageWill"));
       } else if (mode === "signup") {
         const result = await authClient.signUp.email({
           name: validatedName?.name ?? name.trim(),
@@ -224,7 +216,7 @@ export function WebsiteAccountPanel({
         if (result.error) throw new Error(result.error.message);
         setStep("verify");
         setResendSeconds(60);
-        setMessage(en ? "Verification code sent. Complete verification within 10 minutes." : "验证码已发送，请在 10 分钟内完成验证。");
+        setMessage(intl("components_auth_WebsiteAccountPanel.verificationCodeSentCompleteVerificationWithin10Minutes"));
       } else {
         const result = await authClient.signIn.email({
           email: email.trim(),
@@ -253,7 +245,7 @@ export function WebsiteAccountPanel({
       if (result.error) throw new Error(result.error.message);
       setOtpStatus("success");
       setStep("complete");
-      setMessage(en ? "Email verified. You can now sign in." : "邮箱验证完成，现在可以登录网站账号。");
+      setMessage(intl("components_auth_WebsiteAccountPanel.emailVerifiedYouCanNowSignIn"));
     } catch (caught) {
       setOtpStatus("error");
       setError(errorMessage(caught, en));
@@ -295,7 +287,7 @@ export function WebsiteAccountPanel({
   if (isPending && !busy && !message && !error) {
     return loadingMode === "dialog"
       ? <WebsiteAccountLoadingStatus />
-      : <StatusCenterLoading label={en ? "Restoring website account" : "正在恢复网站账号"} />;
+      : <StatusCenterLoading label={intl("components_auth_WebsiteAccountPanel.restoringWebsiteAccount")} />;
   }
 
   if (session) {
@@ -316,7 +308,7 @@ export function WebsiteAccountPanel({
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="truncate text-2xl font-semibold tracking-tight">{session.user.name}</h2>
-                  <Badge variant="secondary"><ShieldCheck />{en ? "Email verified" : "邮箱已验证"}</Badge>
+                  <Badge variant="secondary"><ShieldCheck />{intl("components_auth_WebsiteAccountPanel.emailVerified")}</Badge>
                 </div>
                 <p className="mt-1 break-all text-sm text-muted-foreground">{session.user.email}</p>
               </div>
@@ -331,7 +323,7 @@ export function WebsiteAccountPanel({
               onClick={() => void runAccountAction("signout")}
               data-account-logout
             >
-              <LogOut />{busyAction === "signout" ? (en ? "Signing out…" : "正在退出…") : (en ? "Sign out on this device" : "退出当前设备")}
+              <LogOut />{busyAction === "signout" ? (intl("components_auth_WebsiteAccountPanel.signingOut")) : (intl("components_auth_WebsiteAccountPanel.signOutOnThisDevice"))}
             </Button>
           )}
         />
@@ -346,12 +338,10 @@ export function WebsiteAccountPanel({
                 icon={<MonitorSmartphone className="size-4" aria-hidden="true" />}
                 titleId={`${fieldId}-devices`}
               >
-                {en ? "Signed-in devices" : "登录设备"}
+                {intl("components_auth_WebsiteAccountPanel.signedInDevices")}
               </AccountTechnicalHeading>
               <p className="mt-4 max-w-xl text-sm leading-6 text-white/64">
-                {en
-                  ? `This session ${expiresAt ? `expires ${expiresAt}` : "is active"}. Signing out everywhere revokes database sessions and clears third-party account credentials saved in this browser.`
-                  : `当前会话${expiresAt ? `将在 ${expiresAt} 到期` : "处于有效状态"}。退出全部设备会撤销数据库 Session，并清除当前浏览器保存的第三方账号凭据。`}
+                {intl("components_auth_WebsiteAccountPanel.thisSessionSigningOutEverywhereRevokesDatabaseSessionsAnd", { value1: (en) ? (expiresAt ? `expires ${expiresAt}` : "is active") : "", value2: (en) ? "" : (expiresAt ? `将在 ${expiresAt} 到期` : "处于有效状态") })}
               </p>
               <div className="mt-auto flex justify-end pt-5">
                 <Button
@@ -361,7 +351,7 @@ export function WebsiteAccountPanel({
                   disabled={busyAction !== null}
                   onClick={() => void runAccountAction("sessions")}
                 >
-                  {busyAction === "sessions" ? (en ? "Revoking sessions…" : "正在撤销 Session…") : (en ? "Sign out everywhere" : "退出全部设备")}
+                  {busyAction === "sessions" ? (intl("components_auth_WebsiteAccountPanel.revokingSessions")) : (intl("components_auth_WebsiteAccountPanel.signOutEverywhere"))}
                 </Button>
               </div>
             </section>
@@ -373,13 +363,13 @@ export function WebsiteAccountPanel({
                 icon={<Trash2 className="size-4" aria-hidden="true" />}
                 titleId={`${fieldId}-delete`}
               >
-                {en ? "Delete account permanently" : "永久注销账号"}
+                {intl("components_auth_WebsiteAccountPanel.deleteAccountPermanently")}
               </AccountTechnicalHeading>
               <p className="mt-4 text-sm leading-6 text-white/64">
-                {en ? "Your account and all sessions will be deleted immediately. Enter your current password to confirm. This cannot be undone." : "账号与全部 Session 会立即删除。请输入当前密码确认，此操作不可撤销。"}
+                {intl("components_auth_WebsiteAccountPanel.yourAccountAndAllSessionsWillBeDeletedImmediately")}
               </p>
               <div className="mt-4 grid gap-1.5">
-                <Label className="text-white/72" htmlFor={`${fieldId}-delete-password`}>{en ? "Current password" : "当前密码"}</Label>
+                <Label className="text-white/72" htmlFor={`${fieldId}-delete-password`}>{intl("components_auth_WebsiteAccountPanel.currentPassword")}</Label>
                 <PasswordInput
                   id={`${fieldId}-delete-password`}
                   className="border-white/22 bg-white text-[#242424] shadow-none placeholder:text-[#737373]"
@@ -388,7 +378,7 @@ export function WebsiteAccountPanel({
                   minLength={10}
                   maxLength={128}
                   autoComplete="current-password"
-                  revealLabel={en ? "Show current password" : "显示当前密码"}
+                  revealLabel={intl("components_auth_WebsiteAccountPanel.showCurrentPassword")}
                   toggleClassName={AUTH_PASSWORD_TOGGLE_CLASS}
                 />
               </div>
@@ -399,7 +389,7 @@ export function WebsiteAccountPanel({
                   onChange={(event) => setDeleteLocalData(event.target.checked)}
                   className="size-4 shrink-0 accent-white"
                 />
-                {en ? "Also clear this browser's local workspace after deletion" : "注销成功后同时清除当前浏览器的本地工作区"}
+                {intl("components_auth_WebsiteAccountPanel.alsoClearThisBrowserSLocalWorkspaceAfterDeletion")}
               </label>
               <div className="mt-auto flex justify-end pt-5">
                 <Button
@@ -409,7 +399,7 @@ export function WebsiteAccountPanel({
                   disabled={deletePassword.length < 10 || busyAction !== null}
                   onClick={() => void runAccountAction("delete")}
                 >
-                  {busyAction === "delete" ? (en ? "Deleting…" : "正在注销…") : (en ? "Delete account permanently" : "永久注销账号")}
+                  {busyAction === "delete" ? (intl("components_auth_WebsiteAccountPanel.deleting")) : (intl("components_auth_WebsiteAccountPanel.deleteAccountPermanently"))}
                 </Button>
               </div>
             </section>
@@ -426,8 +416,8 @@ export function WebsiteAccountPanel({
   }
 
   const recoverySteps = [
-    { id: "details", label: en ? "Confirm email" : "确认邮箱" },
-    { id: "complete", label: en ? "Check inbox" : "查收邮件" },
+    { id: "details", label: intl("components_auth_WebsiteAccountPanel.confirmEmail") },
+    { id: "complete", label: intl("components_auth_WebsiteAccountPanel.checkInbox") },
   ];
 
   return (
@@ -437,7 +427,7 @@ export function WebsiteAccountPanel({
           <div className="mb-6 grid size-10 place-items-center rounded-lg bg-primary text-primary-foreground">
             <UserRound className="size-5" aria-hidden="true" />
           </div>
-          <p className="text-xs font-medium tracking-wide text-primary">{en ? "Account" : "账号管理"}</p>
+          <p className="text-xs font-medium tracking-wide text-primary">{intl("components_auth_WebsiteAccountPanel.account")}</p>
           <h3 className="mt-2 text-2xl font-semibold tracking-tight">{modeCopy[mode].title}</h3>
           <p className="mt-3 max-w-sm text-sm leading-6 text-muted-foreground">{modeCopy[mode].description}</p>
         </div>
@@ -452,7 +442,7 @@ export function WebsiteAccountPanel({
                 onValueChange={(value) => {
                   if (value === "details") setStep("details");
                 }}
-                label={en ? "Password recovery steps" : "找回密码步骤"}
+                label={intl("components_auth_WebsiteAccountPanel.passwordRecoverySteps")}
               />
             </div>
           ) : null}
@@ -461,7 +451,7 @@ export function WebsiteAccountPanel({
               <div className="grid content-start gap-4 px-5 py-6 sm:px-8 sm:py-8">
                 {mode === "signup" ? (
                   <div className="grid gap-1.5">
-                    <Label htmlFor={`${fieldId}-name`}>{en ? "Display name" : "昵称"}</Label>
+                    <Label htmlFor={`${fieldId}-name`}>{intl("components_auth_WebsiteAccountPanel.displayName")}</Label>
                     <Input
                       id={`${fieldId}-name`}
                       className={AUTH_INPUT_CLASS}
@@ -473,23 +463,23 @@ export function WebsiteAccountPanel({
                       required
                       minLength={WEBSITE_ACCOUNT_NAME_MIN_LENGTH}
                       maxLength={WEBSITE_ACCOUNT_NAME_MAX_LENGTH}
-                      placeholder={en ? "Shown on this website" : "用于网站内显示"}
+                      placeholder={intl("components_auth_WebsiteAccountPanel.shownOnThisWebsite")}
                       autoComplete="name"
                       aria-invalid={Boolean(nameError)}
                       aria-describedby={`${fieldId}-name-hint`}
                     />
                     <p id={`${fieldId}-name-hint`} role={nameError ? "alert" : undefined} className={`text-xs leading-5 ${nameError ? "text-destructive" : "text-muted-foreground"}`}>
-                      {nameError ?? (en ? WEBSITE_ACCOUNT_NAME_HINT_EN : WEBSITE_ACCOUNT_NAME_HINT)}
+                      {nameError ?? (authText.text(en, "nameHint"))}
                     </p>
                   </div>
                 ) : null}
                 <div className="grid gap-1.5">
-                  <Label htmlFor={`${fieldId}-email`}>{en ? "Email" : "邮箱"}</Label>
+                  <Label htmlFor={`${fieldId}-email`}>{intl("components_auth_WebsiteAccountPanel.email")}</Label>
                   <Input className={AUTH_INPUT_CLASS} id={`${fieldId}-email`} value={email} onChange={(event) => setEmail(event.target.value)} required type="email" placeholder="name@example.com" autoComplete="email" />
                 </div>
                 {mode !== "forgot" ? (
                   <div className="grid gap-1.5">
-                    <Label htmlFor={`${fieldId}-password`}>{en ? "Password" : "密码"}</Label>
+                    <Label htmlFor={`${fieldId}-password`}>{intl("components_auth_WebsiteAccountPanel.password")}</Label>
                     <PasswordInput
                       className={AUTH_INPUT_CLASS}
                       id={`${fieldId}-password`}
@@ -498,7 +488,7 @@ export function WebsiteAccountPanel({
                         const nextPassword = event.target.value;
                         setPassword(nextPassword);
                         if (passwordStrengthError) {
-                          setPasswordStrengthError(isStrongPassword(nextPassword) ? null : en ? PASSWORD_STRENGTH_ERROR_EN : PASSWORD_STRENGTH_ERROR);
+                          setPasswordStrengthError(isStrongPassword(nextPassword) ? null : authText.text(en, "passwordWeak"));
                         }
                         if (confirmPasswordError && mode === "signup") {
                           setConfirmPasswordError(localizedPasswordConfirmationError(nextPassword, confirmPassword, en));
@@ -506,15 +496,15 @@ export function WebsiteAccountPanel({
                       }}
                       onBlur={() => {
                         if (mode === "signup" && password && !isStrongPassword(password)) {
-                          setPasswordStrengthError(en ? PASSWORD_STRENGTH_ERROR_EN : PASSWORD_STRENGTH_ERROR);
+                          setPasswordStrengthError(authText.text(en, "passwordWeak"));
                         }
                       }}
                       required
                       minLength={10}
                       maxLength={128}
-                      placeholder={en ? "10–128 characters" : "10–128 位"}
+                      placeholder={intl("components_auth_WebsiteAccountPanel.10128Characters")}
                       autoComplete={mode === "signup" ? "new-password" : "current-password"}
-                      revealLabel={en ? "Show password" : "显示密码"}
+                      revealLabel={intl("components_auth_WebsiteAccountPanel.showPassword")}
                       toggleClassName={AUTH_PASSWORD_TOGGLE_CLASS}
                       aria-invalid={mode === "signup" && Boolean(passwordStrengthError)}
                       aria-describedby={mode === "signup" ? `${fieldId}-password-strength` : undefined}
@@ -531,7 +521,7 @@ export function WebsiteAccountPanel({
                 ) : null}
                 {mode === "signup" ? (
                   <div className="grid gap-1.5">
-                    <Label htmlFor={`${fieldId}-confirm-password`}>{en ? "Confirm password" : "确认密码"}</Label>
+                    <Label htmlFor={`${fieldId}-confirm-password`}>{intl("components_auth_WebsiteAccountPanel.confirmPassword")}</Label>
                     <PasswordInput
                       className={AUTH_INPUT_CLASS}
                       id={`${fieldId}-confirm-password`}
@@ -547,9 +537,9 @@ export function WebsiteAccountPanel({
                       required
                       minLength={10}
                       maxLength={128}
-                      placeholder={en ? "Enter the password again" : "再次输入密码"}
+                      placeholder={intl("components_auth_WebsiteAccountPanel.enterThePasswordAgain")}
                       autoComplete="new-password"
-                      revealLabel={en ? "Show password confirmation" : "显示确认密码"}
+                      revealLabel={intl("components_auth_WebsiteAccountPanel.showPasswordConfirmation")}
                       toggleClassName={AUTH_PASSWORD_TOGGLE_CLASS}
                       aria-invalid={Boolean(confirmPasswordError)}
                       aria-describedby={`${fieldId}-confirm-password-hint`}
@@ -559,13 +549,13 @@ export function WebsiteAccountPanel({
                       role={confirmPasswordError ? "alert" : undefined}
                       className={`text-xs leading-5 ${confirmPasswordError ? "text-destructive" : "text-muted-foreground"}`}
                     >
-                      {confirmPasswordError ?? (en ? "Enter the same password again." : "请再次输入上面的密码。")}
+                      {confirmPasswordError ?? (intl("components_auth_WebsiteAccountPanel.enterTheSamePasswordAgain"))}
                     </p>
                   </div>
                 ) : null}
                 {mode === "signup" ? (
                   <p className="text-xs leading-5 text-muted-foreground">
-                    {en ? <>By registering, you agree to the <Link className="underline underline-offset-2" href="/terms">Terms</Link> and <Link className="underline underline-offset-2" href="/privacy">Privacy Policy</Link>.</> : <>注册即表示你已阅读并同意<Link className="underline underline-offset-2" href="/terms">服务条款</Link>和<Link className="underline underline-offset-2" href="/privacy">隐私政策</Link>。</>}
+                    {intl.rich("components_auth_WebsiteAccountPanel.rich1", { element1: (chunks) => (<Link className="underline underline-offset-2" href="/terms">{chunks}</Link>), element2: (chunks) => (<Link className="underline underline-offset-2" href="/privacy">{chunks}</Link>) })}
                   </p>
                 ) : null}
                 {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
@@ -573,16 +563,16 @@ export function WebsiteAccountPanel({
               </div>
               <div className="grid gap-3 border-t px-5 py-4 sm:px-8 sm:py-5">
                 <Button type="submit" size="dialog" className="w-full" disabled={busy}>
-                  {busy ? en ? "Processing…" : "正在处理…" : mode === "signup" ? en ? "Create account and send code" : "创建账号并发送验证码" : mode === "forgot" ? en ? "Send reset email" : "发送重置邮件" : en ? "Sign in" : "登录"}
+                  {busy ? intl("components_auth_WebsiteAccountPanel.processing") : mode === "signup" ? intl("components_auth_WebsiteAccountPanel.createAccountAndSendCode") : mode === "forgot" ? intl("components_auth_WebsiteAccountPanel.sendResetEmail") : intl("components_auth_WebsiteAccountPanel.signIn")}
                 </Button>
                 <div className="flex min-h-11 flex-wrap items-center justify-center gap-x-1 text-xs">
-                  <Button type="button" size="sm" variant="ghost" onClick={() => chooseMode(mode === "signup" ? "signin" : "signup")}>{mode === "signup" ? en ? "I have an account" : "已有账号" : en ? "Create account" : "创建账号"}</Button>
+                  <Button type="button" size="sm" variant="ghost" onClick={() => chooseMode(mode === "signup" ? "signin" : "signup")}>{mode === "signup" ? intl("components_auth_WebsiteAccountPanel.iHaveAnAccount") : intl("components_auth_WebsiteAccountPanel.createAccount")}</Button>
                   {mode === "forgot" ? (
-                    <Button type="button" size="sm" variant="ghost" onClick={() => chooseMode("signin")}><ArrowLeft />{en ? "Back to sign in" : "返回登录"}</Button>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => chooseMode("signin")}><ArrowLeft />{intl("components_auth_WebsiteAccountPanel.backToSignIn")}</Button>
                   ) : (
-                    <Button type="button" size="sm" variant="ghost" onClick={() => chooseMode("forgot")}>{en ? "Forgot password" : "忘记密码"}</Button>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => chooseMode("forgot")}>{intl("components_auth_WebsiteAccountPanel.forgotPassword")}</Button>
                   )}
-                  {mode === "signin" ? <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => void sendVerificationCode()}>{en ? "Verify email" : "验证邮箱"}</Button> : null}
+                  {mode === "signin" ? <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => void sendVerificationCode()}>{intl("components_auth_WebsiteAccountPanel.verifyEmail")}</Button> : null}
                 </div>
               </div>
             </form>
@@ -591,8 +581,8 @@ export function WebsiteAccountPanel({
               <div className="grid content-center gap-5 px-4 py-8 sm:px-8">
                 <div className="text-center">
                   <MailCheck className="mx-auto size-8 text-primary" aria-hidden="true" />
-                  <h3 className="mt-3 font-semibold">{en ? "Enter email verification code" : "输入邮箱验证码"}</h3>
-                  <p className="mt-1 break-all text-sm text-muted-foreground">{en ? "Sent to" : "已发送至"} {email}</p>
+                  <h3 className="mt-3 font-semibold">{intl("components_auth_WebsiteAccountPanel.enterEmailVerificationCode")}</h3>
+                  <p className="mt-1 break-all text-sm text-muted-foreground">{intl("components_auth_WebsiteAccountPanel.sentTo")} {email}</p>
                 </div>
                 <OtpInput
                   ref={otpRef}
@@ -606,19 +596,19 @@ export function WebsiteAccountPanel({
                       setError(null);
                     }
                   }}
-                  hint={en ? "Enter the 6-digit code from the email" : "输入邮件中的 6 位数字"}
-                  errorMessage={error ?? (en ? "The code is incorrect or expired. Try again." : "验证码不正确或已失效，请重试。")}
-                  successMessage={en ? "Verified" : "验证成功"}
+                  hint={intl("components_auth_WebsiteAccountPanel.enterThe6DigitCodeFromTheEmail")}
+                  errorMessage={error ?? (intl("components_auth_WebsiteAccountPanel.theCodeIsIncorrectOrExpiredTryAgain"))}
+                  successMessage={intl("components_auth_WebsiteAccountPanel.verified")}
                 />
                 {message ? <p role="status" className="text-center text-sm text-muted-foreground">{message}</p> : null}
                 {error ? <p role="alert" className="sr-only">{error}</p> : null}
               </div>
               <div className="grid gap-2 border-t px-5 py-4 sm:px-8 sm:py-5">
-                <Button type="submit" size="dialog" className="w-full" disabled={busy || otp.length !== 6}>{busy ? (en ? "Verifying…" : "正在验证…") : (en ? "Verify email" : "验证邮箱")}</Button>
+                <Button type="submit" size="dialog" className="w-full" disabled={busy || otp.length !== 6}>{busy ? (intl("components_auth_WebsiteAccountPanel.verifying")) : (intl("components_auth_WebsiteAccountPanel.verifyEmail"))}</Button>
                 <div className="flex min-h-11 items-center justify-center gap-2 text-xs">
-                  <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => { setStep("details"); setOtpStatus("idle"); setError(null); }}><ArrowLeft />{en ? "Change email" : "修改邮箱"}</Button>
+                  <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => { setStep("details"); setOtpStatus("idle"); setError(null); }}><ArrowLeft />{intl("components_auth_WebsiteAccountPanel.changeEmail")}</Button>
                   <Button type="button" size="sm" variant="ghost" className="font-number" disabled={busy || resendSeconds > 0} onClick={() => void sendVerificationCode()}>
-                    {resendSeconds > 0 ? (en ? `Resend in ${resendSeconds}s` : `${resendSeconds} 秒后重发`) : (en ? "Resend code" : "重新发送验证码")}
+                    {resendSeconds > 0 ? (intl("components_auth_WebsiteAccountPanel.resendInS", { resendSeconds: resendSeconds })) : (intl("components_auth_WebsiteAccountPanel.resendCode"))}
                   </Button>
                 </div>
               </div>
@@ -627,11 +617,11 @@ export function WebsiteAccountPanel({
             <div className="grid min-h-80 grid-rows-[1fr_auto]">
               <div className="grid content-center justify-items-center gap-3 px-5 py-10 text-center sm:px-8">
                 <CheckCircle2 className="size-10 text-emerald-600" aria-hidden="true" />
-                <h3 className="font-semibold">{mode === "forgot" ? (en ? "Reset email sent" : "重置邮件已发送") : (en ? "Email verified" : "邮箱验证完成")}</h3>
+                <h3 className="font-semibold">{mode === "forgot" ? (intl("components_auth_WebsiteAccountPanel.resetEmailSent")) : (intl("components_auth_WebsiteAccountPanel.emailVerified2"))}</h3>
                 {message ? <p role="status" className="max-w-sm text-sm leading-6 text-muted-foreground">{message}</p> : null}
               </div>
               <div className="border-t px-5 py-4 sm:px-8 sm:py-5">
-                <Button type="button" size="dialog" className="w-full" onClick={() => chooseMode("signin")}>{en ? "Back to sign in" : "返回登录"}</Button>
+                <Button type="button" size="dialog" className="w-full" onClick={() => chooseMode("signin")}>{intl("components_auth_WebsiteAccountPanel.backToSignIn")}</Button>
               </div>
             </div>
           )}

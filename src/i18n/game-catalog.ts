@@ -1,6 +1,6 @@
-import operatorEnglishNamesJson from "./generated/operator-english-names.json" with { type: "json" };
-import buildingSkillEnglishJson from "./generated/building-skill-english.json" with { type: "json" };
-import buildingSkillEnglishManualJson from "./generated/building-skill-english-manual.json" with { type: "json" };
+import operatorEnglishNamesJson from "../generated/operator-english-names.json" with { type: "json" };
+import buildingSkillEnglishJson from "../generated/building-skill-english.json" with { type: "json" };
+import buildingSkillEnglishManualJson from "../generated/building-skill-english-manual.json" with { type: "json" };
 
 type BuildingSkillEnglish = Record<string, { name: string; description: string }>;
 

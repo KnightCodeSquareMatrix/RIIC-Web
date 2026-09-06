@@ -1,3 +1,6 @@
+import { localize as localize_components_pages_TrainingAdvice } from "../../i18n/helpers/components_pages_TrainingAdvice.ts";
+import { useTranslations, useLocale } from "next-intl";
+import { messageRecord } from "@/i18n/translate";
 import { lazy, Suspense, useState, type ReactNode } from "react";
 import { CircleAlert, ClipboardCheck, ChevronDown, GraduationCap } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
@@ -13,7 +16,6 @@ import {
   sortTrainingRecommendations,
 } from "@/components/training-advice/presentation";
 import { Button } from "@/components/ui/button";
-import { useLanguageDemo } from "@/language-demo";
 import type {
   BaseBlueprint,
   OperBoxEntry,
@@ -63,21 +65,21 @@ function contractIssues(layout: BaseBlueprint | null | undefined, operbox: OperB
   const rooms = layout?.rooms ?? [];
   const entries = operbox ?? [];
 
-  if (!rooms.length) issues.push(en ? "No base facilities configured" : "尚未配置基建设施");
-  if (!entries.length) issues.push(en ? "No operator data imported" : "尚未导入干员数据");
-  if (rooms.length > 64) issues.push(en ? "The base cannot contain more than 64 rooms" : "基建设施不能超过 64 间房");
-  if (entries.length > 1000) issues.push(en ? "Operator data cannot contain more than 1,000 entries" : "干员数据不能超过 1000 条");
-  if (rooms.some((room) => !room.id.trim())) issues.push(en ? "A room ID is empty" : "存在空房间 ID");
-  if (entries.some((entry) => !entry.id.trim() || !entry.name.trim())) issues.push(en ? "An operator ID or name is empty" : "存在空干员 ID 或名称");
+  if (!rooms.length) issues.push(localize_components_pages_TrainingAdvice.text(en, "noBaseFacilitiesConfigured"));
+  if (!entries.length) issues.push(localize_components_pages_TrainingAdvice.text(en, "noOperatorDataImported"));
+  if (rooms.length > 64) issues.push(localize_components_pages_TrainingAdvice.text(en, "theBaseCannotContainMoreThan64Rooms"));
+  if (entries.length > 1000) issues.push(localize_components_pages_TrainingAdvice.text(en, "operatorDataCannotContainMoreThan1000Entries"));
+  if (rooms.some((room) => !room.id.trim())) issues.push(localize_components_pages_TrainingAdvice.text(en, "aRoomIdIsEmpty"));
+  if (entries.some((entry) => !entry.id.trim() || !entry.name.trim())) issues.push(localize_components_pages_TrainingAdvice.text(en, "anOperatorIdOrNameIsEmpty"));
 
   const duplicateRoomIds = duplicateValues(rooms.map((room) => room.id));
-  if (duplicateRoomIds.length) issues.push(en ? `Duplicate room IDs: ${duplicateRoomIds.join(", ")}` : `房间 ID 重复：${duplicateRoomIds.join("、")}`);
+  if (duplicateRoomIds.length) issues.push(localize_components_pages_TrainingAdvice.text(en, "duplicateRoomIds", { value1: (en) ? (duplicateRoomIds.join(", ")) : "", value2: (en) ? "" : (duplicateRoomIds.join("、")) }));
 
   const duplicateOperatorIds = duplicateValues(entries.map((entry) => entry.id));
-  if (duplicateOperatorIds.length) issues.push(en ? `Duplicate operator IDs: ${duplicateOperatorIds.join(", ")}` : `干员 ID 重复：${duplicateOperatorIds.join("、")}`);
+  if (duplicateOperatorIds.length) issues.push(localize_components_pages_TrainingAdvice.text(en, "duplicateOperatorIds", { value1: (en) ? (duplicateOperatorIds.join(", ")) : "", value2: (en) ? "" : (duplicateOperatorIds.join("、")) }));
 
   const duplicateOperatorNames = duplicateValues(entries.map((entry) => entry.name));
-  if (duplicateOperatorNames.length) issues.push(en ? `Duplicate operator names: ${duplicateOperatorNames.join(", ")}` : `干员名称重复：${duplicateOperatorNames.join("、")}`);
+  if (duplicateOperatorNames.length) issues.push(localize_components_pages_TrainingAdvice.text(en, "duplicateOperatorNames", { value1: (en) ? (duplicateOperatorNames.join(", ")) : "", value2: (en) ? "" : (duplicateOperatorNames.join("、")) }));
 
   return issues;
 }
@@ -140,7 +142,8 @@ export function TrainingAdvice({
   requiresAccount = false,
   onOpenCalculator,
 }: TrainingAdviceProps) {
-  const { locale } = useLanguageDemo();
+  const intl = useTranslations();
+  const locale = useLocale();
   const en = locale === "en";
   const shouldReduceMotion = useReducedMotion();
   const entries = operbox ?? [];
@@ -161,17 +164,17 @@ export function TrainingAdvice({
   if (requiresAccount) {
     return (
       <div className="flex w-full flex-col gap-5 pt-5" data-training-page>
-        <section className="min-w-0" aria-label={en ? "Training advice overview" : "训练建议概览"}>
+        <section className="min-w-0" aria-label={intl("components_pages_TrainingAdvice.trainingAdviceOverview")}>
           <div className="mb-2 flex min-w-0 items-center gap-2.5">
             <span className="h-7 w-1.5 shrink-0 bg-[#FFD501]" aria-hidden="true" />
-            <h1 className="truncate text-[21px] font-medium leading-none text-[#313131]">{en ? "Training Advice" : "训练建议"}</h1>
+            <h1 className="truncate text-[21px] font-medium leading-none text-[#313131]">{intl("components_pages_TrainingAdvice.trainingAdvice")}</h1>
           </div>
           <InfraTechnicalCard group="training" className="min-h-[248px]" dataSlot="training-account-required" showEmblem={false}>
             <div className="grid min-h-[216px] place-content-center text-center">
               <CircleAlert className="mx-auto size-8 text-[var(--room-accent)]" aria-hidden="true" />
-              <h2 className="mt-4 text-xl font-semibold">{en ? "Sign in to view training advice" : "登录后查看练卡建议"}</h2>
-              <p className="mt-2 max-w-lg text-sm leading-6 text-white/62">{en ? "Data comes from your upload or a third-party sync. Sign in under Account, or use the full-roster sample without an account." : "当前数据来自自主上传或第三方同步。请前往账号管理登录；匿名状态仍可改用全角色样例生成建议。"}</p>
-              <Button type="button" className="mx-auto mt-4 h-9 bg-white text-[#272a2b] hover:bg-white/90 max-sm:h-11" onClick={onOpenCalculator}>{en ? "Back to calculator" : "返回基建计算器"}</Button>
+              <h2 className="mt-4 text-xl font-semibold">{intl("components_pages_TrainingAdvice.signInToViewTrainingAdvice")}</h2>
+              <p className="mt-2 max-w-lg text-sm leading-6 text-white/62">{intl("components_pages_TrainingAdvice.dataComesFromYourUploadOrAThirdParty")}</p>
+              <Button type="button" className="mx-auto mt-4 h-9 bg-white text-[#272a2b] hover:bg-white/90 max-sm:h-11" onClick={onOpenCalculator}>{intl("components_pages_TrainingAdvice.backToCalculator")}</Button>
             </div>
           </InfraTechnicalCard>
         </section>
@@ -181,10 +184,10 @@ export function TrainingAdvice({
 
   return (
     <div className="flex w-full flex-col gap-5 pt-5" data-training-page>
-      <section className="min-w-0" aria-label={en ? "Training advice overview" : "训练建议概览"}>
+      <section className="min-w-0" aria-label={intl("components_pages_TrainingAdvice.trainingAdviceOverview")}>
         <div className="mb-2 flex min-w-0 items-center gap-2.5">
           <span className="h-7 w-1.5 shrink-0 bg-[#FFD501]" aria-hidden="true" />
-          <h1 className="truncate text-[21px] font-medium leading-none text-[#313131]">{en ? "Training Advice" : "训练建议"}</h1>
+          <h1 className="truncate text-[21px] font-medium leading-none text-[#313131]">{intl("components_pages_TrainingAdvice.trainingAdvice")}</h1>
           <span className="font-number text-xs text-[#313131]/52">
             {advice ? recommendations.length : actions.length}
           </span>
@@ -193,18 +196,18 @@ export function TrainingAdvice({
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(28rem,0.8fr)] lg:items-end">
             <div>
               <InfraTechnicalHeading icon={<GraduationCap className="size-4" aria-hidden="true" />}>
-                {en ? "Latest schedule" : "最近一次排班"}
+                {intl("components_pages_TrainingAdvice.latestSchedule")}
               </InfraTechnicalHeading>
               <h2 className="mt-4 text-[23px] font-medium leading-tight tracking-[-0.02em]">
-                {en ? "Training priorities based on the latest schedule" : "根据最近排班整理的培养方向"}
+                {intl("components_pages_TrainingAdvice.trainingPrioritiesBasedOnTheLatestSchedule")}
               </h2>
             </div>
             <div className="grid grid-cols-2 gap-px bg-white/10 sm:grid-cols-4">
               {[
-                [en ? "Layout" : "布局", layout?.template || "—"],
-                [en ? "Rooms" : "房间", roomCounts.total || "—"],
-                [en ? "Owned" : "已拥有", entries.length ? ownedTotal : "—"],
-                [en ? "Elite 2" : "已精二", entries.length ? eliteTotal : "—"],
+                [intl("components_pages_TrainingAdvice.layout"), layout?.template || "—"],
+                [intl("components_pages_TrainingAdvice.rooms"), roomCounts.total || "—"],
+                [intl("components_pages_TrainingAdvice.owned"), entries.length ? ownedTotal : "—"],
+                [intl("components_pages_TrainingAdvice.elite2"), entries.length ? eliteTotal : "—"],
               ].map(([label, value]) => (
                 <div key={label} className="min-w-0 bg-black/24 px-3 py-3">
                   <span className="text-[10px] text-white/48">{label}</span>
@@ -215,33 +218,33 @@ export function TrainingAdvice({
               ))}
               {advice ? (
                 <div className="col-span-2 flex flex-wrap items-center gap-x-3 gap-y-1 bg-black/24 px-3 py-2 text-xs text-white/65 sm:col-span-4">
-                  <span>{en ? "Efficiency" : "效率"}</span>
+                  <span>{intl("components_pages_TrainingAdvice.efficiency")}</span>
                   <span>
-                    <span className="font-number">{formatPercent(context?.trade_average_efficiency_percent)}</span> {en ? "Trading" : "贸易"}
+                    <span className="font-number">{formatPercent(context?.trade_average_efficiency_percent)}</span> {intl("components_pages_TrainingAdvice.trading")}
                   </span>
                   <span>
-                    <span className="font-number">{formatPercent(context?.manufacturing_average_efficiency_percent)}</span> {en ? "Manufacturing" : "制造"}
+                    <span className="font-number">{formatPercent(context?.manufacturing_average_efficiency_percent)}</span> {intl("components_pages_TrainingAdvice.manufacturing")}
                   </span>
                   {context?.dormitory_level_sum != null ? (
-                    <span><span className="font-number">{context.dormitory_level_sum}</span> {en ? "Dorm levels" : "宿舍级"}</span>
+                    <span><span className="font-number">{context.dormitory_level_sum}</span> {intl("components_pages_TrainingAdvice.dormLevels")}</span>
                   ) : null}
                   {context?.engineering_robot_count != null ? (
-                    <span><span className="font-number">{context.engineering_robot_count}</span> {en ? "Robots" : "机器人"}</span>
+                    <span><span className="font-number">{context.engineering_robot_count}</span> {intl("components_pages_TrainingAdvice.robots")}</span>
                   ) : null}
                   {context?.meeting_room_max_level != null ? (
-                    <span>{en ? "Reception Room" : "会客室"} Lv<span className="font-number">{context.meeting_room_max_level}</span></span>
+                    <span>{intl("components_pages_TrainingAdvice.receptionRoom")} Lv<span className="font-number">{context.meeting_room_max_level}</span></span>
                   ) : null}
                   {context?.has_originium_shard_factory != null ? (
-                    <span>{en ? "Originium Shards" : "搓玉"} {context.has_originium_shard_factory ? (en ? "Yes" : "是") : (en ? "No" : "否")}</span>
+                    <span>{intl("components_pages_TrainingAdvice.originiumShards")} {context.has_originium_shard_factory ? (intl("components_pages_TrainingAdvice.yes")) : (intl("components_pages_TrainingAdvice.no"))}</span>
                   ) : null}
                 </div>
               ) : (
                 <div className="col-span-2 flex flex-wrap items-center gap-x-3 gap-y-1 bg-black/24 px-3 py-2 text-xs text-white/65 sm:col-span-4">
-                  <span>{en ? "Facilities" : "设施"}</span>
-                  <span><span className="font-number">{roomCounts.trade}</span> {en ? "Trading" : "贸易"}</span>
-                  <span><span className="font-number">{roomCounts.factory}</span> {en ? "Factories" : "制造"}</span>
-                  <span><span className="font-number">{roomCounts.power}</span> {en ? "Power Plants" : "发电"}</span>
-                  <span><span className="font-number">{roomCounts.dormitory}</span> {en ? "Dormitories" : "宿舍"}</span>
+                  <span>{intl("components_pages_TrainingAdvice.facilities")}</span>
+                  <span><span className="font-number">{roomCounts.trade}</span> {intl("components_pages_TrainingAdvice.trading")}</span>
+                  <span><span className="font-number">{roomCounts.factory}</span> {intl("components_pages_TrainingAdvice.factories")}</span>
+                  <span><span className="font-number">{roomCounts.power}</span> {intl("components_pages_TrainingAdvice.powerPlants")}</span>
+                  <span><span className="font-number">{roomCounts.dormitory}</span> {intl("components_pages_TrainingAdvice.dormitories")}</span>
                 </div>
               )}
             </div>
@@ -251,10 +254,10 @@ export function TrainingAdvice({
 
       {issues.length ? (
         <InfraTechnicalCard group="manufacture" dataSlot="training-data-check" showEmblem={false}>
-          <div className="flex gap-3 text-sm" aria-label={en ? "Data validation issues" : "数据检查问题"}>
+          <div className="flex gap-3 text-sm" aria-label={intl("components_pages_TrainingAdvice.dataValidationIssues")}>
             <CircleAlert className="mt-0.5 size-5 shrink-0 text-[var(--room-accent)]" aria-hidden="true" />
             <div>
-              <strong className="text-[var(--room-accent)]">{en ? "More information is required" : "还需要补充以下信息"}</strong>
+              <strong className="text-[var(--room-accent)]">{intl("components_pages_TrainingAdvice.moreInformationIsRequired")}</strong>
               <ul className="mt-2 grid gap-1 text-white/72">
                 {issues.map((issue) => <li key={issue}>• {issue}</li>)}
               </ul>
@@ -263,9 +266,9 @@ export function TrainingAdvice({
         </InfraTechnicalCard>
       ) : (
         <InfraTechnicalCard group="power" dataSlot="training-data-check" showEmblem={false}>
-          <div className="flex gap-3 text-sm" aria-label={en ? "Data validation" : "数据检查"}>
+          <div className="flex gap-3 text-sm" aria-label={intl("components_pages_TrainingAdvice.dataValidation")}>
             <ClipboardCheck className="mt-0.5 size-5 shrink-0 text-[var(--room-accent)]" aria-hidden="true" />
-            <p className="text-white/76">{en ? "Infrastructure and operator data passed the basic checks." : "当前基建设施与干员数据已通过基础检查，可以生成排班。"}</p>
+            <p className="text-white/76">{intl("components_pages_TrainingAdvice.infrastructureAndOperatorDataPassedTheBasicChecks")}</p>
           </div>
         </InfraTechnicalCard>
       )}
@@ -275,7 +278,7 @@ export function TrainingAdvice({
           {advice.newbie_section_status === "shown" && advice.incomplete_newbie.length ? (
             <CollapsibleSection
               accent="bg-[#B8F03A]"
-              title={en ? "Beginner Goals" : "新手目标"}
+              title={intl("components_pages_TrainingAdvice.beginnerGoals")}
               count={advice.incomplete_newbie.length}
               collapsed={Boolean(collapsedSections.newbie)}
               onToggle={() => toggleSection("newbie")}
@@ -293,20 +296,20 @@ export function TrainingAdvice({
           ) : advice.newbie_section_status === "skipped_by_efficiency" ? (
             <InfraTechnicalCard group="power" dataSlot="training-newbie-skipped" showEmblem={false}>
               <p className="text-sm leading-6 text-white/76">
-                {en ? "Average trading and manufacturing efficiency already exceeds the beginner threshold. The basic roster is not prioritized this round; " : "当前贸易与制造均效已高于新手门槛，本轮不把基础名单列为优先行动；仍有"}
+                {intl("components_pages_TrainingAdvice.averageTradingAndManufacturingEfficiencyAlreadyExceedsTheBeginner")}
                 <span className="font-number mx-1 text-[var(--room-accent)]">{advice.incomplete_newbie.length}</span>
-                {en ? "operators still have incomplete basic goals." : "名干员未完成基础目标。"}
+                {intl("components_pages_TrainingAdvice.operatorsStillHaveIncompleteBasicGoals")}
               </p>
             </InfraTechnicalCard>
           ) : advice.newbie_section_status === "complete" ? (
             <InfraTechnicalCard group="power" dataSlot="training-newbie-complete" showEmblem={false}>
-              <p className="text-sm leading-6 text-white/76">{en ? "Basic training goals are complete." : "基础练卡目标已完成。"}</p>
+              <p className="text-sm leading-6 text-white/76">{intl("components_pages_TrainingAdvice.basicTrainingGoalsAreComplete")}</p>
             </InfraTechnicalCard>
           ) : null}
 
           <CollapsibleSection
             accent="bg-[#29BDF5]"
-            title={en ? "Training Recommendations" : "练卡建议"}
+            title={intl("components_pages_TrainingAdvice.trainingRecommendations")}
             count={recommendations.length}
             collapsed={Boolean(collapsedSections.actions)}
             onToggle={() => toggleSection("actions")}
@@ -325,9 +328,9 @@ export function TrainingAdvice({
             ) : (
               <InfraTechnicalCard group="training" className="min-h-[248px]" dataSlot="training-empty" showEmblem={false}>
                 <div className="grid min-h-[216px] place-content-center text-center">
-                  <h3 className="text-xl font-semibold">{en ? "No priority training targets" : "暂无优先培养目标"}</h3>
+                  <h3 className="text-xl font-semibold">{intl("components_pages_TrainingAdvice.noPriorityTrainingTargets")}</h3>
                   <p className="mt-2 max-w-lg text-sm leading-6 text-white/62">
-                    {en ? "No operator or layout requires priority training. You can continue using the current schedule." : "当前干员与布局没有需要优先培养的项目，可以继续使用现有排班。"}
+                    {intl("components_pages_TrainingAdvice.noOperatorOrLayoutRequiresPriorityTrainingYouCan")}
                   </p>
                 </div>
               </InfraTechnicalCard>
@@ -336,7 +339,7 @@ export function TrainingAdvice({
 
           <CollapsibleSection
             accent="bg-[#FFD501]"
-            title={en ? "Combination Progress" : "组合进度"}
+            title={intl("components_pages_TrainingAdvice.combinationProgress")}
             count={combinations.length}
             collapsed={Boolean(collapsedSections.combinations)}
             onToggle={() => toggleSection("combinations")}
@@ -351,14 +354,14 @@ export function TrainingAdvice({
       ) : (
         <CollapsibleSection
           accent="bg-[#29BDF5]"
-          title={en ? "Training Recommendations" : "培养建议"}
+          title={intl("components_pages_TrainingAdvice.trainingRecommendations2")}
           count={actions.length}
           collapsed={Boolean(collapsedSections["legacy-actions"])}
           onToggle={() => toggleSection("legacy-actions")}
         >
           {actions.length ? (
             <div className="grid min-w-0 gap-3" data-training-advice-list>
-              <Suspense fallback={<p className="py-4 text-sm text-white/62" role="status">{en ? "Loading training recommendations…" : "正在加载培养建议…"}</p>}>
+              <Suspense fallback={<p className="py-4 text-sm text-white/62" role="status">{intl("components_pages_TrainingAdvice.loadingTrainingRecommendations")}</p>}>
                 {actions.map((action, index) => (
                   <RecommendationCard key={actionKey(action, index)} action={action} entry={ownedByName.get(action.operator)} index={index} />
                 ))}
@@ -374,21 +377,21 @@ export function TrainingAdvice({
               <div className="grid min-h-[216px] gap-6 sm:grid-cols-[minmax(0,1fr)_15rem] sm:items-center">
                 <motion.div className="max-w-xl" initial={{ opacity: 0, x: shouldReduceMotion ? 0 : -12 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: shouldReduceMotion ? 0 : 0.38, ease: [0.23, 1, 0.32, 1] }}>
                   <h3 className="text-xl font-semibold">
-                    {profile ? (en ? "No recommendations for this schedule" : "本次排班暂无培养建议") : (en ? "No training recommendations yet" : "尚无培养建议")}
+                    {profile ? (intl("components_pages_TrainingAdvice.noRecommendationsForThisSchedule")) : (intl("components_pages_TrainingAdvice.noTrainingRecommendationsYet"))}
                   </h3>
                   {profile ? (
                     <p className="mt-2 max-w-lg text-sm leading-6 text-white/62">
-                      {en ? "No operator or layout requires priority training. You can continue using the current schedule." : "当前干员与布局没有需要优先培养的项目，可以继续使用现有排班。"}
+                      {intl("components_pages_TrainingAdvice.noOperatorOrLayoutRequiresPriorityTrainingYouCan")}
                     </p>
                   ) : null}
                   <div className="mt-5 flex justify-start">
                     <Button type="button" size="dialog" className="bg-white text-[#272a2b] hover:bg-white/90" onClick={onOpenCalculator}>
-                      {profile ? (en ? "View current schedule" : "查看当前排班") : (en ? "Generate a schedule" : "前往生成排班")}
+                      {profile ? (intl("components_pages_TrainingAdvice.viewCurrentSchedule")) : (intl("components_pages_TrainingAdvice.generateASchedule"))}
                     </Button>
                   </div>
                 </motion.div>
                 <motion.div className="hidden border-y border-white/12 py-3 sm:block" aria-hidden="true" initial={{ opacity: 0, x: shouldReduceMotion ? 0 : 12 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: shouldReduceMotion ? 0 : 0.38, delay: shouldReduceMotion ? 0 : 0.08, ease: [0.23, 1, 0.32, 1] }}>
-                  {(en ? ["Operator progression scan", "Facility analysis", "Priority queue"] : ["干员练度扫描", "设施领域分析", "优先级队列"]).map((label, index) => (
+                  {(messageRecord(en, "components_pages_TrainingAdvice_labels")).map((label, index) => (
                     <div key={label} className="grid grid-cols-[auto_1fr_auto] items-center gap-2 border-b border-white/8 py-2.5 last:border-0">
                       <span className="font-number text-[10px] text-white/35">0{index + 1}</span>
                       <span className="text-xs text-white/65">{label}</span>

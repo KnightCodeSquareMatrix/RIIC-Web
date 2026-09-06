@@ -527,6 +527,21 @@ export async function deleteExpiredBusinessRecords(now = new Date()): Promise<vo
       lt(savedPlan.expiresAt, now),
     ));
     await tx.delete(operboxSnapshot).where(lt(operboxSnapshot.expiresAt, now));
-    await tx.delete(telemetryEvent).where(lt(telemetryEvent.expiresAt, now));
   });
+  // Separate transactions bound lock duration and avoid making other retention
+  // work wait for the full telemetry backlog. The cutoff is fixed for this run.
+  for (;;) {
+    const deleted = await getDatabase().execute(sql`
+      DELETE FROM ${telemetryEvent}
+      WHERE ${telemetryEvent.id} IN (
+        SELECT ${telemetryEvent.id} FROM ${telemetryEvent}
+        WHERE ${telemetryEvent.expiresAt} < ${now}
+        ORDER BY ${telemetryEvent.expiresAt}, ${telemetryEvent.id}
+        LIMIT 1000
+        FOR UPDATE SKIP LOCKED
+      )
+      RETURNING ${telemetryEvent.id}
+    `);
+    if (deleted.rows.length < 1000) break;
+  }
 }

@@ -2,7 +2,7 @@
 
 import { Play } from "lucide-react";
 import { useState, type ReactNode } from "react";
-import { useLanguageDemo } from "@/language-demo";
+import { useLocale } from "next-intl";
 
 export function TutorialVideo({ src, title, cover, duration }: {
   src: string;
@@ -10,7 +10,7 @@ export function TutorialVideo({ src, title, cover, duration }: {
   cover: ReactNode;
   duration: string;
 }) {
-  const { locale } = useLanguageDemo();
+  const locale = useLocale();
   const en = locale === "en";
   const [started, setStarted] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -32,3 +32,4 @@ export function TutorialVideo({ src, title, cover, duration }: {
     </div>
   );
 }
+

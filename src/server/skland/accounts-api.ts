@@ -46,14 +46,14 @@ export async function handleGetSklandAccounts(request: Request, route: string) {
     mode = sklandSessionMode(request.url);
     websiteUserId = (await requireWebsiteSession(request)).user.id;
   } catch (error) {
-    return sklandErrorResponse(error, requestId, route, startedAt);
+    return sklandErrorResponse(error, requestId, route, startedAt, request);
   }
   const bindingSummaryPromise = getSklandBindingSummary(websiteUserId);
   if (!isSklandConfigured() || !isSecureSklandRequest(request)) {
     try {
       bindingSummary = await bindingSummaryPromise;
     } catch (error) {
-      return sklandErrorResponse(error, requestId, route, startedAt);
+      return sklandErrorResponse(error, requestId, route, startedAt, request);
     }
     return successResponse({
       authenticated: false,
@@ -84,7 +84,7 @@ export async function handleGetSklandAccounts(request: Request, route: string) {
     if (resolved.refreshed) setSklandAccountStoreCookies(response, request, resolved.store, previous);
     return response;
   } catch (error) {
-    return sklandErrorResponse(error, requestId, route, startedAt);
+    return sklandErrorResponse(error, requestId, route, startedAt, request);
   }
 }
 
@@ -136,7 +136,7 @@ async function deleteSklandAccounts(
     setSklandAccountStoreCookies(response, request, loaded.store, previous);
     return response;
   } catch (error) {
-    return sklandErrorResponse(error, requestId, route, startedAt);
+    return sklandErrorResponse(error, requestId, route, startedAt, request);
   }
 }
 

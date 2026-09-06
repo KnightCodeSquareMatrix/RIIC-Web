@@ -1,4 +1,5 @@
 import { expect, test, type Locator } from "@playwright/test";
+import { TERMS_VERSION, PRIVACY_VERSION } from "../src/legal-policy";
 import { requestId, diagnosticId, expectUnifiedDialogTypography, expectUnifiedDialogAction, waitForOwnAnimations, planData, sampleData, authenticatedSklandSnapshot, productionHeavySklandSnapshot, primarySklandAccount, mockApis, openSklandOverview, seedPreferences, seedV4Session } from "./production-readiness.fixture";
 
 function relativeLuminance(cssColor: string) {
@@ -123,8 +124,8 @@ test("Skland login exposes both methods and starts QR only after explicit consen
       consent: {
         termsAccepted: true,
         privacyAccepted: true,
-        termsVersion: "2026-08-21-cloud-workspace",
-        privacyVersion: "2026-09-03-solver-reproduction-retention",
+        termsVersion: TERMS_VERSION,
+        privacyVersion: PRIVACY_VERSION,
       },
     });
     return route.fulfill({
@@ -404,8 +405,8 @@ test("credential import explains the risk, gates consent, recovers from errors, 
       consent: {
         termsAccepted: true,
         privacyAccepted: true,
-        termsVersion: "2026-08-21-cloud-workspace",
-        privacyVersion: "2026-09-03-solver-reproduction-retention",
+        termsVersion: TERMS_VERSION,
+        privacyVersion: PRIVACY_VERSION,
       },
     },
     {
@@ -413,8 +414,8 @@ test("credential import explains the risk, gates consent, recovers from errors, 
       consent: {
         termsAccepted: true,
         privacyAccepted: true,
-        termsVersion: "2026-08-21-cloud-workspace",
-        privacyVersion: "2026-09-03-solver-reproduction-retention",
+        termsVersion: TERMS_VERSION,
+        privacyVersion: PRIVACY_VERSION,
       },
     },
   ]);
@@ -521,8 +522,8 @@ test("credential import can add a second Skland account from the account dialog"
     consent: {
       termsAccepted: true,
       privacyAccepted: true,
-      termsVersion: "2026-08-21-cloud-workspace",
-      privacyVersion: "2026-09-03-solver-reproduction-retention",
+      termsVersion: TERMS_VERSION,
+      privacyVersion: PRIVACY_VERSION,
     },
   });
   await expect(page.locator("body")).not.toContainText(submittedCredential);
@@ -615,7 +616,7 @@ test("Skland login replaces a scanned QR with progress while authentication fini
   await expect(page.getByRole("img", { name: "森空岛登录二维码" })).toBeVisible();
   await expect(page.locator("[data-skland-login-progress]")).toBeVisible({ timeout: 10_000 });
   await expect(page.getByRole("img", { name: "森空岛登录二维码" })).toHaveCount(0);
-  await expect(page.getByRole("status")).toContainText("已扫码，正在等待森空岛 App 确认并完成登录…");
+  await expect(page.locator("[data-skland-login-panel]").getByRole("status")).toContainText("已扫码，正在等待森空岛 App 确认并完成登录…");
 });
 
 test("Skland restore waits for website authentication and then starts summary and full requests once", async ({ page }) => {

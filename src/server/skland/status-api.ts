@@ -44,7 +44,7 @@ export async function handleRefreshSklandStatus(request: Request, route: string)
     setSklandAccountStoreCookies(response, request, next, previous);
     return response;
   } catch (error) {
-    return sklandErrorResponse(error, requestId, route, startedAt);
+    return sklandErrorResponse(error, requestId, route, startedAt, request);
   }
 }
 

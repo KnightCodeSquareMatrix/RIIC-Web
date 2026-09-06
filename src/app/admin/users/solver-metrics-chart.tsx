@@ -1,4 +1,5 @@
 "use client";
+import { localize as localize_app_admin_users_solver_metrics_chart } from "../../../i18n/helpers/app_admin_users_solver_metrics_chart.ts";
 
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 
@@ -11,18 +12,18 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart";
 import type { AdminSolverMetricsData } from "@/types";
-import { useLanguageDemo } from "@/language-demo";
+import { useLocale } from "next-intl";
 
 function chartConfig(en: boolean): ChartConfig { return {
   successCount: {
-    label: en ? "Success" : "成功",
+    label: localize_app_admin_users_solver_metrics_chart.text(en, "success"),
     theme: {
       light: "oklch(0.58 0.14 166)",
       dark: "oklch(0.72 0.13 166)",
     },
   },
   failureCount: {
-    label: en ? "Failure" : "失败",
+    label: localize_app_admin_users_solver_metrics_chart.text(en, "failure"),
     theme: {
       light: "oklch(0.62 0.2 24)",
       dark: "oklch(0.72 0.16 24)",
@@ -40,10 +41,10 @@ export function AdminSolverMetricsChart({
 }: {
   trend: AdminSolverMetricsData["solver"]["trend"];
 }) {
-  const { locale } = useLanguageDemo();
+  const locale = useLocale();
   const en = locale === "en";
-  const axisTimeFormatter = new Intl.DateTimeFormat(en ? "en-US" : "zh-CN", { hour: "2-digit", minute: "2-digit" });
-  const tooltipTimeFormatter = new Intl.DateTimeFormat(en ? "en-US" : "zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  const axisTimeFormatter = new Intl.DateTimeFormat((locale === "en" ? "en-US" : "zh-CN"), { hour: "2-digit", minute: "2-digit" });
+  const tooltipTimeFormatter = new Intl.DateTimeFormat((locale === "en" ? "en-US" : "zh-CN"), { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
   return (
     <ChartContainer
       config={chartConfig(en)}

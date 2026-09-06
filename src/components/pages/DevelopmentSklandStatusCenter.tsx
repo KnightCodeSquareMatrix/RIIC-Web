@@ -1,4 +1,5 @@
 "use client";
+import { useTranslations } from "next-intl";
 
 import { LogIn, UserRound } from "lucide-react";
 
@@ -6,7 +7,6 @@ import { SklandStatus, type SklandStatusProps } from "@/components/pages/SklandS
 import { StatusCenterLoading, StatusCenterPage } from "@/components/pages/StatusCenterShell";
 import { Button } from "@/components/ui/button";
 import type { SklandBindingSummary } from "@/types";
-import { useLanguageDemo } from "@/language-demo";
 
 export interface DevelopmentSklandStatusCenterProps {
   websiteAuthenticated: boolean;
@@ -17,15 +17,15 @@ export interface DevelopmentSklandStatusCenterProps {
 }
 
 function WebsiteLoginRequired({ onOpenAccount }: { onOpenAccount: () => void }) {
-  const { locale } = useLanguageDemo();
-  const en = locale === "en";
+  const intl = useTranslations();
+
   return (
     <StatusCenterPage data-skland-page data-skland-login-required>
       <header className="max-w-2xl">
-        <p className="text-xs font-medium tracking-wide text-primary">{en ? "Skland Status" : "森空岛状态中心"}</p>
-        <h2 className="mt-2 text-2xl font-semibold tracking-tight">{en ? "Sign in to your website account" : "先登录网站账号"}</h2>
+        <p className="text-xs font-medium tracking-wide text-primary">{intl("components_pages_DevelopmentSklandStatusCenter.sklandStatus")}</p>
+        <h2 className="mt-2 text-2xl font-semibold tracking-tight">{intl("components_pages_DevelopmentSklandStatusCenter.signInToYourWebsiteAccount")}</h2>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          {en ? "Your Skland connection belongs to the current website account. Sign in to connect by QR code or credentials, view infrastructure status, and renew access after seven days." : "森空岛绑定属于当前网站账号。登录后可通过扫码或凭证导入完成绑定、查看当前基建状态，并在七天授权到期后重新续期。"}
+          {intl("components_pages_DevelopmentSklandStatusCenter.yourSklandConnectionBelongsToTheCurrentWebsiteAccount")}
         </p>
       </header>
       <div className="grid min-h-64 place-items-center border-y border-border/70 py-10 text-center">
@@ -33,12 +33,12 @@ function WebsiteLoginRequired({ onOpenAccount }: { onOpenAccount: () => void }) 
           <div className="mx-auto grid size-12 place-items-center rounded-xl bg-muted">
             <LogIn className="size-5" aria-hidden="true" />
           </div>
-          <h3 className="mt-4 text-lg font-semibold">{en ? "Website account not signed in" : "网站账号尚未登录"}</h3>
+          <h3 className="mt-4 text-lg font-semibold">{intl("components_pages_DevelopmentSklandStatusCenter.websiteAccountNotSignedIn")}</h3>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            {en ? "Account management and Skland status are separate. Sign in under Account, then return here to authorize Skland." : "账号管理与森空岛状态已经分开。请先前往账号管理登录，再回到这里完成森空岛授权。"}
+            {intl("components_pages_DevelopmentSklandStatusCenter.accountManagementAndSklandStatusAreSeparateSignIn")}
           </p>
           <Button type="button" className="mt-5 min-h-11" onClick={onOpenAccount}>
-            <UserRound />{en ? "Go to Account" : "前往账号管理"}
+            <UserRound />{intl("components_pages_DevelopmentSklandStatusCenter.goToAccount")}
           </Button>
         </div>
       </div>
@@ -53,11 +53,12 @@ export function DevelopmentSklandStatusCenter({
   onOpenAccount,
   skland,
 }: DevelopmentSklandStatusCenterProps) {
-  const { locale } = useLanguageDemo();
+  const intl = useTranslations();
+
   if (websiteSessionPending) {
     return (
       <StatusCenterPage data-skland-page>
-        <StatusCenterLoading label={locale === "en" ? "Restoring website account" : "正在恢复网站账号"} />
+        <StatusCenterLoading label={intl("components_pages_DevelopmentSklandStatusCenter.restoringWebsiteAccount")} />
       </StatusCenterPage>
     );
   }

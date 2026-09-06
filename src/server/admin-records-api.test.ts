@@ -32,6 +32,11 @@ test("admin issue details and deletion retain their privacy boundaries", async (
 
 test("admin issue UI explains every reproduction availability state", async () => {
   const source = await readFile(new URL("../app/admin/issues/issues-client.tsx", import.meta.url), "utf8");
+  const namespace = "app_admin_issues_issues_client_labels";
+  assert.equal(source.includes(namespace), true);
+  const catalogs = await Promise.all(["zh", "en"].map(async (locale) =>
+    JSON.parse(await readFile(new URL(`../../messages/records/${locale}.json`, import.meta.url), "utf8")),
+  ));
   for (const reason of [
     "expired",
     "cache_hit",
@@ -42,6 +47,9 @@ test("admin issue UI explains every reproduction availability state", async () =
     "invalid",
     "incomplete",
   ]) {
-    assert.equal(source.includes(`${reason}:`), true);
+    for (const catalog of catalogs) {
+      assert.equal(typeof catalog[namespace][reason], "string");
+      assert.ok(catalog[namespace][reason].trim().length > 0);
+    }
   }
 });

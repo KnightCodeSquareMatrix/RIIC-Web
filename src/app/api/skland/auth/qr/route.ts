@@ -28,6 +28,6 @@ export async function POST(request: Request) {
     if (!isCurrentPolicyConsent(body?.consent)) throw new PublicApiError("AIC-AUTH-2005");
     return successResponse(await startScan(website.user.id, ip, body.consent), requestId);
   } catch (error) {
-    return sklandErrorResponse(error, requestId, "/api/skland/auth/qr", startedAt);
+    return sklandErrorResponse(error, requestId, "/api/skland/auth/qr", startedAt, request);
   }
 }

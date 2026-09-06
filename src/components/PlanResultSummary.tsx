@@ -1,4 +1,6 @@
 "use client";
+import { localize as localize_components_PlanResultSummary } from "../i18n/helpers/components_PlanResultSummary.ts";
+import { useTranslations, useLocale } from "next-intl";
 
 import { ChevronRight } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
@@ -13,11 +15,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { estimateDailyProduction, type DailyProductionUnavailableReason } from "@/daily-production";
 import { dailyProductionGroups, type DailyProductionGroup, type ProductionDetailProduct } from "@/daily-production-presentation";
 import { cn } from "@/lib/utils";
-import { useLanguageDemo } from "@/language-demo";
 
-const EN_PRODUCT_LABELS: Record<string, string> = { experience: "Experience", "lmd-orders": "LMD", gold: "Pure Gold", orundum: "Orundum", shards: "Originium Shards" };
-function productLabel(product: { id: string; label: string }, en: boolean) { return en ? EN_PRODUCT_LABELS[product.id] ?? product.label : product.label; }
-function productUnit(unit: string, en: boolean) { return en ? ({ "经验": "EXP", "龙门币": "LMD", "合成玉": "Orundum", "枚": "pcs" }[unit] ?? unit) : unit; }
+const PRODUCT_KEYS = { experience: "productExperience", "lmd-orders": "productLmd", gold: "productGold", orundum: "productOrundum", shards: "productShards" } as const;
+function productLabel(product: { id: string; label: string }, en: boolean) {
+  const key = PRODUCT_KEYS[product.id as keyof typeof PRODUCT_KEYS];
+  return en && key ? localize_components_PlanResultSummary.text(en, key) : product.label;
+}
+function productUnit(unit: string, en: boolean) {
+  const keys = { "经验": "unitExperience", "龙门币": "unitLmd", "合成玉": "unitOrundum", "枚": "unitPieces" } as const;
+  const key = keys[unit as keyof typeof keys];
+  return en && key ? localize_components_PlanResultSummary.text(en, key) : unit;
+}
 import { MOTION_DURATION, MOTION_EASE_OUT } from "@/motion";
 import { formatPlanDuration } from "@/rotation-presentation";
 import { countShiftPlacementAdjustments } from "@/skland";
@@ -30,9 +38,9 @@ function dailyNumber(value: number | null): string {
 }
 
 function unavailableReason(reason: DailyProductionUnavailableReason | undefined, en: boolean): string {
-  if (reason === "ambiguous-recipe") return en ? "Recipe cannot be classified" : "配方无法归类";
-  if (reason === "missing-drone-data") return en ? "Insufficient drone data" : "无人机数据不足";
-  return en ? "Insufficient room data" : "逐房数据不足";
+  if (reason === "ambiguous-recipe") return localize_components_PlanResultSummary.text(en, "recipeCannotBeClassified");
+  if (reason === "missing-drone-data") return localize_components_PlanResultSummary.text(en, "insufficientDroneData");
+  return localize_components_PlanResultSummary.text(en, "insufficientRoomData");
 }
 
 export function PlanResultSummary({
@@ -64,7 +72,8 @@ export function PlanResultSummary({
   onPerformanceIssue: () => void;
   feedbackDisabled?: boolean;
 }) {
-  const { locale } = useLanguageDemo();
+  const intl = useTranslations();
+  const locale = useLocale();
   const en = locale === "en";
   const shouldReduceMotion = useReducedMotion();
   const [animateOnMount] = useState(animateEntrance);
@@ -99,7 +108,7 @@ export function PlanResultSummary({
     <>
       <motion.section
         className="relative mb-5 overflow-hidden border border-[#313131]/18 bg-[#F3F1EA] text-[#313131] shadow-[0_12px_30px_rgba(35,38,39,0.10)]"
-        aria-label={en ? "Schedule result summary" : "排班结果摘要"}
+        aria-label={intl("components_PlanResultSummary.scheduleResultSummary")}
         data-plan-summary
         data-plan-result-summary
         data-plan-revision={planRevision}
@@ -118,13 +127,13 @@ export function PlanResultSummary({
         <div data-animation-revision={animationRevision} className="grid min-h-[84px] grid-cols-[minmax(10rem,1.05fr)_minmax(0,5fr)] items-stretch max-[820px]:grid-cols-1">
           <motion.button type="button" className={cn("group relative flex min-w-0 items-center justify-between gap-3 overflow-hidden bg-[#272A2B] px-5 py-3 text-left text-white focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-[#FFD800] max-[820px]:row-span-1 max-sm:min-h-16", comparison && "row-span-2")} data-plan-details-trigger="efficiency" data-plan-primary-details-trigger whileHover={shouldReduceMotion ? undefined : { x: 2 }} whileTap={shouldReduceMotion ? undefined : { scale: 0.985 }} onClick={() => openDetails("efficiency")}>
             <motion.span className="min-w-0" data-plan-metric initial={animateOnMount ? { opacity: 0, x: shouldReduceMotion ? 0 : -10 } : false} animate={{ opacity: 1, x: 0 }} transition={{ duration: shouldReduceMotion ? MOTION_DURATION.feedback : 0.36, delay: shouldReduceMotion ? 0 : 0.1, ease: MOTION_EASE_OUT }}>
-              <strong className="block truncate text-lg font-medium"><span className="font-number">{layout.template}</span> {en ? "Base Plan" : "基建方案"}</strong>
-              <span className="mt-1 block text-[10px] text-white/45">{en ? "Generated in" : "用时"} <span className="font-number">{en ? formatPlanDuration(durationMs).replace(" 秒", "s") : formatPlanDuration(durationMs)}</span> · {en ? "View details" : "点击查看详情"}</span>
+              <strong className="block truncate text-lg font-medium"><span className="font-number">{layout.template}</span> {intl("components_PlanResultSummary.basePlan")}</strong>
+              <span className="mt-1 block text-[10px] text-white/45">{intl("components_PlanResultSummary.generatedIn")} <span className="font-number">{en ? formatPlanDuration(durationMs).replace(" 秒", "s") : formatPlanDuration(durationMs)}</span> · {intl("components_PlanResultSummary.viewDetails")}</span>
             </motion.span>
             <ChevronRight className="size-4 shrink-0 text-white/55 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
           </motion.button>
 
-          <div className="grid min-w-0 grid-cols-3 max-sm:grid-cols-2" aria-label={en ? "Estimated daily production" : "预计日产物"} data-daily-production-summary data-production-source={productGroups[0]?.source}>
+          <div className="grid min-w-0 grid-cols-3 max-sm:grid-cols-2" aria-label={intl("components_PlanResultSummary.estimatedDailyProduction")} data-daily-production-summary data-production-source={productGroups[0]?.source}>
             {productGroups.map((productGroup, index) => (
               <motion.button
                 key={productGroup.id}
@@ -170,14 +179,14 @@ export function PlanResultSummary({
           {comparison ? (
             <motion.button type="button" className="col-start-2 min-w-0 border-t border-[#313131]/10 bg-[#E7E3D8] px-4 py-2.5 text-left transition-colors hover:bg-[#DDD8CA] focus-visible:outline-2 focus-visible:outline-primary max-[820px]:col-start-1 max-sm:min-h-14" data-shift-comparison data-plan-details-trigger="comparison" whileTap={shouldReduceMotion ? undefined : { scale: 0.99 }} onClick={() => openDetails("comparison")}>
               <span className="flex items-center justify-between gap-3 text-xs">
-                <span className="min-w-0 truncate">{en ? <>Closest to shift <strong className="font-number"><AnimatedText value={comparison.planIndex + 1} /></strong> · Match <strong className="font-number"><AnimatedText value={`${comparison.score}%`} /></strong></> : <>最接近第 <strong className="font-number"><AnimatedText value={comparison.planIndex + 1} /></strong> 班 · 匹配率 <strong className="font-number"><AnimatedText value={`${comparison.score}%`} /></strong></>}</span>
+                <span className="min-w-0 truncate">{intl.rich("components_PlanResultSummary.rich1", { element1: (chunks) => (<strong className="font-number">{chunks}</strong>), value2: () => (<AnimatedText value={comparison.planIndex + 1} />), value3: () => (<AnimatedText value={`${comparison.score}%`} />) })}</span>
                 <span className="shrink-0 text-[#313131]/60">
                   {adjustmentCount === 0
-                    ? (en ? "No changes" : "无需调整")
-                    : (en ? <><strong className="font-number text-[#313131]"><AnimatedText value={adjustmentCount} /></strong> changes</> : <>需调整 <strong className="font-number text-[#313131]"><AnimatedText value={adjustmentCount} /></strong> 处</>)}
+                    ? (intl("components_PlanResultSummary.noChanges"))
+                    : (intl.rich("components_PlanResultSummary.rich2", { element1: (chunks) => (<strong className="font-number text-[#313131]">{chunks}</strong>), value2: () => (<AnimatedText value={adjustmentCount} />) }))}
                 </span>
               </span>
-              <span className="mt-1 block h-1 overflow-hidden bg-[#313131]/10" role="progressbar" aria-label={en ? "Non-dormitory facility match percentage" : "非宿舍设施匹配百分比"} aria-valuemin={0} aria-valuemax={100} aria-valuenow={comparison.score}>
+              <span className="mt-1 block h-1 overflow-hidden bg-[#313131]/10" role="progressbar" aria-label={intl("components_PlanResultSummary.nonDormitoryFacilityMatchPercentage")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={comparison.score}>
                 <motion.span
                   className="block h-full bg-primary"
                   initial={animateOnMount
@@ -193,12 +202,12 @@ export function PlanResultSummary({
         </div>
       </motion.section>
 
-      <Drawer open={drawerOpen} onOpenChange={setDrawerOpen} onCloseComplete={handleDrawerCloseComplete} title={en ? "Schedule details" : "排班结果详情"} description={en ? "Review daily output and current staffing match." : "查看日产物和当前进驻匹配。"} width={560}>
+      <Drawer open={drawerOpen} onOpenChange={setDrawerOpen} onCloseComplete={handleDrawerCloseComplete} title={intl("components_PlanResultSummary.scheduleDetails")} description={intl("components_PlanResultSummary.reviewDailyOutputProductionImprovementsAndCurrentStaffingMatch")} width={560}>
         <div className="flex h-full min-h-0 flex-col">
           <Tabs value={activeDetailSection} onValueChange={(value) => setDetailSection(value as DetailSection)} className="min-h-0 flex-1 gap-0">
-            <TabsList variant="line" className="w-full justify-start gap-1 border-b border-border/70 px-4 py-0" aria-label={en ? "Schedule detail categories" : "结果详情分类"}>
-              <TabsTrigger value="efficiency" className="min-h-11 flex-none px-3">{en ? "Output & Improvements" : "产出与提升"}</TabsTrigger>
-              {comparison ? <TabsTrigger value="comparison" className="min-h-11 flex-none px-3">{en ? "Current Match" : "当前状态匹配"}</TabsTrigger> : null}
+            <TabsList variant="line" className="w-full justify-start gap-1 border-b border-border/70 px-4 py-0" aria-label={intl("components_PlanResultSummary.scheduleDetailCategories")}>
+              <TabsTrigger value="efficiency" className="min-h-11 flex-none px-3">{intl("components_PlanResultSummary.outputImprovements")}</TabsTrigger>
+              {comparison ? <TabsTrigger value="comparison" className="min-h-11 flex-none px-3">{intl("components_PlanResultSummary.currentMatch")}</TabsTrigger> : null}
             </TabsList>
             <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 pb-6" data-plan-details-section={activeDetailSection}>
               <TabsContent value="efficiency" className="m-0">
@@ -222,12 +231,12 @@ export function PlanResultSummary({
               className="h-11 justify-start px-0 text-xs font-medium text-[#313131]/58 hover:text-[#313131]"
               data-plan-performance-feedback
               disabled={feedbackDisabled}
-              title={feedbackDisabled ? (en ? "The full-roster sample cannot submit feedback" : "全角色导入为体验数据，不能提交反馈") : undefined}
+              title={feedbackDisabled ? (intl("components_PlanResultSummary.theFullRosterSampleCannotSubmitFeedback")) : undefined}
               onClick={requestPerformanceFeedback}
             >
-              {en ? "Report solve performance" : "反馈本次求解速度"}
+              {intl("components_PlanResultSummary.reportSolvePerformance")}
             </Button>
-            {feedbackDisabled ? <p className="mt-1 text-xs text-[#313131]/55">{en ? "The full-roster sample cannot submit feedback." : "全角色导入为体验数据，不能提交反馈。"}</p> : null}
+            {feedbackDisabled ? <p className="mt-1 text-xs text-[#313131]/55">{intl("components_PlanResultSummary.theFullRosterSampleCannotSubmitFeedback2")}</p> : null}
           </div>
         </div>
       </Drawer>
@@ -254,7 +263,7 @@ function ProductionDetailItem({ product, supporting = false, en }: { product: Pr
           </span>
           <strong className={cn("font-technical mt-0.5 flex items-baseline gap-1 leading-none tabular-nums", supporting ? "text-lg" : "text-xl")}>
             <span>{dailyNumber(product.amount.value)}</span>
-            {product.amount.value === null ? null : <span className="text-[10px] font-medium text-muted-foreground">{productUnit(product.unit, en)} / {en ? "day" : "日"}</span>}
+            {product.amount.value === null ? null : <span className="text-[10px] font-medium text-muted-foreground">{productUnit(product.unit, en)} / {localize_components_PlanResultSummary.text(en, "day")}</span>}
           </strong>
           {product.amount.value === null ? <span className="mt-1 block text-[10px] font-semibold text-amber-800">{unavailableReason(product.amount.unavailableReason, en)}</span> : null}
         </div>
@@ -277,8 +286,8 @@ function ProductionDetailItem({ product, supporting = false, en }: { product: Pr
 function ProductionDetails({ productGroups, en }: { productGroups: DailyProductionGroup[]; en: boolean }) {
   if (!productGroups.length) return null;
   return (
-    <section aria-label={en ? "Estimated daily production details" : "预计日产物详情"} data-production-details data-production-source={productGroups[0].source}>
-      <h3 className="text-sm font-semibold">{en ? "Estimated daily production" : "预计日产物"}</h3>
+    <section aria-label={localize_components_PlanResultSummary.text(en, "estimatedDailyProductionDetails")} data-production-details data-production-source={productGroups[0].source}>
+      <h3 className="text-sm font-semibold">{localize_components_PlanResultSummary.text(en, "estimatedDailyProduction")}</h3>
       <div className="mt-2 divide-y divide-border/70 border-y border-border/70">
         {productGroups.map((productGroup) => (
           <section key={productGroup.id} className="space-y-2 py-3" data-production-group={productGroup.id}>
@@ -293,7 +302,7 @@ function ProductionDetails({ productGroups, en }: { productGroups: DailyProducti
 
 function EfficiencyDetails({ productGroups, en }: { productGroups: DailyProductionGroup[]; en: boolean }) {
   return (
-    <section className="pt-4" aria-label={en ? "Daily output details" : "日产物详情"} data-efficiency-details>
+    <section className="pt-4" aria-label={localize_components_PlanResultSummary.text(en, "outputAndImprovementDetails")} data-efficiency-details>
       <ProductionDetails productGroups={productGroups} en={en} />
     </section>
   );

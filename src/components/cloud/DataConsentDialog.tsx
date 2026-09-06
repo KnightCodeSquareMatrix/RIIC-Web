@@ -1,4 +1,5 @@
 "use client";
+import { useTranslations } from "next-intl";
 
 import Link from "next/link";
 import { useId, useState } from "react";
@@ -14,23 +15,24 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useLanguageDemo } from "@/language-demo";
 
 export function DataConsentDialog({
   open,
   saving,
   error,
+  reloadRequired = false,
   onAccept,
   onDecline,
 }: {
   open: boolean;
   saving: boolean;
   error: string | null;
+  reloadRequired?: boolean;
   onAccept: () => void;
   onDecline: () => void;
 }) {
-  const { locale } = useLanguageDemo();
-  const en = locale === "en";
+  const intl = useTranslations();
+
   const [terms, setTerms] = useState(false);
   const [privacy, setPrivacy] = useState(false);
   const id = useId();
@@ -41,30 +43,30 @@ export function DataConsentDialog({
         className="max-h-[calc(100dvh-1rem)] grid-rows-[auto_minmax(0,1fr)_auto] sm:max-h-[calc(100dvh-2rem)] sm:max-w-lg"
       >
         <DialogHeader>
-          <DialogTitle>{en ? "Enable account cloud workspace" : "启用账号云端工作区"}</DialogTitle>
+          <DialogTitle>{intl("components_cloud_DataConsentDialog.enableAccountCloudWorkspace")}</DialogTitle>
           <DialogDescription>
-            {en ? "After you consent, the site automatically syncs your MAA BOX, layout, settings, and recent schedules. You can keep using local-only mode instead." : "同意后，本站会自动同步 MAA Box、布局、设置与最近排班。你也可以选择继续纯本地使用。"}
+            {intl("components_cloud_DataConsentDialog.afterYouConsentTheSiteAutomaticallySyncsYourMaa")}
           </DialogDescription>
         </DialogHeader>
         <DialogBody className="min-h-0 gap-4 overflow-y-auto overscroll-contain py-2 text-sm leading-6 text-muted-foreground sm:py-3">
           <ul className="list-disc space-y-1 pl-5">
-            <li>{en ? "Each MAA BOX uses an independent key and AES-256-GCM envelope encryption. Cloud data is retained on a rolling 30-day basis." : "MAA Box 使用每条独立密钥和 AES-256-GCM 信封加密，云端数据滚动保留 30 天。"}</li>
-            <li>{en ? "The five most recent schedules are synced; up to five pinned schedules can be kept longer." : "最近 5 条排班会同步；最多固定 5 条长期保留。"}</li>
-            <li>{en ? "Third-party game account UIDs, nicknames, BOX data, credentials, and complete status snapshots are not written to the business database." : "第三方游戏账号的 UID、昵称、Box、凭据和完整状态快照不会写入业务数据库。"}</li>
+            <li>{intl("components_cloud_DataConsentDialog.eachMaaBoxUsesAnIndependentKeyAndAes")}</li>
+            <li>{intl("components_cloud_DataConsentDialog.theFiveMostRecentSchedulesAreSyncedUpTo")}</li>
+            <li>{intl("components_cloud_DataConsentDialog.thirdPartyGameAccountUidsNicknamesBoxDataCredentials")}</li>
           </ul>
           <label className="flex min-h-11 items-start gap-3" htmlFor={`${id}-terms`}>
             <input id={`${id}-terms`} type="checkbox" checked={terms} onChange={(event) => setTerms(event.target.checked)} className="mt-1 size-4 shrink-0 accent-primary" />
-            <span>{en ? <>I have read and agree to the <Link href="/terms" target="_blank" className="mx-1 text-foreground underline underline-offset-4">Terms</Link>.</> : <>我已阅读并同意<Link href="/terms" target="_blank" className="mx-1 text-foreground underline underline-offset-4">服务条款</Link>。</>}</span>
+            <span>{intl.rich("components_cloud_DataConsentDialog.rich1", { element1: (chunks) => (<Link href="/terms" target="_blank" className="mx-1 text-foreground underline underline-offset-4">{chunks}</Link>) })}</span>
           </label>
           <label className="flex min-h-11 items-start gap-3" htmlFor={`${id}-privacy`}>
             <input id={`${id}-privacy`} type="checkbox" checked={privacy} onChange={(event) => setPrivacy(event.target.checked)} className="mt-1 size-4 shrink-0 accent-primary" />
-            <span>{en ? <>I have read the <Link href="/privacy" target="_blank" className="mx-1 text-foreground underline underline-offset-4">Privacy Policy</Link> and consent to automatic syncing of the data above.</> : <>我已阅读<Link href="/privacy" target="_blank" className="mx-1 text-foreground underline underline-offset-4">隐私政策</Link>并同意自动同步上述数据。</>}</span>
+            <span>{intl.rich("components_cloud_DataConsentDialog.rich2", { element1: (chunks) => (<Link href="/privacy" target="_blank" className="mx-1 text-foreground underline underline-offset-4">{chunks}</Link>) })}</span>
           </label>
           {error ? <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert> : null}
         </DialogBody>
         <DialogFooter className="flex-col items-stretch border-t border-border/50 sm:flex-row sm:items-center">
-          <Button className="w-full sm:w-auto" type="button" size="dialog" variant="outline" disabled={saving} onClick={onDecline}>{en ? "Keep local-only mode" : "继续纯本地模式"}</Button>
-          <Button className="w-full sm:w-auto" type="button" size="dialog" disabled={saving || !terms || !privacy} onClick={onAccept}>{saving ? (en ? "Enabling…" : "正在启用…") : (en ? "Agree and start syncing" : "同意并开始同步")}</Button>
+          <Button className="w-full sm:w-auto" type="button" size="dialog" variant="outline" disabled={saving} onClick={onDecline}>{intl("components_cloud_DataConsentDialog.keepLocalOnlyMode")}</Button>
+          <Button className="w-full sm:w-auto" type="button" size="dialog" disabled={saving || (!reloadRequired && (!terms || !privacy))} onClick={onAccept}>{saving ? intl("components_cloud_DataConsentDialog.enabling") : reloadRequired ? intl("components_cloud_DataConsentDialog.reloadUpdatedPolicy") : intl("components_cloud_DataConsentDialog.agreeAndStartSyncing")}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

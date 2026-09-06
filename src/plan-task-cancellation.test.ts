@@ -106,7 +106,15 @@ test("poll failures back off, preserve resumable storage, and clear expired task
     clearStoredTask: false,
   });
   assert.equal(planTaskPollErrorDecision("AIC-AUTH-2001", 0).clearStoredTask, false);
+  assert.equal(planTaskPollErrorDecision("AIC-AUTH-2008", 0).kind, "pause");
+  assert.equal(planTaskPollErrorDecision("AIC-AUTH-2008", 5).clearStoredTask, false);
   assert.equal(planTaskPollErrorDecision("AIC-REQ-1001", 0).clearStoredTask, true);
+});
+
+test("server Retry-After is a minimum for every scheduled retry, including exhausted backoff", () => {
+  assert.equal((planTaskPollErrorDecision("AIC-RATE-6001", 0, 10_000) as { delayMs: number }).delayMs, 10_000);
+  assert.equal((planTaskPollErrorDecision("AIC-RATE-6001", 5, 40_000) as { delayMs: number }).delayMs, 40_000);
+  assert.equal(planTaskPollErrorDecision("AIC-AUTH-2001", 0, 10_000).kind, "pause");
 });
 
 function pollingHarness(outcomes: Array<unknown>) {

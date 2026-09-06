@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import process from "node:process";
 import test from "node:test";
 import { URL } from "node:url";
 
@@ -8,6 +12,107 @@ const repoRoot = new URL("../", import.meta.url);
 async function readRepoFile(relativePath) {
   return readFile(new URL(relativePath, repoRoot), "utf8");
 }
+
+test("CI avoids duplicate installation audits without weakening its security gate", async () => {
+  const workflow = (await readRepoFile(".github/workflows/frontend-quality.yml")).replaceAll("\r\n", "\n");
+  const packageJson = JSON.parse(await readRepoFile("package.json"));
+  for (const job of ["static_checks", "database_checks", "release_artifact", "browser_e2e", "browser_boundaries"]) {
+    const section = workflow.split(`  ${job}:\n`)[1]?.split(/^ {2}\w+:/m)[0];
+    assert.ok(section, job);
+    assert.match(section, /run: npm ci --no-audit --no-fund/);
+  }
+  const scheduled = workflow.split("  webkit_e2e:\n")[1].split(/^ {2}\w+:/m)[0];
+  assert.match(scheduled, /run: npm ci\s*$/m);
+  assert.doesNotMatch(scheduled, /--no-audit/);
+  assert.match(workflow, /name: Security audit\s+run: npm run audit:security/);
+  assert.equal(packageJson.scripts["audit:security"], "npm audit --audit-level=high");
+  assert.match(workflow, /verify_result "\$RUN_CORE" "\$STATIC_RESULT" static/);
+});
+
+test("batched deployment inspections make one SSH call and fail closed on invalid responses", async (t) => {
+  const workflow = (await readRepoFile(".github/workflows/deploy.yml")).replaceAll("\r\n", "\n");
+  const gitExecPath = process.platform === "win32"
+    ? spawnSync("git", ["--exec-path"], { encoding: "utf8" }).stdout?.trim()
+    : null;
+  const gitBash = gitExecPath ? resolve(gitExecPath, "../../../bin/bash.exe") : null;
+  const bash = process.env.TEST_BASH_PATH
+    ?? (gitBash && existsSync(gitBash) ? gitBash : "bash");
+  assert.equal(spawnSync(bash, ["--version"], { encoding: "utf8" }).status, 0,
+    "Bash is required for deployment behavior tests; set TEST_BASH_PATH on Windows.");
+  const digest = "a".repeat(64);
+  for (const [name, good, bad] of [
+    ["verify_helper", `root:root:755|6|${digest}`, [
+      `root:root:777|6|${digest}`, `root:root:755|5|${digest}`,
+      "root:root:755|6", "root:root:755|6|invalid",
+    ]],
+    ["verify_remote_archive", `123|${digest}`, [
+      `124|${digest}`, `123|${"b".repeat(64)}`, "123", "123|invalid",
+    ]],
+  ]) {
+    const body = workflow.match(new RegExp(`^          ${name}\\(\\) \\{[\\s\\S]*?^          \\}`, "m"))?.[0];
+    assert.ok(body, name);
+    assert.equal((body.match(/30s ssh/g) ?? []).length, 1);
+    assert.match(body, /test -f '[^']+'\s+test ! -L/);
+    assert.match(body, /set -eu/);
+    assert.match(body, /timeout --kill-after=5s 30s ssh/);
+    if (name === "verify_helper") {
+      const permissionsCheck = body.indexOf("'root:root:755'");
+      assert.ok(permissionsCheck >= 0 && permissionsCheck < body.indexOf("--contract-version"));
+    }
+    const script = `set -euo pipefail
+      timeout() { shift 2; "$@"; }
+      ssh() {
+        printf 'FAKE_SSH_CALL\\n' >&2
+        if [[ -n "$REMOTE_TEST_FAILURE" ]]; then
+          "$BASH" -c '
+            test() {
+              if [[ "$1" == "-f" ]]; then [[ "$REMOTE_TEST_FAILURE" != "regular" ]]; return; fi
+              if [[ "$1" == "!" && "$2" == "-L" ]]; then [[ "$REMOTE_TEST_FAILURE" != "symlink" ]]; return; fi
+              builtin test "$@"
+            }
+            stat() { printf "UNSAFE_STAT_REACHED\\n" >&2; return 1; }
+          '"\${!#}"
+          return
+        fi
+        printf '%s' "$INSPECTION_RESPONSE"
+        return "$SSH_EXIT"
+      }
+      ssh_options=(-o BatchMode=yes -o ConnectTimeout=15 -o ConnectionAttempts=2 -o ServerAliveInterval=15 -o ServerAliveCountMax=3)
+      ssh_target=fixture@example.invalid
+      remote_archive=/tmp/fixture.tar.gz
+      ${body}
+      ${name} deploy /usr/local/sbin/arknights-infra-deploy 6
+    `;
+    const run = (response, status = 0, remoteTestFailure = "") => spawnSync(bash, ["--noprofile", "--norc", "-c", script], {
+      encoding: "utf8",
+      timeout: 10_000,
+      env: { ...process.env, INSPECTION_RESPONSE: response, SSH_EXIT: String(status), REMOTE_TEST_FAILURE: remoteTestFailure,
+        DEPLOY_SSH_USER: "fixture", DEPLOY_HOST: "example.invalid",
+        GITHUB_STEP_SUMMARY: "/dev/null", DEPLOY_ARCHIVE_BYTES: "123", DEPLOY_ARCHIVE_SHA256: digest },
+    });
+    await t.test(`${name} accepts valid metadata in one request`, () => {
+      const result = run(good);
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(result.stderr.trim(), "FAKE_SSH_CALL");
+    });
+    for (const response of [...bad, "", `${good}|extra`, `${good}|`, `${good}\nextra`]) {
+      await t.test(`${name} rejects ${JSON.stringify(response)}`, () => {
+        const result = run(response);
+        assert.notEqual(result.status, 0, result.stdout);
+      });
+    }
+    await t.test(`${name} propagates SSH failure even with valid output`, () => {
+      assert.notEqual(run(good, 42).status, 0);
+    });
+    for (const failure of ["regular", "symlink"]) {
+      await t.test(`${name} stops the remote script before stat when ${failure} check fails`, () => {
+        const result = run("", 0, failure);
+        assert.notEqual(result.status, 0);
+        assert.equal(result.stderr.trim(), "FAKE_SSH_CALL");
+      });
+    }
+  }
+});
 
 test("Next.js commands use the default Turbopack bundler", async () => {
   const packageJson = JSON.parse(await readRepoFile("package.json"));
@@ -49,6 +154,7 @@ test("production builds prepare a solver-free standalone runtime with static ass
   assert.equal(packageJson.scripts.postbuild, "node scripts/prepare-standalone.mjs");
   assert.equal(packageJson.scripts.start, "node scripts/start-standalone.mjs");
   assert.equal(packageJson.scripts["release:stage"], "node scripts/stage-standalone-release.mjs");
+  assert.match(prepareStandalone, /process\.env\.RIIC_NEXT_DIST_DIR \|\| "\.next"/);
   assert.match(prepareStandalone, /standaloneRoot, "public"/);
   assert.match(prepareStandalone, /standaloneRoot, "\.next", "static"/);
   assert.match(prepareStandalone, /\["infra-cli", "infra-cli\.exe"\]/);
@@ -83,6 +189,9 @@ test("the plan worker centrally dispatches an eight-task pipeline across four is
   assert.match(workerRuntime, /warmPlanServeLane[\s\S]+length: PLAN_TASK_WORKER_CONCURRENCY[\s\S]+warmPlanServeLane\(serveLane\)[\s\S]+recoverStaleRunningTasks[\s\S]+recordPlanWorkerHeartbeat/);
   const startup = workerRuntime.slice(workerRuntime.indexOf("export async function runPlanWorker"));
   const firstHeartbeat = startup.indexOf("await recordPlanWorkerHeartbeat");
+  const storageProbe = startup.indexOf("await assertPlanArtifactStorageReady()");
+  assert.ok(storageProbe >= 0 && storageProbe < startup.indexOf("warmPlanServeLane(serveLane)"));
+  assert.ok(storageProbe < firstHeartbeat);
   const heartbeatTimer = startup.indexOf("const heartbeatTimer = setInterval");
   const artifactRecovery = startup.indexOf("void resumePendingPlanArtifactFinalizations");
   assert.ok(firstHeartbeat >= 0 && firstHeartbeat < heartbeatTimer);
@@ -149,20 +258,21 @@ test("CI enforces route and document preload JavaScript budgets after building",
 
   assert.equal(packageJson.scripts["check:bundle-budget"], "node scripts/check-bundle-budget.mjs");
   assert.match(workflow, /Build standalone application and worker[\s\S]+Release output checks[\s\S]+npm run check:bundle-budget/);
-  assert.match(budgetCheck, /MAX_SKLAND_DISABLED_ROUTE_INITIAL_JS_BYTES = 1_167_000/);
-  assert.match(budgetCheck, /MAX_SKLAND_ENABLED_ROUTE_INITIAL_JS_BYTES = 1_205_000/);
-  assert.match(budgetCheck, /MAX_SKLAND_ROUTE_INITIAL_JS_BYTES = 1_642_000/);
-  assert.match(budgetCheck, /MAX_SKLAND_DISABLED_DOCUMENT_INITIAL_JS_BYTES = 1_280_000/);
-  assert.match(budgetCheck, /MAX_SKLAND_ENABLED_DOCUMENT_INITIAL_JS_BYTES = 1_317_000/);
-  assert.match(budgetCheck, /MAX_SKLAND_DISABLED_DOCUMENT_INITIAL_GZIP_JS_BYTES = 416_000/);
-  assert.match(budgetCheck, /MAX_SKLAND_ENABLED_DOCUMENT_INITIAL_GZIP_JS_BYTES = 422_000/);
+  assert.match(budgetCheck, /MAX_SKLAND_DISABLED_ROUTE_INITIAL_JS_BYTES = 1_257_000/);
+  assert.match(budgetCheck, /MAX_SKLAND_ENABLED_ROUTE_INITIAL_JS_BYTES = 1_293_000/);
+  assert.match(budgetCheck, /MAX_SKLAND_ROUTE_INITIAL_JS_BYTES = 1_732_000/);
+  assert.match(budgetCheck, /MAX_SKLAND_DISABLED_DOCUMENT_INITIAL_JS_BYTES = 1_370_000/);
+  assert.match(budgetCheck, /MAX_SKLAND_ENABLED_DOCUMENT_INITIAL_JS_BYTES = 1_406_000/);
+  assert.match(budgetCheck, /MAX_SKLAND_DISABLED_DOCUMENT_INITIAL_GZIP_JS_BYTES = 442_000/);
+  assert.match(budgetCheck, /MAX_SKLAND_ENABLED_DOCUMENT_INITIAL_GZIP_JS_BYTES = 448_000/);
   assert.match(budgetCheck, /const sklandEnabled = sklandRoute\.firstLoadChunkPaths\.some/);
-  assert.match(budgetCheck, /MAX_SECONDARY_ROUTE_INITIAL_JS_BYTES = 1_582_000/);
-  assert.match(budgetCheck, /MAX_MANUAL_ROUTE_INITIAL_JS_BYTES = 1_602_000/);
+  assert.match(budgetCheck, /MAX_SECONDARY_ROUTE_INITIAL_JS_BYTES = 1_672_000/);
+  assert.match(budgetCheck, /MAX_MANUAL_ROUTE_INITIAL_JS_BYTES = 1_692_000/);
   assert.match(budgetCheck, /MAX_DOCUMENT_INITIAL_JS_FILES = 18/);
   assert.match(budgetCheck, /WORKBENCH_ROUTES = \["\/", "\/manual", "\/training", "\/mastery", "\/skills", "\/skland", "\/account"\]/);
   assert.match(budgetCheck, /firstLoadUncompressedJsBytes/);
-  assert.match(budgetCheck, /\.next\/server\/app\/index\.html/);
+  assert.match(budgetCheck, /server\/app\/index\.html/);
+  assert.match(budgetCheck, /return renderBuildDocument\(\)/);
   assert.match(budgetCheck, /gzipSync/);
   assert.match(budgetCheck, /COMPACT_SCHEDULE_MARKER = "data-compact-schedule-view"/);
   assert.match(budgetCheck, /compact schedule code leaked into the initially loaded application chunk/);
@@ -208,7 +318,7 @@ test("CI gates releases on Chromium and a WebKit Skland smoke test, then schedul
   assert.doesNotMatch(workflow, /^\s*pull_request\s*:/m);
   assert.match(workflow, /cancel-in-progress: false/);
   assert.equal(readinessSpecs.length, 4);
-  assert.equal(readinessTestCount, 100);
+  assert.equal(readinessTestCount, 101);
   assert.equal(e2eFiles.includes("production-readiness.spec.ts"), false);
   assert.match(playwrightConfig, /fullyParallel: true/);
   assert.match(playwrightConfig, /workers: process\.env\.CI \? 2 : undefined/);

@@ -1,4 +1,4 @@
-// 轻量埋点 SDK：批量 + sendBeacon，当前记录全部性能事件，不阻塞主线程。
+// Response-aware batching; sendBeacon is only a page-exit fallback.
 // 只采集白名单事件；字段校验在服务端 /api/telemetry 完成。
 
 import {
@@ -6,11 +6,11 @@ import {
   type TelemetryInput,
   type TelemetryType,
 } from "@/telemetry-contract";
+import { createTelemetryQueue } from "./telemetry-queue";
 
 const TELEMETRY_ENDPOINT = "/api/telemetry";
-const FLUSH_INTERVAL_MS = 5_000;
-const FLUSH_BATCH_SIZE = 20;
 const PERFORMANCE_SAMPLE_RATE = 1;
+const COOLDOWN_KEY = "riic-telemetry-cooldown-v1";
 
 /** 设备环境快照：会话级一条，不随每条事件重复上报。 */
 function collectDeviceInfo(): Record<string, string | number | boolean> {
@@ -66,9 +66,33 @@ type QueuedEvent = TelemetryInput & {
   sessionId: string;
 };
 
-const queue: QueuedEvent[] = [];
-let flushTimer: ReturnType<typeof setTimeout> | null = null;
 let fallbackSessionId: string | null = null;
+const queue = createTelemetryQueue<QueuedEvent>({
+  now: Date.now,
+  schedule: (callback,delay) => setTimeout(callback,delay),
+  cancel: clearTimeout,
+  readCooldown: () => {
+    try { const value=Number(window.localStorage.getItem(COOLDOWN_KEY)); return Number.isFinite(value) ? Math.min(value,Date.now()+3_600_000) : 0; }
+    catch { return 0; }
+  },
+  writeCooldown: (until) => { try { window.localStorage.setItem(COOLDOWN_KEY,String(until)); } catch { /* optional */ } },
+  send: async (events) => {
+    const controller=new AbortController();
+    const timeout=setTimeout(()=>controller.abort(),10_000);
+    try {
+      const response=await fetch(TELEMETRY_ENDPOINT, {
+        method:"POST", headers:{"Content-Type":"application/json", "X-RIIC-Client-Schema":"2",
+          "X-RIIC-Client-Version":process.env.APP_CLIENT_BUILD_ID ?? "local-development"},
+        body:JSON.stringify({events}), keepalive:true, signal:controller.signal,
+      });
+      return {status:response.status,retryAfter:response.headers.get("Retry-After")};
+    } finally { clearTimeout(timeout); }
+  },
+  beacon: (events) => {
+    try { return navigator.sendBeacon(TELEMETRY_ENDPOINT,new Blob([JSON.stringify({events})],{type:"application/json"})); }
+    catch { return false; }
+  },
+});
 
 function getSessionId(): string {
   try {
@@ -87,52 +111,27 @@ function shouldSample(type: TelemetryType): boolean {
   return type !== "performance" || Math.random() < PERFORMANCE_SAMPLE_RATE;
 }
 
-function scheduleFlush(): void {
-  if (flushTimer) return;
-  flushTimer = setTimeout(() => {
-    flushTimer = null;
-    void flushTelemetry();
-  }, FLUSH_INTERVAL_MS);
-}
-
 export function track(input: TelemetryInput): void {
   if (!shouldSample(input.type)) return;
-  queue.push({
+  queue.enqueue({
     ...input,
+    ...(input.page ? {page:input.page.split(/[?#]/)[0].slice(0,120)} : {}),
+    ...(input.durationMs === undefined ? {} : {durationMs:Math.max(0,Math.min(2_147_483_647,Math.round(input.durationMs)))}),
+    ...(input.value === undefined ? {} : {value:Math.max(0,Math.min(2_147_483_647,Math.round(input.value)))}),
     sessionId: getSessionId(),
   });
-  if (queue.length >= FLUSH_BATCH_SIZE) {
-    void flushTelemetry();
-  } else {
-    scheduleFlush();
-  }
 }
 
 /** 手动立即上报（页面卸载前调用，防止丢数据）。 */
 export function flushTelemetry(): void {
-  if (queue.length === 0) return;
-  const events = queue.splice(0, FLUSH_BATCH_SIZE);
-  const payload = { events };
-  try {
-    const blob = new Blob([JSON.stringify(payload)], { type: "application/json" });
-    if (navigator.sendBeacon(TELEMETRY_ENDPOINT, blob)) return;
-  } catch {
-    // sendBeacon 不可用时走 fetch 兜底
-  }
-  void fetch(TELEMETRY_ENDPOINT, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-    keepalive: true,
-  }).catch(() => {
-    // 上报失败直接丢弃，避免重试循环拖累页面。
-  });
+  if (document.visibilityState === "hidden") queue.hide();
+  else void queue.flush();
 }
 
 // 页面卸载/隐藏前冲刷剩余队列。
 if (typeof window !== "undefined") {
   track({ type: "environment", name: "device_info", meta: collectDeviceInfo() });
-  window.addEventListener("pagehide", () => flushTelemetry());
+  window.addEventListener("pagehide", () => queue.hide());
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") flushTelemetry();
   });

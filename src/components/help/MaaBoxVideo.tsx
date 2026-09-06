@@ -3,10 +3,10 @@
 import Image from "next/image";
 import { Play } from "lucide-react";
 import { useState } from "react";
-import { useLanguageDemo } from "@/language-demo";
+import { useLocale } from "next-intl";
 
 export function MaaBoxVideo() {
-  const { locale } = useLanguageDemo();
+  const locale = useLocale();
   const en = locale === "en";
   const [started, setStarted] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -55,3 +55,4 @@ export function MaaBoxVideo() {
     </div>
   );
 }
+

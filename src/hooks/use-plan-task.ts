@@ -16,7 +16,7 @@ import {
 import type { PublicPlanData } from "@/types";
 
 const STORAGE_KEY = "aic-plan-task-v1";
-const RESUME_COOLDOWN_SECONDS = 30;
+const MANUAL_QUERY_INTERVAL_MS = 1_000;
 
 export type PlanTaskUiState = {
   taskId: string | null;
@@ -89,6 +89,11 @@ export function usePlanTask({ onDone, onFailed, storageKey }: PlanTaskOptions) {
     reject: (reason: Error) => void;
   } | null>(null);
   const restoredRef = useRef(false);
+  const inFlightRef = useRef(new Set<string>());
+  const retryAfterUntilRef = useRef(0);
+  const manualQueryUntilRef = useRef(0);
+  const networkStoppedRef = useRef(false);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
     onDoneRef.current = onDone;
@@ -113,22 +118,16 @@ export function usePlanTask({ onDone, onFailed, storageKey }: PlanTaskOptions) {
     setResumeCountdown(0);
   }, []);
 
-  const startResumeCooldown = useCallback(() => {
+  const startResumeCooldown = useCallback((until: number) => {
     if (cooldownRef.current) clearInterval(cooldownRef.current);
     setResumeDisabled(true);
-    setResumeCountdown(RESUME_COOLDOWN_SECONDS);
+    setResumeCountdown(Math.max(0, Math.ceil((until - Date.now()) / 1_000)));
     cooldownRef.current = setInterval(() => {
-      setResumeCountdown((previous) => {
-        if (previous <= 1) {
-          if (cooldownRef.current) clearInterval(cooldownRef.current);
-          cooldownRef.current = null;
-          setResumeDisabled(false);
-          return 0;
-        }
-        return previous - 1;
-      });
+      const remaining = Math.max(0, Math.ceil((until - Date.now()) / 1_000));
+      setResumeCountdown(remaining);
+      if (!remaining) stopResumeCooldown();
     }, 1_000);
-  }, []);
+  }, [stopResumeCooldown]);
 
   const resolveWaiter = useCallback((result: PublicPlanData) => {
     const waiter = waiterRef.current;
@@ -147,6 +146,7 @@ export function usePlanTask({ onDone, onFailed, storageKey }: PlanTaskOptions) {
     stopResumeCooldown();
     clearStoredTaskId(taskStorageKey);
     taskIdRef.current = null;
+    networkStoppedRef.current = false;
     setState((current) => ({
       ...current,
       taskId: null,
@@ -165,44 +165,64 @@ export function usePlanTask({ onDone, onFailed, storageKey }: PlanTaskOptions) {
     timerRef.current = setTimeout(() => void pollOnceRef.current(taskId, attempt), delayMs);
   }, [clearTimer]);
   const pollOnce = useCallback(async (taskId: string, attempt: number) => {
-    await runPlanTaskPollAttempt(taskId, attempt, {
-      poll: pollPlanTask,
-      isCurrent: (candidate) => taskIdRef.current === candidate,
-      errorCode: (error) => error instanceof ApiClientError ? error.code : null,
-      finishDone: (result) => {
-        if (!result) {
-          const message = "排班任务已完成，但没有返回可用结果。";
-          finish({ status: "failed", error: message });
-          onFailedRef.current(message);
+    if (!mountedRef.current || taskIdRef.current !== taskId || inFlightRef.current.has(taskId)) return;
+    const remaining = retryAfterUntilRef.current - Date.now();
+    if (remaining > 0) {
+      schedulePoll(taskId, attempt, remaining);
+      return;
+    }
+    inFlightRef.current.add(taskId);
+    try {
+      await runPlanTaskPollAttempt(taskId, attempt, {
+        poll: pollPlanTask,
+        isCurrent: (candidate) => mountedRef.current && taskIdRef.current === candidate,
+        errorCode: (error) => error instanceof ApiClientError ? error.code : null,
+        retryAfterMs: (error) => {
+          const seconds = error instanceof ApiClientError ? error.retryAfterSeconds : undefined;
+          if (!seconds || !Number.isFinite(seconds) || seconds < 0) return 0;
+          const delay = seconds * 1_000;
+          retryAfterUntilRef.current = Math.max(retryAfterUntilRef.current, Date.now() + delay);
+          startResumeCooldown(retryAfterUntilRef.current);
+          return delay;
+        },
+        finishDone: (result) => {
+          if (!result) {
+            const message = "排班任务已完成，但没有返回可用结果。";
+            finish({ status: "failed", error: message });
+            onFailedRef.current(message);
+            rejectWaiter(message);
+            return;
+          }
+          finish({ status: "done", result, error: null });
+          onDoneRef.current(result);
+          resolveWaiter(result);
+        },
+        finishTerminal: (status, message, notifyFailure) => {
+          finish({ status, error: message });
+          if (notifyFailure) onFailedRef.current(message);
           rejectWaiter(message);
-          return;
-        }
-        finish({ status: "done", result, error: null });
-        onDoneRef.current(result);
-        resolveWaiter(result);
-      },
-      finishTerminal: (status, message, notifyFailure) => {
-        finish({ status, error: message });
-        if (notifyFailure) onFailedRef.current(message);
-        rejectWaiter(message);
-      },
-      continueActive: (decision) => setState((current) => ({
-        ...current,
-        status: decision.status,
-        queuePosition: decision.queuePosition ?? current.queuePosition,
-        etaSeconds: decision.etaSeconds ?? current.etaSeconds,
-        pollStopped: false,
-      })),
-      schedule: schedulePoll,
-      pause: (message) => {
-        clearTimer();
-        setState((current) => ({ ...current, error: message }));
-      },
-      stop: (message) => {
-        setState((current) => ({ ...current, pollStopped: true, error: message }));
-        startResumeCooldown();
-      },
-    });
+        },
+        continueActive: (decision) => setState((current) => ({
+          ...current,
+          status: decision.status,
+          queuePosition: decision.queuePosition ?? current.queuePosition,
+          etaSeconds: decision.etaSeconds ?? current.etaSeconds,
+          pollStopped: false,
+        })),
+        schedule: schedulePoll,
+        pause: (message) => {
+          clearTimer();
+          networkStoppedRef.current = false;
+          setState((current) => ({ ...current, error: message }));
+        },
+        stop: (message, recoverOnNetwork) => {
+          networkStoppedRef.current = recoverOnNetwork;
+          setState((current) => ({ ...current, pollStopped: true, error: message }));
+        },
+      });
+    } finally {
+      inFlightRef.current.delete(taskId);
+    }
   }, [clearTimer, finish, rejectWaiter, resolveWaiter, schedulePoll, startResumeCooldown]);
   useEffect(() => {
     pollOnceRef.current = pollOnce;
@@ -216,6 +236,7 @@ export function usePlanTask({ onDone, onFailed, storageKey }: PlanTaskOptions) {
     clearTimer();
     stopResumeCooldown();
     taskIdRef.current = taskId;
+    networkStoppedRef.current = false;
     writeStoredTaskId(taskStorageKey, taskId);
     setState({
       taskId,
@@ -250,12 +271,30 @@ export function usePlanTask({ onDone, onFailed, storageKey }: PlanTaskOptions) {
 
   const resume = useCallback(() => {
     const taskId = taskIdRef.current;
-    if (!taskId) return;
-    stopResumeCooldown();
+    if (!taskId || inFlightRef.current.has(taskId)
+      || Date.now() < Math.max(retryAfterUntilRef.current, manualQueryUntilRef.current)) return;
+    manualQueryUntilRef.current = Date.now() + MANUAL_QUERY_INTERVAL_MS;
+    startResumeCooldown(manualQueryUntilRef.current);
+    networkStoppedRef.current = false;
     clearTimer();
     setState((current) => ({ ...current, pollStopped: false, error: null }));
     void pollOnce(taskId, 0);
-  }, [clearTimer, pollOnce, stopResumeCooldown]);
+  }, [clearTimer, pollOnce, startResumeCooldown]);
+
+  useEffect(() => {
+    const recover = () => {
+      if (networkStoppedRef.current) resume();
+    };
+    const recoverWhenVisible = () => {
+      if (document.visibilityState === "visible") recover();
+    };
+    window.addEventListener("online", recover);
+    document.addEventListener("visibilitychange", recoverWhenVisible);
+    return () => {
+      window.removeEventListener("online", recover);
+      document.removeEventListener("visibilitychange", recoverWhenVisible);
+    };
+  }, [resume]);
 
   const cancel = useCallback(async (): Promise<boolean> => {
     const taskId = taskIdRef.current;
@@ -298,9 +337,13 @@ export function usePlanTask({ onDone, onFailed, storageKey }: PlanTaskOptions) {
   }, [begin, taskStorageKey]);
 
   // 卸载清理。
-  useEffect(() => () => {
-    clearTimer();
-    if (cooldownRef.current) clearInterval(cooldownRef.current);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      clearTimer();
+      if (cooldownRef.current) clearInterval(cooldownRef.current);
+    };
   }, [clearTimer]);
 
   return {

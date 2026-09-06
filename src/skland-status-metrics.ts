@@ -1,3 +1,4 @@
+import { localize as localize_skland_status_metrics } from "./i18n/helpers/skland_status_metrics.ts";
 import type {
   SklandInfrastructureRoom,
   SklandManufactureRoom,
@@ -31,14 +32,14 @@ export function sklandTradingOrderRewardLabel(
 
 export function formatDashboardDuration(seconds: number, en = false): string {
   const safe = Math.max(0, Math.floor(Number.isFinite(seconds) ? seconds : 0));
-  if (safe <= 0) return en ? "Complete" : "已完成";
-  if (safe < 60) return en ? "Under 1 minute" : "不足1分钟";
+  if (safe <= 0) return localize_skland_status_metrics.text(en, "complete");
+  if (safe < 60) return localize_skland_status_metrics.text(en, "under1Minute");
   const days = Math.floor(safe / 86_400);
   const hours = Math.floor((safe % 86_400) / 3_600);
   const minutes = Math.floor((safe % 3_600) / 60);
-  if (days > 0) return en ? `${days}d ${hours}h` : `${days}天${hours}小时`;
-  if (hours > 0) return en ? `${hours}h ${minutes}m` : `${hours}小时${minutes}分钟`;
-  return en ? `${Math.max(1, minutes)}m` : `${Math.max(1, minutes)}分钟`;
+  if (days > 0) return localize_skland_status_metrics.text(en, "dH", { days: days, hours: hours });
+  if (hours > 0) return localize_skland_status_metrics.text(en, "hM", { hours: hours, minutes: minutes });
+  return localize_skland_status_metrics.text(en, "m", { value1: Math.max(1, minutes) });
 }
 
 function until(timestamp: number | null | undefined, now: number, fallback: string, en = false): string {
@@ -95,37 +96,35 @@ export function deriveSklandBuildingMetrics(snapshot: SklandStatusSnapshot, now:
   return [
     fractionMetric(
       "rest",
-      en ? "Rest progress" : "休息进度",
+      localize_skland_status_metrics.text(en, "restProgress"),
       restedOperators,
       dormOperators.length,
       dormOperators.length
-        ? en ? `${dormOperators.length - restedOperators} operators are still resting` : `${dormOperators.length - restedOperators} 名干员仍在休息`
-        : en ? "No operators are resting" : "当前宿舍无人休息",
+        ? localize_skland_status_metrics.text(en, "operatorsAreStillResting", { value1: dormOperators.length - restedOperators })
+        : localize_skland_status_metrics.text(en, "noOperatorsAreResting"),
       "green",
       "rest"
     ),
-    fractionMetric("trading", en ? "Order progress" : "订单进度", trading.current, trading.total, en ? "Trading Post order stock" : "贸易站订单库存", "blue", "trading"),
+    fractionMetric("trading", localize_skland_status_metrics.text(en, "orderProgress"), trading.current, trading.total, localize_skland_status_metrics.text(en, "tradingPostOrderStock"), "blue", "trading"),
     fractionMetric(
       "manufacture",
-      en ? "Manufacturing progress" : "制造进度",
+      localize_skland_status_metrics.text(en, "manufacturingProgress"),
       manufacture.current,
       manufacture.total,
-      manufacture.total === null ? (en ? "Capacity is unknown for some formulas" : "部分制造配方容量未知") : (en ? "Completed Factory products" : "制造站已完成产物"),
+      manufacture.total === null ? (localize_skland_status_metrics.text(en, "capacityIsUnknownForSomeFormulas")) : (localize_skland_status_metrics.text(en, "completedFactoryProducts")),
       "amber",
       "manufacture"
     ),
     {
       id: "clue",
-      label: en ? "Clue collection" : "线索收集",
-      value: sharingClues ? (en ? "Sharing" : "交流中") : String(clueCount),
+      label: localize_skland_status_metrics.text(en, "clueCollection"),
+      value: sharingClues ? (localize_skland_status_metrics.text(en, "sharing")) : String(clueCount),
       total: sharingClues ? null : "7",
       hint: sharingClues
-        ? en
-          ? `Sharing ends in ${until(meeting?.group === "meeting" ? meeting.clue.shareCompleteTime : null, now, "progress", true)}`
-          : `${until(meeting?.group === "meeting" ? meeting.clue.shareCompleteTime : null, now, "交流进行中")}后结束交流`
+        ? localize_skland_status_metrics.text(en, "sharingEndsIn", { value1: (en) ? (until(meeting?.group === "meeting" ? meeting.clue.shareCompleteTime : null, now, "progress", true)) : "", value2: (en) ? "" : (until(meeting?.group === "meeting" ? meeting.clue.shareCompleteTime : null, now, "交流进行中")) })
         : meeting
-          ? en ? `${clueCount} clues placed` : `当前已布置 ${clueCount} 条线索`
-          : en ? "Reception Room data not provided" : "会客室数据未提供",
+          ? localize_skland_status_metrics.text(en, "cluesPlaced", { clueCount: clueCount })
+          : localize_skland_status_metrics.text(en, "receptionRoomDataNotProvided"),
       tone: "orange",
       visual: "clue",
     },

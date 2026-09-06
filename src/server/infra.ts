@@ -21,6 +21,7 @@ import type {
 import { legacyAdminFeedbackStatus, toAdminReproductionData } from "./admin-record-dto";
 import { isSklandConfigured, sklandDisabledReason } from "@/server/skland/session";
 import { PublicApiError } from "./api-contract";
+import { diagnosticText } from "./diagnostic-text.ts";
 import { feedbackDirectoryGroup, toStoredFeedbackIssue } from "./feedback-record";
 import {
   createPlanComputeParams,
@@ -52,6 +53,7 @@ import {
   type PrivateArtifactDescriptor,
 } from "./business-records";
 import { BUSINESS_DATA_TTL_MS, isBusinessDatabaseReadEnabled, isBusinessFileFallbackEnabled } from "./business-config";
+import { solverTimeoutMs } from "./solver-timeout";
 import {
   InfraCliServeClient,
   type JsonRecord,
@@ -60,6 +62,10 @@ import {
 import { registerProcessCleanup } from "./process-cleanup";
 import { normalizeSolverOperbox } from "./plan-solver-input";
 import { legacyPlanReproductionContext } from "./business-backfill";
+import { verifySolverFallbackConfig, runWithSolverFallback, withinSolverDeadline, withSolverLane, type SolverFallbackConfig } from "./solver-fallback.ts";
+import { assertCompleteSolverOutput } from "./solver-output-contract.ts";
+import { toPublicPlanData } from "./public-plan.ts";
+import { makeDiagnostic, persistDiagnostic } from "./request-diagnostics.ts";
 
 type PlanRequestBody = {
   layout: BaseBlueprint;
@@ -80,7 +86,7 @@ const feedbackRoot = path.resolve(/* turbopackIgnore: true */ process.env.BETA_F
 const cliRunRoot = path.resolve(/* turbopackIgnore: true */ process.env.BETA_CLI_RUN_DIR || path.join(storageRoot, "cli-runs"));
 const cliReleaseRoot = path.resolve(/* turbopackIgnore: true */ process.env.BETA_CLI_RELEASE_DIR || path.join(storageRoot, "cli-releases"));
 const activeCliPath = path.join(storageRoot, "active-cli.json");
-const timeoutMs = Number(process.env.BETA_CLI_TIMEOUT_MS || 180_000);
+const timeoutMs = solverTimeoutMs();
 export const PRIVATE_RECORD_TTL_MS = BUSINESS_DATA_TTL_MS;
 const PRIVATE_MAINTENANCE_INTERVAL_MS = 60 * 60 * 1000;
 const PLAN_CACHE_SOLVER_IDENTITY_TTL_MS = 60_000;
@@ -146,9 +152,6 @@ function cliCandidates() {
   const platformCliName = process.platform === "win32" ? "infra-cli.exe" : "infra-cli";
   const fallbackCliName = process.platform === "win32" ? "infra-cli" : "infra-cli.exe";
   const bundledPlatformCli = path.join(bundledCliRoot, platformCliName);
-  if (process.env.INFRA_CLI_EXPECTED_SHA256 !== undefined) {
-    return [bundledPlatformCli];
-  }
   const candidates = [
     process.env.INFRA_CLI_PATH,
     readActiveCliPath(),
@@ -163,6 +166,15 @@ function cliCandidates() {
   ].filter(Boolean) as string[];
 
   return [...new Set(candidates.map((candidate) => path.resolve(candidate)))];
+}
+
+/**
+ * A solver published independently of the website may be selected by the
+ * durable active-cli pointer.  The website release hash is only a fallback
+ * pin for installations that do not have an active solver release.
+ */
+function expectedSolverSha256ForSelectedCli() {
+  return readActiveCliPath() ? undefined : process.env.INFRA_CLI_EXPECTED_SHA256;
 }
 
 function readActiveCliPath() {
@@ -384,6 +396,23 @@ async function ensurePrivateStorageBoundaries(): Promise<void> {
     || resolvedRoots.some((root) => !isPrivateStorageChild(resolvedStorageRoot, root))
   ) {
     throw new Error("存储目录的真实路径越过了整体存储边界。");
+  }
+}
+
+export async function assertPlanArtifactStorageReady(): Promise<void> {
+  if (!process.env.BETA_STORAGE_DIR?.trim() || !path.isAbsolute(process.env.BETA_STORAGE_DIR)) {
+    throw new Error("Worker requires an absolute BETA_STORAGE_DIR shared with the website.");
+  }
+  await ensurePrivateStorageBoundaries();
+  // Probe the actual run directory inside the service sandbox before claiming tasks.
+  const probe = path.join(cliRunRoot, `.worker-storage-probe-${randomUUID()}`);
+  const handle = await open(probe, "wx", 0o600);
+  try {
+    await handle.writeFile("ready");
+    await handle.sync();
+  } finally {
+    await handle.close();
+    await rm(probe, { force: true });
   }
 }
 
@@ -833,7 +862,7 @@ function countRoomsByKind(layout: BaseBlueprint, kind: string) {
 }
 
 function serveErrorMessage(response: JsonRecord) {
-  const error = response.error;
+  const error = response.error ?? (isObject(response.result) ? response.result.error : undefined);
   if (isObject(error) && typeof error.message === "string") return error.message;
   return "unknown error";
 }
@@ -871,7 +900,7 @@ function formatPlanFailure({
   }
 
   return [
-    !response.ok && `infra-cli serve error: ${message}`,
+    (!response.ok || message !== "unknown error") && `infra-cli serve error: ${message}`,
     stderr?.slice(0, 1200),
   ]
     .filter(Boolean)
@@ -882,6 +911,7 @@ const globalForInfra = globalThis as typeof globalThis & {
   __infraCliHealthServeClient?: InfraCliServeClient;
   __infraCliPlanServeClients?: Map<number, InfraCliServeClient>;
   __infraCliPlanCapabilities?: Map<number, { generation: number; capability: PlanComputeCapability }>;
+  __infraFallbackServeClients?: Map<number, InfraCliServeClient>;
   __infraCliCleanupRegistered?: boolean;
   __infraPrivateMaintenance?: {
     lastCompletedAt: number;
@@ -911,6 +941,16 @@ function getPlanServeClient(lane = 0) {
   return client;
 }
 
+function getFallbackServeClient(lane: number, config: SolverFallbackConfig) {
+  globalForInfra.__infraFallbackServeClients ??= new Map();
+  const existing=globalForInfra.__infraFallbackServeClients.get(lane);
+  if(existing) return existing;
+  const client=new InfraCliServeClient({resolveCliPath:()=>config.cliPath,resolveRuntimeDataDir:()=>config.dataDir,
+    cwd:()=>path.dirname(config.cliPath),childEnv:{RAYON_NUM_THREADS:"1"},timeoutMs});
+  globalForInfra.__infraFallbackServeClients.set(lane,client);
+  return client;
+}
+
 export async function warmPlanServeLane(serveLane: number): Promise<void> {
   if (!Number.isSafeInteger(serveLane) || serveLane < 0) {
     throw new Error("Plan solver lane must be a non-negative integer.");
@@ -931,16 +971,23 @@ export async function warmPlanServeLane(serveLane: number): Promise<void> {
   }
   const readiness = inspectSolverDeploymentReadiness(
     capability,
-    process.env.INFRA_CLI_EXPECTED_SHA256,
+    expectedSolverSha256ForSelectedCli(),
   );
   if (!readiness.ready) {
     throw new Error(`Plan solver lane ${serveLane} is not ready: ${readiness.reason ?? "unknown reason"}`);
+  }
+  const fallback=verifySolverFallbackConfig();
+  if(fallback) {
+    const fallbackPing=await getFallbackServeClient(serveLane,fallback).ping();
+    const fallbackReady=inspectSolverDeploymentReadiness(inspectPlanComputeCapability(fallbackPing.response),fallback.sha256);
+    if(!fallbackReady.ready) throw new Error(`Fallback solver lane ${serveLane} is not ready: ${fallbackReady.reason}`);
   }
 }
 
 export function stopInfraServeClients(reason: string) {
   globalForInfra.__infraCliHealthServeClient?.stop(reason);
   for (const client of globalForInfra.__infraCliPlanServeClients?.values() ?? []) client.stop(reason);
+  for (const client of globalForInfra.__infraFallbackServeClients?.values() ?? []) client.stop(reason);
   globalForInfra.__infraCliPlanCapabilities?.clear();
 }
 
@@ -993,7 +1040,7 @@ export async function getHealth(): Promise<HealthApiResponse> {
         const fingerprint = inspectSolverPingFingerprint(pingResult.response);
         const deploymentReadiness = inspectSolverDeploymentReadiness(
           planCompute,
-          process.env.INFRA_CLI_EXPECTED_SHA256
+          expectedSolverSha256ForSelectedCli()
         );
         serve = {
           ...healthServeClient.info(),
@@ -1076,7 +1123,7 @@ export async function getPlanCacheSolverIdentity(): Promise<SolverObservation | 
         ? await getPlanServeCapability(0, planClient)
         : inspectPlanComputeCapability((await serveClient.ping()).response);
       if (capability.supported && capability.solverExecutableSha256) {
-        const readiness = inspectSolverDeploymentReadiness(capability, process.env.INFRA_CLI_EXPECTED_SHA256);
+        const readiness = inspectSolverDeploymentReadiness(capability, expectedSolverSha256ForSelectedCli());
         if (readiness.ready) value = createSolverObservation(capability, new Date().toISOString());
       }
     } catch {
@@ -1102,7 +1149,7 @@ export function getCachedPlanCacheSolverIdentity(): SolverObservation | null {
     void getPlanCacheSolverIdentity().catch(() => undefined);
   }
   if (current) return current;
-  const expectedSha256 = process.env.INFRA_CLI_EXPECTED_SHA256?.trim();
+  const expectedSha256 = expectedSolverSha256ForSelectedCli()?.trim();
   if (!expectedSha256 || !/^[a-f0-9]{64}$/.test(expectedSha256)) return null;
   return {
     protocol_version: PLAN_PROTOCOL_VERSION,
@@ -1206,6 +1253,7 @@ export async function saveFeedback(
 export async function savePlanFailureArtifact(input: PlanRequestBody & {
   diagnosticId: string;
   errorCode: string;
+  diagnosticReason?: string | null;
 }): Promise<PrivateArtifactDescriptor | null> {
   assertPlanBody(input);
   if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(input.diagnosticId)) {
@@ -1251,7 +1299,7 @@ export async function savePlanFailureArtifact(input: PlanRequestBody & {
         success: false,
         startedAt,
         durationMs: 0,
-        error: input.errorCode,
+        error: diagnosticText(input.diagnosticReason) ?? input.errorCode,
         runId: input.diagnosticId,
       } satisfies PlanApiResponse),
     ]);
@@ -1302,7 +1350,7 @@ export async function savePlanFailureArtifact(input: PlanRequestBody & {
         success: false,
         startedAt,
         durationMs: 0,
-        error: input.errorCode,
+        error: diagnosticText(input.diagnosticReason) ?? input.errorCode,
         runId: input.diagnosticId,
       } satisfies PlanApiResponse),
       ...(input.dataOwnerTag ? [
@@ -1643,6 +1691,8 @@ export async function runPlan(
   let solverStartedAt: string | undefined;
   let solverFinishedAt: string | undefined;
   let solver: SolverObservation | undefined;
+  let fallbackUsed = false;
+  const solverAttempts: NonNullable<PlanApiResponse["solverAttempts"]> = [];
   const startedAt = new Date().toISOString();
   const start = performance.now();
 
@@ -1713,11 +1763,12 @@ export async function runPlan(
       fiammettaEnabled: body.fiammettaEnable ?? true,
     });
 
-    const cliPath = resolveCliPath();
+    const fallbackConfig=verifySolverFallbackConfig();
+    let cliPath = fallbackConfig ? "" : resolveCliPath();
     const serveLane = options.serveLane ?? 0;
     const serveClient = getPlanServeClient(serveLane);
-    const planCompute = await getPlanServeCapability(serveLane, serveClient);
-    solver = createSolverObservation(planCompute, new Date().toISOString());
+    const planCompute = fallbackConfig ? null : await getPlanServeCapability(serveLane, serveClient);
+    if(planCompute) solver = createSolverObservation(planCompute, new Date().toISOString());
     let serveResult: ServeResult;
     let profileJson: unknown;
     let maaJson: unknown;
@@ -1730,8 +1781,102 @@ export async function runPlan(
     let shiftsPath: string | undefined;
     let responseValidationError: string | undefined;
     let solverDurationMs: number | undefined;
+    let combinedReportedDuration: number | undefined;
 
-    if (planCompute.supported) {
+    if (fallbackConfig) {
+      const params=createPlanComputeParams({layout:body.layout,operbox:body.operbox,sourceName:body.sourceName,
+        rotation:body.rotation,fiammettaEnable:body.fiammettaEnable});
+      const captures: Array<Record<string,unknown>>=[];
+      const preserveAttempt=async(name:string,capture:Record<string,unknown>)=>{
+        try {await writeJsonAtomic(path.join(runDir,name),capture,true);}
+        catch(error) {
+          console.error(JSON.stringify({...makeDiagnostic({code:"AIC-PLAN-3004",status:500,route:"solver/attempt-artifact",requestId:runId,
+            durationMs:0,error}),event:"solver_attempt_artifact_write_failed"}));
+        }
+      };
+      const reportedDurations: Array<number | undefined>=[];
+      const attempt=async(engine:"primary"|"fallback",budgetMs:number)=>{
+        const client=engine==="primary" ? serveClient : getFallbackServeClient(serveLane,fallbackConfig);
+        const attemptStarted=performance.now();
+        const attemptStartedAt=new Date().toISOString();
+        solverStartedAt ??= attemptStartedAt;
+        let observation:SolverObservation|undefined;
+        let wire:ServeResult|undefined;
+        let errorMessage:string|undefined;
+        let failed=false;
+        try {
+          return await withinSolverDeadline(async()=>{
+            cliPath=engine==="primary" ? resolveCliPath() : fallbackConfig.cliPath;
+            const capability=engine==="primary" ? await getPlanServeCapability(serveLane,client)
+              : inspectPlanComputeCapability((await client.ping()).response);
+            const ready=inspectSolverDeploymentReadiness(capability,engine==="primary" ? expectedSolverSha256ForSelectedCli() : fallbackConfig.sha256);
+            if(!ready.ready) throw new Error(`Solver protocol or identity rejected: ${ready.reason}`);
+            observation=createSolverObservation(capability,new Date().toISOString());
+            solver=observation;
+            wire=await client.send("plan.compute",params,{timeoutMs:budgetMs});
+            if(wire.response.error || (isObject(wire.response.result) && wire.response.result.error)) {
+              throw new Error(formatPlanFailure({layout:body.layout,response:wire.response,stderr:wire.stderr}));
+            }
+            const payload=parsePlanComputePayload(wire.response);
+            if(!payload) throw new Error(formatPlanFailure({layout:body.layout,response:wire.response,stderr:wire.stderr}));
+            assertCompleteSolverOutput(payload,body.rotation);
+            // Exercise the same public contract before choosing either engine's output.
+            toPublicPlanData({success:true,profileJson:payload.profile as unknown as PlanApiResponse["profileJson"],
+              maaJson:payload.maa as unknown as PlanApiResponse["maaJson"],rotationJson:payload.rotation as unknown as PlanApiResponse["rotationJson"],
+              trainingRoomJson:payload.trainingRoom,trainingAdviceJson:payload.trainingAdvice},
+            {layoutLabel:body.layout.template,sourceName:body.sourceName ?? "已导入的干员数据"},runId);
+            return {wire,payload};
+          },budgetMs,()=>client.stop("Solver attempt deadline exceeded."));
+        } catch(error) {
+          failed=true;
+          errorMessage=(error instanceof Error ? (error.cause instanceof Error ? error.cause.message : error.message) : String(error)) || "Solver attempt failed.";
+          throw error;
+        } finally {
+          solverFinishedAt=new Date().toISOString();
+          const reported=wire?.response.elapsed_ms;
+          reportedDurations.push(typeof reported==="number" && Number.isFinite(reported) && reported>=0 ? Math.round(reported) : undefined);
+          const entry={engine,status:failed ? "failed" as const : "success" as const,durationMs:Math.round(performance.now()-attemptStarted),solver:observation,error:errorMessage};
+          solverAttempts.push(entry);
+          captures.push({...entry,startedAt:attemptStartedAt,finishedAt:solverFinishedAt,cliPath,
+            request:wire?.request ?? {method:"plan.compute",params},response:wire?.response ?? null,stdout:wire?.stdout ?? "",stderr:wire?.stderr ?? ""});
+        }
+      };
+      try {
+        const execution=await withSolverLane(serveLane,()=>runWithSolverFallback({budgetMs:timeoutMs,
+          primary:budget=>attempt("primary",budget),fallback:async budget=>{
+            fallbackUsed=true;
+            try {return await attempt("fallback",budget);}
+            finally {if(solverAttempts.at(-1)?.status==="failed") await getFallbackServeClient(serveLane,fallbackConfig).stopAndWait("Fallback failed; drain lane.");}
+          },
+          onPrimaryFailure:async error=>{
+            // Preserve the first response before starting the second solver, including deferred runs.
+            await preserveAttempt("primary-attempt.json",captures[0]);
+            console.error(JSON.stringify({...makeDiagnostic({code:"AIC-PLAN-3004",status:502,route:"solver/plan/primary",requestId:runId,
+              durationMs:solverAttempts[0]?.durationMs ?? 0,error,reason:solverAttempts[0]?.error}),event:"solver_primary_failed"}));
+            await serveClient.stopAndWait("Primary failed; isolate fallback process.");
+          }}));
+        serveResult=execution.value.wire;
+        const payload=execution.value.payload;
+        profileJson=payload.profile;maaJson=payload.maa;trainingRoomJson=payload.trainingRoom;trainingAdviceJson=payload.trainingAdvice;
+        rotationSource=payload.rotation;serveShifts=payload.rotation.shifts;
+        if(reportedDurations.every(value=>value!==undefined)) combinedReportedDuration=reportedDurations.reduce<number>((sum,value)=>sum+(value ?? 0),0);
+        if(!deferArtifacts && profileJson) await writeJson(profilePath,profileJson);
+        if(!deferArtifacts && maaJson) await writeJson(maaPath,maaJson);
+      } finally {
+        if(solverAttempts[0]?.status==="failed") {
+          if(captures[1]) await preserveAttempt("fallback-attempt.json",captures[1]);
+          const fallbackAttempt=solverAttempts[1];
+          const diagnostic=makeDiagnostic({code:"AIC-PLAN-3004",status:502,route:"solver/plan/primary",requestId:runId,diagnosticId:runId,
+            durationMs:solverAttempts.reduce((sum,row)=>sum+row.durationMs,0),reason:solverAttempts[0].error,
+            fields:[{path:"primary.solver",code:solverAttempts[0].solver?.solver_executable_sha256 ?? "unknown",message:"primary"},
+              {path:"fallback.solver",code:fallbackConfig.sha256,message:"v2"},
+              {path:"fallback.outcome",code:fallbackAttempt?.status==="success" ? "recovered" : fallbackAttempt ? "failed" : "skipped",
+                message:fallbackAttempt?.error ?? (fallbackAttempt?.status==="success" ? "Recovered with v2; final task is successful." : "No fallback result.")} ]});
+          persistDiagnostic(diagnostic);
+          console.info(JSON.stringify({...diagnostic,event:"solver_fallback_completed"}));
+        }
+      }
+    } else if (planCompute?.supported) {
       solverStartedAt = new Date().toISOString();
       try {
         serveResult = await serveClient.send("plan.compute", createPlanComputeParams({
@@ -1791,7 +1936,7 @@ export async function runPlan(
       shiftsPath = path.relative(repoRoot, shiftsDir);
     }
 
-    const reportedSolverDuration = serveResult.response.elapsed_ms;
+    const reportedSolverDuration = fallbackConfig ? combinedReportedDuration : serveResult.response.elapsed_ms;
     if (typeof reportedSolverDuration === "number" && Number.isFinite(reportedSolverDuration) && reportedSolverDuration >= 0) {
       solverDurationMs = Math.round(reportedSolverDuration);
     }
@@ -1866,6 +2011,7 @@ export async function runPlan(
 
     const resultPayload: PlanApiResponse = {
       success,
+      ...(fallbackConfig ? {fallbackUsed,solverAttempts} : {}),
       startedAt,
       durationMs,
       solverDurationMs,
@@ -1917,6 +2063,8 @@ export async function runPlan(
     if (error instanceof PublicApiError) throw error;
     const errorPayload: PlanApiResponse = {
       success: false,
+      fallbackUsed,
+      solverAttempts,
       startedAt,
       durationMs: Math.max(0, Math.round(performance.now() - start)),
       solverStartedAt,

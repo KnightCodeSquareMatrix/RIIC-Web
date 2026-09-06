@@ -3,7 +3,8 @@ import test from "node:test";
 
 import * as XLSX from "xlsx";
 
-import { readOperboxFile, readOperboxText } from "./operbox.ts";
+import { assertOperbox, readOperboxFile, readOperboxText } from "./operbox.ts";
+import { computePlan, putCloudWorkspace, submitPlanTask } from "./api.ts";
 
 const entry = {
   id: "char_test",
@@ -29,7 +30,7 @@ test("JSON imports do not load the XLSX parser", async () => {
 
 test("localized MAA JSON names are converted to Simplified Chinese during import", async () => {
   const localizedEntries = [
-    { ...entry, id: "char_002_amiya", name: "アーミヤ" },
+    { ...entry, id: "char_002_amiya", name: "アーミヤ", rarity: 5, level: 80 },
     { ...entry, id: "char_003_kalts", name: "凱爾希" },
     { ...entry, id: "char_010_chen", name: "Ch'en" },
     { ...entry, id: "char_017_huang", name: "煌" },
@@ -59,4 +60,40 @@ test("Excel imports still parse compatible operator rows", async () => {
 test("invalid Excel imports remain recoverable errors", async () => {
   const file = new File([new Uint8Array([1, 2, 3, 4])], "broken.xlsx");
   await assert.rejects(() => readOperboxFile(file, async () => XLSX), Error);
+});
+
+test("owned operator progression respects every rarity and elite-stage boundary", () => {
+  const limits = [[30], [30], [40, 55], [45, 60, 70], [50, 70, 80], [50, 80, 90]];
+  limits.forEach((levels, index) => {
+    const rarity = index + 1;
+    levels.forEach((level, elite) => {
+      assert.doesNotThrow(() => assertOperbox([{ ...entry, rarity, elite, level }]));
+      assert.throws(() => assertOperbox([{ ...entry, rarity, elite, level: level + 1 }]), /level/);
+    });
+    assert.throws(() => assertOperbox([{ ...entry, rarity, elite: levels.length, level: 1 }]), /elite/);
+  });
+});
+
+test("canonical operator IDs cannot spoof rarity to bypass progression limits", () => {
+  for (const id of ["char_002_amiya", "002_amiya"]) {
+    assert.throws(() => assertOperbox([{ ...entry, id }]), /rarity/);
+    assert.doesNotThrow(() => assertOperbox([{ ...entry, id, rarity: 5, level: 80 }]));
+  }
+  assert.throws(() => assertOperbox([{ ...entry, id: "char_285_medic2", rarity: 6 }]), /rarity/);
+});
+
+test("unowned import placeholders do not require owned progression", () => {
+  assert.doesNotThrow(() => assertOperbox([{ ...entry, own: false, rarity: 1, elite: -1, level: 0, potential: 0 }]));
+});
+
+test("invalid progression is rejected before plan, task, or cloud HTTP requests", async (context) => {
+  const fetch = context.mock.method(globalThis, "fetch", async () => { throw new Error("unexpected HTTP request"); });
+  const payload = {
+    layout: { template: "243", drone_cap: 200, scenario: {}, rooms: [] },
+    operbox: [{ ...entry, rarity: 1 }], sourceName: "fixture", boxSource: "maa" as const, rotation: "abc_12_6_6" as const,
+  };
+  await assert.rejects(computePlan(payload), { code: "AIC-BOX-1101", retryable: false });
+  await assert.rejects(submitPlanTask(payload), { code: "AIC-BOX-1101", retryable: false });
+  await assert.rejects(putCloudWorkspace({ state: { boxSource: "maa" } as never, operbox: payload.operbox, result: null }), { code: "AIC-DATA-8003", retryable: false });
+  assert.equal(fetch.mock.callCount(), 0);
 });

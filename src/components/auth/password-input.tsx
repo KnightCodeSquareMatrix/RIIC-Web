@@ -1,11 +1,11 @@
 "use client";
+import { useTranslations } from "next-intl";
 
 import { Eye, EyeOff } from "lucide-react";
 import { useState, type ComponentProps } from "react";
 
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { useLanguageDemo } from "@/language-demo";
 
 type PasswordInputProps = Omit<ComponentProps<typeof Input>, "type"> & {
   hideLabel?: string;
@@ -14,9 +14,10 @@ type PasswordInputProps = Omit<ComponentProps<typeof Input>, "type"> & {
 };
 
 export function PasswordInput({ className, disabled, hideLabel, id, revealLabel, toggleClassName, ...props }: PasswordInputProps) {
-  const { locale } = useLanguageDemo();
+  const intl = useTranslations();
+
   const [revealed, setRevealed] = useState(false);
-  const resolvedRevealLabel = revealLabel ?? (locale === "en" ? "Show password" : "显示密码");
+  const resolvedRevealLabel = revealLabel ?? (intl("components_auth_password_input.showPassword"));
   const toggleLabel = revealed
     ? hideLabel ?? (resolvedRevealLabel.startsWith("Show ") ? resolvedRevealLabel.replace(/^Show /, "Hide ") : resolvedRevealLabel.replace(/^显示/, "隐藏"))
     : resolvedRevealLabel;

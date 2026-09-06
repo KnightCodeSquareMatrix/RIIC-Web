@@ -1,4 +1,6 @@
 "use client";
+import { localize as localize_App } from "./i18n/helpers/App.ts";
+import { useTranslations, useLocale } from "next-intl";
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -30,7 +32,7 @@ import { WorkbenchContext } from "@/workbench-context";
 import { WORKBENCH_PAGE_PATHS, workbenchHref, workbenchPageFromPathname, type AppPage } from "@/workbench-routes";
 import { useWebsiteSession } from "@/website-session";
 import { usePlanTask } from "@/hooks/use-plan-task";
-import { LanguageDemoSwitch, useLanguageDemo } from "@/language-demo";
+import { LanguageSwitch } from "@/i18n/client";
 
 import {
   computePlan,
@@ -68,9 +70,10 @@ import { normalizeOperboxEntries } from "./operbox-normalization";
 import { upgradeSimulationBoxSource } from "./upgrade-simulation";
 import {
   DEFAULT_MANUAL_SHIFT_DURATIONS,
+  DEFAULT_MANUAL_SHIFT_START_TIME,
   MANUAL_SCHEDULE_STORAGE_KEY,
 } from "./manual-schedule-config";
-import type { ManualScheduleDraft } from "./manual-schedule";
+import type { ManualScheduleDraft, ManualScheduleMode } from "./manual-schedule";
 import { effectiveFiammettaSetting, resolvePlanPresentationLayout } from "./plan-presentation";
 import {
   applyLocalLayoutPatch,
@@ -182,14 +185,14 @@ function parseLayoutJson(value: unknown): BaseBlueprint | null {
 }
 
 function layoutValidationError(layout: BaseBlueprint, en = false): string | null {
-  if (!layout.rooms.some((room) => room.kind === "control_center")) return en ? "The layout must include a Control Center." : "布局必须包含控制中枢。";
+  if (!layout.rooms.some((room) => room.kind === "control_center")) return localize_App.text(en, "theLayoutMustIncludeAControlCenter");
   const invalid = layout.rooms.find((room) => {
     const maxLevel = room.kind === "control_center" || room.kind === "dormitory" ? 5 : 3;
     return !Number.isInteger(room.level) || room.level < 1 || room.level > maxLevel;
   });
   if (!invalid) return null;
   const maxLevel = invalid.kind === "control_center" || invalid.kind === "dormitory" ? 5 : 3;
-  return en ? `${invalid.id}'s facility level must be between 1 and ${maxLevel}.` : `${invalid.id} 的设施等级必须在 1–${maxLevel} 之间。`;
+  return localize_App.text(en, "sFacilityLevelMustBeBetween1And", { id: invalid.id, maxLevel: maxLevel });
 }
 
 function restoreEditableProducts(baseLayout: BaseBlueprint, cachedLayout: BaseBlueprint | undefined): BaseBlueprint {
@@ -233,7 +236,8 @@ function mergeSklandLayout(current: BaseBlueprint, suggestion: BaseBlueprint): B
 }
 
 function WorkbenchAppContent({ children }: { children: ReactNode }) {
-  const { locale } = useLanguageDemo();
+  const intl = useTranslations();
+  const locale = useLocale();
   const pathname = usePathname();
   const router = useRouter();
   const page = workbenchPageFromPathname(pathname);
@@ -252,6 +256,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   const [websiteAuthDialogOpen, setWebsiteAuthDialogOpen] = useState(false);
   const [websiteAuthDialogMounted, setWebsiteAuthDialogMounted] = useState(false);
   const [hasRestoredSession, setHasRestoredSession] = useState(false);
+  const restoredLocalSession = useRef(false);
   const [onboardingPreference, setOnboardingPreference] = useState<OnboardingPreference>("active");
   const [preset, setPreset] = useState<PresetDef>(defaultPreset);
   const [layout, setLayout] = useState<BaseBlueprint>(defaultLayout);
@@ -290,6 +295,8 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   const [fiammettaEnabled, setFiammettaEnabled] = useState(false);
   const [manualFiammettaEnabled, setManualFiammettaEnabled] = useState(false);
   const [manualShiftDurations, setManualShiftDurations] = useState<number[]>([...DEFAULT_MANUAL_SHIFT_DURATIONS]);
+  const [manualShiftStartTime, setManualShiftStartTime] = useState(DEFAULT_MANUAL_SHIFT_START_TIME);
+  const [manualScheduleMode, setManualScheduleMode] = useState<ManualScheduleMode>("sequential");
   const [manualDraftHandoff, setManualDraftHandoff] = useState<ManualScheduleDraft | null>(null);
   const [pendingManualDraftReplacement, setPendingManualDraftReplacement] = useState<ManualScheduleDraft | null>(null);
   const [inputMode, setInputMode] = useState<"skland" | "maa" | "manual">(CLIENT_SKLAND_ENABLED ? "skland" : "maa");
@@ -611,7 +618,8 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   }, [loading, planTask]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || restoredLocalSession.current) return;
+    restoredLocalSession.current = true;
     try {
       const restored = loadPersistedSession(window.localStorage);
       hadPersistedSession.current = Boolean(restored);
@@ -629,7 +637,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
         setLayout(restoredLayout);
         const restoreAsLocalImport = !CLIENT_SKLAND_ENABLED && restored.boxSource === "skland";
         const restoredBoxSource = restoreAsLocalImport ? "maa" : restored.boxSource;
-        const restoredSourceName = restoreAsLocalImport ? (locale === "en" ? "Saved operator data" : "已保存的干员数据") : restored.sourceName;
+        const restoredSourceName = restoreAsLocalImport ? (intl("App.savedOperatorData")) : restored.sourceName;
         const restoredLayoutSource = CLIENT_SKLAND_ENABLED ? restored.layoutSource : "local";
         setOperbox(restoredOperbox);
         setFileName(restoredSourceName);
@@ -648,11 +656,11 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
         initialLocalLayoutBackup.current = CLIENT_SKLAND_ENABLED ? restored.localLayoutBackup : null;
       }
     } catch {
-      setStorageNotice(displayError("AIC-LOCAL-7001", locale === "en" ? "The browser could not read local data, but schedules can still be generated." : "浏览器无法读取本地数据，但仍可继续生成排班。"));
+      setStorageNotice(displayError("AIC-LOCAL-7001", intl("App.theBrowserCouldNotReadLocalDataButSchedules")));
     } finally {
       setHasRestoredSession(true);
     }
-  }, [locale, setBoxSource, setLayoutDirty, setOperbox]);
+  }, [intl, locale, setBoxSource, setLayoutDirty, setOperbox]);
 
   useEffect(() => {
     if (!hasRestoredSession || typeof window === "undefined") return;
@@ -677,9 +685,9 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       });
       setStorageNotice(null);
     } catch {
-      setStorageNotice(displayError("AIC-LOCAL-7001", locale === "en" ? "The browser could not save local data, but schedules can still be generated." : "浏览器无法保存本地数据，但仍可继续生成排班。"));
+      setStorageNotice(displayError("AIC-LOCAL-7001", intl("App.theBrowserCouldNotSaveLocalDataButSchedules")));
     }
-  }, [hasRestoredSession, preset, layout, operbox, fileName, boxSource, layoutDirty, layoutSource, localLayoutBackup, rotationProfile, fiammettaEnabled, result, activeShift, locale]);
+  }, [intl, hasRestoredSession, preset, layout, operbox, fileName, boxSource, layoutDirty, layoutSource, localLayoutBackup, rotationProfile, fiammettaEnabled, result, activeShift, locale]);
 
   useEffect(() => {
     let cancelled = false;
@@ -695,18 +703,18 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
           setApiError(null);
         } else {
           setCliReady(false);
-          setApiError(displayError("AIC-PLAN-3001", locale === "en" ? "The scheduling service is temporarily unavailable. Try again later." : "排班服务暂不可用，请稍后重试。", true));
+          setApiError(displayError("AIC-PLAN-3001", intl("App.theSchedulingServiceIsTemporarilyUnavailableTryAgainLater"), true));
         }
       })
       .catch((error) => {
         if (cancelled) return;
         setCliReady(false);
-        setApiError(toDisplayError(error, locale === "en" ? "The scheduling service is temporarily unavailable. Try again later." : "排班服务暂不可用，请稍后重试。"));
+        setApiError(toDisplayError(error, intl("App.theSchedulingServiceIsTemporarilyUnavailableTryAgainLater")));
       });
     return () => {
       cancelled = true;
     };
-  }, [hasRestoredSession, locale]);
+  }, [intl, hasRestoredSession, locale]);
 
   useEffect(() => {
     if (
@@ -836,7 +844,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       })
       .catch((error) => {
         if (cancelled || !sklandRestoreGuard.current.isCurrent(generation)) return;
-        setSklandError(toDisplayError(error, locale === "en" ? "Could not restore the Skland session. Refresh and try again." : "森空岛会话恢复失败，请稍后刷新。"));
+        setSklandError(toDisplayError(error, intl("App.couldNotRestoreTheSklandSessionRefreshAndTry")));
       })
       .finally(() => {
         if (sklandFullRestore.current === restore) sklandFullRestorePending.current = false;
@@ -845,7 +853,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [hasRestoredSession, locale, page, setBoxSource, setOperbox, setupOpen, websiteAuthReloadKey, websiteSessionPending, websiteUserId]);
+  }, [intl, hasRestoredSession, locale, page, setBoxSource, setOperbox, setupOpen, websiteAuthReloadKey, websiteSessionPending, websiteUserId]);
 
   useEffect(() => {
     if (
@@ -870,7 +878,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
         setSklandError(null);
       })
       .catch((error) => {
-        if (!cancelled) setSklandError(toDisplayError(error, locale === "en" ? "Could not load the Status Center. Try again later." : "状态中心加载失败，请稍后重试。"));
+        if (!cancelled) setSklandError(toDisplayError(error, intl("App.couldNotLoadTheStatusCenterTryAgainLater")));
       })
       .finally(() => {
         statusLoadingAccount.current = null;
@@ -879,7 +887,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [activeSklandAccount, locale, page, sklandError, sklandSessionLoading, sklandStatusReloadKey, sklandStatusSnapshot]);
+  }, [intl, activeSklandAccount, locale, page, sklandError, sklandSessionLoading, sklandStatusReloadKey, sklandStatusSnapshot]);
 
   async function handleFile(file: File): Promise<boolean> {
     setInputError(null);
@@ -893,9 +901,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       setBoxSource("maa");
       return true;
     } catch (error) {
-      setInputError(locale === "en"
-        ? "Could not parse the operator file. Check the file and try again."
-        : error instanceof Error ? error.message : "练度文件解析失败。");
+      setInputError(localize_App.text(locale, "additional1", { choice1: (!(locale === "en")) && (error instanceof Error) ? "yes" : "no", value2: (!(locale === "en") && (error instanceof Error)) ? String(error.message) : "" }));
       setInputErrorCode("AIC-BOX-1101");
       return false;
     }
@@ -941,14 +947,12 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       const { readOperboxText } = await import("./operbox");
       const entries = await readOperboxText(maaPaste);
       setOperbox(entries);
-      setFileName(locale === "en" ? "Pasted Arknights_OperBox_Export.json" : "粘贴的 Arknights_OperBox_Export.json");
+      setFileName(intl("App.pastedArknightsOperboxExportJson"));
       setBoxSource("maa");
       clearPlanResult();
       return true;
     } catch (error) {
-      setInputError(locale === "en"
-        ? "Could not parse the MAA JSON. Paste the complete export and try again."
-        : error instanceof Error ? error.message : "MAA JSON 解析失败。");
+      setInputError(localize_App.text(locale, "additional2", { choice1: (!(locale === "en")) && (error instanceof Error) ? "yes" : "no", value2: (!(locale === "en") && (error instanceof Error)) ? String(error.message) : "" }));
       setInputErrorCode("AIC-BOX-1101");
       return false;
     }
@@ -957,7 +961,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   function handleManualBox(entries: OperBoxEntry[]) {
     setInputError(null);
     setOperbox(normalizeOperboxEntries(entries));
-    setFileName(locale === "en" ? "Manually selected BOX" : "手动选择的 Box");
+    setFileName(intl("App.manuallySelectedBox"));
     setBoxSource("maa");
     clearPlanResult();
   }
@@ -969,12 +973,12 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     try {
       const session = await selectSklandRole(accountId, uid);
       if (!sklandRestoreGuard.current.isCurrent(generation)) return;
-      if (!session.authenticated || !session.scheduleSnapshot) throw new Error(locale === "en" ? "Could not switch character." : "角色切换失败。");
+      if (!session.authenticated || !session.scheduleSnapshot) throw new Error(intl("App.couldNotSwitchCharacter"));
       sklandRestoreGuard.current.acceptFull(generation);
       applySklandSession(session, false);
     } catch (error) {
       if (!sklandRestoreGuard.current.isCurrent(generation)) return;
-      const normalized = toDisplayError(error, locale === "en" ? "Could not switch character. Try again later." : "角色切换失败，请稍后重试。");
+      const normalized = toDisplayError(error, intl("App.couldNotSwitchCharacterTryAgainLater"));
       setSklandError(normalized);
       try {
         const current = await getSklandAccounts();
@@ -1002,7 +1006,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       applySklandSession(session, false);
     } catch (error) {
       if (!sklandRestoreGuard.current.isCurrent(generation)) return;
-      const normalized = toDisplayError(error, locale === "en" ? "Could not sign out of Skland. Try again later." : "退出森空岛失败，请稍后重试。");
+      const normalized = toDisplayError(error, intl("App.couldNotSignOutOfSklandTryAgainLater"));
       setSklandError(normalized);
     } finally {
       if (sklandRestoreGuard.current.isCurrent(generation)) setSklandBusy(false);
@@ -1040,7 +1044,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       return false;
     }
     if (!cliReady && !retryUnavailable) {
-      setApiError(displayError("AIC-PLAN-3001", locale === "en" ? "The scheduling service is temporarily unavailable. Try again later." : "排班服务暂不可用，请稍后重试。", true));
+      setApiError(displayError("AIC-PLAN-3001", intl("App.theSchedulingServiceIsTemporarilyUnavailableTryAgainLater"), true));
       return false;
     }
     void import("@/product-assets").then(({ preloadProductIcons }) => preloadProductIcons());
@@ -1069,7 +1073,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       else planTask.begin(submitted);
       return true;
     } catch (error) {
-      const normalized = toDisplayError(error, locale === "en" ? "The schedule request failed. Try again later." : "排班请求失败，请稍后重试。");
+      const normalized = toDisplayError(error, intl("App.theScheduleRequestFailedTryAgainLater"));
       setApiError(normalized);
       if (normalized.retryAfterSeconds) startPlanRetryCooldown(normalized.retryAfterSeconds);
       setLoading(false);
@@ -1088,8 +1092,8 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   }
 
   async function handleSimulateUpgrades(trialOperbox: OperBoxEntry[]): Promise<PublicPlanData> {
-    if (!operbox) throw new Error(locale === "en" ? "Import operator data first." : "请先导入干员数据。");
-    if (!trialOperbox.some((entry) => entry.own)) throw new Error(locale === "en" ? "Select at least one operator for the simulation." : "请至少选择一名干员进行试算。");
+    if (!operbox) throw new Error(intl("App.importOperatorDataFirst"));
+    if (!trialOperbox.some((entry) => entry.own)) throw new Error(intl("App.selectAtLeastOneOperatorForTheSimulation"));
     const normalizedTrialOperbox = normalizeOperboxEntries(trialOperbox);
     setProgressionAdjustmentActivity({ active: true, loading: true, completed: false, error: null });
     trackTelemetry({ type: "interaction", name: "upgrade_simulation_submit", page: "calculator" });
@@ -1097,7 +1101,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       const payload = {
         layout,
         operbox: normalizedTrialOperbox,
-        sourceName: locale === "en" ? "Progression adjustment Box.json" : "调整练度 Box.json",
+        sourceName: intl("App.progressionAdjustmentBoxJson"),
         // 示例数据的替代 BOX 不能沿用 sample；森空岛来源则保留其数据归属标签。
         boxSource: upgradeSimulationBoxSource(boxSource),
         rotation: rotationProfile,
@@ -1108,13 +1112,13 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
         : await computePlan(payload);
       // 求解成功后再同步，避免失败的试算覆盖用户当前 BOX。
       setOperbox(normalizedTrialOperbox);
-      setFileName(locale === "en" ? "Progression-adjusted Box" : "调整练度后的 Box");
+      setFileName(intl("App.progressionAdjustedBox"));
       setInputMode("manual");
       setProgressionAdjustmentActivity({ active: true, loading: false, completed: true, error: null });
       trackTelemetry({ type: "interaction", name: "upgrade_simulation_response", page: "calculator" });
       return response;
     } catch (error) {
-      const normalized = toDisplayError(error, locale === "en" ? "Progression adjustment failed. Please try again later." : "调整练度试算失败，请稍后重试。");
+      const normalized = toDisplayError(error, intl("App.progressionAdjustmentFailedPleaseTryAgainLater"));
       setProgressionAdjustmentActivity({
         active: true,
         loading: false,
@@ -1145,8 +1149,8 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
         boxSource: "sample",
       });
     } catch (error) {
-      setInputError(locale === "en" ? "Could not read sample data." : error instanceof Error ? error.message : "样例数据读取失败。");
-      const normalized = toDisplayError(error, locale === "en" ? "Could not read sample data. Try again later." : "示例数据读取失败，请稍后重试。");
+      setInputError(localize_App.text(locale, "additional3", { choice1: (!(locale === "en")) && (error instanceof Error) ? "yes" : "no", value2: (!(locale === "en") && (error instanceof Error)) ? String(error.message) : "" }));
+      const normalized = toDisplayError(error, intl("App.couldNotReadSampleDataTryAgainLater"));
       setInputErrorCode(normalized.code);
       setApiError(normalized);
       return false;
@@ -1165,6 +1169,8 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   function openManualScheduleDraft(draft: ManualScheduleDraft) {
     setPendingManualDraftReplacement(null);
     setManualShiftDurations(draft.shifts.map((shift) => shift.durationHours));
+    setManualShiftStartTime(draft.startTime);
+    setManualScheduleMode(draft.scheduleMode);
     setManualFiammettaEnabled(draft.fiammettaEnabled);
     setManualDraftHandoff(draft);
     try {
@@ -1246,7 +1252,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     if (!result?.diagnosticId) return;
     setIssueDraftKind("performance_issue");
     setIssueDraftRow(null);
-    setIssueDraftNote(locale === "en" ? "This solve took noticeably longer than expected." : "本次求解耗时明显偏长。");
+    setIssueDraftNote(intl("App.thisSolveTookNoticeablyLongerThanExpected"));
     setFeedbackResult(null);
     setIssueOpen(true);
   }
@@ -1254,7 +1260,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   async function handleSaveIssue() {
     if (!issueDraftNote.trim() || (issueDraftKind === "room_issue" && !issueDraftRow)) return;
     if (!result?.diagnosticId) {
-      setApiError(displayError("AIC-FEEDBACK-4001", locale === "en" ? "Generate a schedule before submitting an issue." : "请先生成排班，再提交问题。"));
+      setApiError(displayError("AIC-FEEDBACK-4001", intl("App.generateAScheduleBeforeSubmittingAnIssue")));
       return;
     }
     if (!operbox || boxSource === "sample") {
@@ -1273,7 +1279,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       `换班方式：${rotationProfile}`,
       `布局：${preset.label}`,
     ].join("；");
-    const note = `${issueDraftNote.trim()}\n\n[${locale === "en" ? "Environment" : "运行环境"}] ${environment}`;
+    const note = `${issueDraftNote.trim()}\n\n[${intl("App.environment")}] ${environment}`;
     const reproduction = {
       layout: structuredClone(layout),
       operbox: normalizeOperboxEntries(operbox),
@@ -1317,7 +1323,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       setIssueDraftRow(null);
       setIssueDraftNote("");
     } catch (error) {
-      const normalized = toDisplayError(error, locale === "en" ? "Could not save feedback. Try again later." : "反馈保存失败，请稍后重试。");
+      const normalized = toDisplayError(error, intl("App.couldNotSaveFeedbackTryAgainLater"));
       setApiError(normalized);
     } finally {
       setFeedbackSaving(false);
@@ -1375,7 +1381,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
 
   function showResultClearNotice(label: string | undefined) {
     if (resultClearWarningDismissed || !result) return;
-    setResultClearNotice(label ? (locale === "en" ? `Changed to: ${label}` : `已切换到：${label}`) : (locale === "en" ? "Settings changed" : "配置已切换"));
+    setResultClearNotice(label ? (intl("App.changedTo", { label: label })) : (intl("App.settingsChanged")));
   }
 
   function requestProductChange(change: ProductChange) {
@@ -1425,9 +1431,18 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   }
 
   function handlePresetSelect(nextPreset: PresetDef) {
-    showResultClearNotice(locale === "en" ? `Layout ${nextPreset.label}` : `布局 ${nextPreset.label}`);
+    showResultClearNotice(intl("App.layout", { label: nextPreset.label }));
     setPreset(nextPreset);
     setLayout(buildBlueprint(nextPreset));
+    setLayoutDirty(true);
+    setLayoutSource("local");
+    setLocalLayoutBackup(null);
+    clearPlanResult();
+  }
+
+  function handleManualImportedLayout(nextLayout: BaseBlueprint) {
+    setLayout(structuredClone(nextLayout));
+    setPreset(PRESETS.find((candidate) => candidate.label === nextLayout.template) ?? preset);
     setLayoutDirty(true);
     setLayoutSource("local");
     setLocalLayoutBackup(null);
@@ -1457,7 +1472,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   async function handleLayoutFile(file: File) {
     try {
       const parsed = parseLayoutJson(JSON.parse(await file.text()));
-      if (!parsed) throw new Error(locale === "en" ? "Invalid layout file. Check room names, types, and facility levels." : "布局文件格式无效，请检查房间名称、类型和设施等级。");
+      if (!parsed) throw new Error(intl("App.invalidLayoutFileCheckRoomNamesTypesAndFacility"));
       setLayout(parsed);
       setLayoutDirty(true);
       setLayoutSource("local");
@@ -1465,7 +1480,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       clearPlanResult();
       setInputError(null);
     } catch (error) {
-      setInputError(locale === "en" ? (error instanceof Error ? error.message : "Could not read the layout JSON.") : error instanceof Error ? error.message : "布局 JSON 读取失败。");
+      setInputError(localize_App.text(locale, "additional4", { choice1: ((locale === "en")) && (error instanceof Error) ? "yes" : "no", value2: ((locale === "en") && (error instanceof Error)) ? String(error.message) : "", choice3: (!(locale === "en")) && (error instanceof Error) ? "yes" : "no", value4: (!(locale === "en") && (error instanceof Error)) ? String(error.message) : "" }));
       setInputErrorCode("AIC-LAYOUT-1201");
     }
   }
@@ -1713,9 +1728,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
         clearLocalProductData(window.localStorage);
         setStorageNotice(displayError(
           "AIC-LOCAL-7001",
-          locale === "en"
-            ? "The browser could not retain imported data separately. The local session was cleared to ensure Skland data is removed."
-            : "浏览器无法保留独立导入数据，已改为清除整份本地会话以确保森空岛数据不再保留。"
+          intl("App.theBrowserCouldNotRetainImportedDataSeparatelyThe")
         ));
       }
       setSklandAccounts([]);
@@ -1742,7 +1755,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       clearIssueState();
     } catch (error) {
       if (!sklandRestoreGuard.current.isCurrent(generation)) return;
-      setSklandError(toDisplayError(error, locale === "en" ? "Could not delete Skland data. Try again later." : "森空岛数据删除失败，请稍后重试。"));
+      setSklandError(toDisplayError(error, intl("App.couldNotDeleteSklandDataTryAgainLater")));
       throw error;
     } finally {
       if (sklandRestoreGuard.current.isCurrent(generation)) setSklandBusy(false);
@@ -1759,6 +1772,8 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       setFileName(null);
       setBoxSource("sample");
       setManualShiftDurations([...DEFAULT_MANUAL_SHIFT_DURATIONS]);
+      setManualShiftStartTime(DEFAULT_MANUAL_SHIFT_START_TIME);
+      setManualScheduleMode("sequential");
       setManualFiammettaEnabled(false);
       setManualDraftHandoff(null);
       setLayoutDirty(false);
@@ -1774,7 +1789,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       setSetupOpen(false);
       router.push(workbenchHref("calculator"));
     } catch {
-      setStorageNotice(displayError("AIC-LOCAL-7001", locale === "en" ? "The browser could not clear local data. Check site storage permissions." : "浏览器无法清除本地数据，请检查站点存储权限。"));
+      setStorageNotice(displayError("AIC-LOCAL-7001", intl("App.theBrowserCouldNotClearLocalDataCheckSite")));
     }
   }
 
@@ -1800,10 +1815,10 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       setApiError(
         health.plannerReady
           ? null
-          : displayError("AIC-PLAN-3001", locale === "en" ? "The scheduling service is temporarily unavailable. Try again later." : "排班服务暂不可用，请稍后重试。", true)
+          : displayError("AIC-PLAN-3001", intl("App.theSchedulingServiceIsTemporarilyUnavailableTryAgainLater"), true)
       );
     } catch (error) {
-      setApiError(toDisplayError(error, locale === "en" ? "The scheduling service is temporarily unavailable. Try again later." : "排班服务暂不可用，请稍后重试。"));
+      setApiError(toDisplayError(error, intl("App.theSchedulingServiceIsTemporarilyUnavailableTryAgainLater")));
     }
   }
 
@@ -1945,11 +1960,16 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       operbox: accountCanUseCurrentBox ? operbox : null,
       sourceName: accountCanUseCurrentBox ? fileName : null,
       shiftDurations: manualShiftDurations,
+      shiftStartTime: manualShiftStartTime,
+      scheduleMode: manualScheduleMode,
       fiammettaEnabled: effectiveManualFiammettaEnabled,
       initialDraft: accountCanUseCurrentBox ? manualDraftHandoff : null,
       onInitialDraftConsumed: () => setManualDraftHandoff(null),
       onOpenCalculator: () => navigateToPage("calculator"),
       onShiftDurationsChange: setManualShiftDurations,
+      onShiftStartTimeChange: setManualShiftStartTime,
+      onScheduleModeChange: setManualScheduleMode,
+      onImportedLayoutChange: handleManualImportedLayout,
       onFiammettaEnabledChange: setManualFiammettaEnabled,
       onOpenSetup: handleManualSetup,
       onFactoryRecipeChange: handleFactoryRecipeChange,
@@ -2074,11 +2094,11 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       </div>
 
       <footer className="app-content-track mt-auto flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border/70 py-5 text-xs text-muted-foreground">
-        <LanguageDemoSwitch />
-        <Link prefetch={false} className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/help" data-help-link>{locale === "en" ? "Help" : "使用帮助"}</Link>
-        <Link prefetch={false} className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/terms">{locale === "en" ? "Terms" : "本站服务条款"}</Link>
-        <Link prefetch={false} className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/privacy">{locale === "en" ? "Privacy" : "本站隐私政策"}</Link>
-        <a className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/about" data-about-link>{locale === "en" ? "About" : "关于我们"}</a>
+        <LanguageSwitch />
+        <Link prefetch={false} className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/help" data-help-link>{intl("App.help")}</Link>
+        <Link prefetch={false} className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/terms">{intl("App.terms")}</Link>
+        <Link prefetch={false} className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/privacy">{intl("App.privacy")}</Link>
+        <a className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/about" data-about-link>{intl("App.about")}</a>
         <div className="ml-auto flex shrink-0 items-center gap-3 max-sm:ml-0 max-sm:w-full max-sm:justify-end">
           <a className="whitespace-nowrap underline underline-offset-4 hover:text-foreground" href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer" data-ui-number-font>沪ICP备2026041492号</a>
           <span className="h-4 w-px shrink-0 bg-border" aria-hidden="true" />
@@ -2086,11 +2106,11 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
             href="https://www.rainyun.com/riic_"
             target="_blank"
             rel="noopener noreferrer"
-            aria-label={locale === "en" ? "Sponsored by Rainyun (opens in a new tab)" : "由雨云提供赞助（在新标签页打开雨云官网）"}
+            aria-label={intl("App.sponsoredByRainyunOpensInANewTab")}
             data-rainyun-link
             className="inline-flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-sm px-1 text-[11px] leading-none opacity-70 outline-none transition-[opacity,transform] duration-180 ease-[var(--motion-ease-out)] hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-foreground/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.96] motion-reduce:transition-none motion-reduce:active:scale-100"
           >
-            <span className="block leading-none" data-rainyun-copy>{locale === "en" ? "Sponsored by" : "由"}</span>
+            <span className="block leading-none" data-rainyun-copy>{intl("App.sponsoredBy")}</span>
             <img
               src="/images/partners/rainyun-logo.png"
               alt=""
@@ -2119,7 +2139,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
               className="grid min-h-72 w-full max-w-[min(880px,calc(100vw-2rem))] place-items-center bg-background px-6 py-12 text-center shadow-xl"
               role="dialog"
               aria-modal="true"
-              aria-label={locale === "en" ? "Website account sign-in" : "登录网站账号"}
+              aria-label={intl("App.websiteAccountSignIn")}
               aria-busy="true"
               data-website-account-dialog
               data-website-account-dialog-loading
@@ -2130,7 +2150,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
                   aria-hidden="true"
                   data-website-account-loading-spinner
                 />
-                <p className="text-sm text-muted-foreground">{locale === "en" ? "Loading sign-in…" : "正在加载登录界面…"}</p>
+                <p className="text-sm text-muted-foreground">{intl("App.loadingSignIn")}</p>
               </div>
             </div>
           </div>
@@ -2171,11 +2191,15 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
         presets={PRESETS}
         preset={preset}
         layout={layout}
-        configurationKey={setupMode === "manual" ? `${setupConfigurationKey}:${manualShiftDurations.join(",")}:${manualFiammettaEnabled}` : setupConfigurationKey}
+        configurationKey={setupMode === "manual" ? `${setupConfigurationKey}:${manualScheduleMode}:${manualShiftStartTime}:${manualShiftDurations.join(",")}:${manualFiammettaEnabled}` : setupConfigurationKey}
         rotationProfile={setupMode === "manual" ? DEFAULT_ROTATION_PROFILE : rotationProfile}
         onRotationProfileChange={handleRotationProfileChange}
         manualShiftDurations={manualShiftDurations}
         onManualShiftDurationsChange={setManualShiftDurations}
+        manualShiftStartTime={manualShiftStartTime}
+        onManualShiftStartTimeChange={setManualShiftStartTime}
+        manualScheduleMode={manualScheduleMode}
+        onManualScheduleModeChange={setManualScheduleMode}
         fiammettaEnabled={setupMode === "manual" ? effectiveManualFiammettaEnabled : effectiveFiammettaEnabled}
         onFiammettaEnabledChange={setupMode === "manual" ? setManualFiammettaEnabled : handleFiammettaEnabledChange}
         onPresetSelect={handlePresetSelect}
@@ -2206,9 +2230,9 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       /></Suspense> : null}
       {productModalMounted ? <Suspense fallback={null}><ProductChangeConfirmModal
         open={Boolean(pendingProductChange)}
-        roomLabel={rows.find((row) => row.roomId === pendingProductChange?.roomId)?.title ?? pendingProductChange?.roomId ?? (locale === "en" ? "Current facility" : "当前设施")}
+        roomLabel={rows.find((row) => row.roomId === pendingProductChange?.roomId)?.title ?? pendingProductChange?.roomId ?? (intl("App.currentFacility"))}
         changeKind={pendingProductChange?.type === "trade" ? "贸易策略" : "制造配方"}
-        nextValueLabel={pendingProductChange ? productChangeLabel(pendingProductChange) ?? (locale === "en" ? "New setting" : "新配置") : (locale === "en" ? "New setting" : "新配置")}
+        nextValueLabel={pendingProductChange ? productChangeLabel(pendingProductChange) ?? (intl("App.newSetting")) : (intl("App.newSetting"))}
         busy={loading && Boolean(pendingProductChange)}
         onConfirm={() => void confirmScheduleProductChange()}
         onCancel={() => setPendingProductChange(null)}

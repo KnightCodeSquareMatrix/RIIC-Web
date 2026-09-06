@@ -1,6 +1,8 @@
 "use client";
+import { localize as localize_components_pages_ManualSchedulePage } from "../../i18n/helpers/components_pages_ManualSchedulePage.ts";
+import { useTranslations, useLocale } from "next-intl";
 
-import { ArrowLeft, Download, Search, Settings2, Sparkles, X } from "lucide-react";
+import { ArrowLeft, Download, Search, Settings2, Sparkles, Upload, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 
 import type { FactoryRecipe, TradeOrder } from "@/blueprint";
@@ -19,38 +21,47 @@ import {
 import { Input } from "@/components/ui/input";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { downloadJson } from "@/download";
-import { demoOperatorName, useLanguageDemo } from "@/language-demo";
+import { localizedOperatorName } from "@/i18n/game-data";
+import { useGameCatalog } from "@/i18n/game-data-client";
 import {
   assignManualOperator,
   createManualScheduleDraft,
+  createManualScheduleDraftFromCalculator,
+  formatManualShiftDuration,
+  layoutFromMaaSchedule,
   loadManualScheduleDraft,
+  manualShiftTimeRanges,
   manualScheduleToMaa,
+  normalizeMaaScheduleForManualImport,
+  parseMaaScheduleText,
   persistManualScheduleDraft,
   reconcileManualScheduleDraft,
   resizeManualScheduleDraft,
   setManualDormAutofill,
   type ManualOperatorConflict,
   type ManualScheduleDraft,
+  type ManualScheduleMode,
 } from "@/manual-schedule";
 import { operatorPortraitFor } from "@/operatorPortraits";
 import { addOperatorPresentations } from "@/schedule-presentation";
 import { planToRows, type RoomRow } from "@/schedule";
-import type { BaseBlueprint, OperBoxEntry } from "@/types";
-
-const OperatorSkillTooltip = lazy(() => loadClientFeature("operatorSkillTooltip").then((module) => ({
-  default: module.OperatorSkillTooltip,
-})));
+import type { BaseBlueprint, MaaJson, MaaOperatorSlot, MaaRoom, OperBoxEntry } from "@/types";
 
 export interface ManualSchedulePageProps {
   layout: BaseBlueprint;
   operbox: OperBoxEntry[] | null;
   sourceName: string | null;
   shiftDurations: number[];
+  shiftStartTime: string;
+  scheduleMode: ManualScheduleMode;
   fiammettaEnabled: boolean;
   initialDraft: ManualScheduleDraft | null;
   onInitialDraftConsumed: () => void;
   onOpenCalculator: () => void;
   onShiftDurationsChange: (durations: number[]) => void;
+  onShiftStartTimeChange: (startTime: string) => void;
+  onScheduleModeChange: (mode: ManualScheduleMode) => void;
+  onImportedLayoutChange: (layout: BaseBlueprint) => void;
   onFiammettaEnabledChange: (enabled: boolean) => void;
   onOpenSetup: () => void;
   onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
@@ -67,6 +78,39 @@ type PendingMove = {
   conflict: ManualOperatorConflict;
 };
 
+const OperatorSkillTooltip = lazy(() => loadClientFeature("operatorSkillTooltip").then((module) => ({
+  default: module.OperatorSkillTooltip,
+})));
+
+type MaaImportPreview = {
+  fileName: string;
+  draft: ManualScheduleDraft;
+  layout: BaseBlueprint;
+  sourceShiftCount: number;
+  importedShiftCount: number;
+  sourceAssignmentCount: number;
+  importedAssignmentCount: number;
+};
+
+function countDraftAssignments(draft: ManualScheduleDraft): number {
+  return draft.shifts.reduce((total, shift) => total + Object.values(shift.rooms).reduce(
+    (roomTotal, room) => roomTotal + room.operators.filter(Boolean).length,
+    0,
+  ), 0);
+}
+
+function countMaaAssignments(maa: MaaJson): number {
+  return maa.plans.reduce((total, plan) => total + Object.values(plan.rooms).reduce(
+    (roomTotal, rooms) => roomTotal + ((rooms ?? []) as MaaRoom[]).reduce(
+      (groupTotal: number, room: MaaRoom) => groupTotal + (room.operators ?? []).filter((operator: string | MaaOperatorSlot | null) => (
+        typeof operator === "string" ? operator.trim().length > 0 : Boolean(operator?.name?.trim())
+      )).length,
+      0,
+    ),
+    0,
+  ), 0);
+}
+
 function ManualOperatorChoice({
   operator,
   selected,
@@ -80,7 +124,8 @@ function ManualOperatorChoice({
   tooltipDisabled: boolean;
   onChoose: () => void;
 }) {
-  const displayName = demoOperatorName(operator.name, en ? "en" : "zh");
+  const gameCatalog = useGameCatalog();
+  const displayName = localizedOperatorName(operator.name, en ? "en" : "zh", gameCatalog);
   const portrait = operatorPortraitFor(operator.name, operator.id);
   const card = (
     <button
@@ -92,15 +137,15 @@ function ManualOperatorChoice({
     >
       <span className="size-12 shrink-0 overflow-hidden border border-border bg-muted sm:size-14">
         {portrait ? (
-          <img src={portrait} alt={en ? `${displayName} portrait` : `${displayName}头像`} className="size-full object-cover" loading="lazy" decoding="async" />
+          <img src={portrait} alt={localize_components_pages_ManualSchedulePage.text(en, "portrait", { displayName })} className="size-full object-cover" loading="lazy" decoding="async" />
         ) : null}
       </span>
       <span className="min-w-0">
         <span className="block truncate text-sm font-semibold">{displayName}</span>
         <span className="font-number mt-1 block text-xs text-muted-foreground">
-          {operator.rarity}★ · {en ? `E${operator.elite} Lv.${operator.level}` : `精${operator.elite} Lv.${operator.level}`}
+          {operator.rarity}★ · {localize_components_pages_ManualSchedulePage.text(en, "eLv", { elite: operator.elite, level: operator.level })}
         </span>
-        <span className="mt-1 block text-[11px] text-muted-foreground/80">{en ? "Hover for infrastructure skills" : "悬浮查看基建技能"}</span>
+        <span className="mt-1 block text-[11px] text-muted-foreground/80">{localize_components_pages_ManualSchedulePage.text(en, "hoverForInfrastructureSkills")}</span>
       </span>
     </button>
   );
@@ -116,27 +161,36 @@ export function ManualSchedulePage({
   operbox,
   sourceName,
   shiftDurations,
+  shiftStartTime,
+  scheduleMode,
   fiammettaEnabled,
   initialDraft,
   onInitialDraftConsumed,
   onOpenCalculator,
   onShiftDurationsChange,
+  onShiftStartTimeChange,
+  onScheduleModeChange,
+  onImportedLayoutChange,
   onFiammettaEnabledChange,
   onOpenSetup,
   onFactoryRecipeChange,
   onTradeOrderChange,
 }: ManualSchedulePageProps) {
-  const { locale } = useLanguageDemo();
+  const intl = useTranslations();
+  const locale = useLocale();
   const en = locale === "en";
-  const [draft, setDraft] = useState<ManualScheduleDraft>(() => createManualScheduleDraft(shiftDurations));
+  const [draft, setDraft] = useState<ManualScheduleDraft>(() => createManualScheduleDraft(shiftDurations, shiftStartTime, scheduleMode));
   const [restored, setRestored] = useState(false);
   const [picker, setPicker] = useState<PickerTarget | null>(null);
   const [pickerQuery, setPickerQuery] = useState("");
+  const [maaImportPreview, setMaaImportPreview] = useState<MaaImportPreview | null>(null);
+  const [maaImportError, setMaaImportError] = useState<string | null>(null);
   const [pendingMove, setPendingMove] = useState<PendingMove | null>(null);
   const [storageWarning, setStorageWarning] = useState<string | null>(null);
   const [scheduleQuery, setScheduleQuery] = useState("");
   const [pickerScrolling, setPickerScrolling] = useState(false);
   const pickerScrollTimer = useRef<number | null>(null);
+  const maaImportInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => () => {
     if (pickerScrollTimer.current !== null) window.clearTimeout(pickerScrollTimer.current);
@@ -162,14 +216,16 @@ export function ManualSchedulePage({
         const reconciled = reconcileManualScheduleDraft(saved, layout, operbox);
         setDraft(reconciled);
         onShiftDurationsChange(reconciled.shifts.map((shift) => shift.durationHours));
+        onShiftStartTimeChange(reconciled.startTime);
+        onScheduleModeChange(reconciled.scheduleMode);
         onFiammettaEnabledChange(reconciled.fiammettaEnabled);
       }
     } catch {
-      setStorageWarning(en ? "The manual draft could not be restored." : "无法恢复浏览器中的手动排班草稿。");
+      setStorageWarning(intl("components_pages_ManualSchedulePage.theManualDraftCouldNotBeRestored"));
     }
     if (initialDraft) onInitialDraftConsumed();
     setRestored(true);
-  }, [en, initialDraft, layout, onFiammettaEnabledChange, onInitialDraftConsumed, onShiftDurationsChange, operbox, restored]);
+  }, [intl, initialDraft, layout, onFiammettaEnabledChange, onInitialDraftConsumed, onScheduleModeChange, onShiftDurationsChange, onShiftStartTimeChange, operbox, restored]);
 
   useEffect(() => {
     if (!restored) return;
@@ -180,12 +236,17 @@ export function ManualSchedulePage({
 
   useEffect(() => {
     if (!restored) return;
+    setDraft((current) => current.scheduleMode === scheduleMode ? current : { ...current, scheduleMode });
+  }, [restored, scheduleMode]);
+
+  useEffect(() => {
+    if (!restored) return;
     setDraft((current) => reconcileManualScheduleDraft(
-      resizeManualScheduleDraft(current, shiftDurations),
+      resizeManualScheduleDraft(current, shiftDurations, shiftStartTime),
       layout,
       operbox,
     ));
-  }, [layout, operbox, ownedFingerprint, restored, shiftDurations]);
+  }, [layout, operbox, ownedFingerprint, restored, shiftDurations, shiftStartTime]);
 
   useEffect(() => {
     if (!restored || !canPersistDraft) return;
@@ -193,11 +254,12 @@ export function ManualSchedulePage({
       persistManualScheduleDraft(window.localStorage, draft);
       setStorageWarning(null);
     } catch {
-      setStorageWarning(en ? "Changes remain available for this visit but could not be saved locally." : "本次访问仍可继续编辑，但无法在浏览器中保存草稿。");
+      setStorageWarning(intl("components_pages_ManualSchedulePage.changesRemainAvailableForThisVisitButCouldNot"));
     }
-  }, [canPersistDraft, draft, en, restored]);
+  }, [intl, canPersistDraft, draft, en, restored]);
 
   const activeShift = Math.min(draft.activeShift, Math.max(0, draft.shifts.length - 1));
+  const shiftRanges = manualShiftTimeRanges(draft.startTime, draft.shifts.map((shift) => shift.durationHours));
   const maa = useMemo(() => manualScheduleToMaa(draft, layout, fiammettaEnabled), [draft, fiammettaEnabled, layout]);
   const activePlan = maa.plans[activeShift];
   const trainingRoom = layout.rooms.find((room) => room.kind === "training_room");
@@ -304,14 +366,63 @@ export function ManualSchedulePage({
     downloadJson("arknights-infra-schedule-maa.json", maa);
   }
 
+  async function prepareMaaImport(file: File) {
+    setMaaImportError(null);
+    if (file.size > 5 * 1024 * 1024) {
+      setMaaImportError(intl("components_pages_ManualSchedulePage.scheduleFileTooLarge"));
+      return;
+    }
+    try {
+      const sourceMaa = parseMaaScheduleText(await file.text());
+      const importedMaa = normalizeMaaScheduleForManualImport(sourceMaa);
+      const importedLayout = layoutFromMaaSchedule(importedMaa, layout);
+      const fiammettaImported = importedMaa.plans.some((plan) => plan.Fiammetta?.enable === true);
+      const converted = createManualScheduleDraftFromCalculator({
+        layout: importedLayout,
+        maa: importedMaa,
+        fallbackDurations: [],
+        fiammettaEnabled: fiammettaImported,
+        preferMaaTiming: true,
+        preserveExternalOperators: true,
+      });
+      const reconciled = reconcileManualScheduleDraft(converted, importedLayout, operbox);
+      setMaaImportPreview({
+        fileName: file.name,
+        draft: reconciled,
+        layout: importedLayout,
+        sourceShiftCount: sourceMaa.plans.length,
+        importedShiftCount: reconciled.shifts.length,
+        sourceAssignmentCount: Math.max(countMaaAssignments(sourceMaa), countDraftAssignments(reconciled)),
+        importedAssignmentCount: countDraftAssignments(reconciled),
+      });
+    } catch (error) {
+      setMaaImportError(en
+        ? intl("components_pages_ManualSchedulePage.invalidMaaSchedule")
+        : error instanceof Error ? error.message : intl("components_pages_ManualSchedulePage.invalidMaaSchedule"));
+    }
+  }
+
+  function confirmMaaImport() {
+    if (!maaImportPreview) return;
+    const imported = maaImportPreview.draft;
+    onImportedLayoutChange(maaImportPreview.layout);
+    setDraft(imported);
+    onShiftDurationsChange(imported.shifts.map((shift) => shift.durationHours));
+    onShiftStartTimeChange(imported.startTime);
+    onScheduleModeChange(imported.scheduleMode);
+    onFiammettaEnabledChange(imported.fiammettaEnabled);
+    setMaaImportPreview(null);
+    setMaaImportError(null);
+  }
+
   if (!operbox?.some((operator) => operator.own)) {
     return (
       <section className="flex min-h-[calc(100svh-9rem)] items-center justify-center py-8" aria-labelledby="manual-schedule-empty-title" data-manual-schedule-empty>
         <div className="w-full max-w-2xl border border-[#313131]/15 bg-[#F3F1EA] px-6 py-12 text-center shadow-[0_18px_45px_rgb(49_49_49/0.08)] sm:px-10">
           <span className="mx-auto grid size-12 place-items-center bg-[#313131] text-[#FFD800]" aria-hidden="true"><Sparkles /></span>
-          <h1 id="manual-schedule-empty-title" className="mt-5 text-2xl font-semibold tracking-tight">{en ? "Build a manual schedule" : "创建手动基建排班"}</h1>
-          <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-muted-foreground">{en ? "Choose an operator Box, base layout, shift count and independent durations before filling each room." : "先配置干员 Box、基建布局、班次数量和每班时长，再逐个填写设施。"}</p>
-          <Button type="button" size="lg" className="mt-7 min-h-11" onClick={onOpenSetup}><Settings2 />{en ? "Configure Box & layout" : "配置 Box 与布局"}</Button>
+          <h1 id="manual-schedule-empty-title" className="mt-5 text-2xl font-semibold tracking-tight">{intl("components_pages_ManualSchedulePage.buildAManualSchedule")}</h1>
+          <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-muted-foreground">{intl("components_pages_ManualSchedulePage.chooseAnOperatorBoxBaseLayoutShiftCountAnd")}</p>
+          <Button type="button" size="lg" className="mt-7 min-h-11" onClick={onOpenSetup}><Settings2 />{intl("components_pages_ManualSchedulePage.configureBoxLayout")}</Button>
         </div>
       </section>
     );
@@ -320,8 +431,8 @@ export function ManualSchedulePage({
   const fiammettaTarget = draft.shifts[activeShift]?.fiammettaTarget;
   const fiammettaPortrait = fiammettaTarget ? operatorPortraitFor(fiammettaTarget) : null;
   const sourceVariantLabel = draft.source?.variant === "progression-adjusted"
-    ? (en ? "Progression-adjusted plan" : "练度调整后方案")
-    : (en ? "Original plan" : "原方案");
+    ? (intl("components_pages_ManualSchedulePage.progressionAdjustedPlan"))
+    : (intl("components_pages_ManualSchedulePage.originalPlan"));
   const previousRoomTitle = pendingMove ? rows.find((row) => row.roomId === pendingMove.conflict.roomId)?.title ?? pendingMove.conflict.roomId : "";
   const nextRoomTitle = pendingMove ? rows.find((row) => row.roomId === pendingMove.target.roomId)?.title ?? pendingMove.target.roomId : "";
 
@@ -330,24 +441,39 @@ export function ManualSchedulePage({
       <header className="mb-4 flex flex-wrap items-center gap-2">
         <div className="relative min-w-[240px] flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-          <Input value={scheduleQuery} onChange={(event) => setScheduleQuery(event.target.value)} className="pl-9" aria-label={en ? "Search this manual schedule" : "搜索手动排班中的干员或房间"} placeholder={en ? "Search operators or rooms" : "搜索排班中的干员或房间"} />
+          <Input value={scheduleQuery} onChange={(event) => setScheduleQuery(event.target.value)} className="pl-9" aria-label={intl("components_pages_ManualSchedulePage.searchThisManualSchedule")} placeholder={intl("components_pages_ManualSchedulePage.searchOperatorsOrRooms")} />
         </div>
         {draft.source ? (
           <Button type="button" variant="ghost" size="sm" onClick={onOpenCalculator}>
-            <ArrowLeft />{en ? "Back to calculation" : "返回计算结果"}
+            <ArrowLeft />{intl("components_pages_ManualSchedulePage.backToCalculation")}
           </Button>
         ) : null}
-        <Button type="button" variant="outline" size="sm" onClick={onOpenSetup}><Settings2 />{en ? "Configure Box & layout" : "配置 Box 与布局"}</Button>
-        <Button type="button" size="sm" onClick={exportMaa}><Download />{en ? "Export MAA" : "导出到 MAA"}</Button>
+        <Button type="button" variant="outline" size="sm" onClick={onOpenSetup}><Settings2 />{intl("components_pages_ManualSchedulePage.configureBoxLayout")}</Button>
+        <Button type="button" variant="outline" size="sm" onClick={() => maaImportInputRef.current?.click()}><Upload />{intl("components_pages_ManualSchedulePage.importScheduleFile")}</Button>
+        <input
+          ref={maaImportInputRef}
+          type="file"
+          accept="application/json,.json"
+          className="sr-only"
+          aria-label={intl("components_pages_ManualSchedulePage.chooseMaaScheduleFile")}
+          onChange={(event) => {
+            const file = event.currentTarget.files?.[0];
+            if (file) void prepareMaaImport(file);
+            event.currentTarget.value = "";
+          }}
+        />
+        <Button type="button" size="sm" onClick={exportMaa}><Download />{intl("components_pages_ManualSchedulePage.exportMaa")}</Button>
       </header>
+
+      {maaImportError ? <p className="mb-3 text-sm text-destructive" role="alert">{maaImportError}</p> : null}
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-y border-border/70 bg-muted/25 px-3 py-3">
         <div className="min-w-0">
-          <p className="text-sm font-medium">{en ? "Manual draft" : "手动排班草稿"} · <span className="font-number">{layout.template}</span></p>
+          <p className="text-sm font-medium">{intl("components_pages_ManualSchedulePage.manualDraft")} · <span className="font-number">{layout.template}</span></p>
           <p className="mt-1 truncate text-xs text-muted-foreground" data-manual-draft-source={draft.source?.variant ?? "standalone"}>
-            {draft.source ? (en ? `Based on ${sourceVariantLabel}` : `基于「${sourceVariantLabel}」创建`) : null}
+            {draft.source ? (intl("components_pages_ManualSchedulePage.basedOn", { sourceVariantLabel: sourceVariantLabel })) : null}
             {draft.source ? " · " : null}
-            {sourceName ?? (en ? "Current operator Box" : "当前干员 Box")} · {ownedOperators.length} {en ? "owned" : "名已拥有干员"}
+            {sourceName ?? (intl("components_pages_ManualSchedulePage.currentOperatorBox"))} · {ownedOperators.length} {intl("components_pages_ManualSchedulePage.owned")}
           </p>
         </div>
       </div>
@@ -369,12 +495,29 @@ export function ManualSchedulePage({
               <FiammettaTargetChip
                 target={fiammettaTarget}
                 portrait={fiammettaPortrait}
-                onClick={() => { setPickerQuery(""); setPicker({ kind: "fiammetta" }); }}
+                onClick={() => {
+                  setPickerQuery("");
+                  setPicker({ kind: "fiammetta" });
+                }}
               />
             ) : null}
             <ShiftTabs
               maaJson={maa}
               durations={draft.shifts.map((shift) => shift.durationHours)}
+              labels={draft.scheduleMode === "period" ? shiftRanges.map((range, index) => ({
+                content: <>
+                  {intl("components_pages_ManualSchedulePage.shift", { shift: index + 1 })}
+                  {" · "}<span className="font-number">{range.startTime}–{range.endTime}</span>
+                  {intl("components_pages_ManualSchedulePage.durationParenthetical", { duration: formatManualShiftDuration(range.durationMinutes, en) })}
+                </>,
+                ariaLabel: intl("components_pages_ManualSchedulePage.shiftRange", {
+                  shift: index + 1,
+                  startTime: range.startTime,
+                  endTime: range.endTime,
+                  duration: formatManualShiftDuration(range.durationMinutes, en),
+                }),
+              })) : undefined}
+              wrap
               active={activeShift}
               onChange={setActiveShift}
             />
@@ -388,20 +531,20 @@ export function ManualSchedulePage({
       <Dialog open={Boolean(picker)} onOpenChange={(open) => { if (!open) setPicker(null); }}>
         <DialogContent className="max-h-[min(720px,calc(100svh-2rem))] max-w-[min(760px,calc(100vw-2rem))] overflow-hidden">
           <DialogHeader>
-            <DialogTitle>{picker?.kind === "fiammetta" ? (en ? "Fiammetta morale target" : "选择菲亚梅塔换心情目标") : (en ? `Assign ${selectedRoom?.title ?? "room"}` : `安排${selectedRoom?.title ?? "设施"}干员`)}</DialogTitle>
-            <DialogDescription>{picker?.kind === "fiammetta" ? (en ? "This target is stored only for the active shift." : "该目标只应用于当前班次。") : (en ? "Only owned operators in the current Box are shown." : "这里只显示当前 Box 中已拥有的干员。")}</DialogDescription>
+            <DialogTitle>{picker?.kind === "fiammetta" ? (intl("components_pages_ManualSchedulePage.fiammettaMoraleTarget")) : (intl("components_pages_ManualSchedulePage.assign", { value1: (en) ? (selectedRoom?.title ?? "room") : "", value2: (en) ? "" : (selectedRoom?.title ?? "设施") }))}</DialogTitle>
+            <DialogDescription>{picker?.kind === "fiammetta" ? (intl("components_pages_ManualSchedulePage.thisTargetIsStoredOnlyForTheActiveShift")) : (intl("components_pages_ManualSchedulePage.onlyOwnedOperatorsInTheCurrentBoxAreShown"))}</DialogDescription>
           </DialogHeader>
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-            <Input autoFocus value={pickerQuery} onChange={(event) => setPickerQuery(event.target.value)} className="pl-9" placeholder={en ? "Search operators" : "搜索干员"} aria-label={en ? "Search selectable operators" : "搜索可选干员"} />
+            <Input autoFocus value={pickerQuery} onChange={(event) => setPickerQuery(event.target.value)} className="pl-9" placeholder={intl("components_pages_ManualSchedulePage.searchOperators")} aria-label={intl("components_pages_ManualSchedulePage.searchSelectableOperators")} />
           </div>
           <div className="grid max-h-[52svh] grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2" data-manual-operator-picker onScroll={handlePickerScroll}>
             <TooltipProvider delay={300} timeout={100}>
               {picker?.kind === "slot" ? (
                 <div className="col-span-full grid grid-cols-2 gap-2">
-                  <Button type="button" variant="outline" className="min-w-0 justify-center" onClick={() => chooseOperator(null)}><X />{en ? "Leave empty" : "保持空置"}</Button>
+                  <Button type="button" variant="outline" className="min-w-0 justify-center" onClick={() => chooseOperator(null)}><X />{intl("components_pages_ManualSchedulePage.leaveEmpty")}</Button>
                   {selectedRoom?.group === "dormitory" ? (
-                    <Button type="button" variant={selectedAssignment?.autofill ? "default" : "outline"} className="min-w-0 justify-center" onClick={enableDormAutofill}><Sparkles />{en ? "Auto-fill" : "自动补位"}</Button>
+                    <Button type="button" variant={selectedAssignment?.autofill ? "default" : "outline"} className="min-w-0 justify-center" onClick={enableDormAutofill}><Sparkles />{intl("components_pages_ManualSchedulePage.autoFill")}</Button>
                   ) : <span aria-hidden="true" />}
                 </div>
               ) : null}
@@ -415,16 +558,57 @@ export function ManualSchedulePage({
                   onChoose={() => chooseOperator(operator.name)}
                 />
               ))}
-              {visibleOperators.length === 0 ? <p className="col-span-full py-8 text-center text-sm text-muted-foreground">{en ? "No matching operators." : "没有匹配的干员。"}</p> : null}
+              {visibleOperators.length === 0 ? <p className="col-span-full py-8 text-center text-sm text-muted-foreground">{intl("components_pages_ManualSchedulePage.noMatchingOperators")}</p> : null}
             </TooltipProvider>
           </div>
         </DialogContent>
       </Dialog>
 
+      <Dialog open={Boolean(maaImportPreview)} onOpenChange={(open) => { if (!open) setMaaImportPreview(null); }}>
+        <DialogContent className="max-w-[min(520px,calc(100vw-2rem))]">
+          <DialogHeader>
+            <DialogTitle>{intl("components_pages_ManualSchedulePage.importMaaScheduleQuestion")}</DialogTitle>
+            <DialogDescription>
+              {intl("components_pages_ManualSchedulePage.importMaaScheduleDescription")}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2 px-5 py-2 text-sm sm:px-7">
+            <p className="truncate"><span className="text-muted-foreground">{intl("components_pages_ManualSchedulePage.fileLabel")}</span>{maaImportPreview?.fileName}</p>
+            <p>
+              <span className="text-muted-foreground">{intl("components_pages_ManualSchedulePage.shiftsLabel")}</span>
+              <span className="font-number">{maaImportPreview?.importedShiftCount}</span>
+              {maaImportPreview && maaImportPreview.sourceShiftCount !== maaImportPreview.importedShiftCount ? (
+                <span className="ml-2 text-muted-foreground">
+                  {intl("components_pages_ManualSchedulePage.expandedFromPlans", { count: maaImportPreview.sourceShiftCount })}
+                </span>
+              ) : null}
+            </p>
+            <p>
+              <span className="text-muted-foreground">{intl("components_pages_ManualSchedulePage.assignmentsLabel")}</span>
+              <span className="font-number">{maaImportPreview?.importedAssignmentCount}</span>
+              <span className="text-muted-foreground"> / </span>
+              <span className="font-number">{maaImportPreview?.sourceAssignmentCount}</span>
+              {maaImportPreview && maaImportPreview.sourceAssignmentCount > maaImportPreview.importedAssignmentCount ? (
+                <span className="ml-2 text-amber-700">
+                  {intl("components_pages_ManualSchedulePage.unmappedAssignments", { count: maaImportPreview.sourceAssignmentCount - maaImportPreview.importedAssignmentCount })}
+                </span>
+              ) : null}
+            </p>
+            <p className="text-xs leading-5 text-muted-foreground">
+              {intl("components_pages_ManualSchedulePage.importMaaScheduleDetails")}
+            </p>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => setMaaImportPreview(null)}>{intl("components_pages_ManualSchedulePage.cancel")}</Button>
+            <Button type="button" onClick={confirmMaaImport}><Upload />{intl("components_pages_ManualSchedulePage.replaceDraft")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={Boolean(pendingMove)} onOpenChange={(open) => { if (!open) setPendingMove(null); }}>
         <DialogContent className="max-w-[min(480px,calc(100vw-2rem))]">
-          <DialogHeader><DialogTitle>{en ? "Move this operator?" : "移动该干员？"}</DialogTitle><DialogDescription>{en ? `${pendingMove?.operator} is already assigned to ${previousRoomTitle}. Move them to ${nextRoomTitle} and leave the previous slot empty?` : `${pendingMove?.operator ?? "该干员"}已经在${previousRoomTitle}工作。是否移动到${nextRoomTitle}，并将原位置留空？`}</DialogDescription></DialogHeader>
-          <DialogFooter><Button type="button" variant="ghost" onClick={() => setPendingMove(null)}>{en ? "Cancel" : "取消"}</Button><Button type="button" onClick={confirmMove}>{en ? "Move operator" : "移动干员"}</Button></DialogFooter>
+          <DialogHeader><DialogTitle>{intl("components_pages_ManualSchedulePage.moveThisOperator")}</DialogTitle><DialogDescription>{intl("components_pages_ManualSchedulePage.isAlreadyAssignedToMoveThemToAndLeave", { value1: (en) ? (pendingMove?.operator ?? "") : "", previousRoomTitle: previousRoomTitle, nextRoomTitle: nextRoomTitle, value4: (en) ? "" : (pendingMove?.operator ?? "该干员") })}</DialogDescription></DialogHeader>
+          <DialogFooter><Button type="button" variant="ghost" onClick={() => setPendingMove(null)}>{intl("components_pages_ManualSchedulePage.cancel")}</Button><Button type="button" onClick={confirmMove}>{intl("components_pages_ManualSchedulePage.moveOperator")}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 

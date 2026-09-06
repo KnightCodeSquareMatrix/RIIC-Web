@@ -1,4 +1,5 @@
 "use client";
+import { localize as localize_components_OperatorSkillTooltip } from "../i18n/helpers/components_OperatorSkillTooltip.ts";
 
 import {
   cloneElement,
@@ -20,7 +21,9 @@ import {
   operatorBuildingSkillList,
   type BuildingSkillPresentation,
 } from "@/operatorPortraits";
-import { demoBuildingSkill, useLanguageDemo } from "@/language-demo";
+import { useLocale } from "next-intl";
+import { localizedBuildingSkill } from "@/i18n/game-data";
+import { useGameCatalog } from "@/i18n/game-data-client";
 import { cn } from "@/lib/utils";
 
 /**
@@ -49,7 +52,8 @@ export function OperatorSkillTooltip({
   delay?: number;
   disabled?: boolean;
 }) {
-  const { locale } = useLanguageDemo();
+  const locale = useLocale();
+  const gameCatalog = useGameCatalog();
   const [open, setOpen] = useState(false);
   const skills = operatorBuildingSkillList(name);
   useEffect(() => {
@@ -91,7 +95,7 @@ export function OperatorSkillTooltip({
         <SkillBlock
           key={sourceSkill.id}
           locale={locale}
-          skill={demoBuildingSkill(sourceSkill.id, locale, sourceSkill) as BuildingSkillPresentation}
+          skill={localizedBuildingSkill(sourceSkill.id, locale, sourceSkill, gameCatalog) as BuildingSkillPresentation}
           highlighted={highlighted.has(sourceSkill.id)}
           unlocked={currentElite === undefined
             ? undefined
@@ -142,7 +146,7 @@ function SkillBlock({
         <span>{skill.name}</span>
         {highlighted ? (
           <span className="rounded-sm bg-[#FFD501] px-1.5 py-0.5 text-[10px] font-bold text-[#202223]">
-            {locale === "en" ? "THIS TARGET" : "本次目标"}
+            {localize_components_OperatorSkillTooltip.text(locale, "thisTarget")}
           </span>
         ) : null}
         {unlocked !== undefined ? (
@@ -153,8 +157,8 @@ function SkillBlock({
               : "border-background/20 bg-background/10 text-background/65",
           )}>
             {unlocked
-              ? (locale === "en" ? "UNLOCKED" : "已解锁")
-              : (locale === "en" ? "LOCKED" : "未解锁")}
+              ? (localize_components_OperatorSkillTooltip.text(locale, "unlocked"))
+              : (localize_components_OperatorSkillTooltip.text(locale, "locked"))}
           </span>
         ) : null}
       </span>

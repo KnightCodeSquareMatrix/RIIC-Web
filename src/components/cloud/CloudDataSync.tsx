@@ -1,185 +1,73 @@
 "use client";
+import { useTranslations } from "next-intl";
+import { useEffect, useRef, useState } from "react";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-
-import {
-  acceptAccountDataConsent,
-  getAccountDataConsent,
-  getCloudWorkspace,
-  putCloudWorkspace,
-} from "@/api";
-import {
-  cloudWorkspaceFingerprint,
-  readCloudSyncMetadata,
-  writeCloudSyncMetadata,
-} from "@/cloud-sync";
+import { acceptAccountDataConsent, getAccountDataConsent, getCloudWorkspace, putCloudWorkspace } from "@/api";
+import { CloudSyncSession, type CloudSyncStatus, type CloudUpload } from "@/cloud-sync-session";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { PRIVACY_VERSION, TERMS_VERSION } from "@/legal-policy";
-import type { CloudWorkspaceData, CloudWorkspacePutRequest } from "@/types";
+import type { CloudWorkspaceData } from "@/types";
 import { DataConsentDialog } from "./DataConsentDialog";
-import { useLanguageDemo } from "@/language-demo";
 
-type UploadRequest = Exclude<CloudWorkspacePutRequest, { restoreRevisionId: string }>;
-
-export function CloudDataSync({
-  userId,
-  hasLocalSession,
-  workspace,
-  refreshKey,
-  onApply,
-  onWorkspaceChanged,
-}: {
+export function CloudDataSync(props: {
   userId: string | null;
   hasLocalSession: boolean;
-  workspace: UploadRequest;
+  workspace: CloudUpload;
   refreshKey: number;
   onApply: (workspace: CloudWorkspaceData) => void;
   onWorkspaceChanged: (workspace: CloudWorkspaceData | null) => void;
 }) {
-  const { locale } = useLanguageDemo();
-  const en = locale === "en";
-  const latestWorkspace = useRef(workspace);
-  const syncController = useRef<AbortController | null>(null);
-  const initializedUser = useRef<string | null>(null);
-  const syncedFingerprint = useRef<string | null>(null);
-  const [consentOpen, setConsentOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    latestWorkspace.current = workspace;
-  }, [workspace]);
-
-  const synchronizeFirst = useCallback(async (user: string, signal: AbortSignal, forceUpload = false) => {
-    const remote = await getCloudWorkspace(signal);
-    if (signal.aborted) return;
-    const local = latestWorkspace.current;
-    const localFingerprint = cloudWorkspaceFingerprint(local);
-    const metadata = readCloudSyncMetadata(window.localStorage, user);
-    if (!metadata) {
-      if (hasLocalSession || forceUpload) {
-        const uploaded = await putCloudWorkspace(local, signal);
-        if (signal.aborted) return;
-        writeCloudSyncMetadata(window.localStorage, user, { revision: uploaded.revision, fingerprint: localFingerprint });
-        syncedFingerprint.current = localFingerprint;
-        onWorkspaceChanged(uploaded);
-      } else if (remote.exists) {
-        if (signal.aborted) return;
-        onApply(remote);
-        const remoteRequest: UploadRequest = { state: remote.state!, operbox: remote.operbox, result: remote.result };
-        const remoteFingerprint = cloudWorkspaceFingerprint(remoteRequest);
-        writeCloudSyncMetadata(window.localStorage, user, { revision: remote.revision, fingerprint: remoteFingerprint });
-        syncedFingerprint.current = remoteFingerprint;
-        onWorkspaceChanged(remote);
-      } else {
-        syncedFingerprint.current = localFingerprint;
-        onWorkspaceChanged(remote);
-      }
-    } else if (metadata.fingerprint !== localFingerprint) {
-      const uploaded = await putCloudWorkspace({ ...local, baseRevision: metadata.revision }, signal);
-      if (signal.aborted) return;
-      writeCloudSyncMetadata(window.localStorage, user, { revision: uploaded.revision, fingerprint: localFingerprint });
-      syncedFingerprint.current = localFingerprint;
-      onWorkspaceChanged(uploaded);
-    } else if (remote.exists && remote.revision > metadata.revision) {
-      if (signal.aborted) return;
-      onApply(remote);
-      const remoteRequest: UploadRequest = { state: remote.state!, operbox: remote.operbox, result: remote.result };
-      const remoteFingerprint = cloudWorkspaceFingerprint(remoteRequest);
-      writeCloudSyncMetadata(window.localStorage, user, { revision: remote.revision, fingerprint: remoteFingerprint });
-      syncedFingerprint.current = remoteFingerprint;
-      onWorkspaceChanged(remote);
-    } else {
-      syncedFingerprint.current = localFingerprint;
-      onWorkspaceChanged(remote);
-    }
-    initializedUser.current = user;
-  }, [hasLocalSession, onApply, onWorkspaceChanged]);
+  const intl = useTranslations();
+  const { userId, workspace, refreshKey } = props;
+  const latest = useRef(props);
+  const session = useRef<CloudSyncSession | null>(null);
+  const [status, setStatus] = useState<CloudSyncStatus>({ consentOpen: false, saving: false, error: null, errorCode: null });
+  useEffect(() => { latest.current = props; });
 
   useEffect(() => {
-    let cancelled = false;
-    syncController.current?.abort();
-    const controller = new AbortController();
-    syncController.current = controller;
-    initializedUser.current = null;
-    syncedFingerprint.current = null;
-    onWorkspaceChanged(null);
+    setStatus({ consentOpen: false, saving: false, error: null, errorCode: null });
     if (!userId) {
-      setConsentOpen(false);
-      controller.abort();
-      if (syncController.current === controller) syncController.current = null;
+      latest.current.onWorkspaceChanged(null);
       return;
     }
-    void getAccountDataConsent(controller.signal).then(async (consent) => {
-      if (cancelled) return;
-      if (!consent.cloudSyncEnabled) return;
-      if (!consent.current) {
-        const dismissed = window.localStorage.getItem(`cloud-consent-dismissed:${userId}:${TERMS_VERSION}:${PRIVACY_VERSION}`) === "1";
-        if (!dismissed) setConsentOpen(true);
-        return;
-      }
-      await synchronizeFirst(userId, controller.signal);
-    }).catch((cause) => {
-      if (!cancelled && !(cause instanceof DOMException && cause.name === "AbortError")) {
-        setError(cause instanceof Error ? cause.message : (en ? "Cloud sync is temporarily unavailable. Current data remains stored locally." : "云端同步暂不可用，当前数据仍保存在本地。"));
-      }
+    const active = new CloudSyncSession({
+      userId,
+      storage: window.localStorage,
+      dismissedKey: `cloud-consent-dismissed:${userId}:${TERMS_VERSION}:${PRIVACY_VERSION}`,
+      local: () => latest.current,
+      getConsent: getAccountDataConsent,
+      acceptConsent: (signal) => acceptAccountDataConsent({ termsAccepted: true, privacyAccepted: true, termsVersion: TERMS_VERSION, privacyVersion: PRIVACY_VERSION }, signal),
+      getWorkspace: getCloudWorkspace,
+      putWorkspace: putCloudWorkspace,
+      apply: (remote) => latest.current.onApply(remote),
+      changed: (remote) => latest.current.onWorkspaceChanged(remote),
+      status: setStatus,
     });
-    return () => {
-      cancelled = true;
-      controller.abort();
-      if (syncController.current === controller) syncController.current = null;
-    };
-  }, [en, onWorkspaceChanged, refreshKey, synchronizeFirst, userId]);
+    session.current = active;
+    active.start();
+    return () => { active.dispose(); if (session.current === active) session.current = null; };
+  }, [userId]);
 
-  useEffect(() => {
-    if (!userId || initializedUser.current !== userId) return;
-    const fingerprint = cloudWorkspaceFingerprint(workspace);
-    if (fingerprint === syncedFingerprint.current) return;
-    const controller = new AbortController();
-    const timer = window.setTimeout(() => {
-      void putCloudWorkspace(workspace, controller.signal).then((remote) => {
-        if (controller.signal.aborted) return;
-        syncedFingerprint.current = fingerprint;
-        writeCloudSyncMetadata(window.localStorage, userId, { revision: remote.revision, fingerprint });
-        onWorkspaceChanged(remote);
-        setError(null);
-      }).catch((cause) => {
-        if (!(cause instanceof DOMException && cause.name === "AbortError")) {
-          setError(cause instanceof Error ? cause.message : (en ? "Cloud sync failed. A local copy has been retained." : "云端同步失败，已保留本地副本。"));
-        }
-      });
-    }, 1200);
-    return () => {
-      window.clearTimeout(timer);
-      controller.abort();
-    };
-  }, [en, onWorkspaceChanged, userId, workspace]);
+  useEffect(() => { session.current?.update(); }, [workspace]);
+  useEffect(() => { session.current?.refresh(); }, [refreshKey]);
 
-  async function accept() {
-    if (!userId) return;
-    setSaving(true);
-    setError(null);
-    try {
-      const controller = syncController.current ?? new AbortController();
-      syncController.current = controller;
-      await acceptAccountDataConsent({
-        termsAccepted: true,
-        privacyAccepted: true,
-        termsVersion: TERMS_VERSION,
-        privacyVersion: PRIVACY_VERSION,
-      }, controller.signal);
-      if (controller.signal.aborted) return;
-      setConsentOpen(false);
-      await synchronizeFirst(userId, controller.signal, true);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : (en ? "Could not save consent. Try again later." : "无法保存同意状态，请稍后重试。"));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  function decline() {
-    if (userId) window.localStorage.setItem(`cloud-consent-dismissed:${userId}:${TERMS_VERSION}:${PRIVACY_VERSION}`, "1");
-    setConsentOpen(false);
-  }
-
-  return <DataConsentDialog open={consentOpen} saving={saving} error={error} onAccept={() => void accept()} onDecline={decline} />;
+  const errorMessages = {
+    consent: intl("components_cloud_CloudDataSync.syncError_consent"),
+    policy: intl("components_cloud_CloudDataSync.syncError_policy"),
+    invalid: intl("components_cloud_CloudDataSync.syncError_invalid"),
+    retry: intl("components_cloud_CloudDataSync.syncError_retry"),
+    session: intl("components_cloud_CloudDataSync.syncError_session"),
+    paused: intl("components_cloud_CloudDataSync.syncError_paused"),
+  };
+  const error = status.error ? errorMessages[status.error] : null;
+  return <>
+    <DataConsentDialog open={status.consentOpen} saving={status.saving} error={error} reloadRequired={status.error === "policy"} onAccept={() => { if (status.error === "policy") window.location.reload(); else void session.current?.accept(); }} onDecline={() => session.current?.decline()} />
+    {error && !status.consentOpen ? <Alert data-cloud-sync-error role="status" className="my-2">
+      <AlertDescription className="break-words">
+        <p>{error}{status.errorCode ? <> <span className="font-number">({status.errorCode})</span></> : null}</p>
+        {status.error === "paused" || status.error === "consent" ? <Button variant="outline" size="sm" onClick={() => session.current?.retry()}>{intl("components_cloud_CloudDataSync.resumeSync")}</Button> : null}
+      </AlertDescription>
+    </Alert> : null}
+  </>;
 }

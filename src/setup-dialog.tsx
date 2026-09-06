@@ -1,4 +1,6 @@
 "use client";
+import { localize as localize_setup_dialog } from "./i18n/helpers/setup_dialog.ts";
+import { useTranslations, useLocale } from "next-intl";
 
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Check, Database, ExternalLink, FileJson, ListChecks, Minus, Play, Plus, ScanLine, Trash2, Upload } from "lucide-react";
@@ -17,7 +19,14 @@ import { FiammettaSettings } from "@/components/FiammettaSettings";
 import { WizardSteps } from "@/components/interior/wizard-steps";
 import { hasSetupConfigurationChanged } from "@/setup-configuration";
 import { useWebsiteSession } from "@/website-session";
-import { useLanguageDemo } from "@/language-demo";
+import {
+  formatManualShiftDuration,
+  manualShiftTimeRanges,
+  resizeManualShiftDurations,
+  updateManualShiftBoundary,
+  type ManualScheduleMode,
+} from "@/manual-schedule";
+import { DEFAULT_MANUAL_SHIFT_START_TIME } from "@/manual-schedule-config";
 
 import type { FactoryRecipe, PowerBudget, TradeOrder } from "./blueprint";
 import { FileDrop, LayoutEditor, PresetSelector } from "./components";
@@ -63,6 +72,10 @@ type SetupDialogProps = {
   onRotationProfileChange: (value: RotationProfile) => void;
   manualShiftDurations?: number[];
   onManualShiftDurationsChange?: (durations: number[]) => void;
+  manualShiftStartTime?: string;
+  onManualShiftStartTimeChange?: (startTime: string) => void;
+  manualScheduleMode?: ManualScheduleMode;
+  onManualScheduleModeChange?: (mode: ManualScheduleMode) => void;
   fiammettaEnabled: boolean;
   onFiammettaEnabledChange: (enabled: boolean) => void;
   onPresetSelect: (preset: PresetDef) => void;
@@ -80,15 +93,15 @@ type SetupDialogProps = {
 };
 
 function sourceLabel(source: BoxSource, en: boolean): string {
-  if (CLIENT_SKLAND_ENABLED && source === "skland") return en ? "Skland" : "森空岛";
-  if (source === "maa") return en ? "MAA import" : "MAA 导入";
-  return en ? "243 full E2 sample" : "243 全精二示例";
+  if (CLIENT_SKLAND_ENABLED && source === "skland") return localize_setup_dialog.text(en, "skland");
+  if (source === "maa") return localize_setup_dialog.text(en, "maaImport");
+  return localize_setup_dialog.text(en, "243FullE2Sample");
 }
 
 function formatSyncTime(timestamp: number | null | undefined, en: boolean): string {
   const date = timestamp && Number.isFinite(timestamp) ? new Date(timestamp * 1000) : null;
-  if (!date || Number.isNaN(date.getTime())) return en ? "Not synced" : "尚未同步";
-  return new Intl.DateTimeFormat(en ? "en-US" : "zh-CN", { dateStyle: "short", timeStyle: "short" }).format(date);
+  if (!date || Number.isNaN(date.getTime())) return localize_setup_dialog.text(en, "notSynced");
+  return new Intl.DateTimeFormat((en ? "en-US" : "zh-CN"), { dateStyle: "short", timeStyle: "short" }).format(date);
 }
 
 export function SetupDialog({
@@ -122,6 +135,10 @@ export function SetupDialog({
   onRotationProfileChange,
   manualShiftDurations = [12, 6, 6],
   onManualShiftDurationsChange,
+  manualShiftStartTime = DEFAULT_MANUAL_SHIFT_START_TIME,
+  onManualShiftStartTimeChange,
+  manualScheduleMode = "sequential",
+  onManualScheduleModeChange,
   fiammettaEnabled,
   onFiammettaEnabledChange,
   onPresetSelect,
@@ -137,7 +154,8 @@ export function SetupDialog({
   onFinish,
   onSkip,
 }: SetupDialogProps) {
-  const { locale } = useLanguageDemo();
+  const intl = useTranslations();
+  const locale = useLocale();
   const en = locale === "en";
   const { data: websiteSession } = useWebsiteSession();
   const [step, setStep] = useState<SetupStep>("box");
@@ -158,26 +176,22 @@ export function SetupDialog({
   const mustReviewFacilities = needsFacilityReview || !powerBudget.ok;
   const persistedDataLabel = fileName || sourceLabel(boxSource, en);
   const currentDataLabel = CLIENT_SKLAND_ENABLED && boxSource === "skland" && !sklandSnapshot
-    ? (en ? "Last synced Skland data" : "上次同步的森空岛数据")
+    ? (intl("setup_dialog.lastSyncedSklandData"))
     : en && persistedDataLabel === "243 全精二示例"
       ? "243 full E2 sample"
       : persistedDataLabel;
   const reducedMotion = useReducedMotion();
+  const manualShiftRanges = manualShiftTimeRanges(manualShiftStartTime, manualShiftDurations);
 
   function updateManualShiftCount(count: number) {
     if (!onManualShiftDurationsChange) return;
-    const nextCount = Math.max(1, Math.min(12, Math.trunc(count || 1)));
-    onManualShiftDurationsChange(Array.from(
-      { length: nextCount },
-      (_, index) => manualShiftDurations[index] ?? 12,
-    ));
+    onManualShiftDurationsChange(resizeManualShiftDurations(manualShiftDurations, count));
   }
 
-  function updateManualShiftDuration(index: number, duration: number) {
-    if (!onManualShiftDurationsChange || !Number.isFinite(duration)) return;
-    onManualShiftDurationsChange(manualShiftDurations.map((current, candidate) => (
-      candidate === index ? Math.max(0.25, Math.round(duration * 100) / 100) : current
-    )));
+  function updateManualShiftEnd(index: number, endTime: string) {
+    if (!onManualShiftDurationsChange) return;
+    const next = updateManualShiftBoundary(manualShiftStartTime, manualShiftDurations, index, endTime);
+    if (next) onManualShiftDurationsChange(next);
   }
 
   useEffect(() => {
@@ -307,14 +321,14 @@ export function SetupDialog({
         >
           <div data-setup-top className="px-4 pb-3 pt-4 sm:px-7 sm:pb-4 sm:pt-6">
             <div className="flex min-h-9 items-center gap-3 pr-12">
-              <DialogTitle>{en ? "Schedule Settings" : "排班设置"}</DialogTitle>
-              {configurationChanged ? <span className="border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800">{en ? "Modified" : "配置已修改"}</span> : null}
+              <DialogTitle>{intl("setup_dialog.scheduleSettings")}</DialogTitle>
+              {configurationChanged ? <span className="border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800">{intl("setup_dialog.modified")}</span> : null}
             </div>
             <WizardSteps
               steps={[
-                { id: "box", label: en ? "Operator data" : "干员数据" },
-                { id: "layout", label: en ? "Layout" : "布局" },
-                { id: "facilities", label: en ? "Facilities" : "设施" },
+                { id: "box", label: intl("setup_dialog.operatorData") },
+                { id: "layout", label: intl("setup_dialog.layout") },
+                { id: "facilities", label: intl("setup_dialog.facilities") },
               ]}
               value={step}
               onValueChange={(value) => {
@@ -333,7 +347,7 @@ export function SetupDialog({
                 ref={boxPanelRef}
                 data-setup-box-content
                 role="region"
-                aria-label={en ? "Operator data" : "干员数据"}
+                aria-label={intl("setup_dialog.operatorData")}
                 tabIndex={-1}
                 className="grid w-full gap-4 px-4 py-4 outline-none sm:px-7 sm:py-6"
                 initial={reducedMotion ? false : { x: stepDirection * 28, opacity: 0 }}
@@ -347,9 +361,7 @@ export function SetupDialog({
                       <div className="min-w-0">
                         <h3 id="setup-current-data-title" className="font-number truncate text-sm font-semibold">{currentDataLabel}</h3>
                         <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                          {en
-                            ? <><span className="font-number">{operbox?.length ?? 0}</span> operators · <span className="font-number">{ownedCount}</span> available</>
-                            : <><span className="font-number">{operbox?.length ?? 0}</span> 名干员 · <span className="font-number">{ownedCount}</span> 名可用</>}
+                          {intl.rich("setup_dialog.rich1", { element1: (chunks) => (<span className="font-number">{chunks}</span>), value2: () => (operbox?.length ?? 0), value3: () => (ownedCount) })}
                         </p>
                       </div>
                     </div>
@@ -360,25 +372,25 @@ export function SetupDialog({
                       aria-controls="setup-import-options"
                       onClick={() => setShowImportOptions((current) => !current)}
                     >
-                      {showImportOptions ? (en ? "Collapse" : "收起") : (en ? "Change" : "更换")}
+                      {showImportOptions ? (intl("setup_dialog.collapse")) : (intl("setup_dialog.change"))}
                     </SetupActionButton>
                   </section>
                 ) : null}
 
                 {showImportOptions ? (
                   <section id="setup-import-options" className="setup-config-panel p-4 sm:p-5" aria-labelledby="setup-import-title">
-                    <h3 id="setup-import-title" className="sr-only">{en ? "Choose operator data source" : "选择干员数据来源"}</h3>
+                    <h3 id="setup-import-title" className="sr-only">{intl("setup_dialog.chooseOperatorDataSource")}</h3>
                     <Tabs
                       value={!CLIENT_SKLAND_ENABLED && inputMode === "skland" ? "maa" : inputMode}
                       onValueChange={(value) => onInputModeChange(value as OperatorInputMode)}
                     >
                       <TabsList
                         className={`grid h-auto w-full rounded-[4px] ${CLIENT_SKLAND_ENABLED ? "grid-cols-3" : "grid-cols-2"} sm:w-auto`}
-                        aria-label={en ? "Operator data source" : "干员数据来源"}
+                        aria-label={intl("setup_dialog.operatorDataSource")}
                       >
-                        {CLIENT_SKLAND_ENABLED ? <TabsTrigger value="skland" className="rounded-[4px]"><Database />{en ? "Skland" : "森空岛"}</TabsTrigger> : null}
+                        {CLIENT_SKLAND_ENABLED ? <TabsTrigger value="skland" className="rounded-[4px]"><Database />{intl("setup_dialog.skland")}</TabsTrigger> : null}
                         <TabsTrigger value="maa" className="rounded-[4px]"><FileJson />MAA</TabsTrigger>
-                        <TabsTrigger value="manual" className="rounded-[4px]"><ListChecks />{en ? "Manual" : "手动选择"}</TabsTrigger>
+                        <TabsTrigger value="manual" className="rounded-[4px]"><ListChecks />{intl("setup_dialog.manual")}</TabsTrigger>
                       </TabsList>
                       {CLIENT_SKLAND_ENABLED ? <TabsContent value="skland" className="pt-4">
                         <div className="setup-import-action flex flex-wrap items-center justify-between gap-4 px-4 py-4">
@@ -387,31 +399,31 @@ export function SetupDialog({
                               {sklandSnapshot
                                 ? sklandSnapshot.roles.find((role) => role.isDefault)?.nickname
                                   ?? sklandSnapshot.roles[0]?.nickname
-                                  ?? (en ? "Skland sync" : "森空岛同步")
-                                : (en ? "Skland sync" : "森空岛同步")}
+                                  ?? (intl("setup_dialog.sklandSync"))
+                                : (intl("setup_dialog.sklandSync"))}
                             </strong>
                             {sklandSnapshot ? (
                               <span className="mt-0.5 block text-xs text-muted-foreground">
-                                <span className="font-number">{sklandSnapshot.operbox.length}</span> {en ? "operators" : "名干员"} · <span className="font-number">{formatSyncTime(sklandSnapshot.infrastructure.storeTs, en)}</span>
+                                <span className="font-number">{sklandSnapshot.operbox.length}</span> {intl("setup_dialog.operators")} · <span className="font-number">{formatSyncTime(sklandSnapshot.infrastructure.storeTs, en)}</span>
                               </span>
                             ) : !sklandConfigured && sklandDisabledReason ? (
                               <span className="mt-0.5 block text-xs text-muted-foreground">{sklandDisabledReason}</span>
                             ) : sklandBindingCount > 0 ? (
-                              <span className="mt-0.5 block text-xs text-muted-foreground">{en ? "The website account is linked; this browser needs authorization again" : "网站账号已绑定，当前浏览器需要重新授权"}</span>
+                              <span className="mt-0.5 block text-xs text-muted-foreground">{intl("setup_dialog.theWebsiteAccountIsLinkedThisBrowserNeedsAuthorization")}</span>
                             ) : null}
                           </div>
                           {sklandSnapshot && boxSource !== "skland" ? (
                             <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
                               <Button type="button" variant="ghost" className="h-11" onClick={handleOpenSkland}>
-                                {en ? "Sync again" : "重新同步"}
+                                {intl("setup_dialog.syncAgain")}
                               </Button>
                               <Button type="button" className="h-11" onClick={handleUseSklandSnapshot}>
-                                {en ? "Use Skland data" : "使用森空岛数据"}
+                                {intl("setup_dialog.useSklandData")}
                               </Button>
                             </div>
                           ) : (
                             <Button type="button" className="h-11 w-full sm:w-auto" onClick={handleOpenSkland}>
-                              <ScanLine />{en ? "Open Skland sync" : "前往森空岛同步"}
+                              <ScanLine />{intl("setup_dialog.openSklandSync")}
                             </Button>
                           )}
                         </div>
@@ -436,9 +448,9 @@ export function SetupDialog({
                         {!websiteSession ? (
                           <Alert>
                             <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                              <span>{en ? "MAA import requires a verified website account. The full-roster sample and skill search remain available anonymously." : "MAA 导入需要先登录已验证的网站账号；全角色示例和技能查询仍可匿名使用。"}</span>
+                              <span>{intl("setup_dialog.maaImportRequiresAVerifiedWebsiteAccountTheFull")}</span>
                               <Button type="button" size="sm" className="min-h-11 shrink-0" onClick={onRequireWebsiteAccount}>
-                                {en ? "Sign in to import" : "登录后导入"}
+                                {intl("setup_dialog.signInToImport")}
                               </Button>
                             </AlertDescription>
                           </Alert>
@@ -453,24 +465,24 @@ export function SetupDialog({
                               aria-controls="setup-maa-paste"
                               onClick={() => setShowMaaPaste((current) => !current)}
                             >
-                              {showMaaPaste ? (en ? "Collapse JSON" : "收起 JSON") : (en ? "Paste JSON" : "粘贴 JSON")}
+                              {showMaaPaste ? (intl("setup_dialog.collapseJson")) : (intl("setup_dialog.pasteJson"))}
                             </Button>
                           </>
                         )}
                         {websiteSession && showMaaPaste ? (
                           <div id="setup-maa-paste" className="grid gap-2">
-                            <Label htmlFor="setup-maa-json">{en ? "JSON content" : "JSON 内容"}</Label>
+                            <Label htmlFor="setup-maa-json">{intl("setup_dialog.jsonContent")}</Label>
                             <Textarea
                               id="setup-maa-json"
                               value={maaPaste}
                               onChange={(event) => onMaaPasteChange(event.target.value)}
-                              placeholder={en ? "Paste the contents of Arknights_OperBox_Export.json" : "粘贴 Arknights_OperBox_Export.json 内容"}
+                              placeholder={intl("setup_dialog.pasteTheContentsOfArknightsOperboxExportJson")}
                               className="min-h-28 resize-y rounded-[4px] font-mono text-base sm:text-sm"
                               aria-invalid={Boolean(inputError)}
                               aria-describedby={inputError ? "setup-box-error" : undefined}
                             />
                             <SetupActionButton type="button" className="w-full" disabled={!maaPaste.trim()} onClick={() => void importMaaPaste()}>
-                              {en ? "Import JSON" : "导入 JSON"}
+                              {intl("setup_dialog.importJson")}
                             </SetupActionButton>
                           </div>
                         ) : null}
@@ -479,19 +491,19 @@ export function SetupDialog({
                         {!websiteSession ? (
                           <Alert>
                             <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                              <span>{en ? "A manually selected Box is personal data and requires a verified website account." : "手动选择的 Box 属于个人数据，需要先登录已验证的网站账号。"}</span>
+                              <span>{intl("setup_dialog.aManuallySelectedBoxIsPersonalDataAndRequires")}</span>
                               <Button type="button" size="sm" className="min-h-11 shrink-0" onClick={onRequireWebsiteAccount}>
-                                {en ? "Sign in to continue" : "登录后选择"}
+                                {intl("setup_dialog.signInToContinue")}
                               </Button>
                             </AlertDescription>
                           </Alert>
                         ) : (
-                          <Suspense fallback={<div className="grid min-h-40 place-items-center border border-dashed border-border text-sm text-muted-foreground">{en ? "Loading operator roster" : "正在加载干员列表"}</div>}>
+                          <Suspense fallback={<div className="grid min-h-40 place-items-center border border-dashed border-border text-sm text-muted-foreground">{intl("setup_dialog.loadingOperatorRoster")}</div>}>
                             <ManualOperboxPicker
                               compact
                               showProfessionFilter
                               operbox={operbox}
-                              title={en ? "Build your operator BOX" : "手动选择干员 Box"}
+                              title={intl("setup_dialog.buildYourOperatorBox")}
                               description={null}
                               onApply={applyManualBox}
                             />
@@ -512,11 +524,11 @@ export function SetupDialog({
                 ) : null}
 
                 <details className="setup-quiet-details">
-                  <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">{en ? "Data management" : "数据管理"}</summary>
+                  <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">{intl("setup_dialog.dataManagement")}</summary>
                   <div className="flex flex-wrap items-center justify-between gap-3 py-3">
-                    <span className="text-xs text-muted-foreground">{en ? <>Data is stored in this browser for <span className="font-number">30</span> days.</> : <>数据在此浏览器保存 <span className="font-number">30</span> 天。</>}</span>
+                    <span className="text-xs text-muted-foreground">{intl.rich("setup_dialog.rich2", { element1: (chunks) => (<span className="font-number">{chunks}</span>) })}</span>
                     <SetupActionButton type="button" variant="destructive" onClick={() => setClearConfirmOpen(true)}>
-                      <Trash2 />{en ? "Clear local data" : "清除本地数据"}
+                      <Trash2 />{intl("setup_dialog.clearLocalData")}
                     </SetupActionButton>
                   </div>
                 </details>
@@ -536,7 +548,7 @@ export function SetupDialog({
                     ref={basicsPanelRef}
                     data-setup-layout-basics
                     role="region"
-                    aria-label={mode === "manual" ? (en ? "Layout and shifts" : "布局与班次") : (en ? "Layout and rotations" : "布局与换班")}
+                    aria-label={mode === "manual" ? (intl("setup_dialog.layoutAndShifts")) : (intl("setup_dialog.layoutAndRotations"))}
                     tabIndex={-1}
                     className="grid gap-6 px-4 py-5 outline-none sm:px-7 sm:py-6"
                     initial={reducedMotion ? false : { x: stepDirection * 28, opacity: 0 }}
@@ -544,38 +556,101 @@ export function SetupDialog({
                     transition={reducedMotion ? { duration: 0 } : PANEL_TRANSITION}
                   >
                     <section className="grid gap-3" aria-labelledby="setup-preset-title">
-                      <h3 id="setup-preset-title" className="text-sm font-semibold">{en ? "Base presets" : "布局预设"}</h3>
+                      <h3 id="setup-preset-title" className="text-sm font-semibold">{intl("setup_dialog.basePresets")}</h3>
                       <PresetSelector presets={presets} selected={preset} onSelect={handlePresetSelect} />
                     </section>
 
                     <div className="pt-1">
                       {mode === "manual" ? (
                         <section className="grid gap-4" aria-labelledby="manual-shift-settings-title" data-manual-shift-settings>
+                          <div>
+                            <h3 className="text-sm font-semibold">{intl("setup_dialog.scheduleMode")}</h3>
+                            <div className="mt-2 grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label={intl("setup_dialog.scheduleMode")}>
+                              <Button
+                                type="button"
+                                variant={manualScheduleMode === "sequential" ? "default" : "outline"}
+                                className="h-auto min-h-16 items-start justify-start px-4 py-3 text-left"
+                                role="radio"
+                                aria-checked={manualScheduleMode === "sequential"}
+                                onClick={() => onManualScheduleModeChange?.("sequential")}
+                              >
+                                <span>
+                                  <span className="block font-semibold">{intl("setup_dialog.sequentialRotation")}</span>
+                                  <span className="mt-1 block text-xs font-normal opacity-75">{intl("setup_dialog.sequentialRotationDescription")}</span>
+                                </span>
+                              </Button>
+                              <Button
+                                type="button"
+                                variant={manualScheduleMode === "period" ? "default" : "outline"}
+                                className="h-auto min-h-16 items-start justify-start px-4 py-3 text-left"
+                                role="radio"
+                                aria-checked={manualScheduleMode === "period"}
+                                onClick={() => onManualScheduleModeChange?.("period")}
+                              >
+                                <span>
+                                  <span className="block font-semibold">{intl("setup_dialog.timeRanges")}</span>
+                                  <span className="mt-1 block text-xs font-normal opacity-75">{intl("setup_dialog.timeRangesDescription")}</span>
+                                </span>
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="border-t border-border/70" />
                           <div className="flex flex-wrap items-center justify-between gap-3">
                             <div>
-                              <h3 id="manual-shift-settings-title" className="text-sm font-semibold">{en ? "Manual shifts" : "手动班次"}</h3>
-                              <p className="mt-1 text-xs text-muted-foreground">{en ? "Durations are independent and do not need to add up to 24 hours." : "每班时长相互独立，不要求合计为 24 小时。"}</p>
+                               <h3 id="manual-shift-settings-title" className="text-sm font-semibold">{intl("setup_dialog.manualShifts")}</h3>
+                              <p className="mt-1 text-xs text-muted-foreground">{manualScheduleMode === "period"
+                                ? intl("setup_dialog.consecutiveShiftTimes")
+                                : intl("setup_dialog.shiftOrderOnly")}</p>
+                              {manualScheduleMode === "period" ? <p className="mt-1 text-xs font-medium text-foreground">{intl("setup_dialog.total24Hours")}</p> : null}
                             </div>
                             <div className="flex items-center gap-1">
-                              <Button type="button" size="icon-sm" variant="outline" aria-label={en ? "Remove one shift" : "减少一个班次"} disabled={manualShiftDurations.length <= 1} onClick={() => updateManualShiftCount(manualShiftDurations.length - 1)}><Minus /></Button>
+                              <Button type="button" size="icon-sm" variant="outline" aria-label={intl("setup_dialog.removeOneShift")} disabled={manualShiftDurations.length <= 1} onClick={() => updateManualShiftCount(manualShiftDurations.length - 1)}><Minus /></Button>
                               <label className="flex items-center gap-2 text-sm">
-                                <span>{en ? "Shifts" : "班次数"}</span>
+                                <span>{intl("setup_dialog.shifts")}</span>
                                 <input className="h-9 w-16 rounded-[4px] border border-input bg-background px-2 text-center font-number" type="number" min="1" max="12" step="1" value={manualShiftDurations.length} onChange={(event) => updateManualShiftCount(Number(event.target.value))} />
                               </label>
-                              <Button type="button" size="icon-sm" variant="outline" aria-label={en ? "Add one shift" : "增加一个班次"} disabled={manualShiftDurations.length >= 12} onClick={() => updateManualShiftCount(manualShiftDurations.length + 1)}><Plus /></Button>
+                              <Button type="button" size="icon-sm" variant="outline" aria-label={intl("setup_dialog.addOneShift")} disabled={manualShiftDurations.length >= 12} onClick={() => updateManualShiftCount(manualShiftDurations.length + 1)}><Plus /></Button>
                             </div>
                           </div>
-                          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                            {manualShiftDurations.map((duration, index) => (
-                              <label key={index} className="flex min-h-11 items-center justify-between gap-3 border border-border/70 bg-muted/25 px-3 py-2 text-sm">
-                                <span>{en ? `Shift ${index + 1}` : `班次 ${index + 1}`}</span>
-                                <span className="flex items-center gap-1.5">
-                                  <input aria-label={en ? `Shift ${index + 1} duration` : `班次 ${index + 1} 时长`} className="h-8 w-20 rounded-[4px] border border-input bg-background px-2 text-right font-number" type="number" min="0.25" step="0.25" value={duration} onChange={(event) => updateManualShiftDuration(index, Number(event.target.value))} />
-                                  <span className="text-xs text-muted-foreground">{en ? "h" : "小时"}</span>
-                                </span>
-                              </label>
+                          {manualScheduleMode === "period" ? <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                            {manualShiftRanges.map((range, index) => (
+                              <div key={index} className="grid min-h-20 gap-2 border border-border/70 bg-muted/25 px-3 py-2 text-sm">
+                                <div className="flex items-center justify-between gap-3">
+                                  <span>{intl("setup_dialog.shift", { value1: index + 1 })}</span>
+                                  <span className="text-xs text-muted-foreground">{intl("setup_dialog.durationParenthetical", { duration: formatManualShiftDuration(range.durationMinutes, en) })}</span>
+                                </div>
+                                <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                                  <label className="grid gap-1 text-xs text-muted-foreground">
+                                    <span>{intl("setup_dialog.start")}</span>
+                                    <input
+                                      aria-label={intl("setup_dialog.shiftStartTime", { value1: index + 1 })}
+                                      className="h-9 min-w-0 rounded-[4px] border border-input bg-background px-2 font-number disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
+                                      type="time"
+                                      step="60"
+                                      value={range.startTime}
+                                      disabled={index > 0}
+                                      onChange={(event) => {
+                                        if (event.target.value) onManualShiftStartTimeChange?.(event.target.value);
+                                      }}
+                                    />
+                                  </label>
+                                  <span className="mt-5 text-muted-foreground" aria-hidden="true">→</span>
+                                  <label className="grid gap-1 text-xs text-muted-foreground">
+                                    <span>{intl("setup_dialog.end")}</span>
+                                    <input
+                                      aria-label={intl("setup_dialog.shiftEndTime", { value1: index + 1 })}
+                                      className="h-9 min-w-0 rounded-[4px] border border-input bg-background px-2 font-number disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
+                                      type="time"
+                                      step="60"
+                                      value={range.endTime}
+                                      disabled={index === manualShiftRanges.length - 1}
+                                      onChange={(event) => updateManualShiftEnd(index, event.target.value)}
+                                    />
+                                  </label>
+                                </div>
+                              </div>
                             ))}
-                          </div>
+                          </div> : null}
                         </section>
                       ) : <RotationSettings value={rotationProfile} onChange={onRotationProfileChange} />}
                     </div>
@@ -591,13 +666,13 @@ export function SetupDialog({
                     </div>
 
                     <details className="setup-quiet-details pt-1">
-                      <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">{en ? "Advanced tools" : "高级工具"}</summary>
+                      <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">{intl("setup_dialog.advancedTools")}</summary>
                       <div className="grid gap-2 py-3 sm:grid-cols-2">
                         <SetupActionButton
                           asLabel
                           className="w-full cursor-pointer"
                         >
-                          <Upload className="size-4" />{en ? "Import layout" : "导入布局"}
+                          <Upload className="size-4" />{intl("setup_dialog.importLayout")}
                           <input
                             className="sr-only"
                             type="file"
@@ -610,11 +685,11 @@ export function SetupDialog({
                           />
                         </SetupActionButton>
                         <SetupActionButton type="button" className="w-full" onClick={onDownloadLayout}>
-                          <FileJson />{en ? "Export layout" : "导出布局"}
+                          <FileJson />{intl("setup_dialog.exportLayout")}
                         </SetupActionButton>
                         {resultClearWarningDismissed ? (
                           <Button type="button" variant="ghost" className="min-h-11 w-fit" onClick={onRestoreResultClearWarning}>
-                            {en ? "Restore change warning" : "恢复切换提示"}
+                            {intl("setup_dialog.restoreChangeWarning")}
                           </Button>
                         ) : null}
                       </div>
@@ -631,7 +706,7 @@ export function SetupDialog({
                     ref={facilitiesPanelRef}
                     data-setup-facilities
                     role="region"
-                    aria-label={en ? "Facility settings" : "设施设置"}
+                    aria-label={intl("setup_dialog.facilitySettings")}
                     tabIndex={-1}
                     className="px-4 py-5 outline-none sm:px-7 sm:py-6"
                     initial={reducedMotion ? false : { x: stepDirection * 28, opacity: 0 }}
@@ -655,7 +730,7 @@ export function SetupDialog({
         <footer data-setup-footer className="setup-dialog-footer flex w-full min-w-0 flex-nowrap items-center justify-end gap-1.5 px-4 pb-4 pt-2 sm:gap-2 sm:px-7 sm:pb-7 sm:pt-3">
           {step === "box" ? (
             <>
-              <Button className="max-sm:min-w-16 sm:min-w-[88px]" size="dialog" type="button" variant="ghost" onClick={onSkip}>{en ? "Later" : "稍后"}</Button>
+              <Button className="max-sm:min-w-16 sm:min-w-[88px]" size="dialog" type="button" variant="ghost" onClick={onSkip}>{intl("setup_dialog.later")}</Button>
               <Button
                 size="dialog"
                 type="button"
@@ -663,15 +738,15 @@ export function SetupDialog({
                 onClick={goToBasics}
               >
                 {showImportOptions && inputMode === "manual"
-                  ? (en ? "Apply selection first" : "请先应用选择")
-                  : (en ? "Continue" : "继续")}
+                  ? (intl("setup_dialog.applySelectionFirst"))
+                  : (intl("setup_dialog.continue"))}
               </Button>
             </>
           ) : step === "layout" ? (
             <>
-              <Button className="max-sm:min-w-16 sm:min-w-[88px]" size="dialog" type="button" variant="ghost" onClick={goToBox}>{en ? "Back" : "上一步"}</Button>
+              <Button className="max-sm:min-w-16 sm:min-w-[88px]" size="dialog" type="button" variant="ghost" onClick={goToBox}>{intl("setup_dialog.back")}</Button>
               <Button size="dialog" type="button" onClick={reviewFacilities}>
-                {mustReviewFacilities ? (en ? "Review facilities" : "检查设施") : (en ? "Continue" : "继续")}
+                {mustReviewFacilities ? (intl("setup_dialog.reviewFacilities")) : (intl("setup_dialog.continue"))}
               </Button>
             </>
           ) : (
@@ -681,16 +756,16 @@ export function SetupDialog({
                 role="status"
               >
                 <span className={`sm:hidden ${powerBudget.ok ? "text-emerald-700" : "text-red-600"}`}>
-                  {powerBudget.ok ? (en ? "Power OK" : "电力正常") : (en ? `Short ${powerBudget.consumed - powerBudget.generated}` : `缺 ${powerBudget.consumed - powerBudget.generated}`)}
+                  {powerBudget.ok ? (intl("setup_dialog.powerOk")) : (intl("setup_dialog.short", { value1: powerBudget.consumed - powerBudget.generated }))}
                 </span>
                 <span className={`max-sm:hidden ${powerBudget.ok ? "text-emerald-700" : "text-red-600"}`}>
                   {powerBudget.ok
-                    ? (en ? `Power OK · ${powerBudget.consumed}/${powerBudget.generated}` : `电力正常 · ${powerBudget.consumed}/${powerBudget.generated}`)
-                    : (en ? `Power shortfall ${powerBudget.consumed - powerBudget.generated} · ${powerBudget.consumed}/${powerBudget.generated}` : `电力不足 ${powerBudget.consumed - powerBudget.generated} · ${powerBudget.consumed}/${powerBudget.generated}`)}
+                    ? (intl("setup_dialog.powerOk2", { consumed: powerBudget.consumed, generated: powerBudget.generated }))
+                    : (intl("setup_dialog.powerShortfall", { value1: powerBudget.consumed - powerBudget.generated, consumed: powerBudget.consumed, generated: powerBudget.generated }))}
                 </span>
               </span>
-              <Button className="max-sm:min-w-16 sm:min-w-[88px]" size="dialog" type="button" variant="ghost" onClick={goToBasics}>{en ? "Back" : "上一步"}</Button>
-              <Button className="shrink-0" size="dialog" type="button" disabled={!powerBudget.ok} onClick={onFinish}><Check />{en ? "Done" : "完成"}</Button>
+              <Button className="max-sm:min-w-16 sm:min-w-[88px]" size="dialog" type="button" variant="ghost" onClick={goToBasics}>{intl("setup_dialog.back")}</Button>
+              <Button className="shrink-0" size="dialog" type="button" disabled={!powerBudget.ok} onClick={onFinish}><Check />{intl("setup_dialog.done")}</Button>
             </>
           )}
         </footer>
@@ -699,17 +774,13 @@ export function SetupDialog({
       <Dialog open={clearConfirmOpen} onOpenChange={setClearConfirmOpen}>
         <DialogContent layer="nested" className="max-w-[min(460px,calc(100vw-2rem))]">
           <DialogHeader>
-            <DialogTitle>{en ? "Clear local data?" : "清除本地数据？"}</DialogTitle>
+            <DialogTitle>{intl("setup_dialog.clearLocalData2")}</DialogTitle>
             <DialogDescription>
-              {en
-                ? `This clears layouts, operator data, recent schedules, and prompt preferences from this browser.${CLIENT_SKLAND_ENABLED ? " Your Skland session remains signed in." : ""}`
-                : CLIENT_SKLAND_ENABLED
-                  ? "将删除此浏览器中的布局、干员数据、最近排班和提示偏好。森空岛登录状态不会退出。"
-                  : "将删除此浏览器中的布局、干员数据、最近排班和提示偏好。"}
+              {localize_setup_dialog.text(en, "additional1", { choice1: ((en)) && (CLIENT_SKLAND_ENABLED) ? "yes" : "no", choice2: (!(en)) && (CLIENT_SKLAND_ENABLED) ? "yes" : "no" })}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button className="max-sm:min-w-16 sm:min-w-[88px]" type="button" size="dialog" variant="ghost" onClick={() => setClearConfirmOpen(false)}>{en ? "Keep data" : "保留数据"}</Button>
+            <Button className="max-sm:min-w-16 sm:min-w-[88px]" type="button" size="dialog" variant="ghost" onClick={() => setClearConfirmOpen(false)}>{intl("setup_dialog.keepData")}</Button>
             <Button
               type="button"
               size="dialog"
@@ -719,7 +790,7 @@ export function SetupDialog({
                 setClearConfirmOpen(false);
               }}
             >
-              {en ? "Clear local data" : "清除本地数据"}
+              {intl("setup_dialog.clearLocalData")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -727,12 +798,12 @@ export function SetupDialog({
       <Dialog open={closeConfirmOpen} onOpenChange={setCloseConfirmOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{en ? "Close schedule settings?" : "关闭排班设置？"}</DialogTitle>
-            <DialogDescription>{en ? "Changes are saved locally. Generate the schedule again to apply them." : "配置修改已保存在本地。关闭后需要重新生成排班，结果才会按新配置更新。"}</DialogDescription>
+            <DialogTitle>{intl("setup_dialog.closeScheduleSettings")}</DialogTitle>
+            <DialogDescription>{intl("setup_dialog.changesAreSavedLocallyGenerateTheScheduleAgainTo")}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => setCloseConfirmOpen(false)}>{en ? "Keep editing" : "继续编辑"}</Button>
-            <Button type="button" onClick={() => { setCloseConfirmOpen(false); onOpenChange(false); }}>{en ? "Close settings" : "关闭设置"}</Button>
+            <Button type="button" variant="ghost" onClick={() => setCloseConfirmOpen(false)}>{intl("setup_dialog.keepEditing")}</Button>
+            <Button type="button" onClick={() => { setCloseConfirmOpen(false); onOpenChange(false); }}>{intl("setup_dialog.closeSettings")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

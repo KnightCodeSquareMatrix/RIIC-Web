@@ -1,4 +1,7 @@
 "use client";
+import { localize as authText } from "../../../i18n/helpers/AuthValidation.ts";
+import { useTranslations, useLocale } from "next-intl";
+import { messageRecord } from "@/i18n/translate";
 
 import { useEffect, useMemo, useState } from "react";
 
@@ -7,17 +10,15 @@ import { PasswordInput } from "@/components/auth/password-input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
-import { evaluatePasswordStrength, isStrongPassword, PASSWORD_STRENGTH_ERROR } from "@/password-strength";
-import { LanguageDemoSwitch, useLanguageDemo } from "@/language-demo";
-
-const PASSWORD_STRENGTH_LABELS = ["尚未输入", "较弱", "一般", "良好", "强"] as const;
-const EN_PASSWORD_STRENGTH_LABELS = ["Not entered", "Weak", "Fair", "Good", "Strong"] as const;
+import { evaluatePasswordStrength, isStrongPassword } from "@/password-strength";
+import { LanguageSwitch } from "@/i18n/client";
 
 function ResetPasswordStrength({ value, id }: { value: string; id: string }) {
-  const { locale } = useLanguageDemo();
+  const intl = useTranslations();
+  const locale = useLocale();
   const en = locale === "en";
   const strength = useMemo(() => evaluatePasswordStrength(value), [value]);
-  const labels = en ? EN_PASSWORD_STRENGTH_LABELS : PASSWORD_STRENGTH_LABELS;
+  const labels = messageRecord(en, "app_account_reset_password_reset_client_labels");
   const tone = strength.score === 0
     ? "bg-muted-foreground/25"
     : strength.score <= 1
@@ -30,7 +31,7 @@ function ResetPasswordStrength({ value, id }: { value: string; id: string }) {
     <div id={id} className="mt-1.5 w-full" data-password-strength>
       <div
         role="meter"
-        aria-label={en ? "Password strength" : "密码强度"}
+        aria-label={intl("app_account_reset_password_reset_client.passwordStrength")}
         aria-valuemin={0}
         aria-valuemax={4}
         aria-valuenow={strength.score}
@@ -42,12 +43,12 @@ function ResetPasswordStrength({ value, id }: { value: string; id: string }) {
         ))}
       </div>
       <p aria-live="polite" className="mt-2 text-xs text-muted-foreground">
-        {en ? `Password strength: ${labels[strength.score]}.` : `密码强度：${labels[strength.score]}。`}{strength.guessable ? (en ? " Avoid common, easy-to-guess patterns." : "请避免容易猜测的常见模式。") : ""}
+        {intl("app_account_reset_password_reset_client.passwordStrength2", { value1: labels[strength.score] })}{strength.guessable ? (intl("app_account_reset_password_reset_client.avoidCommonEasyToGuessPatterns")) : ""}
       </p>
       <ul className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
         {strength.rules.map((rule) => (
           <li key={rule.id} className={`text-xs ${rule.met ? "text-foreground" : "text-muted-foreground"}`}>
-            {rule.met ? "✓" : "○"} {en ? ({ length: "At least 10 characters", letter: "Contains a letter", digit: "Contains a number", variety: "Mixed case or a symbol" }[rule.id] ?? rule.label) : rule.label}
+            {rule.met ? "✓" : "○"} {authText.text(en, rule.id)}
           </li>
         ))}
       </ul>
@@ -56,7 +57,8 @@ function ResetPasswordStrength({ value, id }: { value: string; id: string }) {
 }
 
 export function ResetPassword() {
-  const { locale } = useLanguageDemo();
+  const intl = useTranslations();
+  const locale = useLocale();
   const en = locale === "en";
   const [password, setPassword] = useState("");
   const [passwordStrengthError, setPasswordStrengthError] = useState<string | null>(null);
@@ -69,39 +71,39 @@ export function ResetPassword() {
   useEffect(() => {
     const resetToken = new URLSearchParams(location.search).get("token")?.trim() ?? "";
     setToken(resetToken);
-    if (!resetToken) setMessage(en ? "The reset link is invalid or missing a token. Request a new password-reset email." : "重置链接无效或缺少令牌，请重新申请密码重置邮件。");
-  }, [en]);
+    if (!resetToken) setMessage(intl("app_account_reset_password_reset_client.theResetLinkIsInvalidOrMissingAToken"));
+  }, [intl, en]);
 
   async function resetPassword() {
     if (!token) {
-      setMessage(en ? "The reset link is invalid or missing a token. Request a new password-reset email." : "重置链接无效或缺少令牌，请重新申请密码重置邮件。");
+      setMessage(intl("app_account_reset_password_reset_client.theResetLinkIsInvalidOrMissingAToken"));
       return;
     }
     if (!isStrongPassword(password)) {
-      setPasswordStrengthError(en ? "Password is too weak. Meet every strength rule and avoid common passwords, sequences, or repeated characters." : PASSWORD_STRENGTH_ERROR);
+      setPasswordStrengthError(authText.text(en, "passwordWeak"));
       return;
     }
     setPasswordStrengthError(null);
     const confirmationError = passwordConfirmationError(password, confirmPassword);
     if (confirmationError) {
-      setConfirmPasswordError(en ? (confirmPassword ? "The passwords do not match." : "Enter the password again.") : confirmationError);
+      setConfirmPasswordError(authText.text(en, confirmPassword ? "passwordMismatch" : "passwordRepeat"));
       return;
     }
     setConfirmPasswordError(null);
     setBusy(true);
     setMessage(null);
     const result = await authClient.resetPassword({ newPassword: password, token });
-    setMessage(result.error?.message ?? (en ? "Password reset. Existing sessions have been revoked; return to the home page to sign in." : "密码已重置，旧 Session 已撤销，请返回首页登录。"));
+    setMessage(result.error?.message ?? (intl("app_account_reset_password_reset_client.passwordResetExistingSessionsHaveBeenRevokedReturnTo")));
     setBusy(false);
   }
 
   return (
     <main className="mx-auto grid min-h-dvh max-w-md place-content-center gap-4 p-5">
-      <div className="flex items-center justify-between gap-4"><a href="/" className="inline-flex min-h-11 items-center text-sm underline underline-offset-4">{en ? "Back to scheduler" : "返回排班助手"}</a><LanguageDemoSwitch /></div>
-      <h1 className="text-2xl font-semibold">{en ? "Reset password" : "重置密码"}</h1>
-      <p className="text-sm leading-6 text-muted-foreground">{en ? "The new password must contain 10–128 characters and satisfy every rule below. Resetting it also revokes sessions on other devices." : "新密码需为 10–128 位，并满足下方全部强度规则。重置成功后，其他登录设备上的 Session 也会失效。"}</p>
+      <div className="flex items-center justify-between gap-4"><a href="/" className="inline-flex min-h-11 items-center text-sm underline underline-offset-4">{intl("app_account_reset_password_reset_client.backToScheduler")}</a><LanguageSwitch /></div>
+      <h1 className="text-2xl font-semibold">{intl("app_account_reset_password_reset_client.resetPassword")}</h1>
+      <p className="text-sm leading-6 text-muted-foreground">{intl("app_account_reset_password_reset_client.theNewPasswordMustContain10128CharactersAnd")}</p>
       <div className="grid gap-1.5">
-        <Label htmlFor="reset-password">{en ? "New password" : "新密码"}</Label>
+        <Label htmlFor="reset-password">{intl("app_account_reset_password_reset_client.newPassword")}</Label>
         <PasswordInput
           id="reset-password"
           minLength={10}
@@ -111,7 +113,7 @@ export function ResetPassword() {
             const nextPassword = event.target.value;
             setPassword(nextPassword);
             if (passwordStrengthError) {
-              setPasswordStrengthError(isStrongPassword(nextPassword) ? null : (en ? "Password is too weak. Meet every strength rule and avoid common passwords, sequences, or repeated characters." : PASSWORD_STRENGTH_ERROR));
+              setPasswordStrengthError(isStrongPassword(nextPassword) ? null : (authText.text(en, "passwordWeak")));
             }
             if (confirmPasswordError) {
               const error = passwordConfirmationError(nextPassword, confirmPassword);
@@ -120,12 +122,12 @@ export function ResetPassword() {
           }}
           onBlur={() => {
             if (password && !isStrongPassword(password)) {
-              setPasswordStrengthError(en ? "Password is too weak. Meet every strength rule and avoid common passwords, sequences, or repeated characters." : PASSWORD_STRENGTH_ERROR);
+              setPasswordStrengthError(authText.text(en, "passwordWeak"));
             }
           }}
           autoComplete="new-password"
-          placeholder={en ? "New password (10–128 characters)" : "新密码（10–128 位）"}
-          revealLabel={en ? "Show new password" : "显示新密码"}
+          placeholder={intl("app_account_reset_password_reset_client.newPassword10128Characters")}
+          revealLabel={intl("app_account_reset_password_reset_client.showNewPassword")}
           aria-invalid={Boolean(passwordStrengthError)}
           aria-describedby="reset-password-strength"
         />
@@ -135,7 +137,7 @@ export function ResetPassword() {
         ) : null}
       </div>
       <div className="grid gap-1.5">
-        <Label htmlFor="reset-confirm-password">{en ? "Confirm new password" : "确认新密码"}</Label>
+        <Label htmlFor="reset-confirm-password">{intl("app_account_reset_password_reset_client.confirmNewPassword")}</Label>
         <PasswordInput
           id="reset-confirm-password"
           minLength={10}
@@ -154,8 +156,8 @@ export function ResetPassword() {
             setConfirmPasswordError(en && error ? (confirmPassword ? "The passwords do not match." : "Enter the password again.") : error);
           }}
           autoComplete="new-password"
-          placeholder={en ? "Enter the new password again" : "再次输入新密码"}
-          revealLabel={en ? "Show password confirmation" : "显示确认新密码"}
+          placeholder={intl("app_account_reset_password_reset_client.enterTheNewPasswordAgain")}
+          revealLabel={intl("app_account_reset_password_reset_client.showPasswordConfirmation")}
           aria-invalid={Boolean(confirmPasswordError)}
           aria-describedby="reset-confirm-password-hint"
         />
@@ -164,7 +166,7 @@ export function ResetPassword() {
           role={confirmPasswordError ? "alert" : undefined}
           className={`text-xs leading-5 ${confirmPasswordError ? "text-destructive" : "text-muted-foreground"}`}
         >
-          {confirmPasswordError ?? (en ? "Enter the new password again." : "请再次输入上面的新密码。")}
+          {confirmPasswordError ?? (intl("app_account_reset_password_reset_client.enterTheNewPasswordAgain2"))}
         </p>
       </div>
       <Button
@@ -172,7 +174,7 @@ export function ResetPassword() {
         disabled={busy || !token || password.length < 10 || confirmPassword.length < 10}
         onClick={() => void resetPassword()}
       >
-        {busy ? (en ? "Resetting…" : "正在重置…") : (en ? "Reset password" : "确认重置")}
+        {busy ? (intl("app_account_reset_password_reset_client.resetting")) : (intl("app_account_reset_password_reset_client.resetPassword2"))}
       </Button>
       {message ? <p role="status" className="text-sm text-muted-foreground">{message}</p> : null}
     </main>

@@ -1,4 +1,5 @@
 "use client";
+import { messageRecord } from "@/i18n/translate";
 
 import {
   Calculator,
@@ -18,6 +19,7 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -26,7 +28,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { workbenchHref, type AppPage } from "@/workbench-routes";
-import { useLanguageDemo } from "@/language-demo";
+import { useLocale } from "next-intl";
 
 const CLIENT_SKLAND_ENABLED = process.env.APP_CLIENT_SKLAND_ENABLED === "1";
 
@@ -77,26 +79,8 @@ function AppNavigationItem({
 }
 
 export function AppSidebar({ page, onPageChange }: AppSidebarProps) {
-  const { locale } = useLanguageDemo();
-  const labels = locale === "en" ? {
-    calculator: "Infrastructure Calculator",
-    manual: "Manual Scheduling",
-    training: "Training Advice",
-    mastery: "Mastery Planner",
-    skills: "Skill Search",
-    skland: "Skland Status",
-    account: "Account",
-    help: "Help",
-  } : {
-    calculator: "基建计算器",
-    manual: "手动排班",
-    training: "练卡建议",
-    mastery: "专精规划",
-    skills: "技能查询",
-    skland: "森空岛状态中心",
-    account: "账号管理",
-    help: "使用帮助",
-  };
+  const locale = useLocale();
+  const labels = messageRecord(locale, "components_layout_AppSidebar_labels");
   return (
     <Sidebar collapsible="icon" data-primary-navigation-prefetch="eager">
       <SidebarHeader className="h-[65px] flex-row items-center justify-end border-b border-sidebar-border px-2 group-data-[collapsible=icon]:justify-center">
@@ -104,12 +88,28 @@ export function AppSidebar({ page, onPageChange }: AppSidebarProps) {
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
+          <SidebarGroupLabel>{labels.schedulingGroup}</SidebarGroupLabel>
           <SidebarMenu>
             <AppNavigationItem page={page} target="calculator" label={labels.calculator} icon={Calculator} onPageChange={onPageChange} />
             <AppNavigationItem page={page} target="manual" label={labels.manual} icon={SquarePen} onPageChange={onPageChange} />
             <AppNavigationItem page={page} target="training" label={labels.training} icon={GraduationCap} onPageChange={onPageChange} />
+          </SidebarMenu>
+        </SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupLabel>{labels.progressionGroup}</SidebarGroupLabel>
+          <SidebarMenu>
             <AppNavigationItem page={page} target="mastery" label={labels.mastery} icon={BookOpen} onPageChange={onPageChange} />
+          </SidebarMenu>
+        </SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupLabel>{labels.skillsGroup}</SidebarGroupLabel>
+          <SidebarMenu>
             <AppNavigationItem page={page} target="skill-query" label={labels.skills} icon={Search} onPageChange={onPageChange} />
+          </SidebarMenu>
+        </SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupLabel>{labels.personalGroup}</SidebarGroupLabel>
+          <SidebarMenu>
             {CLIENT_SKLAND_ENABLED ? (
               <AppNavigationItem page={page} target="skland" label={labels.skland} icon={Cloud} onPageChange={onPageChange} />
             ) : null}

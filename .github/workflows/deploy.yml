@@ -220,27 +220,32 @@ jobs:
             local label="$1"
             local helper_path="$2"
             local expected_contract="$3"
-            local metadata actual_contract artifact_sha256
+            local inspection metadata actual_contract artifact_sha256 extra
 
-            metadata="$(timeout --kill-after=5s 30s ssh "${ssh_options[@]}" \
+            inspection="$(timeout --kill-after=5s 30s ssh "${ssh_options[@]}" \
               "${DEPLOY_SSH_USER}@${DEPLOY_HOST}" \
-              "test -f '$helper_path' && test ! -L '$helper_path' && stat -c '%U:%G:%a' -- '$helper_path'")"
+              "set -eu
+               test -f '$helper_path'
+               test ! -L '$helper_path'
+               metadata=\"\$(stat -c '%U:%G:%a' -- '$helper_path')\"
+               test \"\$metadata\" = 'root:root:755'
+               actual_contract=\"\$('$helper_path' --contract-version)\"
+               artifact_sha256=\"\$(sha256sum -- '$helper_path')\"
+               printf '%s|%s|%s\\n' \"\$metadata\" \"\$actual_contract\" \"\${artifact_sha256%% *}\"")"
+            [[ "$inspection" != *$'\n'* ]]
+            IFS='|' read -r metadata actual_contract artifact_sha256 extra <<< "$inspection"
+            test -z "$extra"
+            test "$inspection" = "$metadata|$actual_contract|$artifact_sha256"
             if [[ "$metadata" != "root:root:755" ]]; then
               echo "$label helper must be a root:root 0755 regular file; received: $metadata" >&2
               exit 1
             fi
 
-            actual_contract="$(timeout --kill-after=5s 30s ssh "${ssh_options[@]}" \
-              "${DEPLOY_SSH_USER}@${DEPLOY_HOST}" \
-              "'$helper_path' --contract-version")"
             if [[ "$actual_contract" != "$expected_contract" ]]; then
               echo "$label helper contract mismatch: expected $expected_contract, received $actual_contract" >&2
               exit 1
             fi
 
-            artifact_sha256="$(timeout --kill-after=5s 30s ssh "${ssh_options[@]}" \
-              "${DEPLOY_SSH_USER}@${DEPLOY_HOST}" \
-              "sha256sum -- '$helper_path' | cut -d ' ' -f 1")"
             [[ "$artifact_sha256" =~ ^[0-9a-f]{64}$ ]]
             printf '%s helper contract=%s sha256=%s\n' "$label" "$actual_contract" "$artifact_sha256" \
               >> "$GITHUB_STEP_SUMMARY"
@@ -349,15 +354,26 @@ jobs:
              mv -fT -- \"\$staged_archive\" '$remote_archive'
              trap - EXIT HUP INT TERM"
 
-          timeout --kill-after=5s 30s ssh "${ssh_options[@]}" \
-            "$ssh_target" \
-            "test -f '$remote_archive' && test ! -L '$remote_archive'"
-          remote_bytes="$(timeout --kill-after=5s 30s ssh "${ssh_options[@]}" \
-            "$ssh_target" "stat -c '%s' -- '$remote_archive'")"
-          remote_sha256="$(timeout --kill-after=5s 30s ssh "${ssh_options[@]}" \
-            "$ssh_target" "sha256sum -- '$remote_archive' | cut -d ' ' -f 1")"
-          test "$remote_bytes" = "$DEPLOY_ARCHIVE_BYTES"
-          test "$remote_sha256" = "$DEPLOY_ARCHIVE_SHA256"
+          verify_remote_archive() {
+            local inspection remote_bytes remote_sha256 extra
+            inspection="$(timeout --kill-after=5s 30s ssh "${ssh_options[@]}" \
+              "$ssh_target" \
+              "set -eu
+               test -f '$remote_archive'
+               test ! -L '$remote_archive'
+               remote_bytes=\"\$(stat -c '%s' -- '$remote_archive')\"
+               remote_sha256=\"\$(sha256sum -- '$remote_archive')\"
+               printf '%s|%s\\n' \"\$remote_bytes\" \"\${remote_sha256%% *}\"")"
+            [[ "$inspection" != *$'\n'* ]]
+            IFS='|' read -r remote_bytes remote_sha256 extra <<< "$inspection"
+            test -z "$extra"
+            test "$inspection" = "$remote_bytes|$remote_sha256"
+            [[ "$remote_bytes" =~ ^[1-9][0-9]*$ ]]
+            [[ "$remote_sha256" =~ ^[0-9a-f]{64}$ ]]
+            test "$remote_bytes" = "$DEPLOY_ARCHIVE_BYTES"
+            test "$remote_sha256" = "$DEPLOY_ARCHIVE_SHA256"
+          }
+          verify_remote_archive
           printf 'archive transfer=rsync file-tree delta total_bytes=%s sha256=%s\n' \
             "$DEPLOY_ARCHIVE_BYTES" "$DEPLOY_ARCHIVE_SHA256" >> "$GITHUB_STEP_SUMMARY"
 

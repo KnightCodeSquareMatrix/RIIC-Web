@@ -1,4 +1,3 @@
-import { lt } from "drizzle-orm";
 import {
   assertSameOrigin,
   createRequestId,
@@ -18,6 +17,7 @@ import {
   MAX_TELEMETRY_EVENTS_PER_REQUEST,
   telemetryEventValues,
   validateTelemetryEvent,
+  telemetryValidationIssue,
 } from "@/server/telemetry";
 
 export const runtime = "nodejs";
@@ -40,7 +40,10 @@ export async function POST(request: Request) {
     const events = body.events.map(validateTelemetryEvent);
     if (events.some((event) => event === null)) {
       throw new PublicApiError("AIC-REQ-1001", {
-        fieldErrors: [{ path: "events", code: "invalid_event", message: "埋点事件包含未知类型或字段。" }],
+        fieldErrors: body.events.flatMap((event,index) => {
+          const issue=telemetryValidationIssue(event);
+          return issue ? [{...issue,path:`events[${index}].${issue.path}`}] : [];
+        }).slice(0,8),
       });
     }
 
@@ -60,15 +63,14 @@ export async function POST(request: Request) {
 
     const now = new Date();
     const validEvents = events as NonNullable<ReturnType<typeof validateTelemetryEvent>>[];
-    await getDatabase().transaction(async (tx) => {
-      await tx.delete(telemetryEvent).where(lt(telemetryEvent.expiresAt, now));
-      await tx.insert(telemetryEvent).values(
-        validEvents.map((event) => telemetryEventValues(event, { userId, dataOwnerTag, now })),
-      );
-    });
+    // Expiration cleanup belongs to the hourly business-record maintenance,
+    // including deployments without a plan worker, not each event submission.
+    await getDatabase().insert(telemetryEvent).values(
+      validEvents.map((event) => telemetryEventValues(event, { userId, dataOwnerTag, now })),
+    );
 
     return successResponse({ accepted: validEvents.length }, requestId);
   } catch (error) {
-    return failureResponse(error, requestId, "/api/telemetry", startedAt, "AIC-SYS-5000");
+    return failureResponse(error, requestId, "/api/telemetry", startedAt, "AIC-SYS-5000", request);
   }
 }
