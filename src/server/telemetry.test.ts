@@ -5,6 +5,7 @@ import {
   TELEMETRY_TTL_MS,
   telemetryEventValues,
   validateTelemetryEvent,
+  telemetryValidationIssue,
 } from "./telemetry.ts";
 
 const validEvent = {
@@ -15,6 +16,14 @@ const validEvent = {
   page: "/training",
   meta: { device_type: "desktop", dpr: 1.25, save_data: false },
 };
+
+test("invalid telemetry reports schema paths without retaining submitted values",()=>{
+  assert.equal(telemetryValidationIssue(validEvent),null);
+  assert.equal(telemetryValidationIssue({...validEvent,durationMs:-1})?.path,"durationMs");
+  assert.equal(telemetryValidationIssue({...validEvent,page:"x".repeat(121)})?.path,"page");
+  const issue=telemetryValidationIssue({...validEvent,meta:{token:"PRIVATE"}});
+  assert.equal(issue?.path,"meta"); assert.doesNotMatch(JSON.stringify(issue),/PRIVATE|token/);
+});
 
 test("telemetry validation accepts only the public field whitelist", () => {
   assert.deepEqual(validateTelemetryEvent(validEvent), validEvent);

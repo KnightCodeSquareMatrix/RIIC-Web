@@ -21,7 +21,7 @@ export async function GET(request: Request) {
     const session = await requireWebsiteSession(request);
     return successResponse(await getWorkspace(session.user.id), requestId);
   } catch (error) {
-    return failureResponse(error, requestId, "/api/workspace", startedAt);
+    return failureResponse(error, requestId, "/api/workspace", startedAt, "AIC-SYS-5000", request);
   }
 }
 
@@ -34,7 +34,7 @@ export async function PUT(request: Request) {
     const session = await requireWebsiteSession(request);
     return successResponse(await putWorkspace(session.user.id, await readJsonBody(request, 3 * 1024 * 1024)), requestId);
   } catch (error) {
-    return failureResponse(error, requestId, "/api/workspace", startedAt);
+    return failureResponse(error, requestId, "/api/workspace", startedAt, "AIC-SYS-5000", request);
   }
 }
 
@@ -52,7 +52,7 @@ export async function DELETE(request: Request) {
     response.headers.set("Link", "</api/account/data-consent>; rel=\"successor-version\"");
     return response;
   } catch (error) {
-    const response = failureResponse(error, requestId, "/api/workspace", startedAt);
+    const response = failureResponse(error, requestId, "/api/workspace", startedAt, "AIC-SYS-5000", request);
     response.headers.set("Deprecation", "true");
     response.headers.set("Link", "</api/account/data-consent>; rel=\"successor-version\"");
     return response;

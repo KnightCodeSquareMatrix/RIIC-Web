@@ -1,0 +1,15 @@
+[Unit]
+Description=Preserve RIIC application journals without pruning original logs
+
+[Service]
+Type=oneshot
+User=root
+UMask=0077
+StateDirectory=riic-log-archive
+StateDirectoryMode=0700
+ExecStart=/usr/bin/flock -n /var/lib/riic-log-archive/archive.lock /usr/local/bin/node /usr/local/lib/riic/archive-journals.mjs /var/lib/riic-log-archive
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+ReadWritePaths=/var/lib/riic-log-archive

@@ -119,3 +119,19 @@ export function telemetryEventValues(
     expiresAt: new Date(context.now.getTime() + TELEMETRY_TTL_MS),
   };
 }
+
+/** Report only schema paths, never values supplied by a browser. */
+export function telemetryValidationIssue(value: unknown): {path:string; code:string; message:string} | null {
+  if (validateTelemetryEvent(value)) return null;
+  const issue = (path:string, code:string) => ({path,code,message:`telemetry_${code}`});
+  if (!value || typeof value!=="object" || Array.isArray(value)) return issue("event","invalid_object");
+  const event=value as Record<string,unknown>;
+  if (Object.keys(event).some(key=>!ALLOWED_EVENT_KEYS.has(key))) return issue("event","unknown_field");
+  if (typeof event.sessionId!=="string" || !event.sessionId.length || event.sessionId.length>128) return issue("sessionId","invalid_session");
+  if (typeof event.type!=="string" || !ALLOWED_TYPES.has(event.type)) return issue("type","unknown_type");
+  if (typeof event.name!=="string" || !ALLOWED_NAMES.has(event.name)) return issue("name","unknown_name");
+  if (postgresInteger(event.durationMs)===null) return issue("durationMs","invalid_integer");
+  if (postgresInteger(event.value)===null) return issue("value","invalid_integer");
+  if (event.page!==undefined && (typeof event.page!=="string" || event.page.length>120)) return issue("page","invalid_page");
+  return issue("meta","invalid_metadata");
+}

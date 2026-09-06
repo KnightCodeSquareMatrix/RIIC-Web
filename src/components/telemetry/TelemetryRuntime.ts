@@ -7,8 +7,19 @@ interface LayoutShiftEntry extends PerformanceEntry {
 
 let activePage: { page: string; at: number } | null = null;
 let clsValue = 0;
+let longTaskDuration = 0;
+let longTaskCount = 0;
+
+function reportLongTasks(): void {
+  if (!longTaskCount) return;
+  trackTelemetry({type:"performance",name:"long_task_total",page:activePage?.page,
+    durationMs:Math.round(longTaskDuration),meta:{count:longTaskCount}});
+  longTaskCount=0;
+  longTaskDuration=0;
+}
 
 function reportPage(final: boolean): void {
+  reportLongTasks();
   const current = activePage;
   if (!current) return;
   if (clsValue > 0) {
@@ -38,10 +49,9 @@ export function trackTelemetryPage(pathname: string): void {
 /** Start global Web Vitals, long-task and page-duration observers. */
 export function startTelemetryRuntime(pathname: string): () => void {
   trackTelemetryPage(pathname);
-  const page = window.location.pathname;
   const observers: PerformanceObserver[] = [];
   const trackVital = (name: string, durationMs?: number, value?: number) => {
-    trackTelemetry({ type: "performance", name, page, durationMs, value });
+    trackTelemetry({ type: "performance", name, page:activePage?.page, durationMs, value });
   };
   const observe = (type: string, callback: PerformanceObserverCallback) => {
     try {
@@ -76,16 +86,19 @@ export function startTelemetryRuntime(pathname: string): () => void {
     // Navigation timing is optional.
   }
   observe("longtask", (list) => {
-    for (const entry of list.getEntries()) trackVital("long_task_total", Math.round(entry.duration));
+    for (const entry of list.getEntries()) { longTaskDuration+=entry.duration; longTaskCount++; }
   });
+  const longTaskTimer = window.setInterval(reportLongTasks, 30_000);
 
   const onVisibilityChange = () => {
     if (document.visibilityState === "hidden") reportPage(true);
+    else trackTelemetryPage(window.location.pathname);
   };
   const onPageHide = () => reportPage(true);
   window.addEventListener("pagehide", onPageHide);
   document.addEventListener("visibilitychange", onVisibilityChange);
   return () => {
+    window.clearInterval(longTaskTimer);
     window.removeEventListener("pagehide", onPageHide);
     document.removeEventListener("visibilitychange", onVisibilityChange);
     observers.forEach((observer) => observer.disconnect());

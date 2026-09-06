@@ -52,7 +52,7 @@ export async function POST(request: Request) {
     setSklandAccountStoreCookies(response, request, next, previous);
     return response;
   } catch (error) {
-    const response = sklandErrorResponse(error, requestId, "/api/skland/sync", startedAt);
+    const response = sklandErrorResponse(error, requestId, "/api/skland/sync", startedAt, request);
     if (previous && error instanceof SklandServiceError && error.code === "AUTH_EXPIRED" && previous.activeAccountId) {
       const removed = removeSklandAccount(previous.accounts, previous.activeAccountId, previous.activeAccountId);
       const next = { ...previous, ...removed, migratedSnapshot: null };
