@@ -110,7 +110,7 @@ export function SkillAnnotationManager() {
     } finally {
       if (!signal?.aborted) setLoading(false);
     }
-  }, [intl, en]);
+  }, [intl]);
 
   useEffect(() => {
     const controller = new AbortController();

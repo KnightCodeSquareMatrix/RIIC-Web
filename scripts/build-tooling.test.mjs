@@ -49,6 +49,7 @@ test("production builds prepare a solver-free standalone runtime with static ass
   assert.equal(packageJson.scripts.postbuild, "node scripts/prepare-standalone.mjs");
   assert.equal(packageJson.scripts.start, "node scripts/start-standalone.mjs");
   assert.equal(packageJson.scripts["release:stage"], "node scripts/stage-standalone-release.mjs");
+  assert.match(prepareStandalone, /process\.env\.RIIC_NEXT_DIST_DIR \|\| "\.next"/);
   assert.match(prepareStandalone, /standaloneRoot, "public"/);
   assert.match(prepareStandalone, /standaloneRoot, "\.next", "static"/);
   assert.match(prepareStandalone, /\["infra-cli", "infra-cli\.exe"\]/);

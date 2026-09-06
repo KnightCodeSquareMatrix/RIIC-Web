@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath, URL } from "node:url";
 
 const repoRoot = path.resolve(fileURLToPath(new URL("../", import.meta.url)));
-const nextRoot = path.join(repoRoot, ".next");
+const nextRoot = path.resolve(repoRoot, process.env.RIIC_NEXT_DIST_DIR || ".next");
 const standaloneRoot = path.join(nextRoot, "standalone");
 const operationalRuntimeEntries = [
   "drizzle",

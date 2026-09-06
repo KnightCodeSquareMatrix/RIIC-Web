@@ -36,13 +36,13 @@ export function AdminUserManagement() {
     } finally {
       setLoading(false);
     }
-  }, [intl, en]);
+  }, [intl]);
 
   useEffect(() => {
     void load("").catch((error) => {
       setMessage(error instanceof Error ? error.message : (intl("app_admin_users_users_client.couldNotLoadUsers")));
     });
-  }, [intl, en, load]);
+  }, [intl, load]);
 
   async function act(userId: string, action: AdminUserAction): Promise<boolean> {
     setBusyKey(`${userId}:${action}`);

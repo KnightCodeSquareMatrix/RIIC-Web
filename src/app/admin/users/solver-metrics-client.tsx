@@ -98,7 +98,7 @@ export function AdminSolverMetrics() {
         setRefreshing(false);
       }
     }
-  }, [intl, en]);
+  }, [intl]);
 
   useEffect(() => {
     const refreshWhenVisible = () => {
