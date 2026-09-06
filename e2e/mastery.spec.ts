@@ -11,9 +11,10 @@ test.beforeEach(async ({page}) => {
 
 for (const mobile of [false,true]) {
   test.describe(mobile ? "mastery mobile" : "mastery desktop", () => {
-    test.use({viewport:mobile ? {width:390,height:844} : {width:1440,height:1000}, reducedMotion:mobile ? "reduce" : "no-preference"});
+    test.use({viewport:mobile ? {width:390,height:844} : {width:1440,height:1000}});
     test("owned E2 picker filters and complete mastery calculation", async ({page},testInfo) => {
       test.setTimeout(120000);
+      await page.emulateMedia({reducedMotion:mobile ? "reduce" : "no-preference"});
       await mockApis(page);
       await seedV4Session(page,null,{operbox:testBox,boxSource:"sample"});
       await gotoStable(page,"/mastery");
