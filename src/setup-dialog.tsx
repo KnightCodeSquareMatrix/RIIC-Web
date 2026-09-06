@@ -148,6 +148,7 @@ export function SetupDialog({
   const [maaChoices, setMaaChoices] = useState<Record<number, number>>({});
   const [reviewBusy, setReviewBusy] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
+  const importedOwnedCount = operbox?.filter((entry) => entry.own).length ?? 0;
   function stageMaaReview(text: string, name: string) {
     setMaaReview(null);
     setMaaChoices({});
@@ -178,6 +179,14 @@ export function SetupDialog({
       }
     } catch (error) { setReviewError(error instanceof Error ? error.message : String(error)); }
     finally { setReviewBusy(false); }
+  }
+  function applyRecommendedMaaChoices() {
+    if (!maaReview) return;
+    setMaaChoices(Object.fromEntries(maaReview.issues.map((issue) => {
+      const inferred = issue.choices.findIndex((choice) => choice.label.includes("可能漏识别"));
+      const fallback = issue.choices.reduce((best, choice, index) => choice.own && choice.elite > issue.choices[best].elite ? index : best, 0);
+      return [issue.index, inferred >= 0 ? inferred : fallback];
+    })));
   }
   const [step, setStep] = useState<SetupStep>("box");
   const [stepDirection, setStepDirection] = useState(0);
@@ -571,13 +580,21 @@ export function SetupDialog({
                           </fieldset>
                         ))}
                         {reviewError ? <p role="alert" className="text-sm text-destructive">{reviewError}</p> : null}
-                        <div className="flex justify-end gap-2">
+                        <div className="flex flex-wrap justify-between gap-2">
+                          <SetupActionButton type="button" variant="outline" disabled={reviewBusy} onClick={applyRecommendedMaaChoices}>一键采用推荐方案</SetupActionButton>
+                          <div className="flex gap-2">
                           <SetupActionButton type="button" variant="outline" disabled={reviewBusy} onClick={() => setMaaReview(null)}>取消本次导入</SetupActionButton>
                           <SetupActionButton type="button" disabled={reviewBusy || maaReview.issues.some(issue => maaChoices[issue.index] === undefined)} onClick={() => void confirmMaaReview()}>{reviewBusy ? "正在导入…" : "确认选择并导入"}</SetupActionButton>
+                          </div>
                         </div>
                       </section>
                     ) : null}
                     {inputError ? <p id="setup-box-error" className="mt-3 text-sm text-destructive" role="alert">{inputError}</p> : null}
+                    {boxSource === "maa" && hasBox && !maaReview && !inputError ? (
+                      <p className="mt-3 rounded-md border border-emerald-500/25 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300" role="status">
+                        MAA Box 已导入 {operbox?.length ?? 0} 名干员，其中已拥有 {importedOwnedCount} 名。
+                      </p>
+                    ) : null}
                   </section>
                 ) : null}
 
