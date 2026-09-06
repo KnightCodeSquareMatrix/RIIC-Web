@@ -64,9 +64,9 @@ for (const locale of ["zh", "en"] as const) {
       if (/MISSING_MESSAGE|INVALID_MESSAGE|FORMATTING_ERROR/.test(message.text())) errors.push(message.text());
     });
     const titles = locale === "en"
-      ? ["About", "Help Center", "Import Operator Box", "Check Operator Data", "Privacy Policy", "Terms of Service", "Account"]
-      : ["关于我们", "使用帮助", "导入干员", "核对干员数据", "隐私政策", "服务条款", "账号"];
-    const routes = ["/about", "/help", "/help/import-operators", "/help/owned-operators", "/privacy", "/terms", "/account"];
+      ? ["About", "Help Center", "Import Operator Box", "Check Operator Data", "Privacy Policy", "Terms of Service", "Account", "Changelog"]
+      : ["关于我们", "使用帮助", "导入干员", "核对干员数据", "隐私政策", "服务条款", "账号", "更新日志"];
+    const routes = ["/about", "/help", "/help/import-operators", "/help/owned-operators", "/privacy", "/terms", "/account", "/changelog"];
     for (const [index, route] of routes.entries()) {
       const response = await page.goto(route);
       expect(response?.ok(), route).toBe(true);
