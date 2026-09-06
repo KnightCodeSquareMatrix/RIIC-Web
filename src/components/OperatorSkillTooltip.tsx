@@ -23,6 +23,7 @@ import {
 } from "@/operatorPortraits";
 import { useLocale } from "next-intl";
 import { localizedBuildingSkill } from "@/i18n/game-data";
+import { useGameCatalog } from "@/i18n/game-data-client";
 import { cn } from "@/lib/utils";
 
 /**
@@ -52,6 +53,7 @@ export function OperatorSkillTooltip({
   disabled?: boolean;
 }) {
   const locale = useLocale();
+  const gameCatalog = useGameCatalog();
   const [open, setOpen] = useState(false);
   const skills = operatorBuildingSkillList(name);
   useEffect(() => {
@@ -93,7 +95,7 @@ export function OperatorSkillTooltip({
         <SkillBlock
           key={sourceSkill.id}
           locale={locale}
-          skill={localizedBuildingSkill(sourceSkill.id, locale, sourceSkill) as BuildingSkillPresentation}
+          skill={localizedBuildingSkill(sourceSkill.id, locale, sourceSkill, gameCatalog) as BuildingSkillPresentation}
           highlighted={highlighted.has(sourceSkill.id)}
           unlocked={currentElite === undefined
             ? undefined

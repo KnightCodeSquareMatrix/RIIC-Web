@@ -45,6 +45,7 @@ import type {
   ApiResponse,
 } from "@/types";
 import { localizedOperatorName } from "@/i18n/game-data";
+import { useGameCatalog } from "@/i18n/game-data-client";
 
 const PAGE_SIZE = 50;
 
@@ -121,6 +122,7 @@ function downloadReproduction(reproduction: AdminReproductionData): void {
 function ReproductionPanel({ state }: { state: DetailState }) {
   const intl = useTranslations();
   const locale = useLocale();
+  const gameCatalog = useGameCatalog();
   const en = locale === "en";
   const [copied, setCopied] = useState(false);
   if (state.loading) {
@@ -129,7 +131,7 @@ function ReproductionPanel({ state }: { state: DetailState }) {
   if (state.error) return <p role="alert" className="py-4 text-sm text-destructive">{state.error}</p>;
   const reproduction = state.reproduction;
   if (!reproduction) return null;
-  const operatorNames = reproduction.operbox?.map((operator) => localizedOperatorName(operator.name, locale)).filter(Boolean) ?? [];
+  const operatorNames = reproduction.operbox?.map((operator) => localizedOperatorName(operator.name, locale, gameCatalog)).filter(Boolean) ?? [];
   return (
     <div className="grid gap-4 border-t border-border/70 pt-4">
       {!reproduction.available ? (
@@ -214,6 +216,7 @@ function FeedbackRow({
 }) {
   const intl = useTranslations();
   const locale = useLocale();
+  const gameCatalog = useGameCatalog();
   const en = locale === "en";
   const statusLabels = messageRecord(en, "app_admin_issues_issues_client_labels2");
   const facilityLabels = messageRecord(en, "app_admin_issues_issues_client_labels3");
@@ -230,7 +233,7 @@ function FeedbackRow({
             <span className="font-number text-xs text-muted-foreground">{formatDate(item.createdAt, en)}</span>
           </div>
           <p className="mt-2 break-words whitespace-pre-wrap text-sm leading-6">{item.note}</p>
-          {item.room?.operators.length ? <p className="mt-2 break-words text-xs leading-5 text-muted-foreground">{intl("app_admin_issues_issues_client.currentOperators")}{item.room.operators.map((name) => localizedOperatorName(name, locale)).join(intl("app_admin_issues_issues_client.label"))}</p> : null}
+          {item.room?.operators.length ? <p className="mt-2 break-words text-xs leading-5 text-muted-foreground">{intl("app_admin_issues_issues_client.currentOperators")}{item.room.operators.map((name) => localizedOperatorName(name, locale, gameCatalog)).join(intl("app_admin_issues_issues_client.label"))}</p> : null}
           <p className="font-number mt-2 break-all text-[11px] text-muted-foreground">{item.diagnosticId}</p>
         </div>
       </div>

@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useState, useTransition, type ReactNode } from "react";
+import { useEffect, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { NextIntlClientProvider, useLocale, useMessages, useTranslations } from "next-intl";
-import { loadGameCatalog } from "./game-data";
 import { isAppLocale, LEGACY_LOCALE_STORAGE, LOCALE_COOKIE, type AppLocale } from "./config";
 
 function saveLocale(locale: AppLocale) {
@@ -13,16 +12,8 @@ function saveLocale(locale: AppLocale) {
 export function LocaleProvider({ children }: { children: ReactNode }) {
   const locale = useLocale();
   const sourceMessages = useMessages();
-  const [, setGameCatalogReady] = useState(false);
-  // Refresh locale consumers once the independently loaded game text is ready.
   const messages = { ...sourceMessages };
   const router = useRouter();
-  useEffect(() => {
-    if (locale !== "en") return;
-    let active = true;
-    void loadGameCatalog().then(() => { if (active) setGameCatalogReady(true); }).catch(() => { /* Original game text remains available; retry on the next language switch. */ });
-    return () => { active = false; };
-  }, [locale]);
   useEffect(() => {
     document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
     const cookie = document.cookie.split("; ").find((item) => item.startsWith(`${LOCALE_COOKIE}=`))?.split("=")[1];

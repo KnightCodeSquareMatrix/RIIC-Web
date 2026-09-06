@@ -12,6 +12,7 @@ import { MOTION_DURATION, MOTION_EASE_OUT } from "@/motion";
 import { roomLightAccentFor } from "@/room-visuals";
 import type { ShiftAdjustment, ShiftAdjustmentIssue, ShiftComparison } from "@/types";
 import { localizedOperatorName } from "@/i18n/game-data";
+import { useGameCatalog } from "@/i18n/game-data-client";
 
 const ISSUE_LABELS: Record<ShiftAdjustmentIssue, string> = { missing: "需换入", unexpected: "需换出", misplaced: "位置调整", tired: "疲劳" };
 const ISSUE_LABELS_EN: Record<ShiftAdjustmentIssue, string> = { missing: "Move in", unexpected: "Move out", misplaced: "Relocate", tired: "Fatigued" };
@@ -69,9 +70,10 @@ function RoomLabel({ roomKey }: { roomKey: string | null }) {
 
 function OperatorName({ adjustment, className }: { adjustment: ShiftAdjustment; className?: string }) {
   const locale = useLocale();
+  const gameCatalog = useGameCatalog();
   return (
     <div className={cn("flex min-w-0 flex-wrap items-center gap-1.5", className)}>
-      <strong className="min-w-0 truncate">{localizedOperatorName(adjustment.operator, locale)}</strong>
+      <strong className="min-w-0 truncate">{localizedOperatorName(adjustment.operator, locale, gameCatalog)}</strong>
       {adjustment.issues.includes("tired") ? <IssueLabel issue="tired" /> : null}
     </div>
   );
@@ -104,6 +106,7 @@ function GroupHeading({ issue, count, id }: { issue: ActionIssue; count: number;
 function MobileAdjustmentGroups({ adjustments, reduceMotion }: { adjustments: ShiftAdjustment[]; reduceMotion: boolean }) {
   const intl = useTranslations();
   const locale = useLocale();
+  const gameCatalog = useGameCatalog();
   const en = locale === "en";
   const tiredOnly = adjustments.filter((adjustment) => adjustment.issues.includes("tired") && !ACTION_ISSUES.some((issue) => adjustment.issues.includes(issue)));
 
@@ -141,7 +144,7 @@ function MobileAdjustmentGroups({ adjustments, reduceMotion }: { adjustments: Sh
             <h4 id="mobile-adjustment-tired"><IssueLabel issue="tired" /></h4>
             <span className="font-number text-xs text-muted-foreground">{tiredOnly.length} {localize_components_ShiftComparisonCard.text(en, "additional2", { choice1: ((en)) && (tiredOnly.length === 1) ? "yes" : "no" })}</span>
           </div>
-          <p className="mt-2 bg-red-50 px-3 py-2.5 text-xs leading-5 text-red-800">{tiredOnly.map((adjustment) => localizedOperatorName(adjustment.operator, locale)).join(intl("components_ShiftComparisonCard.label"))}</p>
+          <p className="mt-2 bg-red-50 px-3 py-2.5 text-xs leading-5 text-red-800">{tiredOnly.map((adjustment) => localizedOperatorName(adjustment.operator, locale, gameCatalog)).join(intl("components_ShiftComparisonCard.label"))}</p>
         </section>
       ) : null}
     </div>

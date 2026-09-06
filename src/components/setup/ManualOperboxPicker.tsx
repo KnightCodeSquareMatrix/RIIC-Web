@@ -20,6 +20,7 @@ import { OperatorSkillTooltip } from "@/components/OperatorSkillTooltip";
 import { SetupActionButton } from "@/components/setup/SetupActionButton";
 import type { AppLocale } from "@/i18n/config";
 import { localizedOperatorName } from "@/i18n/game-data";
+import { useGameCatalog } from "@/i18n/game-data-client";
 import { cn } from "@/lib/utils";
 import {
   buildManualOperbox,
@@ -119,7 +120,8 @@ const ManualOperatorCard = memo(function ManualOperatorCard({
   onStageChange: (id: string, stage: ManualOperboxStage) => void;
 }) {
   const en = locale === "en";
-  const displayName = localizedOperatorName(operator.name, locale);
+  const gameCatalog = useGameCatalog();
+  const displayName = localizedOperatorName(operator.name, locale, gameCatalog);
   const maxElite = maxEliteForRarity(operator.rarity);
   const selectedElite = stage === "none" ? null : stage === "e2" ? 2 : stage === "e1" ? 1 : 0;
   const selectedLevel = selectedElite === null ? undefined : manualLevelFor(operator.rarity, selectedElite);
@@ -241,6 +243,7 @@ export function ManualOperboxPicker({
 }) {
   const intl = useTranslations();
   const locale = useLocale();
+  const gameCatalog = useGameCatalog();
   const en = locale === "en";
   const [query, setQuery] = useState("");
   const [onlyOwned, setOnlyOwned] = useState(false);
@@ -286,11 +289,11 @@ export function ManualOperboxPicker({
     if (rarity !== "all" && operator.rarity !== Number(rarity)) return false;
     if (showProfessionFilter && profession !== "all" && operator.profession !== Number(profession)) return false;
     if (!deferredQuery) return true;
-    const displayName = localizedOperatorName(operator.name, locale).toLocaleLowerCase((locale === "en" ? "en-US" : "zh-CN"));
+    const displayName = localizedOperatorName(operator.name, locale, gameCatalog).toLocaleLowerCase((locale === "en" ? "en-US" : "zh-CN"));
     return operator.name.toLocaleLowerCase("zh-CN").includes(deferredQuery)
       || displayName.includes(deferredQuery)
       || operator.id.toLocaleLowerCase("en-US").includes(deferredQuery);
-  }), [deferredQuery, hasScheduledOperators, locale, onlyOwned, profession, rarity, rosterScope, scheduledNames, scheduledOperatorShifts, scheduledShift, showProfessionFilter, stages]);
+  }), [deferredQuery, gameCatalog, hasScheduledOperators, locale, onlyOwned, profession, rarity, rosterScope, scheduledNames, scheduledOperatorShifts, scheduledShift, showProfessionFilter, stages]);
 
   function resetListView() {
     setVisibleLimit(PAGE_SIZE);
