@@ -2,6 +2,12 @@
 
 All notable changes to RIIC-Web are documented in this file.
 
+## Unreleased
+
+### Changed
+
+- 更新 P3R 联动角色的基建计算，并修复若干已知排班问题。
+
 ## [0.7.0] - 2026-09-06
 
 ### Added
