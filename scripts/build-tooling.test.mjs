@@ -49,6 +49,7 @@ test("production builds prepare a solver-free standalone runtime with static ass
   assert.equal(packageJson.scripts.postbuild, "node scripts/prepare-standalone.mjs");
   assert.equal(packageJson.scripts.start, "node scripts/start-standalone.mjs");
   assert.equal(packageJson.scripts["release:stage"], "node scripts/stage-standalone-release.mjs");
+  assert.match(prepareStandalone, /process\.env\.RIIC_NEXT_DIST_DIR \|\| "\.next"/);
   assert.match(prepareStandalone, /standaloneRoot, "public"/);
   assert.match(prepareStandalone, /standaloneRoot, "\.next", "static"/);
   assert.match(prepareStandalone, /\["infra-cli", "infra-cli\.exe"\]/);
@@ -149,20 +150,21 @@ test("CI enforces route and document preload JavaScript budgets after building",
 
   assert.equal(packageJson.scripts["check:bundle-budget"], "node scripts/check-bundle-budget.mjs");
   assert.match(workflow, /Build standalone application and worker[\s\S]+Release output checks[\s\S]+npm run check:bundle-budget/);
-  assert.match(budgetCheck, /MAX_SKLAND_DISABLED_ROUTE_INITIAL_JS_BYTES = 1_167_000/);
-  assert.match(budgetCheck, /MAX_SKLAND_ENABLED_ROUTE_INITIAL_JS_BYTES = 1_203_000/);
-  assert.match(budgetCheck, /MAX_SKLAND_ROUTE_INITIAL_JS_BYTES = 1_642_000/);
-  assert.match(budgetCheck, /MAX_SKLAND_DISABLED_DOCUMENT_INITIAL_JS_BYTES = 1_280_000/);
-  assert.match(budgetCheck, /MAX_SKLAND_ENABLED_DOCUMENT_INITIAL_JS_BYTES = 1_316_000/);
-  assert.match(budgetCheck, /MAX_SKLAND_DISABLED_DOCUMENT_INITIAL_GZIP_JS_BYTES = 416_000/);
-  assert.match(budgetCheck, /MAX_SKLAND_ENABLED_DOCUMENT_INITIAL_GZIP_JS_BYTES = 422_000/);
+  assert.match(budgetCheck, /MAX_SKLAND_DISABLED_ROUTE_INITIAL_JS_BYTES = 1_257_000/);
+  assert.match(budgetCheck, /MAX_SKLAND_ENABLED_ROUTE_INITIAL_JS_BYTES = 1_293_000/);
+  assert.match(budgetCheck, /MAX_SKLAND_ROUTE_INITIAL_JS_BYTES = 1_732_000/);
+  assert.match(budgetCheck, /MAX_SKLAND_DISABLED_DOCUMENT_INITIAL_JS_BYTES = 1_370_000/);
+  assert.match(budgetCheck, /MAX_SKLAND_ENABLED_DOCUMENT_INITIAL_JS_BYTES = 1_406_000/);
+  assert.match(budgetCheck, /MAX_SKLAND_DISABLED_DOCUMENT_INITIAL_GZIP_JS_BYTES = 442_000/);
+  assert.match(budgetCheck, /MAX_SKLAND_ENABLED_DOCUMENT_INITIAL_GZIP_JS_BYTES = 448_000/);
   assert.match(budgetCheck, /const sklandEnabled = sklandRoute\.firstLoadChunkPaths\.some/);
-  assert.match(budgetCheck, /MAX_SECONDARY_ROUTE_INITIAL_JS_BYTES = 1_582_000/);
-  assert.match(budgetCheck, /MAX_MANUAL_ROUTE_INITIAL_JS_BYTES = 1_602_000/);
+  assert.match(budgetCheck, /MAX_SECONDARY_ROUTE_INITIAL_JS_BYTES = 1_672_000/);
+  assert.match(budgetCheck, /MAX_MANUAL_ROUTE_INITIAL_JS_BYTES = 1_692_000/);
   assert.match(budgetCheck, /MAX_DOCUMENT_INITIAL_JS_FILES = 18/);
   assert.match(budgetCheck, /WORKBENCH_ROUTES = \["\/", "\/manual", "\/training", "\/mastery", "\/skills", "\/skland", "\/account"\]/);
   assert.match(budgetCheck, /firstLoadUncompressedJsBytes/);
-  assert.match(budgetCheck, /\.next\/server\/app\/index\.html/);
+  assert.match(budgetCheck, /server\/app\/index\.html/);
+  assert.match(budgetCheck, /return renderBuildDocument\(\)/);
   assert.match(budgetCheck, /gzipSync/);
   assert.match(budgetCheck, /COMPACT_SCHEDULE_MARKER = "data-compact-schedule-view"/);
   assert.match(budgetCheck, /compact schedule code leaked into the initially loaded application chunk/);
@@ -208,7 +210,7 @@ test("CI gates releases on Chromium and a WebKit Skland smoke test, then schedul
   assert.doesNotMatch(workflow, /^\s*pull_request\s*:/m);
   assert.match(workflow, /cancel-in-progress: false/);
   assert.equal(readinessSpecs.length, 4);
-  assert.equal(readinessTestCount, 99);
+  assert.equal(readinessTestCount, 100);
   assert.equal(e2eFiles.includes("production-readiness.spec.ts"), false);
   assert.match(playwrightConfig, /fullyParallel: true/);
   assert.match(playwrightConfig, /workers: process\.env\.CI \? 2 : undefined/);

@@ -1,4 +1,5 @@
 "use client";
+import { useTranslations, useLocale } from "next-intl";
 
 import { lazy, Suspense } from "react";
 
@@ -13,7 +14,7 @@ import {
 } from "@/operatorPortraits";
 import { cn } from "@/lib/utils";
 import type { TrainingCombination, TrainingAdviceMember } from "@/types";
-import { demoOperatorName, useLanguageDemo } from "@/language-demo";
+import { localizedOperatorName } from "@/i18n/game-data";
 
 import {
   trainingCombinationStateLabel,
@@ -39,7 +40,8 @@ const STATE_CLASSES: Record<string, string> = {
 };
 
 function MemberRow({ member }: { member: TrainingAdviceMember }) {
-  const { locale } = useLanguageDemo();
+  const intl = useTranslations();
+  const locale = useLocale();
   const en = locale === "en";
   const isReady = member.progress === "ready";
   const isMissing = member.progress === "missing";
@@ -57,11 +59,11 @@ function MemberRow({ member }: { member: TrainingAdviceMember }) {
   const statusText = member.progress === "needs_review"
     ? trainingMemberProgressLabel(member.progress, en)
     : isReady
-    ? (en ? "Ready" : "就绪")
+    ? (intl("components_training_advice_TrainingCombinationCard.ready"))
     : isMissing
-      ? (en ? "Missing" : "缺失")
+      ? (intl("components_training_advice_TrainingCombinationCard.missing"))
       : member.target
-        ? `${en ? "Needs " : "需"}${trainingLevelText(member.target, en)}`
+        ? `${intl("components_training_advice_TrainingCombinationCard.needs")}${trainingLevelText(member.target, en)}`
         : trainingMemberProgressLabel(member.progress, en);
   const roleClass =
     member.role === "core"
@@ -89,7 +91,7 @@ function MemberRow({ member }: { member: TrainingAdviceMember }) {
       <span className="size-8 shrink-0 overflow-hidden border border-white/10 bg-[#272A2B]">
         <img src={operatorPortraitFor(member.operator)} alt="" className="size-full object-cover" loading="lazy" />
       </span>
-      <span className="shrink truncate text-sm text-white/85">{demoOperatorName(member.operator, locale)}</span>
+      <span className="shrink truncate text-sm text-white/85">{localizedOperatorName(member.operator, locale)}</span>
       <span className={cn("shrink-0 border px-1.5 py-0.5 text-xs", roleClass)}>
         {trainingMemberRoleLabel(member.role, en)}
       </span>
@@ -113,7 +115,8 @@ function MemberRow({ member }: { member: TrainingAdviceMember }) {
 }
 
 export function TrainingCombinationCard({ combination }: { combination: TrainingCombination }) {
-  const { locale } = useLanguageDemo();
+  const intl = useTranslations();
+  const locale = useLocale();
   const en = locale === "en";
   return (
     <InfraTechnicalCard
@@ -141,11 +144,11 @@ export function TrainingCombinationCard({ combination }: { combination: Training
           <span>{trainingScaleLabel(combination.scale, en)}</span>
           <span>{trainingProductLabel(combination.product, en)}</span>
           {combination.consumer_products?.length ? (
-            <span>{en ? "Covers: " : "覆盖："}{combination.consumer_products.map((product) => trainingProductLabel(product, en)).join(en ? ", " : "、")}</span>
+            <span>{intl("components_training_advice_TrainingCombinationCard.covers")}{combination.consumer_products.map((product) => trainingProductLabel(product, en)).join(intl("components_training_advice_TrainingCombinationCard.label"))}</span>
           ) : null}
           {combination.facilities?.length ? (
             <span>
-              {en ? "Facilities: " : "工作房间："}{combination.facilities.map((facility) => trainingFacilityLabel(facility, en)).join(en ? ", " : "、")}
+              {intl("components_training_advice_TrainingCombinationCard.facilities")}{combination.facilities.map((facility) => trainingFacilityLabel(facility, en)).join(intl("components_training_advice_TrainingCombinationCard.label"))}
             </span>
           ) : null}
         </div>

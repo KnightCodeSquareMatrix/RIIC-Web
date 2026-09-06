@@ -1,10 +1,9 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useTranslations } from "next-intl";
+import type messages from "../../messages/zh.json";
 
-import { useLanguageDemo } from "@/language-demo";
-
-export function LocalizedText({ zh, en }: { zh: ReactNode; en: ReactNode }) {
-  const { locale } = useLanguageDemo();
-  return <>{locale === "en" ? en : zh}</>;
+export function LocalizedText({ message }: { message: keyof typeof messages.Static }) {
+  const t = useTranslations("Static");
+  return <>{t(message)}</>;
 }

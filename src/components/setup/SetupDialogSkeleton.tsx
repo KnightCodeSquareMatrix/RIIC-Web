@@ -1,4 +1,5 @@
 "use client";
+import { useTranslations } from "next-intl";
 
 import {
   Dialog,
@@ -8,7 +9,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useLanguageDemo } from "@/language-demo";
 
 export function SetupDialogSkeleton({
   open,
@@ -17,8 +17,8 @@ export function SetupDialogSkeleton({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { locale } = useLanguageDemo();
-  const en = locale === "en";
+  const intl = useTranslations();
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -28,8 +28,8 @@ export function SetupDialogSkeleton({
         className="h-[min(660px,calc(100dvh-1rem))] max-w-[calc(100%-1rem)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-[24px] p-0 sm:max-w-[min(880px,calc(100%-2rem))] sm:rounded-[32px]"
       >
         <DialogHeader className="sr-only">
-          <DialogTitle>{en ? "Schedule Settings" : "排班设置"}</DialogTitle>
-          <DialogDescription>{en ? "Schedule settings are loading." : "排班设置正在加载。"}</DialogDescription>
+          <DialogTitle>{intl("components_setup_SetupDialogSkeleton.scheduleSettings")}</DialogTitle>
+          <DialogDescription>{intl("components_setup_SetupDialogSkeleton.scheduleSettingsAreLoading")}</DialogDescription>
         </DialogHeader>
         <div className="px-4 pb-3 pt-4 sm:px-7 sm:pb-4 sm:pt-6">
           <Skeleton className="h-6 w-24" />

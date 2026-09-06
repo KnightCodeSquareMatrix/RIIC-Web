@@ -1,0 +1,7 @@
+{
+  "errorCode": "Error code",
+  "requestId": "Request ID",
+  "suggestedWait": "Suggested wait",
+  "seconds": "seconds",
+  "suggestion": "Suggestion"
+}

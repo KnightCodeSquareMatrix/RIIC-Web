@@ -1,4 +1,5 @@
 "use client";
+import { messageRecord } from "@/i18n/translate";
 
 import {
   Calculator,
@@ -26,7 +27,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { workbenchHref, type AppPage } from "@/workbench-routes";
-import { useLanguageDemo } from "@/language-demo";
+import { useLocale } from "next-intl";
 
 const CLIENT_SKLAND_ENABLED = process.env.APP_CLIENT_SKLAND_ENABLED === "1";
 
@@ -77,26 +78,8 @@ function AppNavigationItem({
 }
 
 export function AppSidebar({ page, onPageChange }: AppSidebarProps) {
-  const { locale } = useLanguageDemo();
-  const labels = locale === "en" ? {
-    calculator: "Infrastructure Calculator",
-    manual: "Manual Scheduling",
-    training: "Training Advice",
-    mastery: "Mastery Planner",
-    skills: "Skill Search",
-    skland: "Skland Status",
-    account: "Account",
-    help: "Help",
-  } : {
-    calculator: "基建计算器",
-    manual: "手动排班",
-    training: "练卡建议",
-    mastery: "专精规划",
-    skills: "技能查询",
-    skland: "森空岛状态中心",
-    account: "账号管理",
-    help: "使用帮助",
-  };
+  const locale = useLocale();
+  const labels = messageRecord(locale, "components_layout_AppSidebar_labels");
   return (
     <Sidebar collapsible="icon" data-primary-navigation-prefetch="eager">
       <SidebarHeader className="h-[65px] flex-row items-center justify-end border-b border-sidebar-border px-2 group-data-[collapsible=icon]:justify-center">
@@ -119,6 +102,15 @@ export function AppSidebar({ page, onPageChange }: AppSidebarProps) {
       </SidebarContent>
       <SidebarFooter className="border-t border-sidebar-border p-2">
         <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              render={<Link href="/changelog" data-changelog-link />}
+              tooltip={locale === "en" ? "Changelog" : "更新日志"}
+            >
+              <BookOpen className="size-5" />
+              <span>{locale === "en" ? "Changelog" : "更新日志"}</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton
               render={<Link href="/help" data-help-link />}

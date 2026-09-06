@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
-import { stdout } from "node:process";
+import { stdout, env } from "node:process";
 import { fileURLToPath, URL } from "node:url";
 
 const repoRoot = path.resolve(fileURLToPath(new URL("../", import.meta.url)));
-const nextServerRoot = path.join(repoRoot, ".next", "server");
+const nextServerRoot = path.join(repoRoot, env.RIIC_NEXT_DIST_DIR || ".next", "server");
 const policy = JSON.parse(await readFile(new URL("../build-tracing-policy.json", import.meta.url), "utf8"));
 const forbiddenRoots = policy.excludedDirectories.map((directory) => path.join(repoRoot, directory));
 const forbiddenFiles = new Set(policy.excludedFiles.map((file) => path.join(repoRoot, file)));

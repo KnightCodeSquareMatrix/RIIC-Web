@@ -1,11 +1,11 @@
 "use client";
+import { useTranslations } from "next-intl";
 
 import { ChevronLeft, ChevronRight, MoreHorizontal } from "lucide-react";
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
-import { useLanguageDemo } from "@/language-demo";
 
 function Pagination({ className, ...props }: React.ComponentProps<"nav">) {
   return (
@@ -49,7 +49,8 @@ function PaginationLink({ className, isActive, size = "icon", ...props }: Pagina
 }
 
 function PaginationPrevious({ className, ...props }: React.ComponentProps<typeof PaginationLink>) {
-  const { locale } = useLanguageDemo();
+  const intl = useTranslations();
+
   return (
     <PaginationLink
       aria-label="Go to previous page"
@@ -58,13 +59,14 @@ function PaginationPrevious({ className, ...props }: React.ComponentProps<typeof
       {...props}
     >
       <ChevronLeft aria-hidden="true" />
-      <span>{locale === "en" ? "Previous" : "上一页"}</span>
+      <span>{intl("components_ui_pagination.previous")}</span>
     </PaginationLink>
   );
 }
 
 function PaginationNext({ className, ...props }: React.ComponentProps<typeof PaginationLink>) {
-  const { locale } = useLanguageDemo();
+  const intl = useTranslations();
+
   return (
     <PaginationLink
       aria-label="Go to next page"
@@ -72,14 +74,15 @@ function PaginationNext({ className, ...props }: React.ComponentProps<typeof Pag
       className={cn("gap-1 pr-2.5", className)}
       {...props}
     >
-      <span>{locale === "en" ? "Next" : "下一页"}</span>
+      <span>{intl("components_ui_pagination.next")}</span>
       <ChevronRight aria-hidden="true" />
     </PaginationLink>
   );
 }
 
 function PaginationEllipsis({ className, ...props }: React.ComponentProps<"span">) {
-  const { locale } = useLanguageDemo();
+  const intl = useTranslations();
+
   return (
     <span
       aria-hidden
@@ -87,7 +90,7 @@ function PaginationEllipsis({ className, ...props }: React.ComponentProps<"span"
       {...props}
     >
       <MoreHorizontal className="size-4" />
-      <span className="sr-only">{locale === "en" ? "More pages" : "更多页面"}</span>
+      <span className="sr-only">{intl("components_ui_pagination.morePages")}</span>
     </span>
   );
 }

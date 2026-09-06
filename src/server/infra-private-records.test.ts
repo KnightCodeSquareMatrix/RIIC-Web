@@ -235,7 +235,10 @@ test("Skland owned-data deletion removes only matching runs and feedback without
     else process.env.BETA_BUSINESS_DB_ENABLED = previousBusinessDbEnabled;
   });
 
-  const { deleteFeedbackArtifacts, deletePlanRunArtifacts, deleteSklandOwnedData, maintainPrivateRecords, readFeedbackReproduction, readPlanReproduction, runPlan, saveFeedback, savePlanFailureArtifact } = await import("./infra.ts");
+  const { deleteFeedbackArtifacts, deletePlanRunArtifacts, deleteSklandOwnedData, maintainPrivateRecords, readFeedbackReproduction, readPlanReproduction, runPlan, saveFeedback, savePlanFailureArtifact, stopInfraServeClients } = await import("./infra.ts");
+  // runPlan can start an installed local solver even when the fingerprint is
+  // deliberately invalid. Release the test-owned process after assertions.
+  context.after(() => stopInfraServeClients("private record test finished"));
 
   const planInput = {
     layout: {

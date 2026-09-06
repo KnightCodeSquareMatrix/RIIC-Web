@@ -12,6 +12,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+import type { ReleaseDraft, ReleaseEnvironment } from "../../releases/types.ts";
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -79,6 +80,27 @@ export const sklandBinding = pgTable("skland_binding", {
 }, (table) => [index("skland_binding_user_id_idx").on(table.userId)]);
 
 export const appSchema = pgSchema("app");
+
+export const releaseNote = appSchema.table("release_note", {
+  id: text("id").primaryKey(),
+  environment: text("environment").$type<ReleaseEnvironment>().notNull(),
+  version: text("version").notNull(),
+  draft: jsonb("draft").$type<ReleaseDraft>().notNull(),
+  published: jsonb("published").$type<ReleaseDraft>(),
+  revision: integer("revision").default(1).notNull(),
+  firstPublishedAt: timestamp("first_published_at", { withTimezone: true }),
+  publishedAt: timestamp("published_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdByUserId: text("created_by_user_id").references(() => user.id, { onDelete: "set null" }),
+  updatedByUserId: text("updated_by_user_id").references(() => user.id, { onDelete: "set null" }),
+}, (table) => [
+  uniqueIndex("release_note_environment_version_uidx").on(table.environment, table.version),
+  index("release_note_environment_published_idx").on(table.environment, table.publishedAt),
+  check("release_note_environment_check", sql`${table.environment} IN ('production', 'development', 'local')`),
+  check("release_note_revision_check", sql`${table.revision} > 0`),
+  check("release_note_version_check", sql`${table.draft}->>'version' = ${table.version} AND (${table.published} IS NULL OR ${table.published}->>'version' = ${table.version})`),
+]);
 
 /**
  * 人工维护的基建技能补充说明。

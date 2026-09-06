@@ -32,6 +32,7 @@ export interface RoomOperatorSlot {
   profession?: number;
   portrait?: string;
   buildingSkill?: BuildingSkillPresentation;
+  portraitAlert?: "missing-power-efficiency";
 }
 
 export interface RoomPositionSlot {
@@ -376,10 +377,23 @@ export function planToRows(
     const rooms = Array.isArray(roomsByGroup[group]) ? roomsByGroup[group] : [];
     rooms.forEach((room, index) => {
       const operators = roomOperators(room);
-      const operatorSlots = roomOperatorSlots(room);
+      const sourceOperatorSlots = roomOperatorSlots(room);
       const roomId = roomIdFor(group, index);
       const layoutRoom = layoutRoomMap.get(roomId);
-      const efficiency = efficiencyMap.get(roomId);
+      const sourceEfficiency = efficiencyMap.get(roomId);
+      const missingLancetPowerEfficiency = group === "power"
+        && sourceOperatorSlots.some((slot) => slot.name === "Lancet-2")
+        && sourceEfficiency?.order_multiplier === 1
+        && sourceEfficiency.total_efficiency === undefined
+        && sourceEfficiency.final_efficiency === undefined;
+      const operatorSlots = missingLancetPowerEfficiency
+        ? sourceOperatorSlots.map((slot) => slot.name === "Lancet-2"
+          ? { ...slot, portraitAlert: "missing-power-efficiency" as const }
+          : slot)
+        : sourceOperatorSlots;
+      const efficiency = missingLancetPowerEfficiency
+        ? { ...sourceEfficiency, total_efficiency: 0 }
+        : sourceEfficiency;
       rows.push({
         key: `${group}-${index}`,
         group,

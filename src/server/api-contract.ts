@@ -55,6 +55,8 @@ export const ERROR_DEFINITIONS: Record<AppErrorCode, ErrorDefinition> = {
   "AIC-DATA-8002": { status: 503, message: "账号云端数据暂不可用，请继续使用本地模式。", retryable: true },
   "AIC-DATA-8003": { status: 422, message: "云端工作区数据无效，请检查后重试。", retryable: false },
   "AIC-DATA-8004": { status: 404, message: "请求的云端数据不存在或已过期。", retryable: false },
+  "AIC-RELEASE-9001": { status: 409, message: "更新日志已变化或版本号重复，请刷新后重试。", retryable: false },
+  "AIC-RELEASE-9002": { status: 404, message: "当前环境中找不到这条更新日志。", retryable: false },
 };
 
 export class PublicApiError extends Error {

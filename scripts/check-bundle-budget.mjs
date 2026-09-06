@@ -1,33 +1,38 @@
 import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
-import { stdout } from "node:process";
+import { stdout, env } from "node:process";
 import { URL } from "node:url";
 import { gzipSync } from "node:zlib";
+import { renderBuildDocument } from "./render-build-document.mjs";
 
 // The calculator keeps its always-visible board in the initial graph. Secondary workbench
 // views have independent route chunks and may carry their own datasets without joining `/`.
-const MAX_SKLAND_DISABLED_ROUTE_INITIAL_JS_BYTES = 1_167_000;
+// next-intl + ICU formatting adds ~78 KB raw / 22 KB gzip to the verified
+// Skland-enabled build after namespace splitting. Allow 90 KB / 26 KB for this
+// intentional shared runtime; keep route independence and lazy-chunk checks.
+const MAX_SKLAND_DISABLED_ROUTE_INITIAL_JS_BYTES = 1_257_000;
 // The language switch, protected manual-scheduling entry, and compact bilingual shell copy
 // are part of the initial graph; the full editor and schedule conversion logic stay in
 // on-demand chunks. Keep roughly 8 KB of raw headroom over the verified enabled build.
-const MAX_SKLAND_ENABLED_ROUTE_INITIAL_JS_BYTES = 1_203_000;
-// Task progress UI and training tooltips add intentional code to secondary workbench routes.
+const MAX_SKLAND_ENABLED_ROUTE_INITIAL_JS_BYTES = 1_293_000;
+// The changelog entry, next-intl runtime, task progress UI, and training tooltips add
+// intentional code to workbench routes. Release content and the admin editor remain lazy.
 // The manual editor owns a larger independent page chunk, so track it separately while
 // keeping each ceiling narrow enough to flag unrelated bundle growth.
-const MAX_SECONDARY_ROUTE_INITIAL_JS_BYTES = 1_582_000;
-const MAX_MANUAL_ROUTE_INITIAL_JS_BYTES = 1_602_000;
-const MAX_SKLAND_ROUTE_INITIAL_JS_BYTES = 1_642_000;
-const MAX_SKLAND_DISABLED_DOCUMENT_INITIAL_JS_BYTES = 1_280_000;
-const MAX_SKLAND_ENABLED_DOCUMENT_INITIAL_JS_BYTES = 1_316_000;
-const MAX_SKLAND_DISABLED_DOCUMENT_INITIAL_GZIP_JS_BYTES = 416_000;
-const MAX_SKLAND_ENABLED_DOCUMENT_INITIAL_GZIP_JS_BYTES = 422_000;
+const MAX_SECONDARY_ROUTE_INITIAL_JS_BYTES = 1_672_000;
+const MAX_MANUAL_ROUTE_INITIAL_JS_BYTES = 1_692_000;
+const MAX_SKLAND_ROUTE_INITIAL_JS_BYTES = 1_732_000;
+const MAX_SKLAND_DISABLED_DOCUMENT_INITIAL_JS_BYTES = 1_370_000;
+const MAX_SKLAND_ENABLED_DOCUMENT_INITIAL_JS_BYTES = 1_406_000;
+const MAX_SKLAND_DISABLED_DOCUMENT_INITIAL_GZIP_JS_BYTES = 442_000;
+const MAX_SKLAND_ENABLED_DOCUMENT_INITIAL_GZIP_JS_BYTES = 448_000;
 const MAX_DOCUMENT_INITIAL_JS_FILES = 18;
 const WORKBENCH_ROUTES = ["/", "/manual", "/training", "/mastery", "/skills", "/skland", "/account"];
-const statsUrl = new URL("../.next/diagnostics/route-bundle-stats.json", import.meta.url);
-const documentUrl = new URL("../.next/server/app/index.html", import.meta.url);
-const buildRootUrl = new URL("../.next/", import.meta.url);
+const buildRootUrl = new URL(`../${env.RIIC_NEXT_DIST_DIR || ".next"}/`, import.meta.url);
+const statsUrl = new URL("diagnostics/route-bundle-stats.json", buildRootUrl);
+const documentUrl = new URL("server/app/index.html", buildRootUrl);
 const COMPACT_SCHEDULE_MARKER = "data-compact-schedule-view";
-const staticChunksUrl = new URL("../.next/static/chunks/", import.meta.url);
+const staticChunksUrl = new URL("static/chunks/", buildRootUrl);
 const stats = JSON.parse(await readFile(statsUrl, "utf8"));
 
 assert.ok(Array.isArray(stats), "route bundle stats must be an array; run npm run build first");
@@ -73,7 +78,10 @@ for (const route of WORKBENCH_ROUTES.slice(1)) {
   }
 }
 
-const document = await readFile(documentUrl, "utf8");
+const document = await readFile(documentUrl, "utf8").catch((error) => {
+  if (error.code !== "ENOENT") throw error;
+  return renderBuildDocument();
+});
 const initialScriptPaths = [...document.matchAll(/(?:src|href)="([^"]+\.js(?:\?[^"]*)?)"/g)]
   .map((match) => new URL(match[1], "https://bundle-budget.invalid").pathname)
   .filter((pathname) => pathname.startsWith("/_next/static/chunks/"));
@@ -89,6 +97,12 @@ const initialScriptBodies = await Promise.all(uniqueInitialScriptPaths.map(async
   const relativePath = pathname.slice("/_next/".length);
   return readFile(new URL(relativePath, buildRootUrl));
 }));
+for (const marker of ["data-release-dialog", "data-release-notes", "data-admin-changelog"]) {
+  assert.ok(
+    !initialScriptBodies.some((body) => body.includes(marker)),
+    `release content or dialog leaked into the initial document graph: ${marker}`,
+  );
+}
 const documentInitialJsBytes = initialScriptBodies.reduce((total, body) => total + body.byteLength, 0);
 const documentInitialGzipJsBytes = initialScriptBodies.reduce(
   (total, body) => total + gzipSync(body, { level: 9 }).byteLength,
