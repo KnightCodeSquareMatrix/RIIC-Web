@@ -4,6 +4,9 @@ test.setTimeout(90_000);
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/skill-annotations", (route) => route.fulfill({ json: { success: true, data: { annotations: [] } } }));
   await page.route("**/api/auth/get-session", (route) => route.fulfill({ json: null }));
+  await page.route("**/api/releases**", (route) => route.fulfill({
+    json: { success: true, data: { environment: "development", releases: [] } },
+  }));
 });
 
 test("cookie locale renders on the server, while switching preserves filters and search", async ({ page, context, baseURL }) => {
