@@ -23,7 +23,6 @@ import type {
   SklandStatusData,
 } from "./types";
 import type { SklandPolicyConsentRequest } from "./legal-policy";
-import { assertOperbox } from "./operbox.ts";
 
 const SKLAND_API_PREFIX = process.env.APP_CLIENT_SKLAND_API_PREFIX ?? "";
 
@@ -134,7 +133,9 @@ type PlanRequestOptions = {
   signal?: AbortSignal;
 };
 
-function operboxPreflightError(value: unknown, code: "AIC-BOX-1101" | "AIC-DATA-8003"): ApiClientError | null {
+async function operboxPreflightError(value: unknown, code: "AIC-BOX-1101" | "AIC-DATA-8003"): Promise<ApiClientError | null> {
+  // Keep progression data out of the cold-start API bundle; load it only for uploads.
+  const { assertOperbox } = await import("./operbox.ts");
   try {
     assertOperbox(value);
     return null;
@@ -147,7 +148,7 @@ function operboxPreflightError(value: unknown, code: "AIC-BOX-1101" | "AIC-DATA-
   }
 }
 
-export function computePlan(payload: {
+export async function computePlan(payload: {
   layout: BaseBlueprint;
   operbox: OperBoxEntry[];
   sourceName: string | null;
@@ -155,7 +156,7 @@ export function computePlan(payload: {
   rotation: RotationProfile;
   fiammetta_enable?: boolean;
 }, options: PlanRequestOptions = {}): Promise<PublicPlanData> {
-  const invalid = payload.boxSource === "sample" ? null : operboxPreflightError(payload.operbox, "AIC-BOX-1101");
+  const invalid = payload.boxSource === "sample" ? null : await operboxPreflightError(payload.operbox, "AIC-BOX-1101");
   if (invalid) return Promise.reject(invalid);
   const requestPayload = payload.boxSource === "sample"
     ? { layout: payload.layout, sourceName: payload.sourceName, boxSource: payload.boxSource, rotation: payload.rotation, fiammetta_enable: payload.fiammetta_enable }
@@ -191,7 +192,7 @@ export type PlanTaskPollData = {
   error?: string | null;
 };
 
-export function submitPlanTask(payload: {
+export async function submitPlanTask(payload: {
   layout: BaseBlueprint;
   operbox: OperBoxEntry[];
   sourceName: string | null;
@@ -199,7 +200,7 @@ export function submitPlanTask(payload: {
   rotation: RotationProfile;
   fiammetta_enable?: boolean;
 }): Promise<PlanTaskSubmitData> {
-  const invalid = payload.boxSource === "sample" ? null : operboxPreflightError(payload.operbox, "AIC-BOX-1101");
+  const invalid = payload.boxSource === "sample" ? null : await operboxPreflightError(payload.operbox, "AIC-BOX-1101");
   if (invalid) return Promise.reject(invalid);
   const requestPayload = payload.boxSource === "sample"
     ? { layout: payload.layout, sourceName: payload.sourceName, boxSource: payload.boxSource, rotation: payload.rotation, fiammetta_enable: payload.fiammetta_enable }
@@ -316,8 +317,8 @@ export function getCloudWorkspace(signal?: AbortSignal): Promise<CloudWorkspaceD
   return requestData("/api/workspace", { signal });
 }
 
-export function putCloudWorkspace(payload: CloudWorkspacePutRequest, signal?: AbortSignal): Promise<CloudWorkspaceData> {
-  const invalid = "state" in payload && payload.state.boxSource === "maa" ? operboxPreflightError(payload.operbox, "AIC-DATA-8003") : null;
+export async function putCloudWorkspace(payload: CloudWorkspacePutRequest, signal?: AbortSignal): Promise<CloudWorkspaceData> {
+  const invalid = "state" in payload && payload.state.boxSource === "maa" ? await operboxPreflightError(payload.operbox, "AIC-DATA-8003") : null;
   if (invalid) return Promise.reject(invalid);
   return requestData("/api/workspace", {
     method: "PUT",

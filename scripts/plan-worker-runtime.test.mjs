@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import console from "node:console";
 import { register } from "node:module";
 import test from "node:test";
 import { setTimeout as schedule } from "node:timers";

@@ -261,6 +261,7 @@
   },
   "components_cloud_CloudDataSync": {
     "syncError_consent": "云同步已暂停，请确认最新的服务条款与隐私政策。本地数据保持不变。",
+    "syncError_policy": "打开页面后，服务条款或隐私政策已更新。请刷新后查看最新版，再决定是否同意。本地数据已保留。",
     "syncError_invalid": "云端未接受这份数据，已停止重复上传。请检查干员练度或重新导入数据，本地副本已保留。",
     "syncError_retry": "云同步暂时不可用或请求过于频繁，将在冷却后重试。本地数据已保留。",
     "syncError_session": "登录已过期，请重新登录以恢复云同步。本地数据已保留。",
@@ -271,6 +272,7 @@
     "couldNotSaveConsentTryAgainLater": "无法保存同意状态，请稍后重试。"
   },
   "components_cloud_DataConsentDialog": {
+    "reloadUpdatedPolicy": "刷新以查看新版条款",
     "enableAccountCloudWorkspace": "启用账号云端工作区",
     "afterYouConsentTheSiteAutomaticallySyncsYourMaa": "同意后，本站会自动同步 MAA Box、布局、设置与最近排班。你也可以选择继续纯本地使用。",
     "eachMaaBoxUsesAnIndependentKeyAndAes": "MAA Box 使用每条独立密钥和 AES-256-GCM 信封加密，云端数据滚动保留 30 天。",

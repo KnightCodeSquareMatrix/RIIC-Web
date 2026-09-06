@@ -54,6 +54,7 @@ export function CloudDataSync(props: {
 
   const errorMessages = {
     consent: intl("components_cloud_CloudDataSync.syncError_consent"),
+    policy: intl("components_cloud_CloudDataSync.syncError_policy"),
     invalid: intl("components_cloud_CloudDataSync.syncError_invalid"),
     retry: intl("components_cloud_CloudDataSync.syncError_retry"),
     session: intl("components_cloud_CloudDataSync.syncError_session"),
@@ -61,7 +62,7 @@ export function CloudDataSync(props: {
   };
   const error = status.error ? errorMessages[status.error] : null;
   return <>
-    <DataConsentDialog open={status.consentOpen} saving={status.saving} error={error} onAccept={() => void session.current?.accept()} onDecline={() => session.current?.decline()} />
+    <DataConsentDialog open={status.consentOpen} saving={status.saving} error={error} reloadRequired={status.error === "policy"} onAccept={() => { if (status.error === "policy") window.location.reload(); else void session.current?.accept(); }} onDecline={() => session.current?.decline()} />
     {error && !status.consentOpen ? <Alert data-cloud-sync-error role="status" className="my-2">
       <AlertDescription className="break-words">
         <p>{error}{status.errorCode ? ` (${status.errorCode})` : ""}</p>

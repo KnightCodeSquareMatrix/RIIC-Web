@@ -186,3 +186,16 @@ test("explicit refresh rechecks cloud consent without bypassing failure cooldown
   h.session.decline(); h.session.refresh(); await h.tick(120_000);
   assert.equal(reads, 2);
 });
+
+test("stale policy versions require refresh instead of repeated consent submissions", async (context) => {
+  let submissions = 0;
+  const h = sessionHarness(context, {
+    getConsent: async () => ({ current: false, cloudSyncEnabled: true, termsVersion: "2", privacyVersion: "2", acceptedAt: null, revokedAt: null }),
+    acceptConsent: async () => { submissions++; throw { code: "AIC-DATA-8003" }; },
+  });
+  h.session.start(); await h.tick(0);
+  await h.session.accept(); await h.session.accept(); h.edit(1); await h.tick(120_000);
+  assert.equal(submissions, 1);
+  assert.equal(h.statuses.at(-1)?.error, "policy");
+  assert.equal(h.uploads.length, 0);
+});

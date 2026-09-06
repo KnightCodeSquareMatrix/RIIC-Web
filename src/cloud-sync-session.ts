@@ -5,7 +5,7 @@ export type CloudUpload = Exclude<CloudWorkspacePutRequest, { restoreRevisionId:
 export type CloudSyncStatus = {
   consentOpen: boolean;
   saving: boolean;
-  error: "consent" | "invalid" | "retry" | "session" | "paused" | null;
+  error: "consent" | "policy" | "invalid" | "retry" | "session" | "paused" | null;
   errorCode: string | null;
 };
 
@@ -81,7 +81,7 @@ export class CloudSyncSession {
   }
 
   async accept() {
-    if (this.busy || this.controller.signal.aborted || Date.now() < this.retryAt) return;
+    if (this.busy || this.state.error === "policy" || this.controller.signal.aborted || Date.now() < this.retryAt) return;
     clearTimeout(this.timer);
     this.busy = true;
     this.state.saving = true;
@@ -97,7 +97,7 @@ export class CloudSyncSession {
       this.failures = 0;
       this.state = { consentOpen: false, saving: false, error: null, errorCode: null };
     } catch (cause) {
-      if (!this.controller.signal.aborted) this.failed(cause, null);
+      if (!this.controller.signal.aborted) this.failed(cause, null, true);
     } finally {
       this.busy = false;
       this.state.saving = false;
@@ -123,7 +123,7 @@ export class CloudSyncSession {
     }, Math.min(delay, 2_147_483_647));
   }
 
-  private failed(cause: unknown, attemptedFingerprint: string | null) {
+  private failed(cause: unknown, attemptedFingerprint: string | null, consentSubmission = false) {
     const failure = cause && typeof cause === "object" ? cause as { code?: string; retryable?: boolean; retryAfterSeconds?: number } : {};
     this.state.errorCode = typeof failure.code === "string" && /^AIC-[A-Z]+-\d{4}$/.test(failure.code) ? failure.code : null;
     if (failure.code === "AIC-DATA-8001") {
@@ -134,6 +134,9 @@ export class CloudSyncSession {
     } else if (failure.code === "AIC-AUTH-2008") {
       this.paused = true;
       this.state.error = "session";
+    } else if (failure.code === "AIC-DATA-8003" && consentSubmission) {
+      this.paused = true;
+      this.state.error = "policy";
     } else if (failure.code === "AIC-DATA-8003" || failure.code === "AIC-BOX-1101") {
       this.state.error = "invalid";
       this.blockedFingerprint = attemptedFingerprint;
