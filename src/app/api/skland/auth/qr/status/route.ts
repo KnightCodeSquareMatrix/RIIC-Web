@@ -63,6 +63,6 @@ export async function POST(request: Request) {
     }, requestId);
     return response;
   } catch (error) {
-    return sklandErrorResponse(error, requestId, "/api/skland/auth/qr/status", startedAt);
+    return sklandErrorResponse(error, requestId, "/api/skland/auth/qr/status", startedAt, request);
   }
 }

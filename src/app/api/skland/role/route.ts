@@ -59,7 +59,7 @@ export async function POST(request: Request) {
     setSklandAccountStoreCookies(response, request, next, previous);
     return response;
   } catch (error) {
-    const response = sklandErrorResponse(error, requestId, "/api/skland/role", startedAt);
+    const response = sklandErrorResponse(error, requestId, "/api/skland/role", startedAt, request);
     if (
       previous &&
       targetAccountId &&

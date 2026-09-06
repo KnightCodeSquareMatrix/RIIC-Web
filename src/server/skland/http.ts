@@ -265,20 +265,21 @@ export function sklandErrorResponse(
   error: unknown,
   requestId: string,
   route: string,
-  startedAt: number
+  startedAt: number,
+  request?: Request,
 ): NextResponse {
   if (error instanceof PublicApiError) {
-    return failureResponse(error, requestId, route, startedAt);
+    return failureResponse(error, requestId, route, startedAt, "AIC-SYS-5000", request);
   }
   if (error instanceof SklandBindingConflictError) {
-    return failureResponse(new PublicApiError("AIC-AUTH-2006"), requestId, route, startedAt);
+    return failureResponse(new PublicApiError("AIC-AUTH-2006"), requestId, route, startedAt, "AIC-SYS-5000", request);
   }
   if (error instanceof Error && error.message === "请求来源无效。") {
-    return failureResponse(new PublicApiError("AIC-AUTH-2002"), requestId, route, startedAt);
+    return failureResponse(new PublicApiError("AIC-AUTH-2002"), requestId, route, startedAt, "AIC-SYS-5000", request);
   }
   if (error instanceof SklandServiceError) {
     const code = publicCodeForSklandServiceError(error.code);
-    return failureResponse(new PublicApiError(code), requestId, route, startedAt);
+    return failureResponse(new PublicApiError(code, {cause:error}), requestId, route, startedAt, "AIC-SYS-5000", request);
   }
-  return failureResponse(new PublicApiError("AIC-SYS-5000"), requestId, route, startedAt);
+  return failureResponse(new PublicApiError("AIC-SYS-5000", {cause:error}), requestId, route, startedAt, "AIC-SYS-5000", request);
 }

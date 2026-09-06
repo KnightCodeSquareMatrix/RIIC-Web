@@ -740,6 +740,8 @@ export function ShiftTabs({
   maaJson,
   rotation,
   durations,
+  labels,
+  wrap = false,
   active,
   closest,
   onChange,
@@ -747,6 +749,8 @@ export function ShiftTabs({
   maaJson?: MaaJson;
   rotation?: RotationJson;
   durations?: readonly number[];
+  labels?: readonly { content: ReactNode; ariaLabel: string }[];
+  wrap?: boolean;
   active: number;
   closest?: number;
   onChange: (index: number) => void;
@@ -767,7 +771,12 @@ export function ShiftTabs({
   return (
     <Tabs value={String(active)} onValueChange={(value) => onChange(Number(value))} className="max-w-full">
       <TabsList
-        className="max-w-full justify-start overflow-x-auto overflow-y-hidden tracking-[0.01em] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className={cn(
+          "max-w-full justify-start tracking-[0.01em]",
+          wrap
+            ? "h-auto flex-wrap overflow-visible"
+            : "overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+        )}
         data-shift-tabs
         data-ui-number-font
       >
@@ -777,13 +786,14 @@ export function ShiftTabs({
           const label = localize_components.text(en, "additional1", { value1: ((en)) ? String(index + 1) : "", choice2: ((en)) && (durationHours !== undefined) ? "yes" : "no", value3: ((en) && (durationHours !== undefined)) ? String(compactNumber(durationHours)) : "", choice4: (!(en)) && (durationHours !== undefined) ? "yes" : "no", value5: (!(en) && (durationHours !== undefined)) ? String(index + 1) : "", value6: (!(en) && (durationHours !== undefined)) ? String(compactNumber(durationHours)) : "", value7: (!(en) && !(durationHours !== undefined)) ? String(shiftTabLabel(shift, index)) : "" });
           const originalTeamSummary = shiftTeamSummary(shift, rotation?.profile ?? DEFAULT_ROTATION_PROFILE);
           const teamSummary = en && originalTeamSummary ? originalTeamSummary.replaceAll("主力", "Main").replaceAll("替补", "Backup").replaceAll("上班", "working").replaceAll("休息", "resting") : originalTeamSummary;
+          const customLabel = labels?.[index];
           return (
             <TabsTrigger
               key={`${plan.name}-${index}`}
               value={String(index)}
-              aria-label={teamSummary ? `${label}${intl("components.label")}${teamSummary}` : label}
+              aria-label={customLabel?.ariaLabel ?? (teamSummary ? `${label}${intl("components.label")}${teamSummary}` : label)}
             >
-              {label}
+              {customLabel?.content ?? label}
               {closest === index ? <span className="rounded-full bg-primary/10 px-1.5 text-xs text-primary max-md:hidden">{intl("components.closest")}</span> : null}
             </TabsTrigger>
           );

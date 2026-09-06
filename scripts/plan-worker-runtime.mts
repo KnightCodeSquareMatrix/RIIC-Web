@@ -1,6 +1,7 @@
 import { normalizePersistedPlanData } from "../src/persistence.ts";
 import { PublicApiError } from "../src/server/api-contract.ts";
 import { diagnosticText } from "../src/server/diagnostic-text.ts";
+import { makeDiagnostic, persistDiagnostic } from "../src/server/request-diagnostics.ts";
 import {
   recordPlanRunBestEffort,
   updatePlanRunExecutionBestEffort,
@@ -255,7 +256,7 @@ export async function executePlanTask(
     });
     if (lease) {
       const activeLease = lease;
-      if (!runStored) {
+      if (!runStored || result.fallbackUsed) {
         await dependencies.releaseCacheLease(activeLease);
       } else {
         const referenceStored = await dependencies.recordCacheReference({
@@ -322,7 +323,12 @@ export async function executePlanTask(
       createdAt: new Date(),
     });
     await dependencies.completeTask(id, { status: "failed", error: "排班失败，请重试。" });
+    const diagnostic = makeDiagnostic({code:errorCode,status:error instanceof PublicApiError ? error.status : 500,
+      route:"worker/plan",requestId:diagnosticId,reason:diagnosticReason,
+      diagnosticId,error,durationMs:Math.round(performance.now()-workerStartedAt)});
+    persistDiagnostic(diagnostic);
     console.error(JSON.stringify({
+      ...diagnostic,
       level: "error",
       event: "plan_task_failed",
       taskId: id,
