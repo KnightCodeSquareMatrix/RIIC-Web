@@ -1,5 +1,21 @@
 # systemd runtime settings
 
+## Persistent Worker diagnostics
+
+The Worker must explicitly set an absolute `BETA_STORAGE_DIR` equal to its website's persistent storage directory. Services do not inherit each other's environment. Without this setting, a standalone working directory resolves the fallback under the immutable release, which `ProtectSystem=strict` cannot write. Temporary solver output is not a substitute for persistent diagnostic records.
+
+Install the matching drop-in before deploying a release, then let deployment restart the Worker:
+
+```bash
+sudo install -D -o root -g root -m 0644 deploy/plan-worker-storage-dev.conf /etc/systemd/system/arknights-infra-dev-worker.service.d/50-persistent-storage.conf
+sudo install -D -o root -g root -m 0644 deploy/plan-worker-storage.conf /etc/systemd/system/arknights-infra-worker.service.d/50-persistent-storage.conf
+sudo systemctl daemon-reload
+```
+
+Adapt service names and paths together for other installations. Keep `ReadWritePaths` restricted to that environment's persistent directory and keep it owned by the non-root application user. Do not loosen `ProtectSystem`. Before warming solver lanes, publishing readiness, or claiming tasks, the Worker validates storage boundaries and writes, syncs, and removes a private probe file. Missing or unwritable storage therefore blocks the new release's readiness instead of silently losing failure attachments. Existing lost temporary files cannot be recovered by this configuration change.
+
+## Graceful website shutdown
+
 Next.js owns `SIGINT` and `SIGTERM` so that it can stop accepting new requests and drain in-flight requests before exiting. Its standalone server exits with status `130` or `143` after that graceful shutdown.
 
 Install [`next-graceful-exit.conf`](./next-graceful-exit.conf) as a drop-in for every website service, then reload systemd:
