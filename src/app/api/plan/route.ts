@@ -284,7 +284,7 @@ export async function POST(request: Request) {
     const runStored = await recordRun("success", null, publicResult);
     if (cacheLease) {
       const activeLease = cacheLease;
-      if (!runStored) {
+      if (!runStored || runResult.fallbackUsed) {
         await releasePlanCacheLease(activeLease);
         cacheLease = undefined;
       } else {

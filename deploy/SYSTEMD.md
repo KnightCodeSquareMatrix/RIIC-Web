@@ -35,6 +35,26 @@ The first run copies all currently available journals for both environments' web
 
 This preserves logs that still exist when archiving starts; it cannot restore already expired historical logs. Automatic application deployment does not install root-owned service units or overwrite this archive. User-initiated data deletion and the existing TTL of private BOX data, telemetry event rows and reproduction attachments are unchanged. Do not conflate retaining operational logs with retaining users' private data forever.
 
+## Optional pinned v2 solver fallback
+
+The primary solver stays unchanged. To enable one v2 attempt after a primary computation, transport, or output-contract failure, configure all four variables on both the website and Worker services:
+
+```ini
+[Service]
+Environment=INFRA_FALLBACK_CLI_PATH=/opt/riic-solvers/v2/<immutable-release>/infra-cli
+Environment=INFRA_FALLBACK_DATA_DIR=/opt/riic-solvers/v2/<immutable-release>/data
+Environment=INFRA_FALLBACK_CLI_SHA256=<64-lowercase-hex-sha256>
+Environment=INFRA_FALLBACK_DATA_SHA256=<64-lowercase-hex-sha256>
+```
+
+Use a reviewed, fixed source commit from ArknightsInfraCalc-v2 and its matching data snapshot, never a mutable `latest` download at request time. Install the executable and data outside website release directories, owned by root and readable/executable but not writable by the service user. Record both the executable and complete bundle checksums. Neither the primary executable, active pointer, approved-primary hash nor its data directory is replaced. Do not package private source, inputs or logs in the public website repository.
+
+The Worker verifies the fallback file's SHA-256 and each lane's ping/schema/identity before reporting its first heartbeat. The complete data tree is hashed at startup and before each run using `hashSolverDataDirectory` from `src/server/solver-fallback.ts`: recursively sort names, then hash the UTF-8 concatenation of `JSON.stringify([relativePosixPath, fileSha256]) + "\n"` for each file. Symlinks and special files are rejected. Partial or invalid configuration fails closed. When all four variables are absent, the existing primary-only path is unchanged. Remove only these four configuration entries and restart through the normal deployment workflow to disable fallback; leave installed binaries, data and logs intact.
+
+When enabled, each lane serializes the entire primary/fallback pair. The primary receives 75% of the existing solver timeout budget; v2 receives only the remaining time, with hard deadlines stopping the active process. There is at most one fallback, with the same effective input and rotation/Fiammetta options. Website input admission, authentication, rate limits, database errors and artifact housekeeping are outside this retry boundary. A v2 error or invalid/partial response remains a failure; fallback is an availability policy, not a guarantee that every input has a feasible schedule.
+
+Primary failures are preserved before fallback in private `primary-attempt.json`; attempted fallback responses are kept in `fallback-attempt.json`. These reproduction files retain the existing private-data TTL. Sanitized primary reasons, both solver hashes and fallback outcomes are retained in the separate append-only diagnostic logs and journal archives. Admin diagnostic event counts therefore include recovered primary failures and must not be read as final task failure rates. The final run records the actual winning solver identity and combined reported solver time when both attempts supply it. Recovered v2 results release, rather than populate, the primary solver's cache lease.
+
 ## Graceful website shutdown behavior
 
 Next.js owns `SIGINT` and `SIGTERM` so that it can stop accepting new requests and drain in-flight requests before exiting. Its standalone server exits with status `130` or `143` after that graceful shutdown.
