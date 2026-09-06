@@ -98,7 +98,7 @@ for (const mobile of [false, true]) {
       const professionFilter = picker.getByRole("tablist", { name: "职业筛选", exact: true });
       await professionFilter.getByRole("tab", { name: "术师", exact: true }).click();
       await picker.getByRole("textbox", { name: "搜索干员" }).fill("阿米娅");
-      await expect(picker.getByRole("heading", { name: "阿米娅", exact: true })).toBeVisible();
+      await expect(picker.getByRole("button", { name: "查看阿米娅的基建技能", exact: true })).toBeVisible();
       await professionFilter.getByRole("tab", { name: "近卫", exact: true }).click();
       await expect(picker.getByText("没有符合条件的干员。", { exact: true })).toBeVisible();
       await professionFilter.getByRole("tab", { name: "全部", exact: true }).click();
@@ -115,7 +115,7 @@ for (const mobile of [false, true]) {
       await expect(picker.locator("article")).toHaveCount(48);
       await picker.getByRole("button", { name: "只看已拥有", exact: true }).click();
       await expect(picker.locator("article")).toHaveCount(1);
-      await expect(picker.getByRole("heading", { name: "阿米娅", exact: true })).toBeVisible();
+      await expect(picker.getByRole("button", { name: "查看阿米娅的基建技能", exact: true })).toBeVisible();
       await chooseRarity(picker, 6);
       await expect(picker.locator("article")).toHaveCount(1);
       await picker.getByRole("radiogroup", { name: "银灰持有与精英阶段", exact: true }).getByRole("radio", { name: "精2", exact: true }).click();
@@ -142,7 +142,7 @@ for (const mobile of [false, true]) {
       await assertUpgradeFilterBar(picker);
       const professionFilter = picker.getByRole("tablist", { name: "职业筛选", exact: true });
       await professionFilter.getByRole("tab", { name: "术师", exact: true }).click();
-      await expect(picker.getByRole("heading", { name: "阿米娅", exact: true })).toBeVisible();
+      await expect(picker.getByRole("button", { name: "查看阿米娅的基建技能", exact: true })).toBeVisible();
       await professionFilter.getByRole("tab", { name: "近卫", exact: true }).click();
       await expect(picker.getByText("没有符合条件的干员。", { exact: true })).toBeVisible();
       await professionFilter.getByRole("tab", { name: "全部", exact: true }).click();
@@ -156,7 +156,7 @@ for (const mobile of [false, true]) {
       await expect(picker.getByText("没有符合条件的干员。", { exact: true })).toBeVisible();
       await picker.getByRole("tab", { name: /进入排班/ }).click();
       await expect(picker.locator("article")).toHaveCount(1);
-      await expect(picker.getByRole("heading", { name: "阿米娅", exact: true })).toBeVisible();
+      await expect(picker.getByRole("button", { name: "查看阿米娅的基建技能", exact: true })).toBeVisible();
       await picker.getByRole("textbox", { name: "搜索干员" }).fill("银灰");
       await expect(picker.getByText("没有符合条件的干员。", { exact: true })).toBeVisible();
       await picker.getByRole("textbox", { name: "搜索干员" }).fill("");

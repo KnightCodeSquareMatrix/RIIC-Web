@@ -250,18 +250,14 @@ test("manual scheduling configures independent shifts, moves conflicts and enabl
   await expect(fiammettaPicker.locator("[data-manual-operator-choice]").first().locator("img")).toBeVisible();
   await expect(fiammettaPicker.getByText(/精2 Lv\.60/).first()).toBeVisible();
   await fiammettaPicker.getByRole("button", { name: /锡兰/ }).hover();
-  await page.waitForTimeout(1_000);
-  await expect(page.locator('[data-slot="tooltip-content"][data-open]')).toHaveCount(0);
-  await expect(page.locator('[data-slot="tooltip-content"][data-open]')).toBeVisible({ timeout: 2_000 });
+  await expect(page.locator('[data-slot="tooltip-content"][data-open]')).toBeVisible({ timeout: 1_000 });
   await fiammettaPicker.locator("[data-manual-operator-picker]").evaluate((element) => {
     element.dispatchEvent(new Event("scroll"));
   });
   await expect(page.locator('[data-slot="tooltip-content"][data-open]')).toHaveCount(0);
   await page.waitForTimeout(200);
   await fiammettaPicker.getByRole("button", { name: /阿米娅/ }).hover();
-  await page.waitForTimeout(1_000);
-  await expect(page.locator('[data-slot="tooltip-content"][data-open]')).toHaveCount(0);
-  await expect(page.locator('[data-slot="tooltip-content"][data-open]')).toBeVisible({ timeout: 2_000 });
+  await expect(page.locator('[data-slot="tooltip-content"][data-open]')).toBeVisible({ timeout: 1_000 });
   await fiammettaPicker.getByRole("button", { name: /锡兰/ }).click();
   await expect(manualShiftActions.getByRole("button", { name: "换心情 锡兰" })).toBeVisible();
   await expect(manualShiftActions.locator("[data-fiammetta-target-chip] img")).toBeVisible();

@@ -1,0 +1,11 @@
+{
+  "passwordWeak": "Use at least 10 characters with letters, numbers, and mixed case or a symbol. Avoid common or repeated patterns.",
+  "nameHint": "2–20 characters using Chinese characters, letters, numbers, spaces, underscores, or hyphens.",
+  "passwordMismatch": "Passwords do not match.",
+  "passwordRepeat": "Enter your password again.",
+  "length": "At least 10 characters",
+  "letter": "Contains a letter",
+  "digit": "Contains a number",
+  "variety": "Mixed case or a symbol",
+  "announcement": "Password strength: {strength}. {guessable, select, yes {This password pattern is easy to guess. } other {}}{unmet, select, yes {Still needed: {rules}.} other {All recommendations are met.}}"
+}

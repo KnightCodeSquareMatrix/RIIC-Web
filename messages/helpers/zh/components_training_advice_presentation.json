@@ -1,0 +1,11 @@
+{
+  "general": "综合",
+  "systemCombination": "体系组合",
+  "smallCombination": "小型组合",
+  "unknown": "未知",
+  "noAdditionalTraining": "无需额外培养",
+  "useSkillUnlockRequirement": "按技能解锁要求",
+  "targetNeedsReview": "目标待核对",
+  "elite": "精",
+  "basicGoal": "基础目标"
+}

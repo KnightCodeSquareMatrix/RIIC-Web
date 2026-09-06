@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { requestId, diagnosticId, expectUnifiedDialogTypography, expectUnifiedDialogAction, expectButtonGeometryStable, armEndingTransitionCapture, expectCapturedExitDuration, armMotionCapture, armMotionCollectionCapture, expectCapturedMotion, expectCapturedMotionDelays, armTransientStyleCapture, expectCapturedStyleMotion, waitForOwnAnimations, planData, twoShiftPlanData, scheduleVisualPlanData, productChangePlanData, motionPlanData, authenticatedSklandSnapshot, mockApis, navigateToPrimaryPage, seedPreferences, seedV4Session } from "./production-readiness.fixture";
+import type { PublicPlanData } from "../src/types";
 
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/auth/get-session", (route) => route.fulfill({
@@ -199,7 +200,10 @@ test("operator skill terms reveal square hover cards on pointer and keyboard foc
   await mockApis(page);
   const termPlanData = structuredClone(scheduleVisualPlanData);
   termPlanData.maa.plans[0].rooms.trading[0].operators = [{ name: "陈", skill: 1 }];
-  await seedV4Session(page, termPlanData, { boxSource: "maa" });
+  await seedV4Session(page, termPlanData, {
+    boxSource: "maa",
+    operbox: [{ id: "char_010_chen", name: "陈", elite: 0, level: 1, own: true, potential: 1, rarity: 6 }],
+  });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
 
@@ -208,6 +212,8 @@ test("operator skill terms reveal square hover cards on pointer and keyboard foc
   await operatorPortrait.hover({ position: { x: 8, y: Math.max(8, (portraitBox?.height ?? 80) / 2) } });
   const skillTooltip = page.locator('[data-slot="tooltip-content"][data-open]');
   await expect(skillTooltip).toBeVisible({ timeout: 10_000 });
+  await expect(skillTooltip.locator('[data-skill-unlocked="false"]')).toHaveCSS("opacity", "0.7");
+  await expect(skillTooltip.locator('[data-skill-unlocked="false"]')).toHaveCSS("filter", "grayscale(1)");
   const termTrigger = skillTooltip.locator(".riic-term-hover > .riic-term").first();
   const termCard = skillTooltip.locator(".riic-term-hover-card").first();
 
@@ -217,6 +223,29 @@ test("operator skill terms reveal square hover cards on pointer and keyboard foc
   await expect(termCard).toHaveCSS("border-radius", "0px");
   await termTrigger.focus();
   await expect(termCard).toBeVisible();
+});
+
+test("Lancet-2 power rooms without total efficiency render zero with a red portrait filter", async ({ page }) => {
+  await mockApis(page);
+  const lancetPlanData = structuredClone(scheduleVisualPlanData) as PublicPlanData;
+  lancetPlanData.maa.plans[0]!.rooms.power = [
+    { operators: ["Castle-3"] },
+    { operators: ["Lancet-2"] },
+  ];
+  lancetPlanData.rotation.shifts[0]!.scores.room_lines = [
+    ...lancetPlanData.rotation.shifts[0]!.scores.room_lines.filter((line) => line.room_id !== "power_1" && line.room_id !== "power_2"),
+    { room_id: "power_1", order_multiplier: 1 },
+    { room_id: "power_2", order_multiplier: 1 },
+  ];
+  await seedV4Session(page, lancetPlanData, { boxSource: "maa" });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+
+  const ordinaryPowerRoom = page.locator('[data-room-title="发电站 1"]');
+  const lancetPowerRoom = page.locator('[data-room-title="发电站 2"]');
+  await expect(lancetPowerRoom.locator("[data-room-primary-efficiency]")).toHaveText("0%");
+  await expect(lancetPowerRoom.locator('[data-operator-identity="Lancet-2"] [data-operator-portrait-alert="missing-power-efficiency"]')).toBeVisible();
+  await expect(ordinaryPowerRoom.locator('[data-operator-portrait-alert="missing-power-efficiency"]')).toHaveCount(0);
 });
 
 test("Skland calculator keeps the schedule visible before and after sidebar navigation", async ({ page }) => {
@@ -794,7 +823,7 @@ test("live activity survives navigation and calculator search occupies the relea
   await expect(activity).toHaveCount(0, { timeout: 5_000 });
 
   await expect(page.getByRole("textbox", { name: "搜索干员名称" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "筛选制造站" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "制造站", exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "基建计算器", exact: true }).click();
   const search = page.getByRole("textbox", { name: "搜索排班中的干员或房间" });

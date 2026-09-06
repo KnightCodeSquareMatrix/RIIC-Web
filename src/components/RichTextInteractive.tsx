@@ -1,4 +1,5 @@
 "use client";
+import { useTranslations, useLocale } from "next-intl";
 
 import { useMemo, useState, type ReactNode } from "react";
 
@@ -6,7 +7,6 @@ import { RichTextStatic } from "@/components/RichTextStatic";
 import { parseRichText, type RichTextNode } from "@/components/skill-query/rich-text";
 import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import termCatalogJson from "@/generated/arkntools/term-catalog.json" with { type: "json" };
-import { useLanguageDemo } from "@/language-demo";
 
 type TermRecord = { id: string; name: string; desc: string; descText: string };
 const TERM_CATALOG = termCatalogJson as Record<string, TermRecord>;
@@ -70,7 +70,7 @@ function renderHoverNodes(nodes: readonly RichTextNode[]): ReactNode {
 
 /** 仅用于紧凑 tooltip：悬停或聚焦彩色词条时就地显示详情。 */
 export function RichTextHoverTerms({ text }: { text: string }) {
-  const { locale } = useLanguageDemo();
+  const locale = useLocale();
   const nodes = useMemo(() => parseRichText(text), [text]);
   if (locale === "en") return <RichTextStatic text={text} />;
   return <span className="whitespace-pre-line">{renderHoverNodes(nodes)}</span>;
@@ -85,21 +85,27 @@ function BuildingTermDialog({
   onTermOpen: (id: string) => void;
   onClose: () => void;
 }) {
-  const { locale } = useLanguageDemo();
+  const intl = useTranslations();
+
   return (
     <Dialog open={termStack.length > 0} onOpenChange={(next) => { if (!next) onClose(); }}>
-      <DialogContent>
-        <DialogHeader className="pb-0 sm:pb-0">
-          <DialogTitle>{locale === "en" ? "Infrastructure terms" : "基建词条"}</DialogTitle>
+      <DialogContent
+        className="sm:max-w-[min(560px,calc(100vw-2rem))]"
+        data-building-term-dialog
+      >
+        <DialogHeader className="px-6 pb-1 pt-6 pr-14 sm:px-9 sm:pb-1 sm:pt-8 sm:pr-16">
+          <DialogTitle>{intl("components_RichTextInteractive.infrastructureTerms")}</DialogTitle>
         </DialogHeader>
-        <DialogBody className="gap-3">
+        <DialogBody className="gap-5 px-6 pb-7 pt-4 sm:px-9 sm:pb-9 sm:pt-5">
           {termStack.map((id) => {
             const term = TERM_CATALOG[id];
             if (!term) return null;
             return (
-              <div key={id} className="min-w-0">
-                <h4 className="font-semibold">{term.name}</h4>
-                <RichTextInteractive text={term.desc} onTermOpen={onTermOpen} />
+              <div key={id} className="min-w-0 space-y-2">
+                <h4 className="text-base font-semibold leading-6">{term.name}</h4>
+                <div className="text-pretty leading-6">
+                  <RichTextInteractive text={term.desc} onTermOpen={onTermOpen} />
+                </div>
               </div>
             );
           })}
@@ -117,7 +123,7 @@ export function RichTextInteractive({
   text: string;
   onTermOpen?: (id: string) => void;
 }) {
-  const { locale } = useLanguageDemo();
+  const locale = useLocale();
   const [termStack, setTermStack] = useState<string[]>([]);
   const nodes = useMemo(() => parseRichText(text), [text]);
 

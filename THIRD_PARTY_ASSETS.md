@@ -2,19 +2,18 @@
 
 ## arkntools data and building-skill assets
 
-Operator metadata, the full-operator Box fixture, building-skill icons, and the generated presentation catalogs under the following paths come from the public [`arkntools/arknights-toolbox-data`](https://github.com/arkntools/arknights-toolbox-data) repository:
+Operator metadata, building-skill icons, and the generated presentation catalogs under the following paths come from the public [`arkntools/arknights-toolbox-data`](https://github.com/arkntools/arknights-toolbox-data) repository:
 
-- `fixtures/operbox_full_e2.json`
 - `public/images/building-skills`
 - `src/generated/arkntools`
 
 The repository's updater code is published under the MIT License. Arknights game data, names, and descriptions remain the property of their respective rights holders.
 
-## ArknightsGameResource portraits and operator branches
+## ArknightsGameResource portraits
 
-Operator portraits under `public/images/operator-portraits` and operator branch data derived from `gamedata/excel/character_table.json` come from the public [`yuanyan3060/ArknightsGameResource`](https://github.com/yuanyan3060/ArknightsGameResource) repository. Its README identifies the images as Arknights game assets owned by Hypergryph and limits the repository's purpose to learning and exchange. The resource repository carries an [AGPL-3.0 license](https://github.com/yuanyan3060/ArknightsGameResource/blob/main/LICENSE); this frontend consumes public PNG and JSON artifacts and does not execute code from that repository.
+Operator portraits under `public/images/operator-portraits` come from the public [`yuanyan3060/ArknightsGameResource`](https://github.com/yuanyan3060/ArknightsGameResource) repository. Its README identifies the images as Arknights game assets owned by Hypergryph and limits the repository's purpose to learning and exchange. The resource repository carries an [AGPL-3.0 license](https://github.com/yuanyan3060/ArknightsGameResource/blob/main/LICENSE); this frontend copies only the public PNG artifacts and does not execute code from that repository.
 
-`src/generated/arkntools/source.json` records the exact data and portrait commits and resource counts used by the current checkout. `src/generated/mastery-data.json` records the same pinned sources for its training rules and derived operator branches; the full character table is not bundled into the client. This project does not claim ownership of the game assets.
+`src/generated/arkntools/source.json` records the exact data and portrait commits and resource counts used by the current checkout. This project does not claim ownership of the game assets.
 
 The frontend consumes only public JSON and PNG artifacts. It does not execute private downloader or unpacking workflows, does not require access to private repositories, and never opens pull requests or writes to either upstream repository.
 
@@ -30,7 +29,7 @@ Run `npm run assets:site-icon` after updating the source PNG. CI regenerates the
 
 ## Updating
 
-The `Sync arkntools assets` GitHub Actions workflow performs shallow sparse checkouts of both public sources once per day at 08:00 Asia/Shanghai. When generated content changes, it runs the complete local checks and build, creates or refreshes an allowlisted release pull request to `main`, validates and squash-merges that exact resource update, dispatches the full production release, and then mirrors the released resources to `develop` through a separate pull request. It uses the repository-scoped `GITHUB_TOKEN`; maintainers must enable **Allow GitHub Actions to create and approve pull requests** in the repository Actions settings.
+The `Sync arkntools assets` GitHub Actions workflow performs shallow sparse checkouts of both public sources once per day at 10:17 Asia/Shanghai and opens or refreshes a pull request in this frontend repository when generated content changes. It uses the repository-scoped `GITHUB_TOKEN`; maintainers must enable **Allow GitHub Actions to create and approve pull requests** in the repository Actions settings. The workflow creates pull requests but never approves or merges them.
 
 For a local, explicitly reviewed update:
 
@@ -38,14 +37,13 @@ For a local, explicitly reviewed update:
 git clone --depth 1 --filter=blob:none --sparse https://github.com/arkntools/arknights-toolbox-data.git .tmp/arkntools-data
 git -C .tmp/arkntools-data sparse-checkout set --no-cone /assets/data/character.json /assets/data/building.json /assets/locales/cn/character.json /assets/locales/cn/building.json /assets/locales/cn/term.json /assets/img/building_skill /LICENSE /package.json
 git clone --depth 1 --filter=blob:none --sparse https://github.com/yuanyan3060/ArknightsGameResource.git .tmp/arknights-game-resource
-git -C .tmp/arknights-game-resource sparse-checkout set --no-cone /avatar/char_*.png /gamedata/excel/character_table.json
+git -C .tmp/arknights-game-resource sparse-checkout set --no-cone /avatar/char_*.png
 $sourceSha = git -C .tmp/arkntools-data rev-parse HEAD
 $portraitsSha = git -C .tmp/arknights-game-resource rev-parse HEAD
 npm run assets:sync:arkntools -- --source .tmp/arkntools-data --source-sha $sourceSha --portraits-source .tmp/arknights-game-resource --portraits-source-sha $portraitsSha
-npm run assets:mastery -- .tmp/arknights-game-resource/gamedata/excel/character_table.json
 ```
 
-Scheduled updates fail closed when upstream removes a managed file or reduces the operator count. After reviewing a legitimate removal, rerun the manual workflow with `allow_removals` enabled. The generator stages and validates the complete result, including the full-operator fixture, before replacing managed paths. Training-skill description changes also stop Mastery data generation until the rules are reviewed; follow the [Mastery Planner data-maintenance guide](./docs/MASTERY_PLANNER.md#数据维护) before regenerating with `--review-rules`.
+Scheduled updates fail closed when upstream removes a managed file or reduces the operator count. After reviewing a legitimate removal, rerun the manual workflow with `allow_removals` enabled. The generator stages and validates the complete result before replacing managed directories.
 
 No runtime page or API route fetches data from either upstream. Production builds always use the reviewed, Git-tracked snapshot in this repository.
 

@@ -1,3 +1,6 @@
+import { pageMetadata } from "@/i18n/metadata";
 import { MasteryRoute } from "@/components/workbench/MasteryRoute";
-export const metadata = { title: "专精规划 · 可露希尔基建终端" };
+
 export default function Page() { return <MasteryRoute />; }
+
+export function generateMetadata() { return pageMetadata("mastery"); }

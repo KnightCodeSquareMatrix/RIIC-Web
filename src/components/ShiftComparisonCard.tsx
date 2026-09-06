@@ -1,4 +1,7 @@
 "use client";
+import { localize as localize_components_ShiftComparisonCard } from "../i18n/helpers/components_ShiftComparisonCard.ts";
+import { useTranslations, useLocale } from "next-intl";
+import { messageRecord } from "@/i18n/translate";
 
 import type { CSSProperties, ReactNode } from "react";
 import { CheckCircle2 } from "lucide-react";
@@ -8,20 +11,18 @@ import { cn } from "@/lib/utils";
 import { MOTION_DURATION, MOTION_EASE_OUT } from "@/motion";
 import { roomLightAccentFor } from "@/room-visuals";
 import type { ShiftAdjustment, ShiftAdjustmentIssue, ShiftComparison } from "@/types";
-import { demoOperatorName, useLanguageDemo } from "@/language-demo";
+import { localizedOperatorName } from "@/i18n/game-data";
 
-const ROOM_LABELS: Record<string, string> = { control: "控制中枢", trading: "贸易站", manufacture: "制造站", power: "发电站", dormitory: "宿舍", meeting: "会客室", hire: "办公室", processing: "加工站" };
-const ROOM_LABELS_EN: Record<string, string> = { control: "Control Center", trading: "Trading Post", manufacture: "Factory", power: "Power Plant", dormitory: "Dormitory", meeting: "Reception Room", hire: "Office", processing: "Workshop" };
 const ISSUE_LABELS: Record<ShiftAdjustmentIssue, string> = { missing: "需换入", unexpected: "需换出", misplaced: "位置调整", tired: "疲劳" };
 const ISSUE_LABELS_EN: Record<ShiftAdjustmentIssue, string> = { missing: "Move in", unexpected: "Move out", misplaced: "Relocate", tired: "Fatigued" };
 const ACTION_ISSUES = ["unexpected", "missing", "misplaced"] as const;
 type ActionIssue = typeof ACTION_ISSUES[number];
 
 function roomKeyParts(key: string | null, en = false) {
-  if (!key) return { group: "default", label: en ? "Unassigned" : "未进驻" };
+  if (!key) return { group: "default", label: localize_components_ShiftComparisonCard.text(en, "unassigned") };
   const [group, indexText] = key.split(":");
-  const labels = en ? ROOM_LABELS_EN : ROOM_LABELS;
-  const groupLabel = labels[group] ?? (en ? "Unknown facility" : "未知设施");
+  const labels = messageRecord(en, "components_ShiftComparisonCard_labels");
+  const groupLabel = labels[group] ?? (localize_components_ShiftComparisonCard.text(en, "unknownFacility"));
   const index = Number(indexText);
   return {
     group: labels[group] ? group : "default",
@@ -41,12 +42,12 @@ function issueTone(issue: ShiftAdjustmentIssue) {
 }
 
 function IssueLabel({ issue }: { issue: ShiftAdjustmentIssue }) {
-  const { locale } = useLanguageDemo();
-  return <span className={cn("inline-flex px-2 py-1 text-xs font-semibold", issueTone(issue))}>{(locale === "en" ? ISSUE_LABELS_EN : ISSUE_LABELS)[issue]}</span>;
+  const locale = useLocale();
+  return <span className={cn("inline-flex px-2 py-1 text-xs font-semibold", issueTone(issue))}>{(messageRecord(locale, "components_ShiftComparisonCard_labels2"))[issue]}</span>;
 }
 
 function RoomLabel({ roomKey }: { roomKey: string | null }) {
-  const { locale } = useLanguageDemo();
+  const locale = useLocale();
   const room = roomKeyParts(roomKey, locale === "en");
   const accent = roomLightAccentFor(room.group);
   const style = {
@@ -67,45 +68,47 @@ function RoomLabel({ roomKey }: { roomKey: string | null }) {
 }
 
 function OperatorName({ adjustment, className }: { adjustment: ShiftAdjustment; className?: string }) {
-  const { locale } = useLanguageDemo();
+  const locale = useLocale();
   return (
     <div className={cn("flex min-w-0 flex-wrap items-center gap-1.5", className)}>
-      <strong className="min-w-0 truncate">{demoOperatorName(adjustment.operator, locale)}</strong>
+      <strong className="min-w-0 truncate">{localizedOperatorName(adjustment.operator, locale)}</strong>
       {adjustment.issues.includes("tired") ? <IssueLabel issue="tired" /> : null}
     </div>
   );
 }
 
 function ActionDescription({ adjustment, issue }: { adjustment: ShiftAdjustment; issue: ActionIssue }) {
-  const { locale } = useLanguageDemo();
-  const en = locale === "en";
-  if (issue === "unexpected") return <div className="flex min-w-0 items-center gap-1.5"><span>{en ? "From" : "从"}</span><RoomLabel roomKey={adjustment.currentRoomKey} /><span>{en ? "move out" : "换出"}</span></div>;
-  if (issue === "missing") return <div className="flex min-w-0 items-center gap-1.5"><span>{en ? "Move into" : "换入"}</span><RoomLabel roomKey={adjustment.targetRoomKey} /></div>;
+  const intl = useTranslations();
+
+  if (issue === "unexpected") return <div className="flex min-w-0 items-center gap-1.5"><span>{intl("components_ShiftComparisonCard.from")}</span><RoomLabel roomKey={adjustment.currentRoomKey} /><span>{intl("components_ShiftComparisonCard.moveOut")}</span></div>;
+  if (issue === "missing") return <div className="flex min-w-0 items-center gap-1.5"><span>{intl("components_ShiftComparisonCard.moveInto")}</span><RoomLabel roomKey={adjustment.targetRoomKey} /></div>;
   return <div className="flex min-w-0 items-center gap-1.5"><RoomLabel roomKey={adjustment.currentRoomKey} /><span aria-hidden="true">→</span><RoomLabel roomKey={adjustment.targetRoomKey} /></div>;
 }
 
 function EmptyGroup() {
-  const { locale } = useLanguageDemo();
-  return <p className="mt-2 bg-muted/25 px-3 py-2.5 text-xs text-muted-foreground">{locale === "en" ? "None" : "无"}</p>;
+  const intl = useTranslations();
+
+  return <p className="mt-2 bg-muted/25 px-3 py-2.5 text-xs text-muted-foreground">{intl("components_ShiftComparisonCard.none")}</p>;
 }
 
 function GroupHeading({ issue, count, id }: { issue: ActionIssue; count: number; id: string }) {
-  const { locale } = useLanguageDemo();
+  const locale = useLocale();
   return (
     <div className="flex items-center justify-between gap-3">
       <h4 id={id}><IssueLabel issue={issue} /></h4>
-      <span className="font-number text-xs text-muted-foreground">{count} {locale === "en" ? (count === 1 ? "operator" : "operators") : "人"}</span>
+      <span className="font-number text-xs text-muted-foreground">{count} {localize_components_ShiftComparisonCard.text(locale, "additional1", { choice1: ((locale === "en")) && (count === 1) ? "yes" : "no" })}</span>
     </div>
   );
 }
 
 function MobileAdjustmentGroups({ adjustments, reduceMotion }: { adjustments: ShiftAdjustment[]; reduceMotion: boolean }) {
-  const { locale } = useLanguageDemo();
+  const intl = useTranslations();
+  const locale = useLocale();
   const en = locale === "en";
   const tiredOnly = adjustments.filter((adjustment) => adjustment.issues.includes("tired") && !ACTION_ISSUES.some((issue) => adjustment.issues.includes(issue)));
 
   return (
-    <div className="mt-5 grid gap-5 sm:hidden" aria-label={en ? "Shift-change summary" : "换班动作摘要"} data-mobile-adjustment-groups>
+    <div className="mt-5 grid gap-5 sm:hidden" aria-label={intl("components_ShiftComparisonCard.shiftChangeSummary")} data-mobile-adjustment-groups>
       {ACTION_ISSUES.map((issue) => {
         const items = adjustments.filter((adjustment) => adjustment.issues.includes(issue));
         const headingId = `mobile-adjustment-${issue}`;
@@ -136,9 +139,9 @@ function MobileAdjustmentGroups({ adjustments, reduceMotion }: { adjustments: Sh
         <section aria-labelledby="mobile-adjustment-tired" data-adjustment-group="tired">
           <div className="flex items-center justify-between gap-3">
             <h4 id="mobile-adjustment-tired"><IssueLabel issue="tired" /></h4>
-            <span className="font-number text-xs text-muted-foreground">{tiredOnly.length} {en ? (tiredOnly.length === 1 ? "operator" : "operators") : "人"}</span>
+            <span className="font-number text-xs text-muted-foreground">{tiredOnly.length} {localize_components_ShiftComparisonCard.text(en, "additional2", { choice1: ((en)) && (tiredOnly.length === 1) ? "yes" : "no" })}</span>
           </div>
-          <p className="mt-2 bg-red-50 px-3 py-2.5 text-xs leading-5 text-red-800">{tiredOnly.map((adjustment) => demoOperatorName(adjustment.operator, locale)).join(en ? ", " : "、")}</p>
+          <p className="mt-2 bg-red-50 px-3 py-2.5 text-xs leading-5 text-red-800">{tiredOnly.map((adjustment) => localizedOperatorName(adjustment.operator, locale)).join(intl("components_ShiftComparisonCard.label"))}</p>
         </section>
       ) : null}
     </div>
@@ -152,21 +155,22 @@ function DesktopCells({ adjustment, issue }: { adjustment: ShiftAdjustment; issu
 }
 
 function DesktopTable({ items, issue, reduceMotion }: { items: ShiftAdjustment[]; issue: ActionIssue; reduceMotion: boolean }) {
-  const { locale } = useLanguageDemo();
+  const intl = useTranslations();
+  const locale = useLocale();
   const en = locale === "en";
   const roomHeaders: ReactNode = issue === "misplaced"
-    ? <><th className="px-3 py-2 text-left font-medium">{en ? "Current room" : "当前房间"}</th><th className="px-3 py-2 text-left font-medium">{en ? "Target room" : "目标房间"}</th></>
-    : <th className="px-3 py-2 text-left font-medium">{issue === "unexpected" ? (en ? "Current room" : "当前房间") : (en ? "Target room" : "目标房间")}</th>;
+    ? <><th className="px-3 py-2 text-left font-medium">{intl("components_ShiftComparisonCard.currentRoom")}</th><th className="px-3 py-2 text-left font-medium">{intl("components_ShiftComparisonCard.targetRoom")}</th></>
+    : <th className="px-3 py-2 text-left font-medium">{issue === "unexpected" ? (intl("components_ShiftComparisonCard.currentRoom")) : (intl("components_ShiftComparisonCard.targetRoom"))}</th>;
 
   return (
-    <table className="mt-2 w-full table-fixed border-collapse" aria-label={en ? `${ISSUE_LABELS_EN[issue]} operator adjustments` : `${ISSUE_LABELS[issue]}干员调整`} data-desktop-adjustment-table={issue}>
+    <table className="mt-2 w-full table-fixed border-collapse" aria-label={intl("components_ShiftComparisonCard.operatorAdjustments", { value1: (en) ? (ISSUE_LABELS_EN[issue]) : "", value2: (en) ? "" : (ISSUE_LABELS[issue]) })} data-desktop-adjustment-table={issue}>
       <colgroup>
         <col style={{ width: issue === "misplaced" ? "28%" : "38%" }} />
         <col style={{ width: issue === "misplaced" ? "36%" : "62%" }} />
         {issue === "misplaced" ? <col style={{ width: "36%" }} /> : null}
       </colgroup>
       <thead className="border-y border-border/70 bg-muted/45 text-xs font-medium text-muted-foreground">
-        <tr><th className="px-3 py-2 text-left font-medium">{en ? "Operator" : "干员"}</th>{roomHeaders}</tr>
+        <tr><th className="px-3 py-2 text-left font-medium">{intl("components_ShiftComparisonCard.operator")}</th>{roomHeaders}</tr>
       </thead>
       <tbody>
         {items.map((adjustment, index) => (
@@ -186,9 +190,10 @@ function DesktopTable({ items, issue, reduceMotion }: { items: ShiftAdjustment[]
 }
 
 function DesktopAdjustmentGroups({ adjustments, reduceMotion }: { adjustments: ShiftAdjustment[]; reduceMotion: boolean }) {
-  const { locale } = useLanguageDemo();
+  const intl = useTranslations();
+
   return (
-    <div className="mt-5 hidden gap-6 sm:grid" aria-label={locale === "en" ? "Operator room adjustments grouped by action" : "按操作分组的干员房间调整"} data-desktop-adjustment-groups>
+    <div className="mt-5 hidden gap-6 sm:grid" aria-label={intl("components_ShiftComparisonCard.operatorRoomAdjustmentsGroupedByAction")} data-desktop-adjustment-groups>
       {ACTION_ISSUES.map((issue) => {
         const items = adjustments.filter((adjustment) => adjustment.issues.includes(issue));
         const headingId = `desktop-adjustment-${issue}`;
@@ -204,17 +209,16 @@ function DesktopAdjustmentGroups({ adjustments, reduceMotion }: { adjustments: S
 }
 
 export function ShiftComparisonDetails({ comparison }: { comparison: ShiftComparison | null }) {
+  const intl = useTranslations();
   const reduceMotion = useReducedMotion();
-  const { locale } = useLanguageDemo();
-  const en = locale === "en";
   if (!comparison) return null;
   const exactMatch = comparison.adjustments.length === 0;
   return (
     <section className="pt-4 text-sm" aria-labelledby="closest-shift-title" data-shift-comparison-details>
-      <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2"><div><span className="text-xs font-medium text-muted-foreground">{en ? "Current-state match" : "当前状态匹配"}</span><h3 id="closest-shift-title" className="mt-0.5 text-base font-semibold">{en ? "Closest to shift " : "当前最接近第 "}<span className="font-number">{comparison.planIndex + 1}</span>{en ? null : " 班"}</h3></div><div className="text-right"><span className="text-xs text-muted-foreground">{en ? "Non-dormitory match" : "非宿舍匹配"}</span><strong className="ml-2 text-lg tabular-nums">{comparison.score}%</strong></div></div>
-      <div className="mt-3 h-1.5 overflow-hidden bg-border/70" role="progressbar" aria-label={en ? "Non-dormitory facility match percentage" : "非宿舍设施匹配百分比"} aria-valuemin={0} aria-valuemax={100} aria-valuenow={comparison.score}><div className="h-full bg-primary" style={{ width: `${Math.max(0, Math.min(100, comparison.score))}%` }} /></div>
+      <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2"><div><span className="text-xs font-medium text-muted-foreground">{intl("components_ShiftComparisonCard.currentStateMatch")}</span><h3 id="closest-shift-title" className="mt-0.5 text-base font-semibold">{intl.rich("components_ShiftComparisonCard.closestToShift", { number: comparison.planIndex + 1, shiftNumber: (chunks) => <span className="font-number">{chunks}</span> })}</h3></div><div className="text-right"><span className="text-xs text-muted-foreground">{intl("components_ShiftComparisonCard.nonDormitoryMatch")}</span><strong className="ml-2 text-lg tabular-nums">{comparison.score}%</strong></div></div>
+      <div className="mt-3 h-1.5 overflow-hidden bg-border/70" role="progressbar" aria-label={intl("components_ShiftComparisonCard.nonDormitoryFacilityMatchPercentage")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={comparison.score}><div className="h-full bg-primary" style={{ width: `${Math.max(0, Math.min(100, comparison.score))}%` }} /></div>
       {exactMatch ? (
-        <div className="mt-5 flex gap-3 border border-emerald-200 bg-emerald-50 px-4 py-4 text-emerald-900" role="status"><CheckCircle2 className="mt-0.5 size-5 shrink-0" aria-hidden="true" /><div><strong className="block">{en ? "Current non-dormitory assignments match this shift exactly" : "当前非宿舍进驻与排班完全一致"}</strong><span className="mt-1 block text-xs text-emerald-800/75">{en ? "No non-dormitory operator needs to move in, move out, or change rooms." : "非宿舍设施无需换入、换出或调整房间。"}</span></div></div>
+        <div className="mt-5 flex gap-3 border border-emerald-200 bg-emerald-50 px-4 py-4 text-emerald-900" role="status"><CheckCircle2 className="mt-0.5 size-5 shrink-0" aria-hidden="true" /><div><strong className="block">{intl("components_ShiftComparisonCard.currentNonDormitoryAssignmentsMatchThisShiftExactly")}</strong><span className="mt-1 block text-xs text-emerald-800/75">{intl("components_ShiftComparisonCard.noNonDormitoryOperatorNeedsToMoveInMove")}</span></div></div>
       ) : (
         <>
           <MobileAdjustmentGroups adjustments={comparison.adjustments} reduceMotion={Boolean(reduceMotion)} />

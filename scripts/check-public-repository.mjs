@@ -48,7 +48,7 @@ const SECRET_PATTERNS = [
   },
 ];
 
-const trackedFiles = spawnSync("git", ["ls-files", "-z"], {
+const trackedFiles = spawnSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z"], {
   encoding: "buffer",
   maxBuffer: 32 * 1024 * 1024,
 });
@@ -98,7 +98,12 @@ const actionPolicyErrors = [];
 const privateHostPattern = /(?:[a-z0-9-]+\.)+ts\.net(?::\d+)?/giu;
 
 for (const filePath of paths) {
-  const contents = await readFile(filePath);
+  const contents = await readFile(filePath).catch((error) => {
+    // A renamed/deleted tracked file can remain in the index until staging.
+    if (error.code === "ENOENT") return null;
+    throw error;
+  });
+  if (contents === null) continue;
   if (contents.byteLength > MAX_TRACKED_FILE_BYTES) {
     largeFiles.push(`${filePath} (${contents.byteLength} bytes)`);
   }

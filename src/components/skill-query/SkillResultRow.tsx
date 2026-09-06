@@ -1,4 +1,7 @@
 "use client";
+import { localize as localize_components_skill_query_SkillResultRow } from "../../i18n/helpers/components_skill_query_SkillResultRow.ts";
+
+import { useTranslations, useLocale } from "next-intl";
 
 import { useState } from "react";
 
@@ -19,7 +22,7 @@ import {
 } from "@/operatorPortraits";
 import { skillAnnotationKey } from "@/skill-annotations";
 import type { SkillAnnotationData } from "@/types";
-import { demoBuildingSkill, demoOperatorName, useLanguageDemo } from "@/language-demo";
+import { localizedBuildingSkill, localizedOperatorName } from "@/i18n/game-data";
 
 /** 按「最后一个下划线之前」的前缀分组：同一族（基础 + 提升）分到同一组，行内按 index 升序。 */
 function groupSkillsByPrefix(skills: OperatorBuildingSkillRef[]): OperatorBuildingSkillRef[][] {
@@ -42,7 +45,7 @@ function groupSkillsByPrefix(skills: OperatorBuildingSkillRef[]): OperatorBuildi
 
 /** 强化技能的尾词用一图流同款蓝色。 */
 function BuildingSkillUnlockText({ elite, level, enhanced }: { elite: number; level: number; enhanced: boolean }) {
-  const { locale } = useLanguageDemo();
+  const locale = useLocale();
   if (locale === "en") return <>{buildingSkillUnlockLabelEnglish(elite, level, enhanced)}</>;
   if (!enhanced) return <>{buildingSkillUnlockLabel(elite, level)}</>;
   return (
@@ -59,15 +62,16 @@ interface SkillResultRowProps {
 }
 
 export function SkillResultRow({ operator, annotationIndex }: SkillResultRowProps) {
+  const intl = useTranslations();
   const isMobile = useIsMobile();
-  const { locale } = useLanguageDemo();
-  const displayName = demoOperatorName(operator.name, locale);
+  const locale = useLocale();
+  const displayName = localizedOperatorName(operator.name, locale);
   const skills = [...operator.buildingSkills].sort((left, right) => left.index - right.index);
 
   return (
     <article
       className="infra-room-surface min-w-0 overflow-hidden px-4 py-4"
-      aria-label={locale === "en" ? `${displayName}'s infrastructure skills` : `${operator.name} 的基建技能`}
+      aria-label={intl("components_skill_query_SkillResultRow.sInfrastructureSkills", { displayName: (locale === "en") ? (displayName) : "", name: (locale === "en") ? "" : (operator.name) })}
     >
       {/* 左右布局：左侧干员卡片（不展示心情），右侧技能（PC 每技能一列，移动端按钮列表+弹窗） */}
       <div className="relative z-10 grid grid-cols-[auto_minmax(0,1fr)] items-center gap-4">
@@ -103,7 +107,7 @@ export function SkillResultRow({ operator, annotationIndex }: SkillResultRowProp
                 </div>
               ))
             ) : (
-              <span className="text-sm text-white/55">{locale === "en" ? "No skill data" : "暂无技能资料"}</span>
+              <span className="text-sm text-white/55">{intl("components_skill_query_SkillResultRow.noSkillData")}</span>
             )}
           </div>
         )}
@@ -127,14 +131,15 @@ function SkillColumn({
   enhanced: boolean;
   annotation?: string;
 }) {
-  const { locale } = useLanguageDemo();
+  const intl = useTranslations();
+  const locale = useLocale();
   const sourceSkill = BUILDING_SKILL_CATALOG[id];
-  const skill = sourceSkill ? demoBuildingSkill(id, locale, sourceSkill) : undefined;
+  const skill = sourceSkill ? localizedBuildingSkill(id, locale, sourceSkill) : undefined;
 
   if (!skill) {
     return (
       <span className="text-sm text-white/55">
-        S<span className="font-number">{index}</span> {locale === "en" ? "No skill data" : "暂无技能资料"}
+        S<span className="font-number">{index}</span> {intl("components_skill_query_SkillResultRow.noSkillData")}
       </span>
     );
   }
@@ -164,14 +169,15 @@ function SkillColumn({
 }
 
 function SkillAnnotationNote({ note, light = false }: { note: string; light?: boolean }) {
-  const { locale } = useLanguageDemo();
+  const intl = useTranslations();
+
   return (
     <span
       className={`mt-2 flex w-full gap-1.5 border-t pt-2 text-left text-xs leading-5 ${light ? "border-border/70 text-muted-foreground" : "border-[#FFD501]/25 text-white/68"}`}
       data-skill-annotation
     >
       <span className="shrink-0 font-semibold text-[#E5B900]" aria-hidden="true">*</span>
-      <span><span className="sr-only">{locale === "en" ? "Manual note: " : "补充说明："}</span>{note}</span>
+      <span><span className="sr-only">{intl("components_skill_query_SkillResultRow.manualNote")}</span>{note}</span>
     </span>
   );
 }
@@ -185,8 +191,9 @@ function MobileSkillList({
   skills: OperatorBuildingSkillRef[];
   annotationIndex: ReadonlyMap<string, SkillAnnotationData>;
 }) {
+  const intl = useTranslations();
   const [selected, setSelected] = useState<OperatorBuildingSkillRef | null>(null);
-  const { locale } = useLanguageDemo();
+  const locale = useLocale();
   const en = locale === "en";
 
   return (
@@ -194,7 +201,7 @@ function MobileSkillList({
       {skills.length ? (
         skills.map((ref) => {
           const sourceSkill = BUILDING_SKILL_CATALOG[ref.id];
-          const skill = sourceSkill ? demoBuildingSkill(ref.id, locale, sourceSkill) : undefined;
+          const skill = sourceSkill ? localizedBuildingSkill(ref.id, locale, sourceSkill) : undefined;
           const annotation = annotationIndex.get(skillAnnotationKey(operatorId, ref.id))?.note;
           return (
             <button
@@ -202,7 +209,7 @@ function MobileSkillList({
               type="button"
               onClick={() => setSelected(ref)}
               className="flex min-h-11 flex-col items-start justify-center rounded-lg border border-white/10 bg-black/24 px-2.5 py-2 text-left text-sm font-medium text-white outline-none transition-colors hover:bg-black/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#FFD800]"
-              aria-label={en ? (skill ? `View skill S${ref.index}: ${skill.name}` : "View skill details") : `查看${skill ? `技能 S${ref.index}：${skill.name}` : "技能详情"}`}
+              aria-label={localize_components_skill_query_SkillResultRow.text(en, "additional1", { choice1: ((en)) && (skill) ? "yes" : "no", value2: ((en) && (skill)) ? String(ref.index) : "", value3: ((en) && (skill)) ? String(skill.name) : "", choice4: (!(en)) && (skill) ? "yes" : "no", value5: (!(en) && (skill)) ? String(ref.index) : "", value6: (!(en) && (skill)) ? String(skill.name) : "" })}
             >
               {skill ? (
                 <span className="flex min-w-0 items-center gap-2">
@@ -213,7 +220,7 @@ function MobileSkillList({
                 </span>
               ) : (
                 <span className="text-white/55">
-                  S<span className="font-number">{ref.index}</span> {en ? "No skill data" : "暂无技能资料"}
+                  S<span className="font-number">{ref.index}</span> {intl("components_skill_query_SkillResultRow.noSkillData")}
                 </span>
               )}
               {annotation ? <SkillAnnotationNote note={annotation} /> : null}
@@ -221,7 +228,7 @@ function MobileSkillList({
           );
         })
       ) : (
-        <span className="text-sm text-white/55">{en ? "No skill data" : "暂无技能资料"}</span>
+        <span className="text-sm text-white/55">{intl("components_skill_query_SkillResultRow.noSkillData")}</span>
       )}
       <SkillDetailDialog
         selected={selected}
@@ -244,10 +251,11 @@ function SkillDetailDialog({
   annotation?: string;
   onClose: () => void;
 }) {
-  const { locale } = useLanguageDemo();
-  const en = locale === "en";
+  const intl = useTranslations();
+  const locale = useLocale();
+
   const sourceSkill = selected ? BUILDING_SKILL_CATALOG[selected.id] : undefined;
-  const skill = selected && sourceSkill ? demoBuildingSkill(selected.id, locale, sourceSkill) : undefined;
+  const skill = selected && sourceSkill ? localizedBuildingSkill(selected.id, locale, sourceSkill) : undefined;
   const unlockLabel = selected ? buildingSkillUnlockLabel(selected.elite, selected.level, enhanced) : "";
 
   return (
@@ -269,7 +277,7 @@ function SkillDetailDialog({
               </span>
             ) : (
               <span>
-                S<span className="font-number">{selected?.index}</span> {en ? "No skill data" : "暂无技能资料"}
+                S<span className="font-number">{selected?.index}</span> {intl("components_skill_query_SkillResultRow.noSkillData")}
               </span>
             )}
           </DialogTitle>

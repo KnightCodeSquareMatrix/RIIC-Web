@@ -25,6 +25,24 @@ const TAGS: Record<string, string[]> = {
 
 const realSkillLookup: SkillRecordLookup = (skillId) => BUILDING_SKILL_CATALOG[skillId];
 
+test("intersects rarity and profession with room, tag and search, without changing order", () => {
+  const operators = [
+    { name: "Alpha", rarity: 6, profession: 1, order: 1, buildingSkills: [{ id: "manu_x" }] },
+    { name: "Beta", rarity: 5, profession: 1, order: 2, buildingSkills: [{ id: "manu_x" }] },
+    { name: "Gamma", rarity: 6, profession: 2, order: 3, buildingSkills: [{ id: "manu_x" }] },
+    { name: "Delta", rarity: 6, profession: 1, order: 4, buildingSkills: [{ id: "control_x" }] },
+  ];
+  const lookup: SkillRecordLookup = (id) => ({ tags: TAGS[id] ?? [] });
+  const names = (filters: { rarity?: number | null; profession?: number | null }) => filterOperators(operators, null, null, "", lookup, filters).map((o) => o.name);
+  assert.deepEqual(names({ rarity: 6 }), ["Delta", "Gamma", "Alpha"]);
+  assert.deepEqual(names({ profession: 1 }), ["Delta", "Beta", "Alpha"]);
+  assert.deepEqual(names({ rarity: 6, profession: 1 }), ["Delta", "Alpha"]);
+  assert.deepEqual(names({ rarity: null, profession: null }), ["Delta", "Gamma", "Beta", "Alpha"]);
+  assert.deepEqual(filterOperators(operators, "manu", "生产力", "alp", lookup, { rarity: 6, profession: 1 }).map((o) => o.name), ["Alpha"]);
+  assert.deepEqual(filterOperators(operators, "manu", "生产力", "Beta", lookup, { rarity: 6, profession: 1 }), []);
+  assert.deepEqual(names({ rarity: 1 }), []);
+});
+
 test("derives the building-room prefix from the skill id's first underscore segment", () => {
   assert.equal(buildingRoomPrefixForSkillId("control_tra_spd_000"), "control");
   assert.equal(buildingRoomPrefixForSkillId("manu_spd_000"), "manu");

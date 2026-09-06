@@ -1,0 +1,11 @@
+{
+  "passwordWeak": "密码强度不足：请满足全部强度规则，并避免常见密码、连续字符或重复字符。",
+  "nameHint": "2–20 个字符，可使用中文、英文字母、数字、空格、下划线和短横线。",
+  "passwordMismatch": "两次输入的密码不一致。",
+  "passwordRepeat": "请再次输入密码。",
+  "length": "至少 10 个字符",
+  "letter": "包含字母",
+  "digit": "包含数字",
+  "variety": "包含大小写或符号",
+  "announcement": "密码强度：{strength}。{guessable, select, yes {这个密码模式容易被猜到。} other {}}{unmet, select, yes {还需要：{rules}。} other {全部规则均已满足。}}"
+}

@@ -1,4 +1,5 @@
 "use client";
+import { useTranslations } from "next-intl";
 
 /*
  * Interaction adapted from interior.dev by Dominic Doemann.
@@ -10,7 +11,6 @@ import { animate, motion, useMotionValue, useReducedMotion, useTransform } from 
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
-import { useLanguageDemo } from "@/language-demo";
 
 type HoldPhase = "idle" | "holding" | "releasing" | "committed";
 
@@ -29,9 +29,9 @@ export function HoldToConfirm({
   disabled?: boolean;
   className?: string;
 }) {
-  const { locale } = useLanguageDemo();
-  const en = locale === "en";
-  const effectiveConfirmLabel = confirmLabel ?? (en ? "Confirmed" : "已确认");
+  const intl = useTranslations();
+
+  const effectiveConfirmLabel = confirmLabel ?? (intl("components_ui_hold_to_confirm.confirmed"));
   const [phase, setPhase] = useState<HoldPhase>("idle");
   const phaseRef = useRef<HoldPhase>("idle");
   const startedAtRef = useRef(0);
@@ -162,7 +162,7 @@ export function HoldToConfirm({
       <motion.span aria-hidden style={{ clipPath }} className="absolute inset-0 grid place-items-center bg-[#E23B32] px-4 text-white">
         <span className="flex items-center justify-center gap-2 whitespace-nowrap">{committed ? effectiveConfirmLabel : children}</span>
       </motion.span>
-      <span id={hintId} className="font-number sr-only">{en ? `Hold for ${duration / 1000} seconds to confirm. Releasing early cancels without deleting data.` : `按住 ${duration / 1000} 秒确认；提前松开将取消，且不会删除任何数据。`}</span>
+      <span id={hintId} className="font-number sr-only">{intl("components_ui_hold_to_confirm.holdForSecondsToConfirmReleasingEarlyCancelsWithout", { value1: duration / 1000 })}</span>
       <span role="status" aria-live="polite" className="sr-only">{committed ? effectiveConfirmLabel : ""}</span>
     </button>
   );
