@@ -10,6 +10,8 @@ import { getDatabase } from "./db";
 import { planCache, planCacheReference, policyConsent } from "./db/schema";
 import { stablePlanCacheHmac } from "./plan-cache-key";
 import { normalizeSolverOperbox } from "./plan-solver-input";
+import { waitForPlanCache } from "./plan-cache-wait";
+import { planCacheLeaseDurationMs } from "./solver-timeout";
 
 export type PlanCacheKeyInput = {
   layout: BaseBlueprint;
@@ -51,28 +53,21 @@ function cachedResult(value: unknown, diagnosticId: string, durationMs: number):
   return normalized ? { ...normalized, diagnosticId, durationMs } : null;
 }
 
-async function findHit(keyHmac: string, startedAt: number): Promise<CacheHit | null> {
+async function readCacheState(keyHmac: string, startedAt: number): Promise<{ hit: CacheHit | null; leased: boolean }> {
   const now = new Date();
-  const [row] = await getDatabase().select({ result: planCache.publicResult }).from(planCache).where(and(
+  const [row] = await getDatabase().select({ result: planCache.publicResult, leaseExpiresAt: planCache.leaseExpiresAt }).from(planCache).where(and(
     eq(planCache.keyHmac, keyHmac),
     gt(planCache.expiresAt, now),
-    sql`${planCache.publicResult} is not null`,
   )).limit(1);
-  if (!row) return null;
+  if (!row) return { hit: null, leased: false };
   const durationMs = Math.max(0, Math.round(performance.now() - startedAt));
   const result = cachedResult(row.result, randomUUID(), durationMs);
-  if (!result) return null;
+  if (!result) return { hit: null, leased: Boolean(row.leaseExpiresAt && row.leaseExpiresAt > now) };
   void getDatabase().update(planCache).set({
     hitCount: sql`${planCache.hitCount} + 1`,
     updatedAt: now,
   }).where(eq(planCache.keyHmac, keyHmac)).catch(() => undefined);
-  return { kind: "hit", keyHmac, result, lookupDurationMs: durationMs };
-}
-
-function leaseDurationMs(): number {
-  const cliTimeout = Number(process.env.BETA_CLI_TIMEOUT_MS || 120_000);
-  const effectiveTimeout = Number.isFinite(cliTimeout) && cliTimeout > 0 ? cliTimeout : 120_000;
-  return Math.max(30_000, Math.min(2_147_000_000, effectiveTimeout + 15_000));
+  return { hit: { kind: "hit", keyHmac, result, lookupDurationMs: durationMs }, leased: false };
 }
 
 export async function lookupPlanCache(input: PlanCacheKeyInput): Promise<CacheHit | CacheBypass> {
@@ -81,7 +76,7 @@ export async function lookupPlanCache(input: PlanCacheKeyInput): Promise<CacheHi
   try { keyHmac = createPlanCacheKey(input); } catch { return { kind: "bypass" }; }
   if (!keyHmac) return { kind: "bypass" };
   try {
-    return await findHit(keyHmac, startedAt) ?? { kind: "bypass" };
+    return (await readCacheState(keyHmac, startedAt)).hit ?? { kind: "bypass" };
   } catch {
     return { kind: "bypass" };
   }
@@ -93,28 +88,16 @@ export async function resolvePlanCache(input: PlanCacheKeyInput): Promise<PlanCa
   try { keyHmac = createPlanCacheKey(input); } catch { return { kind: "bypass" }; }
   if (!keyHmac) return { kind: "bypass" };
   try {
-    const immediate = await findHit(keyHmac, startedAt);
-    if (immediate) return immediate;
-    const waitDeadline = Date.now() + leaseDurationMs() + 5_000;
-    for (;;) {
-      const now = new Date();
-      const leaseOwner = randomUUID();
-      const leaseExpiresAt = new Date(now.getTime() + leaseDurationMs());
-      const acquired = await getDatabase().insert(planCache).values({
-        keyHmac,
-        solverExecutableSha256: input.solver.solver_executable_sha256!,
-        protocolVersion: input.solver.protocol_version!,
-        planSchemaVersion: input.solver.plan_schema_version!,
-        publicResult: null,
-        createdAt: now,
-        updatedAt: now,
-        expiresAt: new Date(now.getTime() + PLAN_CACHE_TTL_MS),
-        hitCount: 0,
-        leaseOwner,
-        leaseExpiresAt,
-      }).onConflictDoUpdate({
-        target: planCache.keyHmac,
-        set: {
+    const leaseDuration = planCacheLeaseDurationMs();
+    return await waitForPlanCache<CacheHit | CacheLease>({
+      read: () => readCacheState(keyHmac, startedAt),
+      timeoutMs: leaseDuration + 5_000,
+      acquire: async () => {
+        const now = new Date();
+        const leaseOwner = randomUUID();
+        const leaseExpiresAt = new Date(now.getTime() + leaseDuration);
+        const acquired = await getDatabase().insert(planCache).values({
+          keyHmac,
           solverExecutableSha256: input.solver.solver_executable_sha256!,
           protocolVersion: input.solver.protocol_version!,
           planSchemaVersion: input.solver.plan_schema_version!,
@@ -125,22 +108,32 @@ export async function resolvePlanCache(input: PlanCacheKeyInput): Promise<PlanCa
           hitCount: 0,
           leaseOwner,
           leaseExpiresAt,
-        },
-        setWhere: or(
-          lte(planCache.expiresAt, now),
-          and(
-            isNull(planCache.publicResult),
-            or(isNull(planCache.leaseExpiresAt), lte(planCache.leaseExpiresAt, now)),
+        }).onConflictDoUpdate({
+          target: planCache.keyHmac,
+          set: {
+            solverExecutableSha256: input.solver.solver_executable_sha256!,
+            protocolVersion: input.solver.protocol_version!,
+            planSchemaVersion: input.solver.plan_schema_version!,
+            publicResult: null,
+            createdAt: now,
+            updatedAt: now,
+            expiresAt: new Date(now.getTime() + PLAN_CACHE_TTL_MS),
+            hitCount: 0,
+            leaseOwner,
+            leaseExpiresAt,
+          },
+          setWhere: or(
+            lte(planCache.expiresAt, now),
+            and(
+              isNull(planCache.publicResult),
+              or(isNull(planCache.leaseExpiresAt), lte(planCache.leaseExpiresAt, now)),
+            ),
           ),
-        ),
-      }).returning({ leaseOwner: planCache.leaseOwner });
-      if (acquired[0]?.leaseOwner === leaseOwner) return { kind: "lease", keyHmac, leaseOwner };
-
-      const hit = await findHit(keyHmac, startedAt);
-      if (hit) return hit;
-      if (Date.now() >= waitDeadline) return { kind: "bypass" };
-      await new Promise((resolve) => setTimeout(resolve, 250));
-    }
+        }).returning({ leaseOwner: planCache.leaseOwner });
+        if (acquired[0]?.leaseOwner === leaseOwner) return { kind: "lease", keyHmac, leaseOwner };
+        return null;
+      },
+    }) ?? { kind: "bypass" };
   } catch {
     return { kind: "bypass" };
   }

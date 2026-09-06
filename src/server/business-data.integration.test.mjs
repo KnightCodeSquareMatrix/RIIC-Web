@@ -69,6 +69,7 @@ const {
   planQueuePosition,
 } = await import("./plan-task.ts");
 const {
+  deleteExpiredBusinessRecords,
   deleteFeedbackRecords,
   queryAdminSolverMetrics,
   queryBusinessRecords,
@@ -77,6 +78,7 @@ const {
   updatePlanRunArtifactBestEffort,
 } = await import("./business-records.ts");
 const { getDatabase } = await import("./db/index.ts");
+const { resolvePlanCache, releasePlanCacheLease } = await import("./plan-cache.ts");
 const {
   resumePendingPlanArtifactFinalizations,
   waitForPlanArtifactFinalizers,
@@ -85,6 +87,68 @@ const {
 test.after(async () => {
   await getDatabase().$client.end().catch(() => undefined);
   await rm(artifactWorkspace, { recursive: true, force: true });
+});
+
+test("hourly business retention drains multiple telemetry batches without a plan queue", async () => {
+  const pool = new Pool({ connectionString: databaseUrl, max: 2 });
+  const sessionId = randomUUID();
+  const previousQueue = process.env.PLAN_TASK_QUEUE_ENABLED;
+  const cutoff = new Date("2000-01-01T00:00:00Z");
+  try {
+    process.env.PLAN_TASK_QUEUE_ENABLED = "0";
+    await pool.query(`
+      INSERT INTO app.telemetry_event (id, session_id, type, name, expires_at)
+      SELECT $1 || '-' || n, $1, 'navigation', 'page_view',
+        CASE WHEN n <= 2001 THEN $2::timestamptz - interval '1 second' ELSE $2::timestamptz END
+      FROM generate_series(1, 2002) n
+    `, [sessionId, cutoff]);
+    await deleteExpiredBusinessRecords(cutoff);
+    const remaining = await pool.query("SELECT id FROM app.telemetry_event WHERE session_id=$1", [sessionId]);
+    assert.deepEqual(remaining.rows, [{ id: `${sessionId}-2002` }]);
+    await deleteExpiredBusinessRecords(cutoff);
+    assert.equal((await pool.query("SELECT id FROM app.telemetry_event WHERE session_id=$1", [sessionId])).rowCount, 1);
+  } finally {
+    if (previousQueue === undefined) delete process.env.PLAN_TASK_QUEUE_ENABLED;
+    else process.env.PLAN_TASK_QUEUE_ENABLED = previousQueue;
+    await pool.query("DELETE FROM app.telemetry_event WHERE session_id=$1", [sessionId]).catch(() => undefined);
+    await pool.end();
+  }
+});
+
+test("an expired cache lease is replaceable but the previous owner cannot release its replacement", async () => {
+  const pool = new Pool({ connectionString: databaseUrl, max: 2 });
+  const previousEnabled = process.env.PLAN_CACHE_ENABLED;
+  const previousKey = process.env.PLAN_CACHE_HMAC_KEY;
+  let keyHmac;
+  try {
+    process.env.PLAN_CACHE_ENABLED = "1";
+    process.env.PLAN_CACHE_HMAC_KEY = "integration-cache-key-not-a-production-secret";
+    const input = {
+      layout: { template: "243", rooms: [] }, operbox: [],
+      sourceType: "sample", sourceName: randomUUID(), rotation: "abc_12_6_6", fiammettaEnable: false,
+      solver: { solver_executable_sha256: "a".repeat(64), protocol_version: 1, plan_schema_version: 3 },
+    };
+    const first = await resolvePlanCache(input);
+    assert.equal(first.kind, "lease");
+    keyHmac = first.keyHmac;
+    await pool.query("UPDATE app.plan_cache SET lease_expires_at=now()-interval '1 second' WHERE key_hmac=$1", [keyHmac]);
+    const second = await resolvePlanCache(input);
+    assert.equal(second.kind, "lease");
+    assert.notEqual(first.leaseOwner, second.leaseOwner);
+    await releasePlanCacheLease(first);
+    const row = await pool.query("SELECT lease_owner FROM app.plan_cache WHERE key_hmac=$1", [keyHmac]);
+    assert.equal(row.rows[0].lease_owner, second.leaseOwner);
+    assert.deepEqual(await resolvePlanCache({ ...input, sourceType: "skland" }), { kind: "bypass" });
+    await releasePlanCacheLease(second);
+    assert.equal((await pool.query("SELECT key_hmac FROM app.plan_cache WHERE key_hmac=$1", [keyHmac])).rowCount, 0);
+  } finally {
+    if (previousEnabled === undefined) delete process.env.PLAN_CACHE_ENABLED;
+    else process.env.PLAN_CACHE_ENABLED = previousEnabled;
+    if (previousKey === undefined) delete process.env.PLAN_CACHE_HMAC_KEY;
+    else process.env.PLAN_CACHE_HMAC_KEY = previousKey;
+    if (keyHmac) await pool.query("DELETE FROM app.plan_cache WHERE key_hmac=$1", [keyHmac]).catch(() => undefined);
+    await pool.end();
+  }
 });
 
 test("admin feedback workflow defaults, filters, transitions, and cascades without deleting its run", async () => {

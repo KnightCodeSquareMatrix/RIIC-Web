@@ -1,4 +1,3 @@
-import { lt } from "drizzle-orm";
 import {
   assertSameOrigin,
   createRequestId,
@@ -60,12 +59,11 @@ export async function POST(request: Request) {
 
     const now = new Date();
     const validEvents = events as NonNullable<ReturnType<typeof validateTelemetryEvent>>[];
-    await getDatabase().transaction(async (tx) => {
-      await tx.delete(telemetryEvent).where(lt(telemetryEvent.expiresAt, now));
-      await tx.insert(telemetryEvent).values(
-        validEvents.map((event) => telemetryEventValues(event, { userId, dataOwnerTag, now })),
-      );
-    });
+    // Expiration cleanup belongs to the hourly business-record maintenance,
+    // including deployments without a plan worker, not each event submission.
+    await getDatabase().insert(telemetryEvent).values(
+      validEvents.map((event) => telemetryEventValues(event, { userId, dataOwnerTag, now })),
+    );
 
     return successResponse({ accepted: validEvents.length }, requestId);
   } catch (error) {

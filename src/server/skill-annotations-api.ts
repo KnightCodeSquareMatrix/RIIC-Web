@@ -28,6 +28,10 @@ import {
 import { requireWebsiteAdmin } from "./auth/authorization";
 import { getDatabase } from "./db";
 import { skillAnnotation } from "./db/schema";
+import { appDeploymentEnvironment } from "../deployment.ts";
+import { cachePublicResponse, createPublicDataCache } from "./public-data-cache.ts";
+
+const publicAnnotations = createPublicDataCache<string, SkillAnnotationData[]>();
 
 type AnnotationRecord = typeof skillAnnotation.$inferSelect;
 type AdminSkillAnnotationRoute =
@@ -114,12 +118,15 @@ export async function handleListSkillAnnotations(request: Request) {
   const startedAt = performance.now();
   try {
     enforceRateLimit("skill-annotations-read", requestClientIp(request), 300, 10 * 60_000);
-    const records = await getDatabase()
-      .select()
-      .from(skillAnnotation)
-      .orderBy(asc(skillAnnotation.operatorId), asc(skillAnnotation.skillId));
-    return noStore(successResponse<SkillAnnotationListData>({
-      annotations: records.map(toSkillAnnotationData),
+    const annotations = await publicAnnotations.get(appDeploymentEnvironment(), async () => {
+      const records = await getDatabase()
+        .select()
+        .from(skillAnnotation)
+        .orderBy(asc(skillAnnotation.operatorId), asc(skillAnnotation.skillId));
+      return records.map(toSkillAnnotationData);
+    });
+    return cachePublicResponse(successResponse<SkillAnnotationListData>({
+      annotations,
     }, requestId));
   } catch (error) {
     return noStore(failureResponse(error, requestId, "/api/skill-annotations", startedAt));
@@ -176,6 +183,7 @@ export async function handleCreateAdminSkillAnnotation(request: Request) {
     if (!created) {
       throw new PublicApiError("AIC-REQ-1001", { message: "这个干员技能已经有补充说明，请直接编辑现有卡片。" });
     }
+    publicAnnotations.invalidate(appDeploymentEnvironment());
     return noStore(successResponse<AdminSkillAnnotationMutationData>({
       annotation: toAdminSkillAnnotationData(created),
     }, requestId, 201), true);
@@ -202,6 +210,7 @@ export async function handleUpdateAdminSkillAnnotation(
       updatedAt: new Date(),
     }).where(eq(skillAnnotation.id, annotationId(idValue))).returning();
     if (!updated) throw new PublicApiError("AIC-DATA-8004", { message: "这条补充说明已不存在，请刷新列表。" });
+    publicAnnotations.invalidate(appDeploymentEnvironment());
     return noStore(successResponse<AdminSkillAnnotationMutationData>({
       annotation: toAdminSkillAnnotationData(updated),
     }, requestId), true);
@@ -226,6 +235,7 @@ export async function handleDeleteAdminSkillAnnotation(
       .where(eq(skillAnnotation.id, annotationId(idValue)))
       .returning({ id: skillAnnotation.id });
     if (!deleted.length) throw new PublicApiError("AIC-DATA-8004", { message: "这条补充说明已不存在，请刷新列表。" });
+    publicAnnotations.invalidate(appDeploymentEnvironment());
     return noStore(successResponse<AdminSkillAnnotationDeleteData>({ deleted: true }, requestId), true);
   } catch (error) {
     return noStore(failureResponse(error, requestId, route, startedAt), true);

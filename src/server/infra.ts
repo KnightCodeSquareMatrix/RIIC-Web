@@ -52,6 +52,7 @@ import {
   type PrivateArtifactDescriptor,
 } from "./business-records";
 import { BUSINESS_DATA_TTL_MS, isBusinessDatabaseReadEnabled, isBusinessFileFallbackEnabled } from "./business-config";
+import { solverTimeoutMs } from "./solver-timeout";
 import {
   InfraCliServeClient,
   type JsonRecord,
@@ -80,7 +81,7 @@ const feedbackRoot = path.resolve(/* turbopackIgnore: true */ process.env.BETA_F
 const cliRunRoot = path.resolve(/* turbopackIgnore: true */ process.env.BETA_CLI_RUN_DIR || path.join(storageRoot, "cli-runs"));
 const cliReleaseRoot = path.resolve(/* turbopackIgnore: true */ process.env.BETA_CLI_RELEASE_DIR || path.join(storageRoot, "cli-releases"));
 const activeCliPath = path.join(storageRoot, "active-cli.json");
-const timeoutMs = Number(process.env.BETA_CLI_TIMEOUT_MS || 180_000);
+const timeoutMs = solverTimeoutMs();
 export const PRIVATE_RECORD_TTL_MS = BUSINESS_DATA_TTL_MS;
 const PRIVATE_MAINTENANCE_INTERVAL_MS = 60 * 60 * 1000;
 const PLAN_CACHE_SOLVER_IDENTITY_TTL_MS = 60_000;

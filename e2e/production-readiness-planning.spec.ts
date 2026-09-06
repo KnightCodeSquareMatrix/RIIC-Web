@@ -196,6 +196,69 @@ test("buffered plans show a quiet candidate-ring state and can be dismissed with
   expect(taskSubmissions).toBe(1);
 });
 
+test("stopped task polling allows immediate manual retry and single-flight network recovery", async ({ page }) => {
+  await mockApis(page, { taskQueueEnabled: true });
+  let submissions = 0;
+  let polls = 0;
+  let recovering = false;
+  let releaseRecovery!: () => void;
+  const recoveryGate = new Promise<void>((resolve) => { releaseRecovery = resolve; });
+  const taskId = "11111111-1111-4111-8111-111111111113";
+  await page.route(/\/api\/tasks(?:\/[^/?]+)?$/, async (route) => {
+    if (route.request().method() === "POST") {
+      submissions++;
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify({ success: true, data: { taskId, status: "buffered", selectionPoolSize: 37 }, requestId }),
+      });
+      return;
+    }
+    polls++;
+    if (!recovering) {
+      await route.abort("failed");
+      return;
+    }
+    await recoveryGate;
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({ success: true, data: { taskId, status: "done", result: planData }, requestId }),
+    });
+  });
+  await seedV4Session(page, null, { boxSource: "maa" });
+  await page.goto("/");
+  await expect(page.locator('[data-workbench-hydrated="true"]')).toBeVisible();
+  await page.clock.install();
+  await page.getByRole("button", { name: "生成排班" }).click();
+  const resume = page.getByRole("button", { name: "查询进度", exact: true });
+  const exhaustBackoff = async (expectedPolls: number) => {
+    await expect.poll(async () => {
+      if (polls < expectedPolls) await page.clock.fastForward(33_100);
+      return polls;
+    }, { timeout: 10_000 }).toBe(expectedPolls);
+    // Do not advance the clock after the final failure: there must be no extra cooldown.
+    await expect(resume).toBeEnabled();
+  };
+  await exhaustBackoff(6);
+  await resume.click();
+  await expect.poll(() => polls).toBe(7);
+  expect(submissions).toBe(1);
+
+  await exhaustBackoff(12);
+  recovering = true;
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event("online"));
+    document.dispatchEvent(new Event("visibilitychange"));
+    window.dispatchEvent(new Event("online"));
+  });
+  await expect.poll(() => polls).toBe(13);
+  await page.clock.fastForward(1_100);
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+  expect(polls).toBe(13);
+  releaseRecovery();
+  await expect(page.locator("[data-plan-board]")).toHaveAttribute("data-plan-revision", diagnosticId);
+  expect(submissions).toBe(1);
+});
+
 test("operator skill terms reveal square hover cards on pointer and keyboard focus", async ({ page }) => {
   await mockApis(page);
   const termPlanData = structuredClone(scheduleVisualPlanData);
