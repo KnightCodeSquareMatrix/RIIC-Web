@@ -60,11 +60,12 @@ const MANUAL_ROSTER: ManualRosterOperator[] = (fullOperboxJson as OperBoxEntry[]
   }))
   .sort((left, right) => right.rarity - left.rarity || right.order - left.order || left.name.localeCompare(right.name, "zh-CN"));
 
-const STAGES: ManualOperboxStage[] = ["none", "e0", "e1", "e2"];
+const STAGES: ManualOperboxStage[] = ["none", "e0-low", "e0", "e1", "e2"];
 
 const STAGE_COLOR: Record<ManualOperboxStage, string> = {
   none: "#71717A",
   e0: "#22BBFF",
+  "e0-low": "#A3A3A3",
   e1: "#B8F03A",
   e2: "#FFD800",
 };
@@ -92,7 +93,9 @@ function initialStages(operbox: OperBoxEntry[] | null): Record<string, ManualOpe
 function stageLabel(stage: ManualOperboxStage, locale: AppLocale, rarity?: number): string {
   const en = locale === "en";
   if (stage === "none") return localize_components_setup_ManualOperboxPicker.text(en, "unowned");
-  if (stage === "e0") return rarity !== undefined && rarity <= 2 ? (locale === "en" ? "E0 level 30" : "精0 30级") : localize_components_setup_ManualOperboxPicker.text(en, "e0");`n  if (stage === "e1") return localize_components_setup_ManualOperboxPicker.text(en, "e1");
+  if (stage === "e0") return rarity !== undefined && rarity <= 2 ? (locale === "en" ? "E0 level 30" : "精0 30级") : localize_components_setup_ManualOperboxPicker.text(en, "e0");
+  if (stage === "e0-low") return locale === "en" ? "E0 below max" : "精0非30";
+  if (stage === "e1") return localize_components_setup_ManualOperboxPicker.text(en, "e1");
   return localize_components_setup_ManualOperboxPicker.text(en, "e2");
 }
 
@@ -178,9 +181,13 @@ const ManualOperatorCard = memo(function ManualOperatorCard({
         aria-label={localize_components_setup_ManualOperboxPicker.text(en, "ownershipAndEliteStage", { displayName: displayName })}
         className={cn("grid grid-cols-4", compact ? "col-span-2 gap-1 sm:col-span-1" : "gap-1.5")}
       >
-        {STAGES.map((option) => {
+        {STAGES.filter((option) => {
+          if (operator.rarity <= 2) return option === "none" || option === "e0-low" || option === "e0";
+          if (operator.rarity === 3) return option !== "e0-low" && option !== "e2";
+          return option !== "e0-low";
+        }).map((option) => {
           const requestedElite = option === "e2" ? 2 : option === "e1" ? 1 : 0;
-          const disabled = option !== "none" && requestedElite > maxElite;
+          const disabled = (option === "e0-low" && operator.rarity > 2) || (option !== "none" && option !== "e0-low" && requestedElite > maxElite);
           const selected = stage === option;
           return (
             <Button
