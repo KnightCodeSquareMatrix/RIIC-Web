@@ -282,7 +282,10 @@ export function ManualOperboxPicker({
 
   const summary = useMemo(() => {
     const result = { none: 0, e0: 0, e1: 0, e2: 0 };
-    for (const operator of MANUAL_ROSTER) result[stages[operator.id] ?? "none"] += 1;
+    for (const operator of MANUAL_ROSTER) {
+      const stage = stages[operator.id] ?? "none";
+      result[stage === "e0-low" ? "e0" : stage] += 1;
+    }
     return result;
   }, [stages]);
   const ownedCount = summary.e0 + summary.e1 + summary.e2;

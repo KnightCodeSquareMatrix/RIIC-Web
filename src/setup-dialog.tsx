@@ -3,7 +3,7 @@ import { localize as localize_setup_dialog } from "./i18n/helpers/setup_dialog.t
 import { useTranslations, useLocale } from "next-intl";
 
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { Check, Database, FileJson, ListChecks, Minus, Plus, ScanLine, Trash2, Upload } from "lucide-react";
+import { ExternalLink, Play, Check, Database, FileJson, ListChecks, Minus, Plus, ScanLine, Trash2, Upload } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -19,20 +19,14 @@ import { FiammettaSettings } from "@/components/FiammettaSettings";
 import { WizardSteps } from "@/components/interior/wizard-steps";
 import { hasSetupConfigurationChanged } from "@/setup-configuration";
 import { useWebsiteSession } from "@/website-session";
-import {
-  formatManualShiftDuration,
-  manualShiftTimeRanges,
-  resizeManualShiftDurations,
-  updateManualShiftBoundary,
-  type ManualScheduleMode,
-} from "@/manual-schedule";
-import { DEFAULT_MANUAL_SHIFT_START_TIME } from "@/manual-schedule-config";
 
 import type { FactoryRecipe, PowerBudget, TradeOrder } from "./blueprint";
 import { FileDrop, LayoutEditor, PresetSelector } from "./components";
 import { countOwned } from "./operbox";
 import type { SetupStep } from "./onboarding";
 import type { BaseBlueprint, BoxSource, DisplayError, OperBoxEntry, PresetDef, RotationProfile, SklandScheduleSnapshot } from "./types";
+
+import { inspectMaaProgress, type MaaIssue } from "./maa-review";
 
 const CLIENT_SKLAND_ENABLED = process.env.APP_CLIENT_SKLAND_ENABLED === "1";
 const ManualOperboxPicker = lazy(() => import("@/components/setup/ManualOperboxPicker").then((module) => ({ default: module.ManualOperboxPicker })));
@@ -72,10 +66,6 @@ type SetupDialogProps = {
   onRotationProfileChange: (value: RotationProfile) => void;
   manualShiftDurations?: number[];
   onManualShiftDurationsChange?: (durations: number[]) => void;
-  manualShiftStartTime?: string;
-  onManualShiftStartTimeChange?: (startTime: string) => void;
-  manualScheduleMode?: ManualScheduleMode;
-  onManualScheduleModeChange?: (mode: ManualScheduleMode) => void;
   fiammettaEnabled: boolean;
   onFiammettaEnabledChange: (enabled: boolean) => void;
   onPresetSelect: (preset: PresetDef) => void;
@@ -135,10 +125,6 @@ export function SetupDialog({
   onRotationProfileChange,
   manualShiftDurations = [12, 6, 6],
   onManualShiftDurationsChange,
-  manualShiftStartTime = DEFAULT_MANUAL_SHIFT_START_TIME,
-  onManualShiftStartTimeChange,
-  manualScheduleMode = "sequential",
-  onManualScheduleModeChange,
   fiammettaEnabled,
   onFiammettaEnabledChange,
   onPresetSelect,
@@ -158,6 +144,41 @@ export function SetupDialog({
   const locale = useLocale();
   const en = locale === "en";
   const { data: websiteSession } = useWebsiteSession();
+  const [maaReview, setMaaReview] = useState<{ rows: Record<string, unknown>[]; issues: MaaIssue[]; name: string } | null>(null);
+  const [maaChoices, setMaaChoices] = useState<Record<number, number>>({});
+  const [reviewBusy, setReviewBusy] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  function stageMaaReview(text: string, name: string) {
+    setMaaReview(null);
+    setMaaChoices({});
+    setReviewError(null);
+    try {
+      const rows = JSON.parse(text);
+      const issues = inspectMaaProgress(rows);
+      if (!issues.length) return false;
+      setMaaReview({ rows, issues, name });
+      return true;
+    } catch { return false; }
+  }
+  async function confirmMaaReview() {
+    if (!maaReview || maaReview.issues.some(issue => maaChoices[issue.index] === undefined)) return;
+    setReviewBusy(true);
+    try {
+      const rows = maaReview.rows.map((row, index) => {
+        const issue = maaReview.issues.find(item => item.index === index);
+        if (!issue) return row;
+        const { own, elite, level } = issue.choices[maaChoices[index]];
+        return { ...row, own, elite, level };
+      });
+      if (await onMaaFile(new File([JSON.stringify(rows)], maaReview.name, { type: "application/json" }))) {
+        setMaaReview(null);
+        setNeedsFacilityReview(true);
+        setShowImportOptions(false);
+        goToBasics();
+      }
+    } catch (error) { setReviewError(error instanceof Error ? error.message : String(error)); }
+    finally { setReviewBusy(false); }
+  }
   const [step, setStep] = useState<SetupStep>("box");
   const [stepDirection, setStepDirection] = useState(0);
   const [needsFacilityReview, setNeedsFacilityReview] = useState(false);
@@ -181,17 +202,21 @@ export function SetupDialog({
       ? "243 full E2 sample"
       : persistedDataLabel;
   const reducedMotion = useReducedMotion();
-  const manualShiftRanges = manualShiftTimeRanges(manualShiftStartTime, manualShiftDurations);
 
   function updateManualShiftCount(count: number) {
     if (!onManualShiftDurationsChange) return;
-    onManualShiftDurationsChange(resizeManualShiftDurations(manualShiftDurations, count));
+    const nextCount = Math.max(1, Math.min(12, Math.trunc(count || 1)));
+    onManualShiftDurationsChange(Array.from(
+      { length: nextCount },
+      (_, index) => manualShiftDurations[index] ?? 12,
+    ));
   }
 
-  function updateManualShiftEnd(index: number, endTime: string) {
-    if (!onManualShiftDurationsChange) return;
-    const next = updateManualShiftBoundary(manualShiftStartTime, manualShiftDurations, index, endTime);
-    if (next) onManualShiftDurationsChange(next);
+  function updateManualShiftDuration(index: number, duration: number) {
+    if (!onManualShiftDurationsChange || !Number.isFinite(duration)) return;
+    onManualShiftDurationsChange(manualShiftDurations.map((current, candidate) => (
+      candidate === index ? Math.max(0.25, Math.round(duration * 100) / 100) : current
+    )));
   }
 
   useEffect(() => {
@@ -243,6 +268,7 @@ export function SetupDialog({
       onRequireWebsiteAccount();
       return;
     }
+    if (!/\.xlsx?$/i.test(file.name) && stageMaaReview(await file.text(), file.name)) return;
     if (await onMaaFile(file)) {
       setNeedsFacilityReview(true);
       setShowImportOptions(false);
@@ -255,6 +281,7 @@ export function SetupDialog({
       onRequireWebsiteAccount();
       return;
     }
+    if (stageMaaReview(maaPaste, "MAA-reviewed-box.json")) return;
     if (await onMaaPaste()) {
       setNeedsFacilityReview(true);
       setShowImportOptions(false);
@@ -434,9 +461,17 @@ export function SetupDialog({
                         ) : null}
                       </TabsContent> : null}
                       <TabsContent value="maa" className="grid gap-3 pt-4">
-                        <p className="rounded border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
-                          MAA 导入遇到超出星级上限的精英阶段或等级时，会自动修正并提醒；一、二星最高精0 30级，三星最高精1 55级。
-                        </p>
+                        <a
+                          href="/help/beginner#maa-box-video"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex min-h-11 w-fit items-center gap-2 rounded-[4px] px-2 text-sm font-medium underline underline-offset-4 outline-none hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          <Play className="size-4 shrink-0" aria-hidden="true" />
+                          {en ? "How to get box.json with MAA · Video tutorial" : "如何用 MAA 获取 box.json · 视频教程"}
+                          <ExternalLink className="size-3.5 shrink-0" aria-hidden="true" />
+                          <span className="sr-only">{en ? " (opens in a new tab)" : "（新标签页打开）"}</span>
+                        </a>
                         {!websiteSession ? (
                           <Alert>
                             <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -503,6 +538,45 @@ export function SetupDialog({
                         )}
                       </TabsContent>
                     </Tabs>
+                    {maaReview ? (
+                      <section className="mt-3 grid gap-2.5 rounded-lg border border-amber-500/35 bg-amber-50/60 p-3 dark:bg-amber-950/15" aria-label="导入异常确认">
+                        <div className="flex items-baseline justify-between gap-3"><h3 className="font-semibold">发现 {maaReview.issues.length} 项异常练度</h3><span className="text-xs text-muted-foreground">请选择修正方案</span></div>
+                        <p className="text-sm text-muted-foreground">确认后才会导入；取消会保留原来的 Box。</p>
+                        <p className="text-xs text-muted-foreground">星级会根据干员数据自动匹配，原 JSON 中填写的星级不一致时将自动修正。</p>
+                        {maaReview.issues.map(issue => (
+                          <fieldset key={issue.index} className="grid gap-2 rounded-md border bg-background p-2.5">
+                            <legend className="px-1 text-sm font-semibold tracking-normal">{issue.name}（{issue.rarity}星）</legend>
+                            <p className="text-xs font-medium text-muted-foreground">原始数据：精{String(issue.elite)} · {String(issue.level)}级，超出合法范围</p>
+                            <div className="flex flex-wrap gap-1.5" role="group" aria-label={`${issue.name}的修正方案`}>
+                              {issue.choices.map((choice, index) => {
+                                const selected = maaChoices[issue.index] === index;
+                                const color = !choice.own || (choice.elite === 0 && choice.level === 1) ? "#71717A" : choice.elite === 2 ? "#FFD800" : choice.elite === 1 ? "#B8F03A" : "#22BBFF";
+                                return (
+                                  <Button
+                                    key={index}
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    aria-pressed={selected}
+                                    disabled={reviewBusy}
+                                    onClick={() => setMaaChoices(current => ({ ...current, [issue.index]: index }))}
+                                    style={selected ? { backgroundColor: color, borderColor: color } : undefined}
+                                    className={`relative h-auto min-h-8 min-w-16 whitespace-normal rounded-[4px] px-2 py-1.5 focus-visible:ring-[#FFD501] focus-visible:ring-offset-2 ${selected ? (!choice.own ? "text-white" : "text-[#202020]") : "border-border bg-background text-muted-foreground hover:border-foreground/45 hover:bg-muted/60 hover:text-foreground"}`}
+                                  >
+                                    {choice.label}
+                                  </Button>
+                                );
+                              })}
+                            </div>
+                          </fieldset>
+                        ))}
+                        {reviewError ? <p role="alert" className="text-sm text-destructive">{reviewError}</p> : null}
+                        <div className="flex justify-end gap-2">
+                          <SetupActionButton type="button" variant="outline" disabled={reviewBusy} onClick={() => setMaaReview(null)}>取消本次导入</SetupActionButton>
+                          <SetupActionButton type="button" disabled={reviewBusy || maaReview.issues.some(issue => maaChoices[issue.index] === undefined)} onClick={() => void confirmMaaReview()}>{reviewBusy ? "正在导入…" : "确认选择并导入"}</SetupActionButton>
+                        </div>
+                      </section>
+                    ) : null}
                     {inputError ? <p id="setup-box-error" className="mt-3 text-sm text-destructive" role="alert">{inputError}</p> : null}
                   </section>
                 ) : null}
@@ -555,45 +629,10 @@ export function SetupDialog({
                     <div className="pt-1">
                       {mode === "manual" ? (
                         <section className="grid gap-4" aria-labelledby="manual-shift-settings-title" data-manual-shift-settings>
-                          <div>
-                            <h3 className="text-sm font-semibold">{intl("setup_dialog.scheduleMode")}</h3>
-                            <div className="mt-2 grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label={intl("setup_dialog.scheduleMode")}>
-                              <Button
-                                type="button"
-                                variant={manualScheduleMode === "sequential" ? "default" : "outline"}
-                                className="h-auto min-h-16 items-start justify-start px-4 py-3 text-left"
-                                role="radio"
-                                aria-checked={manualScheduleMode === "sequential"}
-                                onClick={() => onManualScheduleModeChange?.("sequential")}
-                              >
-                                <span>
-                                  <span className="block font-semibold">{intl("setup_dialog.sequentialRotation")}</span>
-                                  <span className="mt-1 block text-xs font-normal opacity-75">{intl("setup_dialog.sequentialRotationDescription")}</span>
-                                </span>
-                              </Button>
-                              <Button
-                                type="button"
-                                variant={manualScheduleMode === "period" ? "default" : "outline"}
-                                className="h-auto min-h-16 items-start justify-start px-4 py-3 text-left"
-                                role="radio"
-                                aria-checked={manualScheduleMode === "period"}
-                                onClick={() => onManualScheduleModeChange?.("period")}
-                              >
-                                <span>
-                                  <span className="block font-semibold">{intl("setup_dialog.timeRanges")}</span>
-                                  <span className="mt-1 block text-xs font-normal opacity-75">{intl("setup_dialog.timeRangesDescription")}</span>
-                                </span>
-                              </Button>
-                            </div>
-                          </div>
-                          <div className="border-t border-border/70" />
                           <div className="flex flex-wrap items-center justify-between gap-3">
                             <div>
-                               <h3 id="manual-shift-settings-title" className="text-sm font-semibold">{intl("setup_dialog.manualShifts")}</h3>
-                              <p className="mt-1 text-xs text-muted-foreground">{manualScheduleMode === "period"
-                                ? intl("setup_dialog.consecutiveShiftTimes")
-                                : intl("setup_dialog.shiftOrderOnly")}</p>
-                              {manualScheduleMode === "period" ? <p className="mt-1 text-xs font-medium text-foreground">{intl("setup_dialog.total24Hours")}</p> : null}
+                              <h3 id="manual-shift-settings-title" className="text-sm font-semibold">{intl("setup_dialog.manualShifts")}</h3>
+                              <p className="mt-1 text-xs text-muted-foreground">{intl("setup_dialog.durationsAreIndependentAndDoNotNeedToAdd")}</p>
                             </div>
                             <div className="flex items-center gap-1">
                               <Button type="button" size="icon-sm" variant="outline" aria-label={intl("setup_dialog.removeOneShift")} disabled={manualShiftDurations.length <= 1} onClick={() => updateManualShiftCount(manualShiftDurations.length - 1)}><Minus /></Button>
@@ -604,45 +643,17 @@ export function SetupDialog({
                               <Button type="button" size="icon-sm" variant="outline" aria-label={intl("setup_dialog.addOneShift")} disabled={manualShiftDurations.length >= 12} onClick={() => updateManualShiftCount(manualShiftDurations.length + 1)}><Plus /></Button>
                             </div>
                           </div>
-                          {manualScheduleMode === "period" ? <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                            {manualShiftRanges.map((range, index) => (
-                              <div key={index} className="grid min-h-20 gap-2 border border-border/70 bg-muted/25 px-3 py-2 text-sm">
-                                <div className="flex items-center justify-between gap-3">
-                                  <span>{intl("setup_dialog.shift", { value1: index + 1 })}</span>
-                                  <span className="text-xs text-muted-foreground">{intl("setup_dialog.durationParenthetical", { duration: formatManualShiftDuration(range.durationMinutes, en) })}</span>
-                                </div>
-                                <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-                                  <label className="grid gap-1 text-xs text-muted-foreground">
-                                    <span>{intl("setup_dialog.start")}</span>
-                                    <input
-                                      aria-label={intl("setup_dialog.shiftStartTime", { value1: index + 1 })}
-                                      className="h-9 min-w-0 rounded-[4px] border border-input bg-background px-2 font-number disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
-                                      type="time"
-                                      step="60"
-                                      value={range.startTime}
-                                      disabled={index > 0}
-                                      onChange={(event) => {
-                                        if (event.target.value) onManualShiftStartTimeChange?.(event.target.value);
-                                      }}
-                                    />
-                                  </label>
-                                  <span className="mt-5 text-muted-foreground" aria-hidden="true">→</span>
-                                  <label className="grid gap-1 text-xs text-muted-foreground">
-                                    <span>{intl("setup_dialog.end")}</span>
-                                    <input
-                                      aria-label={intl("setup_dialog.shiftEndTime", { value1: index + 1 })}
-                                      className="h-9 min-w-0 rounded-[4px] border border-input bg-background px-2 font-number disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
-                                      type="time"
-                                      step="60"
-                                      value={range.endTime}
-                                      disabled={index === manualShiftRanges.length - 1}
-                                      onChange={(event) => updateManualShiftEnd(index, event.target.value)}
-                                    />
-                                  </label>
-                                </div>
-                              </div>
+                          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                            {manualShiftDurations.map((duration, index) => (
+                              <label key={index} className="flex min-h-11 items-center justify-between gap-3 border border-border/70 bg-muted/25 px-3 py-2 text-sm">
+                                <span>{intl("setup_dialog.shift", { value1: index + 1 })}</span>
+                                <span className="flex items-center gap-1.5">
+                                  <input aria-label={intl("setup_dialog.shiftDuration", { value1: index + 1 })} className="h-8 w-20 rounded-[4px] border border-input bg-background px-2 text-right font-number" type="number" min="0.25" step="0.25" value={duration} onChange={(event) => updateManualShiftDuration(index, Number(event.target.value))} />
+                                  <span className="text-xs text-muted-foreground">{intl("setup_dialog.h")}</span>
+                                </span>
+                              </label>
                             ))}
-                          </div> : null}
+                          </div>
                         </section>
                       ) : <RotationSettings value={rotationProfile} onChange={onRotationProfileChange} />}
                     </div>

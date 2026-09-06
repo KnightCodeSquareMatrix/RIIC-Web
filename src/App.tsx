@@ -891,14 +891,8 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     setResult(null);
     clearIssueState();
     try {
-      let raw = JSON.parse(await file.text()) as unknown;
-      if (Array.isArray(raw) && raw.some((row) => row && typeof row === "object" && Number((row as Record<string, unknown>).elite) > 0 && Number((row as Record<string, unknown>).rarity) <= 2)) {
-        const accept = window.confirm("检测到一、二星干员存在非法精英阶段。确定后将自动修正为精0 30级；取消则不导入。是否继续？");
-        if (!accept) return false;
-        raw = raw.map((row) => row && typeof row === "object" && Number((row as Record<string, unknown>).rarity) <= 2 ? { ...(row as Record<string, unknown>), elite: 0, level: 30 } : row);
-      }
       const { readOperboxFile } = await import("./operbox");
-      const entries = await readOperboxFile(new File([JSON.stringify(raw)], file.name, { type: file.type }));
+      const entries = await readOperboxFile(file);
       setOperbox(entries);
       setFileName(file.name);
       setBoxSource("maa");
@@ -947,14 +941,8 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   async function handleMaaPaste(): Promise<boolean> {
     setInputError(null);
     try {
-      let raw = JSON.parse(maaPaste) as unknown;
-      if (Array.isArray(raw) && raw.some((row) => row && typeof row === "object" && Number((row as Record<string, unknown>).elite) > 0 && Number((row as Record<string, unknown>).rarity) <= 2)) {
-        const accept = window.confirm("检测到一、二星干员存在非法精英阶段。确定后将自动修正为精0 30级；取消则不导入。是否继续？");
-        if (!accept) return false;
-        raw = (raw as unknown[]).map((row) => row && typeof row === "object" && Number((row as Record<string, unknown>).rarity) <= 2 ? { ...(row as Record<string, unknown>), elite: 0, level: 30 } : row);
-      }
       const { readOperboxText } = await import("./operbox");
-      const entries = await readOperboxText(JSON.stringify(raw));
+      const entries = await readOperboxText(maaPaste);
       setOperbox(entries);
       setFileName(intl("App.pastedArknightsOperboxExportJson"));
       setBoxSource("maa");

@@ -94,14 +94,18 @@ export async function readOperboxText(text: string): Promise<OperBoxEntry[]> {
       if (!row || typeof row !== "object" || Array.isArray(row)) return row;
       const value = row as Record<string, unknown>;
       const rarity = Number(value.rarity);
+      const id = typeof value.id === "string" ? value.id.trim() : "";
+      const canonicalId = id.startsWith("char_") ? id : `char_${id}`;
+      const canonicalRarity = Object.hasOwn(operatorRarities, canonicalId) ? operatorRarities[canonicalId as keyof typeof operatorRarities] : undefined;
+      const normalizedRarity = canonicalRarity ?? rarity;
       const elite = Number(value.elite);
-      if (value.own !== true || !Number.isInteger(rarity) || rarity < 1 || rarity > 6) return row;
-      if (Number.isInteger(rarity) && Number.isInteger(elite) && elite > maxEliteForRarity(rarity)) {
-        const safeElite = maxEliteForRarity(rarity);
-        return { ...value, elite: safeElite, level: manualLevelFor(rarity, safeElite) };
+      if (value.own !== true || !Number.isInteger(normalizedRarity) || normalizedRarity < 1 || normalizedRarity > 6) return row;
+      if (Number.isInteger(elite) && elite > maxEliteForRarity(normalizedRarity)) {
+        const safeElite = maxEliteForRarity(normalizedRarity);
+        return { ...value, rarity: normalizedRarity, elite: safeElite, level: manualLevelFor(normalizedRarity, safeElite) };
       }
-      if (Number.isInteger(rarity) && Number.isInteger(elite) && Number.isFinite(Number(value.level))) {
-        return { ...value, level: Math.min(Number(value.level), manualLevelFor(rarity, elite)) };
+      if (Number.isInteger(elite) && Number.isFinite(Number(value.level))) {
+        return { ...value, rarity: normalizedRarity, level: Math.min(Number(value.level), manualLevelFor(normalizedRarity, elite)) };
       }
       return row;
     });
