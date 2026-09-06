@@ -65,7 +65,7 @@ export function CloudDataSync(props: {
     <DataConsentDialog open={status.consentOpen} saving={status.saving} error={error} reloadRequired={status.error === "policy"} onAccept={() => { if (status.error === "policy") window.location.reload(); else void session.current?.accept(); }} onDecline={() => session.current?.decline()} />
     {error && !status.consentOpen ? <Alert data-cloud-sync-error role="status" className="my-2">
       <AlertDescription className="break-words">
-        <p>{error}{status.errorCode ? ` (${status.errorCode})` : ""}</p>
+        <p>{error}{status.errorCode ? <> <span className="font-number">({status.errorCode})</span></> : null}</p>
         {status.error === "paused" || status.error === "consent" ? <Button variant="outline" size="sm" onClick={() => session.current?.retry()}>{intl("components_cloud_CloudDataSync.resumeSync")}</Button> : null}
       </AlertDescription>
     </Alert> : null}
