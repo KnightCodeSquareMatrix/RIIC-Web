@@ -70,10 +70,9 @@ import { normalizeOperboxEntries } from "./operbox-normalization";
 import { upgradeSimulationBoxSource } from "./upgrade-simulation";
 import {
   DEFAULT_MANUAL_SHIFT_DURATIONS,
-  DEFAULT_MANUAL_SHIFT_START_TIME,
   MANUAL_SCHEDULE_STORAGE_KEY,
 } from "./manual-schedule-config";
-import type { ManualScheduleDraft, ManualScheduleMode } from "./manual-schedule";
+import type { ManualScheduleDraft } from "./manual-schedule";
 import { effectiveFiammettaSetting, resolvePlanPresentationLayout } from "./plan-presentation";
 import {
   applyLocalLayoutPatch,
@@ -295,8 +294,6 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   const [fiammettaEnabled, setFiammettaEnabled] = useState(false);
   const [manualFiammettaEnabled, setManualFiammettaEnabled] = useState(false);
   const [manualShiftDurations, setManualShiftDurations] = useState<number[]>([...DEFAULT_MANUAL_SHIFT_DURATIONS]);
-  const [manualShiftStartTime, setManualShiftStartTime] = useState(DEFAULT_MANUAL_SHIFT_START_TIME);
-  const [manualScheduleMode, setManualScheduleMode] = useState<ManualScheduleMode>("sequential");
   const [manualDraftHandoff, setManualDraftHandoff] = useState<ManualScheduleDraft | null>(null);
   const [pendingManualDraftReplacement, setPendingManualDraftReplacement] = useState<ManualScheduleDraft | null>(null);
   const [inputMode, setInputMode] = useState<"skland" | "maa" | "manual">(CLIENT_SKLAND_ENABLED ? "skland" : "maa");
@@ -894,8 +891,14 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     setResult(null);
     clearIssueState();
     try {
+      let raw = JSON.parse(await file.text()) as unknown;
+      if (Array.isArray(raw) && raw.some((row) => row && typeof row === "object" && Number((row as Record<string, unknown>).elite) > 0 && Number((row as Record<string, unknown>).rarity) <= 2)) {
+        const accept = window.confirm("检测到一、二星干员存在非法精英阶段。确定后将自动修正为精0 30级；取消则不导入。是否继续？");
+        if (!accept) return false;
+        raw = raw.map((row) => row && typeof row === "object" && Number((row as Record<string, unknown>).rarity) <= 2 ? { ...(row as Record<string, unknown>), elite: 0, level: 30 } : row);
+      }
       const { readOperboxFile } = await import("./operbox");
-      const entries = await readOperboxFile(file);
+      const entries = await readOperboxFile(new File([JSON.stringify(raw)], file.name, { type: file.type }));
       setOperbox(entries);
       setFileName(file.name);
       setBoxSource("maa");
@@ -944,8 +947,14 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   async function handleMaaPaste(): Promise<boolean> {
     setInputError(null);
     try {
+      let raw = JSON.parse(maaPaste) as unknown;
+      if (Array.isArray(raw) && raw.some((row) => row && typeof row === "object" && Number((row as Record<string, unknown>).elite) > 0 && Number((row as Record<string, unknown>).rarity) <= 2)) {
+        const accept = window.confirm("检测到一、二星干员存在非法精英阶段。确定后将自动修正为精0 30级；取消则不导入。是否继续？");
+        if (!accept) return false;
+        raw = (raw as unknown[]).map((row) => row && typeof row === "object" && Number((row as Record<string, unknown>).rarity) <= 2 ? { ...(row as Record<string, unknown>), elite: 0, level: 30 } : row);
+      }
       const { readOperboxText } = await import("./operbox");
-      const entries = await readOperboxText(maaPaste);
+      const entries = await readOperboxText(JSON.stringify(raw));
       setOperbox(entries);
       setFileName(intl("App.pastedArknightsOperboxExportJson"));
       setBoxSource("maa");
@@ -1169,8 +1178,6 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   function openManualScheduleDraft(draft: ManualScheduleDraft) {
     setPendingManualDraftReplacement(null);
     setManualShiftDurations(draft.shifts.map((shift) => shift.durationHours));
-    setManualShiftStartTime(draft.startTime);
-    setManualScheduleMode(draft.scheduleMode);
     setManualFiammettaEnabled(draft.fiammettaEnabled);
     setManualDraftHandoff(draft);
     try {
@@ -1434,15 +1441,6 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     showResultClearNotice(intl("App.layout", { label: nextPreset.label }));
     setPreset(nextPreset);
     setLayout(buildBlueprint(nextPreset));
-    setLayoutDirty(true);
-    setLayoutSource("local");
-    setLocalLayoutBackup(null);
-    clearPlanResult();
-  }
-
-  function handleManualImportedLayout(nextLayout: BaseBlueprint) {
-    setLayout(structuredClone(nextLayout));
-    setPreset(PRESETS.find((candidate) => candidate.label === nextLayout.template) ?? preset);
     setLayoutDirty(true);
     setLayoutSource("local");
     setLocalLayoutBackup(null);
@@ -1772,8 +1770,6 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       setFileName(null);
       setBoxSource("sample");
       setManualShiftDurations([...DEFAULT_MANUAL_SHIFT_DURATIONS]);
-      setManualShiftStartTime(DEFAULT_MANUAL_SHIFT_START_TIME);
-      setManualScheduleMode("sequential");
       setManualFiammettaEnabled(false);
       setManualDraftHandoff(null);
       setLayoutDirty(false);
@@ -1960,16 +1956,11 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       operbox: accountCanUseCurrentBox ? operbox : null,
       sourceName: accountCanUseCurrentBox ? fileName : null,
       shiftDurations: manualShiftDurations,
-      shiftStartTime: manualShiftStartTime,
-      scheduleMode: manualScheduleMode,
       fiammettaEnabled: effectiveManualFiammettaEnabled,
       initialDraft: accountCanUseCurrentBox ? manualDraftHandoff : null,
       onInitialDraftConsumed: () => setManualDraftHandoff(null),
       onOpenCalculator: () => navigateToPage("calculator"),
       onShiftDurationsChange: setManualShiftDurations,
-      onShiftStartTimeChange: setManualShiftStartTime,
-      onScheduleModeChange: setManualScheduleMode,
-      onImportedLayoutChange: handleManualImportedLayout,
       onFiammettaEnabledChange: setManualFiammettaEnabled,
       onOpenSetup: handleManualSetup,
       onFactoryRecipeChange: handleFactoryRecipeChange,
@@ -2191,15 +2182,11 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
         presets={PRESETS}
         preset={preset}
         layout={layout}
-        configurationKey={setupMode === "manual" ? `${setupConfigurationKey}:${manualScheduleMode}:${manualShiftStartTime}:${manualShiftDurations.join(",")}:${manualFiammettaEnabled}` : setupConfigurationKey}
+        configurationKey={setupMode === "manual" ? `${setupConfigurationKey}:${manualShiftDurations.join(",")}:${manualFiammettaEnabled}` : setupConfigurationKey}
         rotationProfile={setupMode === "manual" ? DEFAULT_ROTATION_PROFILE : rotationProfile}
         onRotationProfileChange={handleRotationProfileChange}
         manualShiftDurations={manualShiftDurations}
         onManualShiftDurationsChange={setManualShiftDurations}
-        manualShiftStartTime={manualShiftStartTime}
-        onManualShiftStartTimeChange={setManualShiftStartTime}
-        manualScheduleMode={manualScheduleMode}
-        onManualScheduleModeChange={setManualScheduleMode}
         fiammettaEnabled={setupMode === "manual" ? effectiveManualFiammettaEnabled : effectiveFiammettaEnabled}
         onFiammettaEnabledChange={setupMode === "manual" ? setManualFiammettaEnabled : handleFiammettaEnabledChange}
         onPresetSelect={handlePresetSelect}
