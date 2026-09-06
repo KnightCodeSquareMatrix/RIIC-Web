@@ -264,6 +264,20 @@ test("manual scheduling configures independent shifts, moves conflicts and enabl
 
   const trade = page.locator('[data-room-title="贸易站 1"]');
   const factory = page.locator('[data-room-title="制造站 1"]');
+  const tradeDrones = trade.getByRole("button", { name: "贸易站 1 无人机加速" });
+  const factoryDrones = factory.getByRole("button", { name: "制造站 1 无人机加速" });
+  await tradeDrones.click();
+  await expect(tradeDrones).toHaveAttribute("aria-pressed", "true");
+  await factoryDrones.click();
+  await expect(tradeDrones).toHaveAttribute("aria-pressed", "false");
+  await expect(factoryDrones).toHaveAttribute("aria-pressed", "true");
+  await page.setViewportSize({ width: 1100, height: 1000 });
+  await expect(page.locator('[data-schedule-view="list"]')).toBeVisible();
+  const listFactoryDrones = page.locator('[data-schedule-view="list"] [data-room-title="制造站 1"]').getByRole("button", { name: "制造站 1 无人机加速" });
+  await listFactoryDrones.hover();
+  await expect(page.getByText("取消当前班次无人机加速", { exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await expect(page.locator('[data-schedule-view="compact"]')).toBeVisible();
   await expect(trade.getByRole("button", { name: "空置" }).first()).toContainText("可编辑");
   await trade.getByRole("button", { name: "空置" }).first().click();
   await page.getByRole("dialog").getByRole("button", { name: /阿米娅/ }).click();
@@ -292,18 +306,35 @@ test("manual scheduling configures independent shifts, moves conflicts and enabl
   await moveDialog.getByRole("button", { name: "移动干员" }).click();
   await expect(trade.locator('[data-operator-identity="阿米娅"]')).toHaveCount(0);
   await expect(factory.locator('[data-operator-identity="阿米娅"]')).toBeVisible();
+  await factory.getByRole("button", { name: "一键清空制造站 1" }).click();
+  await expect(factory.locator('[data-operator-identity="阿米娅"]')).toHaveCount(0);
+  await expect(factoryDrones).toHaveAttribute("aria-pressed", "true");
 
   const dorm = page.locator('[data-room-title="宿舍 1"]');
   await expect(dorm.locator('[data-operator-identity="autofill"]')).toHaveCount(5);
-  await dorm.getByRole("button", { name: "自动补位" }).first().click();
-  await page.getByRole("dialog").getByRole("button", { name: "保持空置" }).click();
+  const dormAutofill = dorm.getByRole("button", { name: /宿舍 1.*自动补位/ });
+  await expect(dormAutofill).toHaveAttribute("aria-pressed", "true");
+  await dormAutofill.click();
   await expect(dorm.locator('[data-operator-identity="autofill"]')).toHaveCount(0);
-  await dorm.getByRole("button", { name: "空置" }).first().click();
-  await page.getByRole("dialog").getByRole("button", { name: "自动补位" }).click();
+  await expect(dormAutofill).toHaveAttribute("aria-pressed", "false");
+  await dormAutofill.click();
   await expect(dorm.locator('[data-operator-identity="autofill"]')).toHaveCount(5);
+  await dorm.getByRole("button", { name: "一键清空宿舍 1" }).click();
+  await expect(dorm.locator('[data-operator-identity="autofill"]')).toHaveCount(0);
+  await expect(dormAutofill).toHaveAttribute("aria-pressed", "false");
 
   await page.getByRole("tab", { name: /第 2 班.*6h/ }).click();
   await expect(factory.locator('[data-operator-identity="阿米娅"]')).toHaveCount(0);
+  await factory.getByRole("button", { name: "空置" }).first().click();
+  await page.getByRole("dialog").getByRole("button", { name: /阿米娅/ }).click();
+  await expect(factory.locator('[data-operator-identity="阿米娅"]')).toBeVisible();
+  await page.getByRole("button", { name: "清空当前班次所有设施" }).click();
+  const clearShiftDialog = page.getByRole("dialog", { name: "清空当前班次所有设施？" });
+  await expect(clearShiftDialog).toContainText("其他班次不会改变");
+  await clearShiftDialog.getByRole("button", { name: "清空当前班次" }).click();
+  await expect(factory.locator('[data-operator-identity="阿米娅"]')).toHaveCount(0);
+  await page.getByRole("tab", { name: /第 1 班.*10.5h/ }).click();
+  await expect(trade.locator('[data-operator-identity="锡兰"]')).toBeVisible();
   expect(planRequests).toBe(0);
 
   const downloadPromise = page.waitForEvent("download");
@@ -315,9 +346,12 @@ test("manual scheduling configures independent shifts, moves conflicts and enabl
   for await (const chunk of stream) chunks.push(Buffer.from(chunk));
   const exported = JSON.parse(Buffer.concat(chunks).toString("utf8"));
   expect(exported).toMatchObject({ title: "手动排班 · 243", planTimes: "2班" });
+  expect(exported.plans[0].drones).toEqual({ enable: true, room: "manufacture", index: 1, rule: "all", order: "pre" });
+  expect(exported.plans[1].drones).toBeUndefined();
   for (const plan of exported.plans) {
     for (const rooms of Object.values(plan.rooms) as Array<Array<{ operators: unknown[] }>>) {
       for (const room of rooms) expect(room.operators.every((operator) => typeof operator === "string")).toBe(true);
     }
   }
+
 });

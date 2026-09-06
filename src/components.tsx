@@ -14,7 +14,10 @@ import {
   RotateCcw,
   Save,
   Smile,
+  Sparkles,
+  Trash2,
   Upload,
+  Zap,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { CSSProperties, ChangeEvent, DragEvent, lazy, ReactElement, ReactNode, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -1580,6 +1583,7 @@ export function ScheduleBoard({
   eliteByOperator,
   levelByOperator,
   viewControlsSlot,
+  viewModeActionSlot,
   mobileActionsSlot,
   shiftInfoSlot,
   activeShift,
@@ -1593,6 +1597,10 @@ export function ScheduleBoard({
   onTradeOrderChange,
   onViewModeChange,
   onSlotClick,
+  onClearRoom,
+  onDormAutofillChange,
+  droneTargetRoomId,
+  onDroneTargetChange,
 }: {
   rows: RoomRow[];
   layout: BaseBlueprint;
@@ -1602,6 +1610,7 @@ export function ScheduleBoard({
   /** 按干员名查当前等级，用于技能解锁状态。 */
   levelByOperator?: ReadonlyMap<string, number>;
   viewControlsSlot?: ReactNode;
+  viewModeActionSlot?: ReactNode;
   mobileActionsSlot?: ReactNode;
   shiftInfoSlot?: ReactNode;
   activeShift: number;
@@ -1615,6 +1624,10 @@ export function ScheduleBoard({
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
   onViewModeChange?: (viewMode: "list" | "compact") => void;
   onSlotClick?: (row: RoomRow, slotIndex: number) => void;
+  onClearRoom?: (row: RoomRow) => void;
+  onDormAutofillChange?: (row: RoomRow, enabled: boolean) => void;
+  droneTargetRoomId?: string | null;
+  onDroneTargetChange?: (row: RoomRow) => void;
 }) {
   const intl = useTranslations();
   const locale = useLocale();
@@ -1627,9 +1640,31 @@ export function ScheduleBoard({
   const [CompactScheduleView, setCompactScheduleView] = useState<CompactScheduleComponent | null>(null);
   const [compactScheduleLoadFailed, setCompactScheduleLoadFailed] = useState(false);
   const preferredViewMode = useRef<ScheduleViewMode | null>(null);
+  const scheduleBoardRef = useRef<HTMLDivElement | null>(null);
   const shouldReduceMotion = useReducedMotion();
+  const editableSchedule = Boolean(onSlotClick || onClearRoom || onDormAutofillChange || onDroneTargetChange);
 
   useLayoutEffect(() => {
+    const board = scheduleBoardRef.current;
+    if (editableSchedule && board) {
+      const syncEditableViewMode = (width: number) => {
+        const canUseCompactLayout = width >= 1_040;
+        setSupportsCompactLayout(canUseCompactLayout);
+        const nextViewMode = canUseCompactLayout
+          ? (preferredViewMode.current ?? "compact")
+          : "list";
+        setViewMode(nextViewMode);
+        onViewModeChange?.(nextViewMode);
+      };
+      syncEditableViewMode(board.getBoundingClientRect().width);
+      const observer = new ResizeObserver((entries) => {
+        const width = entries[0]?.contentRect.width;
+        if (typeof width === "number") syncEditableViewMode(width);
+      });
+      observer.observe(board);
+      return () => observer.disconnect();
+    }
+
     const mq = window.matchMedia("(min-width: 1024px)");
     const syncViewMode = (canUseCompactLayout: boolean) => {
       setSupportsCompactLayout(canUseCompactLayout);
@@ -1644,7 +1679,7 @@ export function ScheduleBoard({
     const handler = (event: MediaQueryListEvent) => syncViewMode(event.matches);
     mq.addEventListener("change", handler);
     return () => mq.removeEventListener("change", handler);
-  }, [onViewModeChange]);
+  }, [editableSchedule, onViewModeChange]);
 
   useEffect(() => {
     if (viewMode !== "compact" || CompactScheduleView || compactScheduleLoadFailed) return;
@@ -1721,7 +1756,7 @@ export function ScheduleBoard({
   }
 
   return (
-    <div className="flex flex-col gap-7">
+    <div ref={scheduleBoardRef} className="flex flex-col gap-7">
       <div className="flex flex-wrap items-center justify-between gap-3 max-sm:flex-col max-sm:items-stretch" data-schedule-toolbar>
         <div className="flex flex-wrap items-center gap-2 max-sm:w-full" data-schedule-view-controls>
           {supportsCompactLayout && viewMode ? (
@@ -1742,6 +1777,7 @@ export function ScheduleBoard({
             </Tabs>
           ) : null}
           {viewControlsSlot}
+          {viewMode === "compact" ? viewModeActionSlot : null}
           {viewMode === "list" && hiddenAuxiliaryCount ? (
             <Button type="button" variant="ghost" size="sm" onClick={restoreHiddenAuxiliaryGroups}>
               {intl("components.restoreHidden")}{intl("components.label3")}<span className="font-number">{hiddenAuxiliaryCount}</span>{intl("components.label4")}
@@ -1760,9 +1796,15 @@ export function ScheduleBoard({
                 </motion.span>
                 {allAuxiliaryCollapsed ? (intl("components.expandAuxiliaryFacilities")) : (intl("components.collapseAuxiliaryFacilities"))}
               </Button>
+              {viewModeActionSlot}
               {mobileActionsSlot ? <div className="min-w-0 flex-1 md:hidden">{mobileActionsSlot}</div> : null}
             </div>
-          ) : mobileActionsSlot ? <div className="w-full md:hidden">{mobileActionsSlot}</div> : null}
+          ) : (
+            <>
+              {viewMode === "list" ? viewModeActionSlot : null}
+              {mobileActionsSlot ? <div className="w-full md:hidden">{mobileActionsSlot}</div> : null}
+            </>
+          )}
         </div>
         {shiftInfoSlot ? <div className="min-w-0 max-sm:w-full">{shiftInfoSlot}</div> : null}
       </div>
@@ -1914,6 +1956,50 @@ export function ScheduleBoard({
                                 {localizedRoomTitle(row.title, row.group, locale, gameCatalog)}
                               </div>
                               <LevelDiamonds level={row.level} maxLevel={layoutRoom ? maxRoomLevel(layoutRoom.kind) : row.level} />
+                              {row.group === "dormitory" && onDormAutofillChange ? (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  aria-pressed={row.autofill}
+                                  aria-label={`${localizedRoomTitle(row.title, row.group, locale, gameCatalog)}${intl("components.label")}${intl("components.autoFill")}`}
+                                  className={cn(
+                                    "ml-1 h-7 border px-2 text-xs text-white hover:text-white",
+                                    row.autofill ? "border-[#FFD800]/70 bg-[#FFD800]/18" : "border-white/15 bg-[#3C3C3C]/55",
+                                  )}
+                                  onClick={() => onDormAutofillChange(row, !row.autofill)}
+                                >
+                                  <Sparkles className="size-3.5" />{intl("components.autoFill")}
+                                </Button>
+                              ) : null}
+                              {(row.group === "trading" || row.group === "manufacture") && onDroneTargetChange ? (
+                                <Tooltip>
+                                  <TooltipTrigger
+                                    render={
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        aria-pressed={droneTargetRoomId === row.roomId}
+                                        aria-label={intl("components_CompactScheduleView.droneAcceleration", { roomTitle: localizedRoomTitle(row.title, row.group, locale, gameCatalog) })}
+                                        className={cn(
+                                          "ml-auto h-7 border px-2 text-xs text-white hover:text-white",
+                                          droneTargetRoomId === row.roomId ? "border-[#FFD800]/70 bg-[#FFD800]/18" : "border-white/15 bg-[#3C3C3C]/55",
+                                        )}
+                                        onClick={() => onDroneTargetChange(row)}
+                                      >
+                                        <Zap className="size-3.5" aria-hidden="true" />
+                                        <span className="sm:hidden">{intl("components_CompactScheduleView.drones")}</span>
+                                      </Button>
+                                    }
+                                  />
+                                  <TooltipContent side="left">
+                                    {droneTargetRoomId === row.roomId
+                                      ? intl("components_CompactScheduleView.disableDroneAcceleration")
+                                      : intl("components_CompactScheduleView.useDronesForShift")}
+                                  </TooltipContent>
+                                </Tooltip>
+                              ) : null}
                             </div>
                           </div>
                           {efficiency ? (
@@ -1928,6 +2014,11 @@ export function ScheduleBoard({
                           onFactoryRecipeChange={onFactoryRecipeChange}
                           onTradeOrderChange={onTradeOrderChange}
                         />
+                        {onClearRoom && row.group === "power" && !efficiency ? (
+                          <div className="font-technical text-xs tracking-[0.01em] text-white/38">
+                            {intl("components_CompactScheduleView.awaitingSchedule")}
+                          </div>
+                        ) : null}
                       </div>
                     </div>
 
@@ -1978,10 +2069,30 @@ export function ScheduleBoard({
                       )}
                     </div>
 
+                    {onClearRoom ? <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <span className="absolute right-2 top-2 z-20">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 border border-white/10 bg-[#3C3C3C]/55 px-2 text-xs text-white/70 hover:bg-[#4B4B4B] hover:text-white max-sm:h-11"
+                              aria-label={intl("components_CompactScheduleView.clearRoom", { roomTitle: localizedRoomTitle(row.title, row.group, locale, gameCatalog) })}
+                              onClick={() => onClearRoom(row)}
+                            >
+                              <Trash2 className="size-3.5" /><span className="sm:hidden">{intl("components_CompactScheduleView.clear")}</span>
+                            </Button>
+                          </span>
+                        }
+                      />
+                      <TooltipContent side="left">{intl("components_CompactScheduleView.clearThisFacility")}</TooltipContent>
+                    </Tooltip> : null}
+
                     {onIssue ? <Tooltip>
                       <TooltipTrigger
                         render={
-                          <span className="absolute right-2 top-2 z-10">
+                          <span className={cn("absolute top-2 z-10", onClearRoom ? "right-24" : "right-2")}>
                           <Button
                             id={scheduleIssueTriggerId(row)}
                             type="button"
@@ -2024,6 +2135,10 @@ export function ScheduleBoard({
               onIssue={onIssue}
               feedbackDisabled={feedbackDisabled}
               onSlotClick={onSlotClick}
+              onClearRoom={onClearRoom}
+              onDormAutofillChange={onDormAutofillChange}
+              droneTargetRoomId={droneTargetRoomId}
+              onDroneTargetChange={onDroneTargetChange}
             />
           ) : compactScheduleLoadFailed ? (
             <div className="grid min-h-[420px] place-items-center border-y border-destructive/35 text-sm text-destructive" role="alert">

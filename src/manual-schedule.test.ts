@@ -3,6 +3,8 @@ import test from "node:test";
 
 import {
   assignManualOperator,
+  clearManualRoom,
+  clearManualShift,
   createManualScheduleDraft,
   createManualScheduleDraftFromCalculator,
   loadManualScheduleDraft,
@@ -11,6 +13,7 @@ import {
   reconcileManualScheduleDraft,
   resizeManualScheduleDraft,
   setManualDormAutofill,
+  setManualDroneTarget,
 } from "./manual-schedule.ts";
 import type { BaseBlueprint, OperBoxEntry } from "./types.ts";
 
@@ -91,30 +94,55 @@ test("reconcile removes missing rooms and operators no longer owned", () => {
 });
 
 test("dormitories default to autofill and become explicitly empty when cleared", () => {
-  const reconciled = reconcileManualScheduleDraft(createManualScheduleDraft([12]), layout, box);
+  let reconciled = reconcileManualScheduleDraft(createManualScheduleDraft([12]), layout, box);
   assert.equal(reconciled.version, 2);
   assert.equal(reconciled.shifts[0]?.rooms.dorm_1?.autofill, true);
   assert.equal(reconciled.shifts[0]?.rooms.dorm_1?.operators.length, 5);
 
-  const cleared = assignManualOperator({
+  reconciled = assignManualOperator({
     draft: reconciled,
     layout,
     shiftIndex: 0,
     roomId: "dorm_1",
     slotIndex: 0,
-    operator: null,
+    operator: "但书",
   }).draft;
+  const autofillDisabled = setManualDormAutofill(reconciled, layout, 0, "dorm_1", false);
+  assert.equal(autofillDisabled.shifts[0]?.rooms.dorm_1?.operators[0], "但书");
+  assert.equal(autofillDisabled.shifts[0]?.rooms.dorm_1?.autofill, false);
+
+  const cleared = clearManualRoom(reconciled, layout, 0, "dorm_1");
+  assert.deepEqual(cleared.shifts[0]?.rooms.dorm_1?.operators, [null, null, null, null, null]);
   assert.equal(cleared.shifts[0]?.rooms.dorm_1?.autofill, false);
+});
+
+test("room and shift clearing keep their intended scope", () => {
+  let draft = reconcileManualScheduleDraft(createManualScheduleDraft([12, 12]), layout, box);
+  draft = assignManualOperator({ draft, layout, shiftIndex: 0, roomId: "trade_1", slotIndex: 0, operator: "但书" }).draft;
+  draft = assignManualOperator({ draft, layout, shiftIndex: 1, roomId: "trade_1", slotIndex: 0, operator: "但书" }).draft;
+  draft = setManualDroneTarget(draft, layout, 0, "manu_1");
+
+  const roomCleared = clearManualRoom(draft, layout, 0, "manu_1");
+  assert.equal(roomCleared.shifts[0]?.droneTargetRoomId, "manu_1");
+
+  const shiftCleared = clearManualShift(draft, layout, 0);
+  assert.equal(shiftCleared.shifts[0]?.rooms.trade_1?.operators.every((operator) => operator === null), true);
+  assert.equal(shiftCleared.shifts[0]?.rooms.dorm_1?.autofill, false);
+  assert.equal(shiftCleared.shifts[0]?.droneTargetRoomId, null);
+  assert.equal(shiftCleared.shifts[1]?.rooms.trade_1?.operators[0], "但书");
 });
 
 test("MAA export keeps arbitrary durations, per-shift Fiammetta targets and dorm autofill", () => {
   let draft = createManualScheduleDraft([12, 12, 12]);
   draft.shifts[0]!.fiammettaTarget = "但书";
   draft = setManualDormAutofill(draft, layout, 0, "dorm_1", true);
+  draft = setManualDroneTarget(draft, layout, 0, "manu_1");
   const maa = manualScheduleToMaa(draft, layout, true);
   assert.equal(maa.planTimes, "3班");
   assert.deepEqual(maa.plans.map((plan) => plan.duration), [720, 720, 720]);
   assert.deepEqual(maa.plans[0]?.Fiammetta, { enable: true, target: "但书", order: "pre" });
+  assert.deepEqual(maa.plans[0]?.drones, { enable: true, room: "manufacture", index: 1, rule: "all", order: "pre" });
+  assert.equal(maa.plans[1]?.drones, undefined);
   assert.deepEqual(maa.plans[1]?.Fiammetta, { enable: false, target: "", order: "pre" });
   assert.equal(maa.plans[0]?.rooms.dormitory?.[0]?.autofill, true);
   assert.deepEqual(maa.plans[0]?.rooms.dormitory?.[0]?.operators, []);
@@ -134,6 +162,7 @@ test("calculator results become an editable manual draft with room order, shifts
           name: "班次 1",
           duration: 600,
           Fiammetta: { enable: true, target: ["但书", "巫恋"], order: "pre" },
+          drones: { enable: true, room: "trading", index: 1, order: "pre" },
           rooms: {
             control: [{ operators: [{ name: "菲亚梅塔", skill: 2 }] }],
             trading: [{ operators: ["但书", null, { name: "巫恋" }] }],
@@ -156,6 +185,7 @@ test("calculator results become an editable manual draft with room order, shifts
   assert.deepEqual(draft.shifts[0]?.rooms.trade_1?.operators, ["但书", null, "巫恋"]);
   assert.equal(draft.shifts[0]?.rooms.dorm_1?.autofill, false);
   assert.equal(draft.shifts[0]?.fiammettaTarget, "但书");
+  assert.equal(draft.shifts[0]?.droneTargetRoomId, "trade_1");
   assert.deepEqual(draft.shifts[0]?.rooms.training_room?.operators, ["巫恋", "菲亚梅塔"]);
   assert.deepEqual(draft.shifts[1]?.rooms.manu_1?.operators, ["巫恋", null, null]);
 });

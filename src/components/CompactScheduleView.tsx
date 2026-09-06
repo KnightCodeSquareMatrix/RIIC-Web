@@ -2,7 +2,7 @@
 import { useTranslations, useLocale } from "next-intl";
 
 import type { CSSProperties } from "react";
-import { FileWarning } from "lucide-react";
+import { FileWarning, Sparkles, Trash2, Zap } from "lucide-react";
 
 import {
   factoryRecipeFor,
@@ -49,6 +49,10 @@ export interface CompactScheduleViewProps {
   onIssue?: (row: RoomRow) => void;
   feedbackDisabled?: boolean;
   onSlotClick?: (row: RoomRow, slotIndex: number) => void;
+  onClearRoom?: (row: RoomRow) => void;
+  onDormAutofillChange?: (row: RoomRow, enabled: boolean) => void;
+  droneTargetRoomId?: string | null;
+  onDroneTargetChange?: (row: RoomRow) => void;
 }
 
 /** 布局宽度百分比，自己改数值 */
@@ -78,6 +82,10 @@ function CompactRoomCard({
   className = "",
   style,
   onSlotClick,
+  onClearRoom,
+  onDormAutofillChange,
+  droneTargetRoomId,
+  onDroneTargetChange,
 }: {
   row: RoomRow;
   layoutRoom: BaseBlueprint["rooms"][number] | undefined;
@@ -93,6 +101,10 @@ function CompactRoomCard({
   className?: string;
   style?: CSSProperties;
   onSlotClick?: (row: RoomRow, slotIndex: number) => void;
+  onClearRoom?: (row: RoomRow) => void;
+  onDormAutofillChange?: (row: RoomRow, enabled: boolean) => void;
+  droneTargetRoomId?: string | null;
+  onDroneTargetChange?: (row: RoomRow) => void;
 }) {
   const intl = useTranslations();
   const locale = useLocale();
@@ -120,12 +132,25 @@ function CompactRoomCard({
         maxLevel={layoutRoom ? maxRoomLevel(layoutRoom.kind) : row.level}
         variant="compact"
       />
+      {row.group === "dormitory" && onDormAutofillChange ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          aria-pressed={row.autofill}
+          aria-label={`${localizedRoomTitle(row.title, row.group, locale, gameCatalog)}${intl("components.label")}${intl("components.autoFill")}`}
+          className={`ml-1 h-7 border px-2 text-xs text-white hover:text-white ${row.autofill ? "border-[#FFD800]/70 bg-[#FFD800]/18" : "border-white/15 bg-[#3C3C3C]/55"}`}
+          onClick={() => onDormAutofillChange(row, !row.autofill)}
+        >
+          <Sparkles className="size-3.5" />{intl("components.autoFill")}
+        </Button>
+      ) : null}
         {isTrade ? (() => {
           const order = tradeOrderFor(layoutRoom!);
           const accent = compactTradeAccent(order);
           const label = order === "gold" ? intl("components_CompactScheduleView.lmdOrder") : order === "originium" ? intl("components_CompactScheduleView.originiumOrder") : order;
           return (
-            <div data-compact-product-badge style={{ marginRight: "2.25rem" }} className={`ml-auto flex h-7 items-center justify-center rounded border px-2 text-xs ${en ? "w-[118px]" : "w-[90px]"} ${accent}`}>
+            <div data-compact-product-badge style={{ marginRight: onDroneTargetChange ? "5.5rem" : onClearRoom ? "2.75rem" : "2.25rem" }} className={`ml-auto flex h-7 shrink-0 items-center justify-center whitespace-nowrap rounded border px-2 text-xs ${en ? "w-[118px]" : "w-[90px]"} ${accent}`}>
               {label}
             </div>
           );
@@ -134,7 +159,7 @@ function CompactRoomCard({
           const accent = compactFactoryAccent(recipe);
           const label = recipe === "all" ? intl("components_CompactScheduleView.auto") : recipe === "gold" ? intl("components_CompactScheduleView.pureGold") : recipe === "battle_record" ? intl("components_CompactScheduleView.battleRecord") : recipe === "originium" ? intl("components_CompactScheduleView.originiumShard") : recipe;
           return (
-            <div data-compact-product-badge style={{ marginRight: "2.25rem" }} className={`ml-auto flex h-7 items-center justify-center rounded border px-2 text-xs ${en ? "w-[118px]" : "w-[90px]"} ${accent}`}>
+            <div data-compact-product-badge style={{ marginRight: onDroneTargetChange ? "5.5rem" : onClearRoom ? "2.75rem" : "2.25rem" }} className={`ml-auto flex h-7 shrink-0 items-center justify-center whitespace-nowrap rounded border px-2 text-xs ${en ? "w-[118px]" : "w-[90px]"} ${accent}`}>
               {label}
             </div>
           );
@@ -166,7 +191,7 @@ function CompactRoomCard({
       )}
     </div>
   ) : null;
-  const emptyWorkstationState = !efficiency && (row.group === "trading" || row.group === "manufacture" || isPower) ? (
+  const emptyWorkstationState = !efficiency && (row.group === "trading" || row.group === "manufacture" || (isPower && onClearRoom)) ? (
     <div className="font-technical text-xs tracking-[0.01em] text-white/38">
       {intl("components_CompactScheduleView.awaitingSchedule")}
     </div>
@@ -222,7 +247,9 @@ function CompactRoomCard({
         style={{ ...rowStyle, ...style }}
       >
         {backgroundLayers}
-        {onIssue ? <CompactFeedbackButton row={row} disabled={feedbackDisabled} onIssue={onIssue} /> : null}
+        {onDroneTargetChange && (isTrade || isFactory) ? <CompactDroneButton row={row} selected={droneTargetRoomId === row.roomId} onChange={onDroneTargetChange} /> : null}
+        {onClearRoom ? <CompactClearButton row={row} onClear={onClearRoom} /> : null}
+        {onIssue ? <CompactFeedbackButton row={row} disabled={feedbackDisabled} offset={Boolean(onClearRoom)} onIssue={onIssue} /> : null}
         {details}
         {operatorArea}
       </div>
@@ -237,7 +264,9 @@ function CompactRoomCard({
       style={{ ...rowStyle, ...style }}
     >
       {backgroundLayers}
-      {onIssue ? <CompactFeedbackButton row={row} disabled={feedbackDisabled} onIssue={onIssue} /> : null}
+      {onDroneTargetChange && (isTrade || isFactory) ? <CompactDroneButton row={row} selected={droneTargetRoomId === row.roomId} onChange={onDroneTargetChange} /> : null}
+      {onClearRoom ? <CompactClearButton row={row} onClear={onClearRoom} /> : null}
+      {onIssue ? <CompactFeedbackButton row={row} disabled={feedbackDisabled} offset={Boolean(onClearRoom)} onIssue={onIssue} /> : null}
       {details}
       <div
         className={`relative z-10 ${
@@ -250,7 +279,7 @@ function CompactRoomCard({
   );
 }
 
-function CompactFeedbackButton({ row, disabled, onIssue }: { row: RoomRow; disabled: boolean; onIssue: (row: RoomRow) => void }) {
+function CompactDroneButton({ row, selected, onChange }: { row: RoomRow; selected: boolean; onChange: (row: RoomRow) => void }) {
   const intl = useTranslations();
   const locale = useLocale();
   const gameCatalog = useGameCatalog();
@@ -260,7 +289,66 @@ function CompactFeedbackButton({ row, disabled, onIssue }: { row: RoomRow; disab
     <Tooltip>
       <TooltipTrigger
         render={
+          <span className="absolute right-12 top-2 z-20">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-pressed={selected}
+              aria-label={intl("components_CompactScheduleView.droneAcceleration", { roomTitle })}
+              className={`h-7 border px-2 text-xs text-white hover:text-white ${selected ? "border-[#FFD800]/70 bg-[#FFD800]/18" : "border-white/10 bg-[#3C3C3C]/55 hover:bg-[#4B4B4B]"}`}
+              onClick={() => onChange(row)}
+            >
+              <Zap className="size-3.5" aria-hidden="true" />
+              <span className="sm:hidden">{intl("components_CompactScheduleView.drones")}</span>
+            </Button>
+          </span>
+        }
+      />
+      <TooltipContent side="left">{selected ? intl("components_CompactScheduleView.disableDroneAcceleration") : intl("components_CompactScheduleView.useDronesForShift")}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+function CompactClearButton({ row, onClear }: { row: RoomRow; onClear: (row: RoomRow) => void }) {
+  const intl = useTranslations();
+  const locale = useLocale();
+  const gameCatalog = useGameCatalog();
+  const roomTitle = localizedRoomTitle(row.title, row.group, locale, gameCatalog);
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
           <span className="absolute right-2 top-2 z-20">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 border border-white/10 bg-[#3C3C3C]/55 px-2 text-xs text-white/70 hover:bg-[#4B4B4B] hover:text-white"
+              aria-label={intl("components_CompactScheduleView.clearRoom", { roomTitle })}
+              onClick={() => onClear(row)}
+            >
+              <Trash2 className="size-3.5" /><span className="sm:hidden">{intl("components_CompactScheduleView.clear")}</span>
+            </Button>
+          </span>
+        }
+      />
+      <TooltipContent side="left">{intl("components_CompactScheduleView.clearThisFacility")}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+function CompactFeedbackButton({ row, disabled, offset, onIssue }: { row: RoomRow; disabled: boolean; offset: boolean; onIssue: (row: RoomRow) => void }) {
+  const intl = useTranslations();
+  const locale = useLocale();
+  const gameCatalog = useGameCatalog();
+
+  const roomTitle = localizedRoomTitle(row.title, row.group, locale, gameCatalog);
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <span className={`absolute top-2 z-20 ${offset ? "right-24" : "right-2"}`}>
             <Button
               type="button"
               variant="ghost"
@@ -282,7 +370,7 @@ function CompactFeedbackButton({ row, disabled, onIssue }: { row: RoomRow; disab
 
 export function CompactScheduleView(props: CompactScheduleViewProps) {
   const intl = useTranslations();
-  const { rows, layout, eliteByOperator, levelByOperator, shiftDirection, onIssue, feedbackDisabled = false, onSlotClick } = props;
+  const { rows, layout, eliteByOperator, levelByOperator, shiftDirection, onIssue, feedbackDisabled = false, onSlotClick, onClearRoom, onDormAutofillChange, droneTargetRoomId, onDroneTargetChange } = props;
 
   if (rows.length === 0) {
     return (
@@ -329,6 +417,10 @@ export function CompactScheduleView(props: CompactScheduleViewProps) {
         onIssue={onIssue}
         feedbackDisabled={feedbackDisabled}
         onSlotClick={onSlotClick}
+        onClearRoom={onClearRoom}
+        onDormAutofillChange={onDormAutofillChange}
+        droneTargetRoomId={droneTargetRoomId}
+        onDroneTargetChange={onDroneTargetChange}
         horizontal={COMPACT_AUXILIARY_GROUPS.has(row.group)}
         className="min-w-0"
         style={widthPercent !== undefined ? { flexBasis: `${widthPercent}%` } : { flex: 1 }}
