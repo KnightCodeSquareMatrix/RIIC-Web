@@ -5,6 +5,7 @@ import {
   appDeploymentEnvironment,
   areRequestRateLimitsEnabled,
   isDebugToolsFeatureEnabled,
+  isManualScheduleEnabled,
   isSklandFeatureEnabled,
 } from "./deployment.ts";
 
@@ -80,4 +81,26 @@ test("local development remains compatible by default", () => {
     SKLAND_FEATURE_ENABLED: undefined,
     NODE_ENV: "development",
   }), true);
+});
+
+test("manual scheduling is hidden only from production deployments", () => {
+  assert.equal(isManualScheduleEnabled({
+    APP_DEPLOYMENT_ENV: "production",
+    NODE_ENV: "production",
+  }), false);
+  assert.equal(isManualScheduleEnabled({
+    APP_DEPLOYMENT_ENV: "development",
+    NODE_ENV: "production",
+  }), true);
+  assert.equal(isManualScheduleEnabled({
+    APP_DEPLOYMENT_ENV: undefined,
+    NODE_ENV: "development",
+  }), true);
+});
+
+test("an unlabelled production build keeps manual scheduling hidden", () => {
+  assert.equal(isManualScheduleEnabled({
+    APP_DEPLOYMENT_ENV: undefined,
+    NODE_ENV: "production",
+  }), false);
 });

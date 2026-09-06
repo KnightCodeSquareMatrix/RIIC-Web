@@ -1,4 +1,5 @@
 "use client";
+import { useTranslations } from "next-intl";
 
 /**
  * Adapted from Interior's OTP Input component.
@@ -170,7 +171,7 @@ export function OtpInput({
   errorMessage = "",
   successMessage = "",
   hint = "",
-  label = "邮箱验证码",
+  label,
   disabled = false,
   autoFocus = false,
   className = "",
@@ -189,7 +190,10 @@ export function OtpInput({
   className?: string;
   ref?: Ref<OtpInputHandle>;
 }) {
+  const intl = useTranslations();
   const reduced = useReducedMotion();
+
+  const resolvedLabel = label ?? (intl("components_interior_otp_input.emailVerificationCode"));
   const statusId = useId();
   const { chars, focusedIndex, focusAt, clear, getCellProps } = useOtpInput(length, disabled, onChange, onComplete);
   const error = status === "error";
@@ -203,7 +207,7 @@ export function OtpInput({
     <div className={`flex min-w-0 flex-col ${className}`}>
       <motion.div
         role="group"
-        aria-label={label}
+        aria-label={resolvedLabel}
         className="flex justify-center gap-1.5 sm:gap-2"
         initial={false}
         variants={{ idle: { x: 0 }, wrong: { x: [0, -5, 4, -3, 0] } }}
@@ -216,7 +220,7 @@ export function OtpInput({
             <div key={index} className={`relative size-11 shrink min-[420px]:size-12 ${index === 3 ? "ml-1.5 sm:ml-3" : ""}`}>
               <input
                 {...getCellProps(index)}
-                aria-label={`${label}第 ${index + 1} 位，共 ${length} 位`}
+                aria-label={intl("components_interior_otp_input.digitOf", { resolvedLabel: resolvedLabel, value2: index + 1, length: length })}
                 aria-invalid={error || undefined}
                 aria-describedby={message ? statusId : undefined}
                 className={`font-number size-11 rounded-lg border-2 text-center text-base text-transparent caret-transparent outline-none transition-[background-color,border-color,box-shadow] duration-150 min-[420px]:size-12 focus-visible:ring-3 focus-visible:ring-ring/30 disabled:opacity-50 ${

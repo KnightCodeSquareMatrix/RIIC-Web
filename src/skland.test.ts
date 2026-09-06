@@ -21,6 +21,9 @@ const maa: MaaJson = { title: "test", plans: [
 
 test("compareShifts builds unique room-level adjustments and merges fatigue", () => {
   const first = compareShifts(maa, infrastructure)[0];
+  assert.equal(first.score, 25);
+  assert.deepEqual(first.matched, ["阿米娅"]);
+  assert.deepEqual(first.misplaced, ["推进之王"]);
   assert.equal(first.adjustments.length, 3);
   assert.deepEqual(first.adjustments.find((item) => item.operator === "推进之王"), { operator: "推进之王", currentRoomKey: "manufacture:0", targetRoomKey: "trading:0", issues: ["misplaced", "tired"] });
   assert.deepEqual(first.adjustments.find((item) => item.operator === "德克萨斯")?.issues, ["missing"]);
@@ -40,6 +43,88 @@ test("compareShifts reports a fully matching shift with no adjustments", () => {
   const second = compareShifts(maa, { ...infrastructure, tiredOperators: [] })[1];
   assert.equal(second.score, 100);
   assert.deepEqual(second.adjustments, []);
+});
+
+test("compareShifts treats rooms of the same facility type as matches", () => {
+  const comparison = compareShifts(
+    {
+      title: "same facility type",
+      plans: [{
+        name: "first shift",
+        rooms: {
+          trading: [
+            { operators: [] },
+            { operators: ["Texas"] },
+          ],
+        },
+      }],
+    },
+    {
+      storeTs: null,
+      layoutLabel: "243",
+      layoutSuggestion: null,
+      layoutWarning: null,
+      tiredOperators: [],
+      rooms: [{
+        key: "trading:0",
+        group: "trading",
+        index: 0,
+        level: 3,
+        operators: [{ id: "texas", name: "Texas", morale: 20 }],
+        product: "gold",
+      }],
+    },
+  )[0];
+
+  assert.equal(comparison.score, 100);
+  assert.deepEqual(comparison.matched, ["Texas"]);
+  assert.deepEqual(comparison.misplaced, []);
+  assert.deepEqual(comparison.adjustments, []);
+  assert.equal(countShiftPlacementAdjustments(comparison), 0);
+});
+
+test("compareShifts keeps fatigue warnings for same-facility matches", () => {
+  const comparison = compareShifts(
+    {
+      title: "same facility type with fatigue",
+      plans: [{
+        name: "first shift",
+        rooms: {
+          trading: [
+            { operators: [] },
+            { operators: ["Texas"] },
+          ],
+        },
+      }],
+    },
+    {
+      storeTs: null,
+      layoutLabel: "243",
+      layoutSuggestion: null,
+      layoutWarning: null,
+      tiredOperators: ["Texas"],
+      rooms: [{
+        key: "trading:0",
+        group: "trading",
+        index: 0,
+        level: 3,
+        operators: [{ id: "texas", name: "Texas", morale: 0 }],
+        product: "gold",
+      }],
+    },
+  )[0];
+
+  assert.equal(comparison.score, 100);
+  assert.deepEqual(comparison.matched, ["Texas"]);
+  assert.deepEqual(comparison.misplaced, []);
+  assert.deepEqual(comparison.tiredScheduled, ["Texas"]);
+  assert.deepEqual(comparison.adjustments, [{
+    operator: "Texas",
+    currentRoomKey: "trading:0",
+    targetRoomKey: "trading:1",
+    issues: ["tired"],
+  }]);
+  assert.equal(countShiftPlacementAdjustments(comparison), 0);
 });
 
 test("compareShifts excludes dormitories before calculating the match rate", () => {

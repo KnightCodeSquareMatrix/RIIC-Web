@@ -236,11 +236,12 @@ export function refreshSklandStatus(): Promise<SklandStatusData> {
   return requestData(sklandApiPath("/status/refresh"), { method: "POST" });
 }
 
-export function pollSklandQr(scanId: string): Promise<SklandQrStatusData> {
+export function pollSklandQr(scanId: string, signal?: AbortSignal): Promise<SklandQrStatusData> {
   return requestData(sklandApiPath("/auth/qr/status"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ scanId }),
+    signal,
   });
 }
 

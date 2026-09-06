@@ -25,6 +25,7 @@ import {
   type SklandSessionPayload,
 } from "./session";
 import {
+  findOwnedScan,
   findReusableScan,
   hasScanStartCapacity,
   scanActorKey,
@@ -47,6 +48,7 @@ type PendingScan = {
   createdAt: number;
   lastPollAt: number;
   policyConsent: SklandPolicyConsent;
+  completed?: CompletedSklandAuthentication;
 };
 
 type RateEntry = { timestamps: number[] };
@@ -376,34 +378,55 @@ async function createScan(
   }
 }
 
-export async function pollScan(scanId: string): Promise<{
+function throwIfAborted(signal?: AbortSignal): void {
+  signal?.throwIfAborted();
+}
+
+function completedScanResult(completed: CompletedSklandAuthentication): {
+  response: SklandQrStatusResponse;
+  session: SklandSessionPayload;
+} {
+  return {
+    response: {
+      success: true,
+      status: "authenticated",
+      scheduleSnapshot: completed.snapshot,
+      statusSnapshot: completed.statusSnapshot,
+    },
+    session: completed.session,
+  };
+}
+
+export function consumeScan(scanId: string, websiteUserId: string): void {
+  if (findOwnedScan(pendingScans, scanId, websiteUserId)) pendingScans.delete(scanId);
+}
+
+export async function pollScan(scanId: string, websiteUserId: string, signal?: AbortSignal): Promise<{
   response: SklandQrStatusResponse;
   session?: SklandSessionPayload;
 }> {
   cleanupScans();
-  const pending = pendingScans.get(scanId);
+  throwIfAborted(signal);
+  const pending = findOwnedScan(pendingScans, scanId, websiteUserId);
   if (!pending) return { response: { success: false, status: "expired", error: "二维码已失效，请刷新后重试。", code: "AUTH_EXPIRED" } };
+  if (pending.completed) return completedScanResult(pending.completed);
   const now = Date.now();
   if (now - pending.lastPollAt < 1_000) return { response: { success: true, status: "waiting" } };
   pending.lastPollAt = now;
   try {
     const status = await pending.client.collections.hypergryph.getScanStatus(scanId);
+    throwIfAborted(signal);
     if (!status.scanCode) return { response: { success: true, status: scanDisplayStatus(status.scanStatus ?? "") } };
 
     const oauthToken = await pending.client.collections.hypergryph.getOAuthTokenByScanCode(status.scanCode);
+    throwIfAborted(signal);
     assertUpstreamCapacity();
     const completed = await completeOAuthLogin(pending.client, oauthToken, pending.policyConsent);
-    pendingScans.delete(scanId);
-    return {
-      response: {
-        success: true,
-        status: "authenticated",
-        scheduleSnapshot: completed.snapshot,
-        statusSnapshot: completed.statusSnapshot,
-      },
-      session: completed.session,
-    };
+    throwIfAborted(signal);
+    pending.completed = completed;
+    return completedScanResult(completed);
   } catch (error) {
+    if (signal?.aborted) throw signal.reason;
     const status = scanStatusFromError(error);
     if (status) {
       if (status === "expired") pendingScans.delete(scanId);

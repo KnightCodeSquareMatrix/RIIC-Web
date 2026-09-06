@@ -1,4 +1,5 @@
 "use client";
+import { useTranslations, useLocale } from "next-intl";
 
 import type { CSSProperties } from "react";
 import { FileWarning } from "lucide-react";
@@ -34,17 +35,20 @@ import {
 import type { RoomRow } from "@/schedule";
 import type { BaseBlueprint, MaaPlan } from "@/types";
 import type { ShiftDirection } from "@/motion";
-import { demoRoomTitle, useLanguageDemo } from "@/language-demo";
+import { localizedRoomTitle } from "@/i18n/game-data";
+import { useGameCatalog } from "@/i18n/game-data-client";
 
 export interface CompactScheduleViewProps {
   rows: RoomRow[];
   layout: BaseBlueprint;
-  currentMoraleByOperator?: ReadonlyMap<string, number>;
+  eliteByOperator?: ReadonlyMap<string, number>;
+  levelByOperator?: ReadonlyMap<string, number>;
   activeShift: number;
   activePlan?: MaaPlan;
   shiftDirection: ShiftDirection;
-  onIssue: (row: RoomRow) => void;
+  onIssue?: (row: RoomRow) => void;
   feedbackDisabled?: boolean;
+  onSlotClick?: (row: RoomRow, slotIndex: number) => void;
 }
 
 /** 布局宽度百分比，自己改数值 */
@@ -65,28 +69,34 @@ function CompactRoomCard({
   visual,
   efficiency,
   slots,
-  currentMoraleByOperator,
+  eliteByOperator,
+  levelByOperator,
   shiftDirection,
   onIssue,
   feedbackDisabled = false,
   horizontal,
   className = "",
   style,
+  onSlotClick,
 }: {
   row: RoomRow;
   layoutRoom: BaseBlueprint["rooms"][number] | undefined;
   visual: ReturnType<typeof roomVisualFor>;
   efficiency: ReturnType<typeof presentRoomEfficiency>;
   slots: { slot: RoomRow["operatorSlots"][number] | undefined; positionLabel?: string }[];
-  currentMoraleByOperator?: ReadonlyMap<string, number>;
+  eliteByOperator?: ReadonlyMap<string, number>;
+  levelByOperator?: ReadonlyMap<string, number>;
   shiftDirection: ShiftDirection;
-  onIssue: (row: RoomRow) => void;
+  onIssue?: (row: RoomRow) => void;
   feedbackDisabled?: boolean;
   horizontal: boolean;
   className?: string;
   style?: CSSProperties;
+  onSlotClick?: (row: RoomRow, slotIndex: number) => void;
 }) {
-  const { locale } = useLanguageDemo();
+  const intl = useTranslations();
+  const locale = useLocale();
+  const gameCatalog = useGameCatalog();
   const en = locale === "en";
   const efficiencyLabel = (label?: string) => en && label ? ({ "纯技能": "Skill", "技能效率": "Skill efficiency", "跨设施": "Cross-facility", "综合加成": "Combined bonus", "仓储上限": "Capacity", "订单机制": "Order mechanic", "总充能": "Total charge" }[label] ?? label) : label;
   const isTrade = layoutRoom?.kind === "trade_post";
@@ -104,7 +114,7 @@ function CompactRoomCard({
   const header = (
     <div className={COMPACT_HEADER_CLASS}>
       <span className="infra-room-accent h-5 w-1 shrink-0 bg-[var(--room-accent)]" aria-hidden="true" />
-      <span className={`${COMPACT_ROOM_TITLE_CLASS} font-number`}>{demoRoomTitle(row.title, row.group, locale)}</span>
+      <span className={`${COMPACT_ROOM_TITLE_CLASS} font-number`}>{localizedRoomTitle(row.title, row.group, locale, gameCatalog)}</span>
       <LevelDiamonds
         level={row.level}
         maxLevel={layoutRoom ? maxRoomLevel(layoutRoom.kind) : row.level}
@@ -113,7 +123,7 @@ function CompactRoomCard({
         {isTrade ? (() => {
           const order = tradeOrderFor(layoutRoom!);
           const accent = compactTradeAccent(order);
-          const label = order === "gold" ? en ? "LMD Order" : "龙门商法" : order === "originium" ? en ? "Originium Order" : "开采协力" : order;
+          const label = order === "gold" ? intl("components_CompactScheduleView.lmdOrder") : order === "originium" ? intl("components_CompactScheduleView.originiumOrder") : order;
           return (
             <div data-compact-product-badge style={{ marginRight: "2.25rem" }} className={`ml-auto flex h-7 items-center justify-center rounded border px-2 text-xs ${en ? "w-[118px]" : "w-[90px]"} ${accent}`}>
               {label}
@@ -122,7 +132,7 @@ function CompactRoomCard({
         })() : isFactory ? (() => {
           const recipe = factoryRecipeFor(layoutRoom!);
           const accent = compactFactoryAccent(recipe);
-          const label = recipe === "all" ? en ? "Auto" : "自动选择" : recipe === "gold" ? en ? "Pure Gold" : "贵金属" : recipe === "battle_record" ? en ? "Battle Record" : "作战记录" : recipe === "originium" ? en ? "Originium Shard" : "源石碎片" : recipe;
+          const label = recipe === "all" ? intl("components_CompactScheduleView.auto") : recipe === "gold" ? intl("components_CompactScheduleView.pureGold") : recipe === "battle_record" ? intl("components_CompactScheduleView.battleRecord") : recipe === "originium" ? intl("components_CompactScheduleView.originiumShard") : recipe;
           return (
             <div data-compact-product-badge style={{ marginRight: "2.25rem" }} className={`ml-auto flex h-7 items-center justify-center rounded border px-2 text-xs ${en ? "w-[118px]" : "w-[90px]"} ${accent}`}>
               {label}
@@ -158,7 +168,7 @@ function CompactRoomCard({
   ) : null;
   const emptyWorkstationState = !efficiency && (row.group === "trading" || row.group === "manufacture") ? (
     <div className="font-technical text-xs tracking-[0.01em] text-white/38">
-      {en ? "Awaiting schedule" : "等待排班"}
+      {intl("components_CompactScheduleView.awaitingSchedule")}
     </div>
   ) : null;
   const efficiencyContent = efficiencyBlock ?? emptyWorkstationState;
@@ -167,13 +177,15 @@ function CompactRoomCard({
     <OperatorSlot
       key={`${row.key}-${index}`}
       slot={slot}
-      currentMorale={slot ? currentMoraleByOperator?.get(slot.name) : undefined}
+      elite={slot ? eliteByOperator?.get(slot.name) : undefined}
+      operatorLevel={slot ? levelByOperator?.get(slot.name) : undefined}
       autofill={row.group === "dormitory" && row.autofill}
       compactView
       showSkillTooltip
       shiftDirection={shiftDirection}
       transitionDelay={Math.min(index, 2) * 0.02}
       positionLabel={positionLabel}
+      onActivate={onSlotClick ? () => onSlotClick(row, index) : undefined}
     />
   ));
 
@@ -210,7 +222,7 @@ function CompactRoomCard({
         style={{ ...rowStyle, ...style }}
       >
         {backgroundLayers}
-        <CompactFeedbackButton row={row} disabled={feedbackDisabled} onIssue={onIssue} />
+        {onIssue ? <CompactFeedbackButton row={row} disabled={feedbackDisabled} onIssue={onIssue} /> : null}
         {details}
         {operatorArea}
       </div>
@@ -225,7 +237,7 @@ function CompactRoomCard({
       style={{ ...rowStyle, ...style }}
     >
       {backgroundLayers}
-      <CompactFeedbackButton row={row} disabled={feedbackDisabled} onIssue={onIssue} />
+      {onIssue ? <CompactFeedbackButton row={row} disabled={feedbackDisabled} onIssue={onIssue} /> : null}
       {details}
       <div
         className={`relative z-10 ${
@@ -239,9 +251,11 @@ function CompactRoomCard({
 }
 
 function CompactFeedbackButton({ row, disabled, onIssue }: { row: RoomRow; disabled: boolean; onIssue: (row: RoomRow) => void }) {
-  const { locale } = useLanguageDemo();
-  const en = locale === "en";
-  const roomTitle = demoRoomTitle(row.title, row.group, locale);
+  const intl = useTranslations();
+  const locale = useLocale();
+  const gameCatalog = useGameCatalog();
+
+  const roomTitle = localizedRoomTitle(row.title, row.group, locale, gameCatalog);
   return (
     <Tooltip>
       <TooltipTrigger
@@ -252,7 +266,7 @@ function CompactFeedbackButton({ row, disabled, onIssue }: { row: RoomRow; disab
               variant="ghost"
               size="icon-sm"
               className="border border-white/10 bg-[#3C3C3C]/55 text-white/70 hover:bg-[#4B4B4B] hover:text-white disabled:cursor-not-allowed disabled:opacity-45"
-              aria-label={en ? `${roomTitle} report schedule issue` : `${roomTitle} 反馈排班问题`}
+              aria-label={intl("components_CompactScheduleView.reportScheduleIssue", { roomTitle: roomTitle })}
               disabled={disabled}
               onClick={() => onIssue(row)}
             >
@@ -261,19 +275,19 @@ function CompactFeedbackButton({ row, disabled, onIssue }: { row: RoomRow; disab
           </span>
         }
       />
-      <TooltipContent side="left">{disabled ? (en ? "Sample BOX data cannot submit feedback" : "全精二 Box 为体验数据，不能提交反馈") : (en ? "Report schedule issue" : "反馈排班问题")}</TooltipContent>
+      <TooltipContent side="left">{disabled ? (intl("components_CompactScheduleView.sampleBoxDataCannotSubmitFeedback")) : (intl("components_CompactScheduleView.reportScheduleIssue2"))}</TooltipContent>
     </Tooltip>
   );
 }
 
 export function CompactScheduleView(props: CompactScheduleViewProps) {
-  const { rows, layout, currentMoraleByOperator, shiftDirection, onIssue, feedbackDisabled = false } = props;
-  const { locale } = useLanguageDemo();
+  const intl = useTranslations();
+  const { rows, layout, eliteByOperator, levelByOperator, shiftDirection, onIssue, feedbackDisabled = false, onSlotClick } = props;
 
   if (rows.length === 0) {
     return (
       <div className="flex min-h-[420px] items-center justify-center border-y border-dashed border-border/70 py-6 text-center text-sm text-muted-foreground">
-        {locale === "en" ? "No layout rooms to display." : "没有可展示的布局房间。"}
+        {intl("components_CompactScheduleView.noLayoutRoomsToDisplay")}
       </div>
     );
   }
@@ -300,7 +314,7 @@ export function CompactScheduleView(props: CompactScheduleViewProps) {
     const slotCount = roomSlotCountFor(row.group);
     const slots = row.positionSlots
       ? row.positionSlots.map(({ slot, positionLabel }) => ({ slot, positionLabel }))
-      : Array.from({ length: slotCount }, (_, i) => ({ slot: row.operatorSlots[i] }));
+      : Array.from({ length: slotCount }, (_, i) => ({ slot: row.slotAssignments ? row.slotAssignments[i] : row.operatorSlots[i] }));
     return (
       <CompactRoomCard
         key={row.key}
@@ -309,10 +323,12 @@ export function CompactScheduleView(props: CompactScheduleViewProps) {
         visual={visual}
         efficiency={efficiency}
         slots={slots}
-        currentMoraleByOperator={currentMoraleByOperator}
+        eliteByOperator={eliteByOperator}
+        levelByOperator={levelByOperator}
         shiftDirection={shiftDirection}
         onIssue={onIssue}
         feedbackDisabled={feedbackDisabled}
+        onSlotClick={onSlotClick}
         horizontal={COMPACT_AUXILIARY_GROUPS.has(row.group)}
         className="min-w-0"
         style={widthPercent !== undefined ? { flexBasis: `${widthPercent}%` } : { flex: 1 }}

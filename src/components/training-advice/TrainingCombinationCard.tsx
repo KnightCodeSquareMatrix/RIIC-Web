@@ -1,14 +1,21 @@
 "use client";
+import { useTranslations, useLocale } from "next-intl";
 
-import { useState } from "react";
+import { lazy, Suspense } from "react";
 
+import { loadClientFeature } from "@/client-lazy-loader";
 import { InfraTechnicalCard } from "@/components/InfraTechnicalCard";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { operatorProfessionPresentationForCode } from "@/operator-presentation";
-import { operatorPortraitFor, operatorProfessionFor } from "@/operatorPortraits";
+import {
+  operatorBuildingSkillList,
+  operatorPortraitFor,
+  operatorProfessionFor,
+  operatorProfessionLabelEnglishForCode,
+  operatorProfessionPresentation,
+} from "@/operatorPortraits";
 import { cn } from "@/lib/utils";
 import type { TrainingCombination, TrainingAdviceMember } from "@/types";
-import { demoOperatorName, useLanguageDemo } from "@/language-demo";
+import { localizedOperatorName } from "@/i18n/game-data";
+import { useGameCatalog } from "@/i18n/game-data-client";
 
 import {
   trainingCombinationStateLabel,
@@ -21,6 +28,10 @@ import {
   trainingScaleLabel,
 } from "./presentation";
 
+const OperatorSkillTooltip = lazy(() => loadClientFeature("operatorSkillTooltip").then((module) => ({
+  default: module.OperatorSkillTooltip,
+})));
+
 const STATE_CLASSES: Record<string, string> = {
   complete: "border-emerald-400/60 bg-emerald-400/10 text-emerald-300",
   needs_training: "border-amber-400/60 bg-amber-400/10 text-amber-300",
@@ -30,8 +41,9 @@ const STATE_CLASSES: Record<string, string> = {
 };
 
 function MemberRow({ member }: { member: TrainingAdviceMember }) {
-  const [professionOpen, setProfessionOpen] = useState(false);
-  const { locale } = useLanguageDemo();
+  const intl = useTranslations();
+  const locale = useLocale();
+  const gameCatalog = useGameCatalog();
   const en = locale === "en";
   const isReady = member.progress === "ready";
   const isMissing = member.progress === "missing";
@@ -49,23 +61,39 @@ function MemberRow({ member }: { member: TrainingAdviceMember }) {
   const statusText = member.progress === "needs_review"
     ? trainingMemberProgressLabel(member.progress, en)
     : isReady
-    ? (en ? "Ready" : "就绪")
+    ? (intl("components_training_advice_TrainingCombinationCard.ready"))
     : isMissing
-      ? (en ? "Missing" : "缺失")
+      ? (intl("components_training_advice_TrainingCombinationCard.missing"))
       : member.target
-        ? `${en ? "Needs " : "需"}${trainingLevelText(member.target, en)}`
+        ? `${intl("components_training_advice_TrainingCombinationCard.needs")}${trainingLevelText(member.target, en)}`
         : trainingMemberProgressLabel(member.progress, en);
   const roleClass =
     member.role === "core"
       ? "border-white/20 bg-white/10 text-white"
       : "border-white/10 bg-white/5 text-white/65";
-  const profession = operatorProfessionPresentationForCode(operatorProfessionFor(member.operator));
+  const hasSkills = operatorBuildingSkillList(member.operator).length > 0;
+  const professionCode = operatorProfessionFor(member.operator);
+  const profession = operatorProfessionPresentation(member.operator);
+  const professionLabel = en
+    ? operatorProfessionLabelEnglishForCode(professionCode)
+    : profession?.label;
+  const professionHeader = profession && professionLabel ? (
+    <span
+      className="flex w-full items-center gap-2 border-b border-background/15 pb-2"
+      data-operator-profession
+    >
+      <img src={profession.icon} alt="" aria-hidden="true" className="size-7 shrink-0 object-contain" />
+      <span className="text-xs font-semibold text-background/85">
+        {professionLabel}
+      </span>
+    </span>
+  ) : null;
   const content = (
     <>
       <span className="size-8 shrink-0 overflow-hidden border border-white/10 bg-[#272A2B]">
         <img src={operatorPortraitFor(member.operator)} alt="" className="size-full object-cover" loading="lazy" />
       </span>
-      <span className="shrink truncate text-sm text-white/85">{demoOperatorName(member.operator, locale)}</span>
+      <span className="shrink truncate text-sm text-white/85">{localizedOperatorName(member.operator, locale, gameCatalog)}</span>
       <span className={cn("shrink-0 border px-1.5 py-0.5 text-xs", roleClass)}>
         {trainingMemberRoleLabel(member.role, en)}
       </span>
@@ -75,32 +103,22 @@ function MemberRow({ member }: { member: TrainingAdviceMember }) {
     </>
   );
   const cardClassName = cn("flex min-w-0 items-center gap-1.5 border px-2 py-1", cardClass);
-  if (!profession) return <div className={cardClassName}>{content}</div>;
+  const cardButton = (
+    <button type="button" className={cardClassName}>
+      {content}
+    </button>
+  );
+  if (!hasSkills) return <div className={cardClassName}>{content}</div>;
   return (
-    <Tooltip open={professionOpen} onOpenChange={setProfessionOpen}>
-      <TooltipTrigger
-        closeOnClick={false}
-        render={(
-        <button
-          type="button"
-          className={cardClassName}
-          aria-label={`${member.operator}，职业：${profession.label}`}
-          onClick={() => setProfessionOpen((value) => !value)}
-        >
-          {content}
-        </button>
-      )}
-      />
-      <TooltipContent side="top" align="center" className="gap-2 whitespace-nowrap px-3.5 py-2">
-        <img src={profession.icon} alt="" aria-hidden="true" className="size-6 shrink-0 object-contain" />
-        <span className="text-sm font-semibold">{profession.label}</span>
-      </TooltipContent>
-    </Tooltip>
+    <Suspense fallback={cardButton}>
+      <OperatorSkillTooltip name={member.operator} trigger={cardButton} header={professionHeader} />
+    </Suspense>
   );
 }
 
 export function TrainingCombinationCard({ combination }: { combination: TrainingCombination }) {
-  const { locale } = useLanguageDemo();
+  const intl = useTranslations();
+  const locale = useLocale();
   const en = locale === "en";
   return (
     <InfraTechnicalCard
@@ -128,11 +146,11 @@ export function TrainingCombinationCard({ combination }: { combination: Training
           <span>{trainingScaleLabel(combination.scale, en)}</span>
           <span>{trainingProductLabel(combination.product, en)}</span>
           {combination.consumer_products?.length ? (
-            <span>{en ? "Covers: " : "覆盖："}{combination.consumer_products.map((product) => trainingProductLabel(product, en)).join(en ? ", " : "、")}</span>
+            <span>{intl("components_training_advice_TrainingCombinationCard.covers")}{combination.consumer_products.map((product) => trainingProductLabel(product, en)).join(intl("components_training_advice_TrainingCombinationCard.label"))}</span>
           ) : null}
           {combination.facilities?.length ? (
             <span>
-              {en ? "Facilities: " : "工作房间："}{combination.facilities.map((facility) => trainingFacilityLabel(facility, en)).join(en ? ", " : "、")}
+              {intl("components_training_advice_TrainingCombinationCard.facilities")}{combination.facilities.map((facility) => trainingFacilityLabel(facility, en)).join(intl("components_training_advice_TrainingCombinationCard.label"))}
             </span>
           ) : null}
         </div>

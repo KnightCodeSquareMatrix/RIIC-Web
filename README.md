@@ -14,13 +14,18 @@
 - 匿名用户可直接载入全角色样例并生成可浏览的示例排班，无需登录
 - 配置 243、153、333、252、342 等基建布局与设施等级
 - 生成三班排班，查看房间效率、换班调整和预计日产出
+- `development` 发布通道可从侧栏新建 1–12 班的手动排班，分别设置每班时长、逐房安排当前 Box 中的干员、按班选择菲亚梅塔换心情目标、处理重复进驻并导出 MAA JSON；已有求解结果也可通过“手动修改排班”转为草稿继续编辑。`production` 的 `/manual` 暂时显示“手动排班待开发”，不会加载编辑器
+- 登录网站账号后，在同一布局下假设干员持有或精英化变化，对比完整试算排班且不覆盖当前 Box 或班表
 - 按练度与基建收益查看练卡建议
-- 查询基建技能与适用设施
+- 从当前 Box 中选择已拥有的精二干员，生成单技能专精的省操作／极速方案和换教官时间表；样例 Box 可匿名使用，个人 Box 需登录网站账号
+- 查询基建技能与适用设施，并按干员星级、职业、工作房间和技能标签组合筛选
 - 对比当前进驻与排班计划，并导出 MAA JSON
 - 可选的森空岛扫码或凭证导入授权、状态同步、网站账号和云端工作区
 - 管理员可在独立页面管理用户、按设施审阅和批量删除反馈，并查看失败求解所需的复现资料
 
 森空岛、网站账号和云同步都由部署者显式配置。未启用这些能力时，样例数据、布局配置、技能查询和已接入求解器的排班流程仍可独立使用。
+
+在 `development` 发布通道中，样例 Box 可以匿名用于手动排班；个人 Box 的手动排班需要先登录网站账号。手动排班草稿只保存在当前浏览器中，清除本地数据时会一并删除。两个发布通道的 `/manual` 文档响应都使用 `no-store`，避免浏览器复用其他版本或通道的页面。
 
 ## 排班队列与提交限制
 
@@ -37,6 +42,7 @@
 
 - Next.js 16 App Router
 - React 19 与 TypeScript
+- next-intl 与 ICU 消息格式
 - Tailwind CSS 4、shadcn/ui、Base UI
 - Better Auth、Drizzle ORM 与 PostgreSQL
 - `skland-kit`，仅用于可选的森空岛扫码或凭证导入授权
@@ -126,6 +132,7 @@ cp .env.example .env.local
 | `src/server` | API 契约、求解器客户端、认证与持久化边界 |
 | `src/layouts` | 基建布局预设 |
 | `drizzle` | 数据库 schema 迁移 |
+| `messages` | next-intl 中英文界面消息、结构化展示记录与翻译维护说明 |
 | `public` | 静态图片与第三方素材快照 |
 | `scripts` | 构建、公开测试、资源同步和仓库卫生检查 |
 
@@ -133,10 +140,10 @@ cp .env.example .env.local
 
 ## 文档索引
 
-- 使用与数据：[键盘和移动端操作](./docs/keyboard-shortcuts.md)、[预计日产物计算逻辑](./docs/计算逻辑.md)、[森空岛数据能力矩阵](./docs/SKLAND_DATA_CAPABILITIES.md)
+- 使用与数据：[键盘和移动端操作](./docs/keyboard-shortcuts.md)、[专精规划](./docs/MASTERY_PLANNER.md)、[预计日产物计算逻辑](./docs/计算逻辑.md)、[森空岛数据能力矩阵](./docs/SKLAND_DATA_CAPABILITIES.md)
 - 求解器与协议：[Frontend Serve Guide](./docs/FRONTEND_SERVE_GUIDE.md)、[`final_efficiency` 接入口径](./docs/TRADE_PRODUCTION_CONTRACT_GAP.md)、[本地求解器目录](./bin/README.md)
 - 部署与仓库管理：[PostgreSQL 部署模板](./deploy/postgres/README.md)、[systemd runtime settings](./deploy/SYSTEMD.md)、[公开仓库管理清单](./docs/REPOSITORY_ADMIN_CHECKLIST.md)
-- 贡献与发布：[参与贡献](./CONTRIBUTING.md)、[公开仓库迁移说明](./MIGRATION.md)、[Changelog](./CHANGELOG.md)、[Contributors](./CONTRIBUTORS.md)
+- 贡献与发布：[参与贡献](./CONTRIBUTING.md)、[网站翻译维护](./messages/README.md)、[公开仓库迁移说明](./MIGRATION.md)、[Changelog](./CHANGELOG.md)、[Contributors](./CONTRIBUTORS.md)
 - 安全与权利：[安全政策](./SECURITY.md)、[第三方素材来源](./THIRD_PARTY_ASSETS.md)、[许可证](./LICENSE.md)
 - 代码代理说明：[AGENTS.md](./AGENTS.md)、[CLAUDE.md](./CLAUDE.md)
 
@@ -148,14 +155,14 @@ npm run audit:security
 npm run build
 ```
 
-`npm run check` 会执行公开仓库卫生检查、生成资源校验、ESLint、单元测试和 API 契约测试。浏览器测试可分别通过 `npm run test:e2e`、`npm run test:e2e:production-profile` 和 `npm run test:e2e:webkit` 运行。`npm run build` 会准备不含求解器的 `.next/standalone` 运行目录，并补齐 `public` 与 `.next/static`；生产启动脚本会使用这一目录。涉及数据库 schema 的改动，应先设置 `DATABASE_MIGRATION_URL`，再执行：
+`npm run check` 会执行公开仓库卫生检查、生成资源与国际化校验、ESLint、单元测试、API 契约测试和排班对比测试；翻译目录也可单独运行 `npm run check:i18n`。浏览器测试可分别通过 `npm run test:e2e`、`npm run test:e2e:production-profile` 和 `npm run test:e2e:webkit` 运行。`npm run build` 会准备不含求解器的 `.next/standalone` 运行目录，并补齐 `public` 与 `.next/static`；生产启动脚本会使用这一目录。涉及数据库 schema 的改动，应先设置 `DATABASE_MIGRATION_URL`，再执行：
 
 ```bash
 npm run db:generate
 npm run db:migrate
 ```
 
-所有普通功能和修复 PR 都应提交到 `develop`；`main` 只接收维护者从同仓库 `release/**` 分支发起的发布 PR。特批的直接发布还必须带有维护者设置的 `direct-main-release` 标签，并通过其余全部质量门禁。完整流程见 [CONTRIBUTING.md](./CONTRIBUTING.md)。不要把本地环境文件、求解器二进制、运行记录、用户数据或浏览器自动化产物加入提交。
+所有普通功能、修复和人工资源 PR 都应提交到 `develop`；`main` 只接收维护者从同仓库 `release/**` 分支发起的发布 PR。仓库内置的 arkntools 受管资源同步是严格白名单化的例外：隔离生成和本地质量门禁通过后，它会从固定 release 分支创建带 `direct-main-release` 标签的审计 PR，自动合并、触发完整 main 发布，并将同一批资源对齐回 `develop`。其他特批直接发布仍必须由维护者设置该标签并通过其余全部质量门禁。完整流程见 [CONTRIBUTING.md](./CONTRIBUTING.md)。不要把本地环境文件、求解器二进制、运行记录、用户数据或浏览器自动化产物加入提交。
 
 ## 第三方素材
 

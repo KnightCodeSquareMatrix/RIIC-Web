@@ -20,8 +20,11 @@ export interface FinalizedSklandAuthentication {
 export async function finalizeSklandAuthentication(
   websiteUserId: string,
   result: CompletedSklandAuthentication,
+  signal?: AbortSignal,
 ): Promise<FinalizedSklandAuthentication> {
+  signal?.throwIfAborted();
   const previous = await readSklandAccountStore(websiteUserId);
+  signal?.throwIfAborted();
   let upserted;
   try {
     upserted = upsertSklandAccount(previous.accounts, result.session, result.snapshot.roles);
@@ -30,7 +33,9 @@ export async function finalizeSklandAuthentication(
     throw error;
   }
 
+  signal?.throwIfAborted();
   const bindingSummary = await bindSklandAccount(websiteUserId, result.session.userId);
+  signal?.throwIfAborted();
   const next: SklandAccountStore = {
     ...previous,
     accounts: upserted.accounts,

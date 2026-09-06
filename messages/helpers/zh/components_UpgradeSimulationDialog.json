@@ -1,0 +1,17 @@
+{
+  "noChange": "持平",
+  "changeAtLeastOneOperatorSOwnershipOrElite": "请至少修改一名干员的持有或精英化状态后再重新计算。",
+  "recalculationWithTheUpdatedProgressionFailedPleaseTryAgain": "使用修改后的练度重新计算失败，请稍后重试。",
+  "modifyProgressionAndRecalculate": "修改练度并重算",
+  "modifyProgressionAndRecalculate2": "修改练度并重新计算",
+  "updateOwnershipOrEliteStageAndRecalculateWithThe": "修改干员持有或精英化状态，并按当前布局重新计算；成功后会更新当前 BOX，同时保留原方案用于对比。",
+  "operatorsForThisRecalculation": "本次重新计算使用的干员",
+  "changeAtLeastOneOperatorTheseUpdatesAreSaved": "请至少修改一名干员；这里的修改会保存到排班设置使用的同一个 BOX。",
+  "solvingAgain": "正在重新求解…",
+  "saveProgressionAndRecalculate": "保存练度并重新计算",
+  "recalculatingWithTheUpdatedProgressionAndSameLayout": "正在使用修改后的练度按同一布局重新计算…",
+  "progressionRecalculationResult": "练度重新计算结果",
+  "recalculationComplete": "重新计算完成",
+  "theBoxIsUpdatedSwitchBetweenTheOriginalAnd": "当前 BOX 已更新，可在主界面切换原方案与练度调整后方案。",
+  "vsCurrent": "较当前 {change}"
+}

@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import createNextIntlPlugin from "next-intl/plugin";
 
 import buildTracingPolicy from "./build-tracing-policy.json";
 import { isSklandFeatureEnabled } from "./src/deployment";
@@ -11,9 +12,12 @@ const outputFileTracingExcludes = [
 const uncachedDocumentRoutes = [
   "/",
   "/about",
+  "/changelog",
   "/account",
   "/account/reset-password",
   "/admin/users",
+  "/manual",
+  "/mastery",
   "/privacy",
   "/skills",
   "/skland",
@@ -24,6 +28,7 @@ const uncachedDocumentRoutes = [
 const documentCacheControl = "private, no-cache, no-store, max-age=0, must-revalidate";
 
 const nextConfig: NextConfig = {
+  distDir: process.env.RIIC_NEXT_DIST_DIR || ".next",
   allowedDevOrigins: ["127.0.0.1"],
   compress: true,
   deploymentId: process.env.APP_BUILD_ID,
@@ -45,7 +50,7 @@ const nextConfig: NextConfig = {
         has: [{ type: "query", key: "v", value: "\\d+-[0-9a-f]{12}" }],
         headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
       },
-      // 以下目录按一年强缓存处理。profession / building-room-emblems / ui 是静态资源，
+      // 以下目录按一年强缓存处理。profession / building-room-emblems / ui / elite 是静态资源，
       // 不随 sync-arkntools-assets 工作流更新；若手工更新这些图片，必须改文件名或加版本参数，
       // 否则浏览器最长一年内会继续使用旧图。
       // building-skills 实际随工作流更新，当前暂不加版本号，更新源后同样存在最长一年的旧图窗口。
@@ -63,6 +68,10 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/images/ui/:asset",
+        headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
+      },
+      {
+        source: "/images/elite/:asset",
         headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
       },
     ];
@@ -95,4 +104,4 @@ const nextConfig: NextConfig = {
   typedRoutes: false,
 };
 
-export default nextConfig;
+export default createNextIntlPlugin()(nextConfig);

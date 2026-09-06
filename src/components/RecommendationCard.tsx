@@ -1,4 +1,7 @@
 "use client";
+import { localize as localize_components_RecommendationCard } from "../i18n/helpers/components_RecommendationCard.ts";
+import { useTranslations, useLocale } from "next-intl";
+import { messageRecord } from "@/i18n/translate";
 
 import { motion, useReducedMotion } from "motion/react";
 
@@ -8,35 +11,48 @@ import { cn } from "@/lib/utils";
 import { MOTION_DURATION, MOTION_EASE_OUT } from "@/motion";
 import { operatorPortraitFor, operatorProfessionFor } from "@/operatorPortraits";
 import type { OperBoxEntry, UserProfileAction } from "@/types";
+import { legacyTrainingTarget, trainingAdviceSkillSummary } from "@/components/training-advice/skill-selection";
+import { localizedOperatorName } from "@/i18n/game-data";
+import { useGameCatalog } from "@/i18n/game-data-client";
 
-const DOMAIN_LABELS: Record<string, string> = { trade: "贸易站", trading: "贸易站", manufacture: "制造站", manu: "制造站", power: "发电站", control: "控制中枢", general: "综合" };
 const DOMAIN_GROUPS: Record<string, string> = { trade: "trading", trading: "trading", manufacture: "manufacture", manu: "manufacture", power: "power", control: "control", general: "training" };
-const KIND_LABELS: Record<string, string> = { promote: "培养优先级", promote_tier_up: "练度提升", acquire: "获取建议", replace: "阵容调整", advice: "培养建议" };
 
-export function recommendationDomainLabel(value: string) { return DOMAIN_LABELS[value.toLowerCase()] ?? "综合"; }
-export function recommendationKindLabel(value: string) { return KIND_LABELS[value.toLowerCase()] ?? "培养建议"; }
+export function recommendationDomainLabel(value: string, en = false) { return (messageRecord(en, "components_RecommendationCard_labels"))[value.toLowerCase()] ?? (localize_components_RecommendationCard.text(en, "general")); }
+export function recommendationKindLabel(value: string, en = false) { return (messageRecord(en, "components_RecommendationCard_labels2"))[value.toLowerCase()] ?? (localize_components_RecommendationCard.text(en, "trainingAdvice")); }
 
-function currentState(action: UserProfileAction, entry?: OperBoxEntry) {
+function currentState(action: UserProfileAction, entry: OperBoxEntry | undefined, en: boolean) {
   const currentElite = action.current_elite ?? entry?.elite;
-  if (entry && !entry.own) return "未拥有";
-  if (action.tier_up_requirement && currentElite !== undefined) return `当前 精${currentElite} → 目标 ${action.tier_up_requirement}`;
-  if (entry?.own && entry.elite >= 2) return "已精二";
-  if (entry?.own) return "待培养";
-  return "练度未知";
+  if (entry && !entry.own) return localize_components_RecommendationCard.text(en, "notOwned");
+  if (action.tier_up_requirement && currentElite !== undefined) return localize_components_RecommendationCard.text(en, "elite", { currentElite: currentElite, tier_up_requirement: action.tier_up_requirement });
+  if (entry?.own && entry.elite >= 2) return localize_components_RecommendationCard.text(en, "elite2");
+  if (entry?.own) return localize_components_RecommendationCard.text(en, "trainingNeeded");
+  return localize_components_RecommendationCard.text(en, "progressUnknown");
 }
 
 export function RecommendationCard({ action, entry, variant = "full", index = 0, showSkillTooltip = true }: { action: UserProfileAction; entry?: OperBoxEntry; variant?: "full" | "compact"; index?: number; showSkillTooltip?: boolean }) {
+  const intl = useTranslations();
   const reduceMotion = useReducedMotion();
-  const priority = action.priority || "未分级";
+  const locale = useLocale();
+  const gameCatalog = useGameCatalog();
+  const en = locale === "en";
+  const priority = action.priority || (intl("components_RecommendationCard.unranked"));
+  const operatorName = localizedOperatorName(action.operator, locale, gameCatalog) || (intl("components_RecommendationCard.unknownOperator"));
   const isHighPriority = /高|urgent|critical|p0|p1/i.test(priority);
+  const skillSummary = trainingAdviceSkillSummary(
+    action.operator,
+    action.current_elite !== undefined || entry
+      ? { elite: action.current_elite ?? entry?.elite, level: entry?.level }
+      : undefined,
+    legacyTrainingTarget(action.tier_up_requirement),
+  );
   const content = variant === "compact" ? (
     <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-border/60 py-3 last:border-0" data-recommendation-card="compact">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-          <strong className="text-foreground">{action.operator || "未知干员"}</strong><span aria-hidden="true">·</span><span>{recommendationDomainLabel(action.domain_id)}</span><span aria-hidden="true">·</span><span>{recommendationKindLabel(action.kind)}</span>
+          <strong className="text-foreground">{operatorName}</strong><span aria-hidden="true">·</span><span>{recommendationDomainLabel(action.domain_id, en)}</span><span aria-hidden="true">·</span><span>{recommendationKindLabel(action.kind, en)}</span>
         </div>
-        <p className="mt-1 text-sm leading-5 text-foreground/80">{action.message || "暂无具体说明"}</p>
-        <span className="mt-1 block text-[11px] text-muted-foreground">{currentState(action, entry)}</span>
+        <p className="mt-1 text-sm leading-5 text-foreground/80">{action.message || (intl("components_RecommendationCard.noDetailsAvailable"))}</p>
+        <span className="mt-1 block text-[11px] text-muted-foreground">{currentState(action, entry, en)}</span>
       </div>
       <span className={cn("h-fit border px-2 py-1 text-[11px] font-semibold", isHighPriority ? "border-amber-500/60 bg-amber-50 text-amber-800" : "border-border bg-muted/60 text-muted-foreground")}>{priority}</span>
     </div>
@@ -46,16 +62,21 @@ export function RecommendationCard({ action, entry, variant = "full", index = 0,
         <OperatorSlot
           slot={{
             name: action.operator || "未知干员",
-            label: action.operator || "未知干员",
+            label: operatorName,
             portrait: operatorPortraitFor(action.operator, entry?.id),
             profession: operatorProfessionFor(action.operator),
           }}
           portraitSize={80}
           showSkillTooltip={showSkillTooltip}
+          skillTooltipFocusable={showSkillTooltip && skillSummary.skills.length > 0}
+          skillTooltipHighlightIds={skillSummary.highlightedSkillIds}
+          skillTooltipContextLabel={skillSummary.highlightedSkillIds.length
+            ? (intl("components_RecommendationCard.operatorBaseSkillsTargetHighlighted"))
+            : (intl("components_RecommendationCard.operatorBaseSkills"))}
         />
         <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-          <div className="min-w-0"><div className="flex flex-wrap items-center gap-2 text-xs text-white/55"><span className="font-medium text-[var(--room-accent)]">{recommendationDomainLabel(action.domain_id)}</span><span aria-hidden="true">·</span><span>{recommendationKindLabel(action.kind)}</span></div><p className="font-number mt-2 max-w-[72ch] text-pretty text-sm leading-6 text-white/82">{action.message || "暂无具体说明"}</p></div>
-          <div className="flex flex-wrap items-center gap-2 sm:flex-col sm:items-end"><span className={cn("font-number border px-2.5 py-1 text-xs font-semibold", isHighPriority ? "border-[var(--room-accent)] bg-[var(--room-accent)] text-[#202223]" : "border-[var(--room-accent)]/45 bg-black/18 text-[var(--room-accent)]")}>{priority}</span><span className="border border-white/15 bg-white/7 px-2.5 py-1 text-xs text-white/70">{currentState(action, entry)}</span></div>
+          <div className="min-w-0"><div className="flex flex-wrap items-center gap-2 text-xs text-white/55"><span className="font-medium text-[var(--room-accent)]">{recommendationDomainLabel(action.domain_id, en)}</span><span aria-hidden="true">·</span><span>{recommendationKindLabel(action.kind, en)}</span></div><p className="font-number mt-2 max-w-[72ch] text-pretty text-sm leading-6 text-white/82">{action.message || (intl("components_RecommendationCard.noDetailsAvailable"))}</p></div>
+          <div className="flex flex-wrap items-center gap-2 sm:flex-col sm:items-end"><span className={cn("font-number border px-2.5 py-1 text-xs font-semibold", isHighPriority ? "border-[var(--room-accent)] bg-[var(--room-accent)] text-[#202223]" : "border-[var(--room-accent)]/45 bg-black/18 text-[var(--room-accent)]")}>{priority}</span><span className="border border-white/15 bg-white/7 px-2.5 py-1 text-xs text-white/70">{currentState(action, entry, en)}</span></div>
         </div>
       </div>
     </InfraTechnicalCard>

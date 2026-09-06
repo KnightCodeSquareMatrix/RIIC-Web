@@ -1,4 +1,7 @@
 "use client";
+import { localize as localize_components_pages_SklandStatus } from "../../i18n/helpers/components_pages_SklandStatus.ts";
+import { useTranslations, useLocale } from "next-intl";
+import { messageRecord } from "@/i18n/translate";
 
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import {
@@ -62,12 +65,14 @@ import {
   StatusCenterPage,
 } from "@/components/pages/StatusCenterShell";
 import { cn } from "@/lib/utils";
-import { useLanguageDemo } from "@/language-demo";
+import { localizedOperatorName } from "@/i18n/game-data";
+import { useGameCatalog } from "@/i18n/game-data-client";
 import { operatorPortraitFor, operatorProfessionFor } from "@/operatorPortraits";
 import { roomGridTone } from "@/schedule-view-presentation";
 import { SklandLoginPanel } from "@/skland-components";
 import {
   deriveSklandBuildingMetrics,
+  sklandTradingOrderRewardLabel,
   type SklandStatusMetric,
 } from "@/skland-status-metrics";
 import type {
@@ -83,27 +88,6 @@ import type {
 } from "@/types";
 import { deriveSklandBindingState } from "@/skland-binding-state";
 
-const PRODUCT_LABELS: Record<string, string> = {
-  gold: "贵金属 / 赤金",
-  battle_record: "作战记录",
-  originium: "源石碎片",
-  unknown: "其他配方",
-};
-
-const PROFESSION_LABELS: Record<string, string> = {
-  PIONEER: "先锋",
-  WARRIOR: "近卫",
-  TANK: "重装",
-  SNIPER: "狙击",
-  CASTER: "术师",
-  MEDIC: "医疗",
-  SUPPORT: "辅助",
-  SPECIAL: "特种",
-  TOKEN: "召唤物",
-  TRAP: "装置",
-  UNKNOWN: "未分类",
-};
-
 const ROOM_LABELS: Record<SklandInfrastructureRoom["group"], string> = {
   control: "控制中枢",
   trading: "贸易站",
@@ -114,6 +98,18 @@ const ROOM_LABELS: Record<SklandInfrastructureRoom["group"], string> = {
   hire: "人力办公室",
   processing: "加工站",
   training: "训练室",
+};
+
+const ROOM_LABELS_ENGLISH: Record<SklandInfrastructureRoom["group"], string> = {
+  control: "Control Center",
+  trading: "Trading Post",
+  manufacture: "Factory",
+  power: "Power Plant",
+  dormitory: "Dormitory",
+  meeting: "Reception Room",
+  hire: "HR Office",
+  processing: "Workshop",
+  training: "Training Room",
 };
 
 const INITIAL_LIST_LIMIT = 60;
@@ -138,6 +134,9 @@ function OperatorFilterCombobox({
   options: FilterOption[];
   onValueChange: (value: string) => void;
 }) {
+  const intl = useTranslations();
+  const locale = useLocale();
+  const en = locale === "en";
   const [query, setQuery] = useState<string | null>(null);
   const selected = options.find((option) => option.value === value) ?? null;
 
@@ -160,9 +159,9 @@ function OperatorFilterCombobox({
         }
       }}
     >
-      <ComboboxInput className="font-number h-11 w-full" aria-label={label} placeholder={`搜索${label}`} />
+      <ComboboxInput className="font-number h-11 w-full" aria-label={label} placeholder={intl("components_pages_SklandStatus.search", { value1: (en) ? (label.toLocaleLowerCase("en-US")) : "", label: (en) ? "" : (label) })} />
       <ComboboxContent>
-        <ComboboxEmpty>没有匹配的{label}</ComboboxEmpty>
+        <ComboboxEmpty>{intl("components_pages_SklandStatus.noMatching", { value1: (en) ? (label.toLocaleLowerCase("en-US")) : "", label: (en) ? "" : (label) })}</ComboboxEmpty>
         <ComboboxList>
           {(option) => (
             <ComboboxItem key={option.value} value={option} className="font-number">
@@ -200,8 +199,8 @@ export interface SklandStatusProps {
   onCopyUid: (uid: string) => void;
 }
 
-function credentialExpiryLabel(timestamp: number): string {
-  return new Intl.DateTimeFormat("zh-CN", {
+function credentialExpiryLabel(timestamp: number, en = false): string {
+  return new Intl.DateTimeFormat((en ? "en-US" : "zh-CN"), {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(timestamp));
@@ -216,65 +215,67 @@ function SklandDataControls({
   busy: boolean;
   onDeleteAllData: () => Promise<void>;
 }) {
+  const intl = useTranslations();
+
   return (
     <section className="grid gap-3 pt-2" data-skland-data-controls>
       <div>
-        <h2 className="text-sm font-semibold">数据管理</h2>
+        <h2 className="text-sm font-semibold">{intl("components_pages_SklandStatus.dataManagement")}</h2>
         <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground" data-ui-number-font>
-          登录凭证将在 {credentialExpiryLabel(account.credentialExpiresAt)} 固定过期。按住下方按钮会永久删除全部森空岛账号、凭证、同步数据及可关联记录；MAA 导入与手动布局会保留。
+          {intl.rich("components_pages_SklandStatus.rich1", { value1: () => (credentialExpiryLabel(account.credentialExpiresAt, true)), value2: () => (credentialExpiryLabel(account.credentialExpiresAt)) })}
         </p>
       </div>
       <HoldToConfirm
         disabled={busy}
-        confirmLabel="正在删除"
+        confirmLabel={intl("components_pages_SklandStatus.deleting")}
         className="w-full sm:w-fit"
         onConfirm={() => void onDeleteAllData().catch(() => {
           // 上层统一展示删除失败信息；此处只避免产生未处理的 Promise rejection。
         })}
       >
-        <Trash2 className="size-4" />按住删除全部森空岛数据
+        <Trash2 className="size-4" />{intl("components_pages_SklandStatus.holdToDeleteAllSklandData")}
       </HoldToConfirm>
     </section>
   );
 }
 
-function formatDateTime(timestamp: number | null): string {
+function formatDateTime(timestamp: number | null, en = false): string {
   const date = timestamp !== null && timestamp > 0 && Number.isFinite(timestamp)
     ? new Date(timestamp * 1000)
     : null;
-  if (!date || Number.isNaN(date.getTime())) return "未提供";
-  return new Intl.DateTimeFormat("zh-CN", {
+  if (!date || Number.isNaN(date.getTime())) return localize_components_pages_SklandStatus.text(en, "notProvided");
+  return new Intl.DateTimeFormat((en ? "en-US" : "zh-CN"), {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(date);
 }
 
-function formatCompactDateTime(timestamp: number | null): string {
+function formatCompactDateTime(timestamp: number | null, en = false): string {
   const date = timestamp !== null && timestamp > 0 && Number.isFinite(timestamp)
     ? new Date(timestamp * 1000)
     : null;
-  if (!date || Number.isNaN(date.getTime())) return "未提供";
+  if (!date || Number.isNaN(date.getTime())) return localize_components_pages_SklandStatus.text(en, "notProvided");
   const time = [date.getHours(), date.getMinutes()]
     .map((value) => String(value).padStart(2, "0"))
     .join(":");
   return `${date.getFullYear()}.${date.getMonth() + 1}.${date.getDate()} ${time}`;
 }
 
-function formatDate(timestamp: number | null): string {
+function formatDate(timestamp: number | null, en = false): string {
   const date = timestamp !== null && timestamp > 0 && Number.isFinite(timestamp)
     ? new Date(timestamp * 1000)
     : null;
-  if (!date || Number.isNaN(date.getTime())) return "未提供";
-  return new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium" }).format(date);
+  if (!date || Number.isNaN(date.getTime())) return localize_components_pages_SklandStatus.text(en, "notProvided");
+  return new Intl.DateTimeFormat((en ? "en-US" : "zh-CN"), { dateStyle: "medium" }).format(date);
 }
 
-function formatDuration(seconds: number): string {
+function formatDuration(seconds: number, en = false): string {
   const safeSeconds = Number.isFinite(seconds) ? Math.max(0, seconds) : 0;
-  if (!safeSeconds) return "已完成";
+  if (!safeSeconds) return localize_components_pages_SklandStatus.text(en, "complete");
   const hours = Math.floor(safeSeconds / 3600);
   const minutes = Math.floor((safeSeconds % 3600) / 60);
-  if (hours > 0) return `${hours} 小时 ${minutes} 分`;
-  return `${Math.max(1, minutes)} 分钟`;
+  if (hours > 0) return localize_components_pages_SklandStatus.text(en, "hM", { hours: hours, minutes: minutes });
+  return localize_components_pages_SklandStatus.text(en, "m", { value1: Math.max(1, minutes) });
 }
 
 function useMinuteTimestamp(baseTimestamp: number): number {
@@ -292,8 +293,8 @@ function maskedUid(uid: string): string {
   return `${uid.slice(0, 3)}••••${uid.slice(-3)}`;
 }
 
-function roomLabel(room: SklandInfrastructureRoom): string {
-  const base = ROOM_LABELS[room.group];
+function roomLabel(room: SklandInfrastructureRoom, en = false): string {
+  const base = en ? ROOM_LABELS_ENGLISH[room.group] : ROOM_LABELS[room.group];
   return ["control", "meeting", "hire", "processing", "training"].includes(room.group) ? base : `${base} ${room.index + 1}`;
 }
 
@@ -301,8 +302,8 @@ function roomMaxLevel(room: SklandInfrastructureRoom): number {
   return room.group === "control" || room.group === "dormitory" ? 5 : 3;
 }
 
-function professionLabel(profession: string): string {
-  return PROFESSION_LABELS[profession] ?? profession;
+function professionLabel(profession: string, en = false): string {
+  return (messageRecord(en, "components_pages_SklandStatus_labels"))[profession] ?? profession;
 }
 
 function ProgressMeter({
@@ -358,6 +359,10 @@ function OverviewTab({
   onContinueSetup: () => void;
   onOpenCalculator: () => void;
 }) {
+  const intl = useTranslations();
+  const locale = useLocale();
+  const gameCatalog = useGameCatalog();
+  const en = locale === "en";
   const { infrastructure, player, progress } = snapshot;
   const fullProductionRooms = infrastructure.rooms.filter(
     (room) =>
@@ -375,30 +380,30 @@ function OverviewTab({
     && infrastructure.labor.value >= infrastructure.labor.maxValue;
   const attentionItems = [
     infrastructure.tiredOperators.length
-      ? `${infrastructure.tiredOperators.length} 名干员心情过低`
+      ? intl("components_pages_SklandStatus.operatorsHaveLowMorale", { length: infrastructure.tiredOperators.length })
       : null,
     fullProductionRooms.length
-      ? `${fullProductionRooms.length} 个生产设施库存已满`
+      ? intl("components_pages_SklandStatus.productionFacilitiesAreFull", { length: fullProductionRooms.length })
       : null,
-    readyRecruit.length ? `${readyRecruit.length} 个公开招募槽位已完成` : null,
-    dronesFull ? "无人机已达到上限" : null,
+    readyRecruit.length ? intl("components_pages_SklandStatus.recruitmentSlotsAreComplete", { length: readyRecruit.length }) : null,
+    dronesFull ? (intl("components_pages_SklandStatus.dronesHaveReachedCapacity")) : null,
   ].filter((item): item is string => Boolean(item));
 
   return (
     <div className="grid gap-3">
       <section
         className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3"
-        aria-label="现在值得处理"
+        aria-label={intl("components_pages_SklandStatus.needsAttention")}
       >
         <OverviewTechnicalCard group="manufacture" className="min-h-40 xl:col-span-2">
           <div className="flex h-full flex-col">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <OverviewTechnicalHeading icon={<AlertTriangle className="size-4" aria-hidden="true" />}>
-                  现在值得处理
+                  {intl("components_pages_SklandStatus.needsAttention")}
                 </OverviewTechnicalHeading>
                 <p className="font-number mt-3 text-lg font-semibold">
-                  {attentionItems.length ? `${attentionItems.length} 项状态提醒` : "基建运转平稳"}
+                  {attentionItems.length ? (intl("components_pages_SklandStatus.statusAlerts", { length: attentionItems.length })) : (intl("components_pages_SklandStatus.infrastructureRunningSmoothly"))}
                 </p>
               </div>
               <strong className="text-4xl font-semibold tabular-nums text-[var(--room-accent)]">
@@ -416,7 +421,7 @@ function OverviewTab({
                 </div>
               )) : (
                 <p className="border-t border-white/10 pt-2 text-sm text-white/58 sm:col-span-2">
-                  当前没有库存、公招、训练或心情方面的明确提醒。
+                  {intl("components_pages_SklandStatus.noInventoryRecruitmentTrainingOrMoraleAlerts")}
                 </p>
               )}
             </div>
@@ -427,14 +432,14 @@ function OverviewTab({
           <div className="grid h-full content-between gap-4">
             <div>
               <OverviewTechnicalHeading icon={<Database className="size-4" aria-hidden="true" />}>
-                已同步到排班助手
+                {intl("components_pages_SklandStatus.syncedToScheduler")}
               </OverviewTechnicalHeading>
               <p className="mt-4 text-2xl font-semibold tabular-nums text-[var(--room-accent)]">
                 {snapshot.operbox.length}
-                <span className="ml-1 text-sm font-normal text-white/60">名干员</span>
+                <span className="ml-1 text-sm font-normal text-white/60">{intl("components_pages_SklandStatus.operators")}</span>
               </p>
               <p className="font-number mt-1 text-xs text-white/58">
-                当前布局 · {infrastructure.layoutLabel ?? "未识别"}
+                {intl("components_pages_SklandStatus.currentLayout")} · {infrastructure.layoutLabel ?? (intl("components_pages_SklandStatus.unrecognized"))}
               </p>
             </div>
             <div className="flex flex-wrap justify-start gap-2">
@@ -444,7 +449,7 @@ function OverviewTab({
                 className="bg-white text-[#272a2b] hover:bg-white/90"
                 onClick={onOpenCalculator}
               >
-                前往生成排班
+                {intl("components_pages_SklandStatus.generateSchedule")}
               </Button>
               <Button
                 type="button"
@@ -453,18 +458,18 @@ function OverviewTab({
                 variant="outline"
                 onClick={onContinueSetup}
               >
-                继续配置布局
+                {intl("components_pages_SklandStatus.continueLayoutSetup")}
               </Button>
             </div>
           </div>
         </OverviewTechnicalCard>
       </section>
 
-      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3" aria-label="状态摘要">
+      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3" aria-label={intl("components_pages_SklandStatus.statusSummary")}>
         <OverviewTechnicalCard group="trading" className="min-h-36 md:col-span-2 xl:col-span-1">
           <div className="flex h-full flex-col">
             <OverviewTechnicalHeading icon={<HeartPulse className="size-4" aria-hidden="true" />}>
-              当前理智
+              {intl("components_pages_SklandStatus.currentSanity")}
             </OverviewTechnicalHeading>
             <div className="mt-5 flex items-end gap-1">
               <strong className="text-4xl font-semibold tabular-nums text-[var(--room-accent)]">
@@ -476,10 +481,10 @@ function OverviewTab({
             </div>
             <p className="font-number mt-auto pt-4 text-xs text-white/58">
               {!player.sanity
-                ? "森空岛暂未提供理智状态"
+                ? (intl("components_pages_SklandStatus.sklandDidNotProvideSanityStatus"))
                 : player.sanity.current >= player.sanity.max
-                  ? "理智已满"
-                  : `预计回满：${formatDateTime(player.sanity.completeRecoveryTime)}`}
+                  ? (intl("components_pages_SklandStatus.sanityIsFull"))
+                  : intl("components_pages_SklandStatus.fullRecovery", { value1: (en) ? (formatDateTime(player.sanity.completeRecoveryTime, true)) : "", value2: (en) ? "" : (formatDateTime(player.sanity.completeRecoveryTime)) })}
             </p>
           </div>
         </OverviewTechnicalCard>
@@ -487,7 +492,7 @@ function OverviewTab({
         <OverviewTechnicalCard group="power" className="min-h-36">
           <div className="flex h-full flex-col">
             <OverviewTechnicalHeading icon={<Zap className="size-4" aria-hidden="true" />}>
-              无人机
+              {intl("components_pages_SklandStatus.drones")}
             </OverviewTechnicalHeading>
             <p className="mt-5 text-3xl font-semibold tabular-nums text-[var(--room-accent)]">
               {infrastructure.labor.value}
@@ -497,8 +502,8 @@ function OverviewTab({
             </p>
             <p className="font-number mt-auto pt-4 text-xs text-white/58">
               {dronesFull
-                ? "无人机已达当前上限"
-                : `下次恢复约 ${formatDuration(infrastructure.labor.remainSecs)}`}
+                ? (intl("components_pages_SklandStatus.dronesAreAtCapacity"))
+                : intl("components_pages_SklandStatus.nextRecoveryInAbout", { value1: (en) ? (formatDuration(infrastructure.labor.remainSecs, true)) : "", value2: (en) ? "" : (formatDuration(infrastructure.labor.remainSecs)) })}
             </p>
           </div>
         </OverviewTechnicalCard>
@@ -506,16 +511,16 @@ function OverviewTab({
         <OverviewTechnicalCard group="manufacture" className="min-h-36">
           <div className="flex h-full flex-col">
             <OverviewTechnicalHeading icon={<Activity className="size-4" aria-hidden="true" />}>
-              日常与周常
+              {intl("components_pages_SklandStatus.dailyWeekly")}
             </OverviewTechnicalHeading>
             <div className="mt-5 grid gap-3">
               {progress.routine ? (
                 <>
-                  <ProgressMeter technical label="日常" {...progress.routine.daily} />
-                  <ProgressMeter technical label="周常" {...progress.routine.weekly} />
+                  <ProgressMeter technical label={intl("components_pages_SklandStatus.daily")} {...progress.routine.daily} />
+                  <ProgressMeter technical label={intl("components_pages_SklandStatus.weekly")} {...progress.routine.weekly} />
                 </>
               ) : (
-                <p className="text-xs text-white/58">森空岛暂未提供任务进度。</p>
+                <p className="text-xs text-white/58">{intl("components_pages_SklandStatus.sklandDidNotProvideMissionProgress")}</p>
               )}
             </div>
           </div>
@@ -524,31 +529,31 @@ function OverviewTab({
 
       <section
         className="grid gap-3 md:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)]"
-        aria-label="博士档案与收藏"
+        aria-label={intl("components_pages_SklandStatus.doctorProfileAndCollection")}
       >
         <OverviewTechnicalCard group="control" className="min-h-48">
           <OverviewTechnicalHeading icon={<UsersRound className="size-4" aria-hidden="true" />}>
-            博士档案
+            {intl("components_pages_SklandStatus.doctorProfile")}
           </OverviewTechnicalHeading>
           <p className="mt-3 text-base font-semibold text-white">{player.nickname}</p>
           <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-3 text-xs">
             <div className="border-t border-white/10 pt-2">
-              <dt className="text-white/50">注册时间</dt>
-              <dd className="font-number mt-1 font-medium text-white">{formatDate(player.registerTs)}</dd>
+              <dt className="text-white/50">{intl("components_pages_SklandStatus.registered")}</dt>
+              <dd className="font-number mt-1 font-medium text-white">{formatDate(player.registerTs, en)}</dd>
             </div>
             <div className="border-t border-white/10 pt-2">
-              <dt className="text-white/50">主线进度</dt>
+              <dt className="text-white/50">{intl("components_pages_SklandStatus.mainStory")}</dt>
               <dd className="font-number mt-1 font-medium text-[var(--room-accent)]">
-                {player.mainStageProgress ?? "未提供"}
+                {player.mainStageProgress ?? (intl("components_pages_SklandStatus.notProvided"))}
               </dd>
             </div>
             <div className="border-t border-white/10 pt-2">
-              <dt className="text-white/50">助理</dt>
-              <dd className="mt-1 font-medium text-white">{player.secretary?.name ?? "未提供"}</dd>
+              <dt className="text-white/50">{intl("components_pages_SklandStatus.assistant")}</dt>
+              <dd className="mt-1 font-medium text-white">{player.secretary?.name ? localizedOperatorName(player.secretary.name, locale, gameCatalog) : (intl("components_pages_SklandStatus.notProvided"))}</dd>
             </div>
             <div className="border-t border-white/10 pt-2">
-              <dt className="text-white/50">月卡到期</dt>
-              <dd className="font-number mt-1 font-medium text-white">{formatDate(player.subscriptionEnd)}</dd>
+              <dt className="text-white/50">{intl("components_pages_SklandStatus.monthlyCardExpires")}</dt>
+              <dd className="font-number mt-1 font-medium text-white">{formatDate(player.subscriptionEnd, en)}</dd>
             </div>
           </dl>
           {player.resume ? (
@@ -558,23 +563,23 @@ function OverviewTab({
 
         <OverviewTechnicalCard group="trading" className="min-h-48">
           <OverviewTechnicalHeading icon={<Boxes className="size-4" aria-hidden="true" />}>
-            收藏概况
+            {intl("components_pages_SklandStatus.collection")}
           </OverviewTechnicalHeading>
           <dl className="mt-5 grid grid-cols-3 divide-x divide-white/10 border-y border-white/10 py-3">
             <div className="px-3 first:pl-0">
-              <dt className="text-xs text-white/50">干员</dt>
+              <dt className="text-xs text-white/50">{intl("components_pages_SklandStatus.operators2")}</dt>
               <dd className="mt-1 text-2xl font-semibold tabular-nums text-[var(--room-accent)]">
                 {player.counts.operators ?? "—"}
               </dd>
             </div>
             <div className="px-3">
-              <dt className="text-xs text-white/50">皮肤</dt>
+              <dt className="text-xs text-white/50">{intl("components_pages_SklandStatus.outfits")}</dt>
               <dd className="mt-1 text-2xl font-semibold tabular-nums text-[var(--room-accent)]">
                 {player.counts.skins ?? "—"}
               </dd>
             </div>
             <div className="px-3">
-              <dt className="text-xs text-white/50">家具</dt>
+              <dt className="text-xs text-white/50">{intl("components_pages_SklandStatus.furniture")}</dt>
               <dd className="mt-1 text-2xl font-semibold tabular-nums text-[var(--room-accent)]">
                 {player.counts.furniture ?? "—"}
               </dd>
@@ -586,7 +591,7 @@ function OverviewTab({
       <section aria-labelledby="overview-recruit-title">
         <OverviewTechnicalCard group="hire" className="min-h-36">
           <OverviewTechnicalHeading icon={<PackageCheck className="size-4" aria-hidden="true" />}>
-            <span id="overview-recruit-title">公开招募</span>
+            <span id="overview-recruit-title">{intl("components_pages_SklandStatus.recruitment")}</span>
           </OverviewTechnicalHeading>
           {progress.recruit?.length ? (
             <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -594,28 +599,28 @@ function OverviewTab({
                 const finished = slot.state === "completed"
                   || (slot.state === "recruiting" && slot.finishTs > 0 && slot.finishTs <= infrastructure.currentTs);
                 const label = finished
-                  ? "已完成"
+                  ? (intl("components_pages_SklandStatus.complete"))
                   : slot.state === "locked"
-                    ? "未解锁"
+                    ? (intl("components_pages_SklandStatus.locked"))
                     : slot.state === "standby"
-                      ? "空闲"
-                      : "进行中";
+                      ? (intl("components_pages_SklandStatus.idle"))
+                      : (intl("components_pages_SklandStatus.inProgress"));
                 return (
                   <div key={slot.index} className="border-t border-white/12 bg-black/12 px-3 py-3 text-sm">
                     <div className="flex items-center justify-between gap-3">
-                      <strong className="font-number">槽位 {slot.index + 1}</strong>
+                      <strong className="font-number">{intl("components_pages_SklandStatus.slot")} {slot.index + 1}</strong>
                       <span className={finished ? "text-[var(--room-accent)]" : "text-white/58"}>
                         {label}
                       </span>
                     </div>
                     <p className="mt-2 whitespace-nowrap text-xs tabular-nums text-white/58">
-                      {slot.finishTs > 0 ? formatDateTime(slot.finishTs) : "暂无计时"}
+                      {slot.finishTs > 0 ? formatDateTime(slot.finishTs, en) : (intl("components_pages_SklandStatus.noTimer"))}
                     </p>
                   </div>
                 );
               })}
             </div>
-          ) : <p className="mt-5 text-sm text-white/58">森空岛暂未提供公招计时。</p>}
+          ) : <p className="mt-5 text-sm text-white/58">{intl("components_pages_SklandStatus.sklandDidNotProvideRecruitmentTimers")}</p>}
         </OverviewTechnicalCard>
       </section>
     </div>
@@ -623,6 +628,9 @@ function OverviewTab({
 }
 
 function RoomCard({ room }: { room: SklandInfrastructureRoom }) {
+  const intl = useTranslations();
+  const locale = useLocale();
+  const en = locale === "en";
   const productionRoom = room.group === "trading" || room.group === "manufacture" ? room : null;
   const isAuxiliaryRoom = ["meeting", "training", "hire", "processing"].includes(room.group);
   const hasRoomDetails = productionRoom !== null || room.group === "hire";
@@ -660,21 +668,21 @@ function RoomCard({ room }: { room: SklandInfrastructureRoom }) {
           <div className="flex min-w-0 items-center gap-2.5">
             <span className="infra-room-accent h-5 w-1 shrink-0 bg-[var(--room-accent)]" aria-hidden="true" />
             <h4 className="font-number truncate text-sm font-medium tracking-[-0.02em] text-white [text-shadow:0_2px_3px_rgba(0,0,0,0.75)]">
-              {roomLabel(room)}
+              {roomLabel(room, en)}
             </h4>
             <LevelDiamonds level={room.level} maxLevel={roomMaxLevel(room)} variant="compact" />
           </div>
           <div className="ml-auto flex shrink-0 items-center gap-2 text-xs text-white/64 max-sm:ml-3 max-sm:w-full max-sm:flex-wrap">
             {productionRoom ? (
               <strong className="infra-room-value text-xs font-semibold text-[var(--room-accent)]">
-                {PRODUCT_LABELS[productionRoom.product] ?? productionRoom.product}
+                {(messageRecord(en, "components_pages_SklandStatus_labels2"))[productionRoom.product] ?? productionRoom.product}
               </strong>
             ) : null}
-            {room.group === "manufacture" ? <span className="font-number">生产力 {Math.round(room.speed * 100)}%</span> : null}
-            {room.group === "dormitory" ? <span className="font-number">氛围 {room.comfort}</span> : null}
-            {room.group === "hire" ? <span className="font-number">可刷新 {room.refreshCount} 次</span> : null}
+            {room.group === "manufacture" ? <span className="font-number">{intl("components_pages_SklandStatus.productivity")} {Math.round(room.speed * 100)}%</span> : null}
+            {room.group === "dormitory" ? <span className="font-number">{intl("components_pages_SklandStatus.ambience")} {room.comfort}</span> : null}
+            {room.group === "hire" ? <span className="font-number">{intl("components_pages_SklandStatus.refreshes", { refreshCount: room.refreshCount })}</span> : null}
             {room.group === "training" ? (
-              <span className="font-number" aria-label={`实时进驻 ${room.occupancy.current} 人，共 ${room.occupancy.capacity} 个席位`}>
+              <span className="font-number" aria-label={intl("components_pages_SklandStatus.ofSlotsOccupied", { current: room.occupancy.current, capacity: room.occupancy.capacity })}>
                 {room.occupancy.current}/{room.occupancy.capacity}
               </span>
             ) : null}
@@ -685,8 +693,8 @@ function RoomCard({ room }: { room: SklandInfrastructureRoom }) {
             className="mt-1 flex min-h-7 items-center gap-2 text-xs text-white/58"
             data-skland-power-efficiency
           >
-            <span>效率</span>
-            <strong className="font-number font-semibold tabular-nums text-[var(--room-accent)]">基准 100%</strong>
+            <span>{intl("components_pages_SklandStatus.efficiency")}</span>
+            <strong className="font-number font-semibold tabular-nums text-[var(--room-accent)]">{intl("components_pages_SklandStatus.baseline")} 100%</strong>
           </div>
         ) : null}
       </div>
@@ -702,8 +710,8 @@ function RoomCard({ room }: { room: SklandInfrastructureRoom }) {
           }`}
         >
           {room.group === "training" ? ([
-            { position: "trainee" as const, positionLabel: "训练位" },
-            { position: "trainer" as const, positionLabel: "协助位" },
+            { position: "trainee" as const, positionLabel: intl("components_pages_SklandStatus.trainee") },
+            { position: "trainer" as const, positionLabel: intl("components_pages_SklandStatus.trainer") },
           ].map(({ position, positionLabel }) => {
             const operator = room.operators.find((candidate) => candidate.position === position);
             return (
@@ -725,7 +733,7 @@ function RoomCard({ room }: { room: SklandInfrastructureRoom }) {
               key={`${room.key}-${operator.id}`}
               slot={{
                 name: operator.name,
-                label: `${operator.name} · 已工作 ${formatDuration(operator.workTime)}`,
+                label: intl("components_pages_SklandStatus.working", { name: operator.name, value2: (en) ? (formatDuration(operator.workTime, true)) : "", value3: (en) ? "" : (formatDuration(operator.workTime)) }),
                 portrait: operatorPortraitFor(operator.name, operator.id),
                 profession: operatorProfessionFor(operator.name),
               }}
@@ -735,7 +743,7 @@ function RoomCard({ room }: { room: SklandInfrastructureRoom }) {
           )) : isAuxiliaryRoom ? Array.from(
             { length: room.group === "meeting" ? 2 : 1 },
             (_, index) => <OperatorSlot key={`${room.key}-empty-${index}`} slot={undefined} compactView />,
-          ) : <span className="py-2 text-sm text-white/48">当前没有进驻干员</span>}
+          ) : <span className="py-2 text-sm text-white/48">{intl("components_pages_SklandStatus.noOperatorsAssigned")}</span>}
         </div>
       </div>
 
@@ -745,47 +753,47 @@ function RoomCard({ room }: { room: SklandInfrastructureRoom }) {
           {productionRoom ? (
             <dl className="flex flex-wrap items-baseline gap-x-4 gap-y-1.5 xl:flex-nowrap">
               <div className="flex items-baseline gap-1 whitespace-nowrap">
-                <dt>库存</dt>
+                <dt>{intl("components_pages_SklandStatus.stock")}</dt>
                 <dd className="font-medium tabular-nums text-white">
                   {productionRoom.production.stock ?? "—"} / {productionRoom.production.capacity ?? "—"}
                 </dd>
               </div>
               <div className="flex items-baseline gap-1 whitespace-nowrap">
-                <dt>预计完成</dt>
+                <dt>{intl("components_pages_SklandStatus.estimatedCompletion")}</dt>
                 <dd
                   className="font-medium tabular-nums text-white"
                   data-infra-complete-time
                 >
-                  {formatCompactDateTime(productionRoom.production.completeWorkTime)}
+                  {formatCompactDateTime(productionRoom.production.completeWorkTime, en)}
                 </dd>
               </div>
               {productionRoom.production.completed !== null ? (
                 <div className="flex items-baseline gap-1 whitespace-nowrap">
-                  <dt>已完成</dt>
+                  <dt>{intl("components_pages_SklandStatus.completed")}</dt>
                   <dd className="font-medium tabular-nums text-white">{productionRoom.production.completed}</dd>
                 </div>
               ) : null}
               {productionRoom.production.remaining !== null ? (
                 <div className="flex items-baseline gap-1 whitespace-nowrap">
-                  <dt>剩余队列</dt>
+                  <dt>{intl("components_pages_SklandStatus.queueRemaining")}</dt>
                   <dd className="font-medium tabular-nums text-white">{productionRoom.production.remaining}</dd>
                 </div>
               ) : null}
             </dl>
           ) : room.group === "hire" ? (
-            <p className="font-number">下次完成 {formatDateTime(room.completeWorkTime)}</p>
+            <p className="font-number">{intl("components_pages_SklandStatus.nextCompletion")} {formatDateTime(room.completeWorkTime, en)}</p>
           ) : null}
 
           {room.group === "trading" && room.orders.length ? (
             <details className="mt-2">
               <summary className="font-number cursor-pointer font-medium text-[var(--room-accent)]">
-                查看 {room.orders.length} 笔订单
+                {intl("components_pages_SklandStatus.viewOrders", { length: room.orders.length })}
               </summary>
               <div className="mt-2 grid gap-1">
                 {room.orders.map((order, index) => (
                   <p key={`${room.key}-order-${index}`} className="font-number">
-                    订单 {index + 1}：交付 {order.delivery.reduce((total, item) => total + item.count, 0)}
-                    ，获得 {order.reward.count} {order.reward.type === "orundum" ? "合成玉" : "龙门币"}
+                    {intl("components_pages_SklandStatus.orderDeliver", { value1: index + 1 })}{order.delivery.reduce((total, item) => total + item.count, 0)}
+                    {intl("components_pages_SklandStatus.receive")}{order.reward.count} {sklandTradingOrderRewardLabel(order, en)}
                   </p>
                 ))}
               </div>
@@ -842,6 +850,9 @@ function LayoutSyncControl({
   layoutDirty: boolean;
   onApplyLayout: () => void;
 }) {
+  const intl = useTranslations();
+  const locale = useLocale();
+  const en = locale === "en";
   const [confirmOpen, setConfirmOpen] = useState(false);
   const { infrastructure } = snapshot;
 
@@ -852,15 +863,15 @@ function LayoutSyncControl({
 
   const hasSuggestion = Boolean(infrastructure.layoutSuggestion);
   const status = hasSuggestion
-    ? `森空岛布局 ${infrastructure.layoutLabel ?? "未识别"}`
-    : "未识别可同步布局";
+    ? intl("components_pages_SklandStatus.sklandLayout", { value1: (en) ? (infrastructure.layoutLabel ?? "Unrecognized") : "", value2: (en) ? "" : (infrastructure.layoutLabel ?? "未识别") })
+    : intl("components_pages_SklandStatus.noSyncableLayoutRecognized");
 
   return (
     <>
       <div
         className="flex min-w-0 items-center gap-2"
         data-slot="skland-layout-sync"
-        aria-label="布局同步"
+        aria-label={intl("components_pages_SklandStatus.layoutSync")}
         aria-live="polite"
       >
         <span
@@ -883,20 +894,20 @@ function LayoutSyncControl({
           onClick={requestApplyLayout}
         >
           <Building2 />
-          {layoutMatches ? "已同步" : hasSuggestion ? "应用布局" : "不可同步"}
+          {layoutMatches ? (intl("components_pages_SklandStatus.synced")) : hasSuggestion ? (intl("components_pages_SklandStatus.applyLayout")) : (intl("components_pages_SklandStatus.unavailable"))}
         </Button>
       </div>
 
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>覆盖当前布局设置？</DialogTitle>
+            <DialogTitle>{intl("components_pages_SklandStatus.overwriteCurrentLayoutSettings")}</DialogTitle>
             <DialogDescription>
-              你已经手动修改过当前布局。继续后会使用森空岛的设施等级、制造配方和贸易订单。
+              {intl("components_pages_SklandStatus.youChangedTheCurrentLayoutManuallyContinuingWillUse")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button className="max-sm:min-w-16 sm:min-w-[88px]" type="button" size="dialog" variant="ghost" onClick={() => setConfirmOpen(false)}>取消</Button>
+            <Button className="max-sm:min-w-16 sm:min-w-[88px]" type="button" size="dialog" variant="ghost" onClick={() => setConfirmOpen(false)}>{intl("components_pages_SklandStatus.cancel")}</Button>
             <Button
               type="button"
               size="dialog"
@@ -905,7 +916,7 @@ function LayoutSyncControl({
                 setConfirmOpen(false);
               }}
             >
-              覆盖并应用
+              {intl("components_pages_SklandStatus.overwriteAndApply")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -915,9 +926,13 @@ function LayoutSyncControl({
 }
 
 function InfrastructureTab({ snapshot }: { snapshot: SklandStatusSnapshot }) {
+  const intl = useTranslations();
+  const locale = useLocale();
+  const gameCatalog = useGameCatalog();
+  const en = locale === "en";
   const { infrastructure } = snapshot;
   const now = useMinuteTimestamp(infrastructure.currentTs);
-  const buildingMetrics = useMemo(() => deriveSklandBuildingMetrics(snapshot, now), [snapshot, now]);
+  const buildingMetrics = useMemo(() => deriveSklandBuildingMetrics(snapshot, now, en), [en, snapshot, now]);
   const controlRooms = infrastructure.rooms.filter((room) => room.group === "control");
   const workRooms = infrastructure.rooms.filter((room) => room.group === "trading" || room.group === "manufacture");
   const powerRooms = infrastructure.rooms.filter((room) => room.group === "power");
@@ -934,7 +949,7 @@ function InfrastructureTab({ snapshot }: { snapshot: SklandStatusSnapshot }) {
     <div className="grid gap-7">
       <section
         className="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
-        aria-label="基建概览"
+        aria-label={intl("components_pages_SklandStatus.infrastructureOverview")}
         data-skland-overview-grid
         data-skland-metric-section="building"
       >
@@ -946,18 +961,18 @@ function InfrastructureTab({ snapshot }: { snapshot: SklandStatusSnapshot }) {
         >
           <div className="flex h-full flex-col">
             <OverviewTechnicalHeading icon={<Activity className="size-4" aria-hidden="true" />}>
-              训练室
+              {intl("components_pages_SklandStatus.trainingRoom")}
             </OverviewTechnicalHeading>
             <p className="mt-5 text-2xl font-semibold tracking-[-0.02em] text-[var(--room-accent)]">
-              {infrastructure.training?.trainee ?? "当前空闲"}
+              {infrastructure.training?.trainee ? localizedOperatorName(infrastructure.training.trainee, locale, gameCatalog) : (intl("components_pages_SklandStatus.currentlyIdle"))}
             </p>
             <div className="mt-auto pt-4 text-xs leading-5 text-white/58">
             {infrastructure.training ? (
               <>
-                <p className="font-number">技能 {infrastructure.training.skillIndex} · 协助：{infrastructure.training.trainer ?? "无"}</p>
-                <p className="font-number">剩余 {formatDuration(infrastructure.training.remainSecs)} · 加速 {Math.round(infrastructure.training.speed * 100)}%</p>
+                <p className="font-number">{intl("components_pages_SklandStatus.skill")} {infrastructure.training.skillIndex} · {intl("components_pages_SklandStatus.trainer2")}: {infrastructure.training.trainer ? localizedOperatorName(infrastructure.training.trainer, locale, gameCatalog) : (intl("components_pages_SklandStatus.none"))}</p>
+                <p className="font-number">{intl("components_pages_SklandStatus.remaining")} {formatDuration(infrastructure.training.remainSecs, en)} · {intl("components_pages_SklandStatus.speed")} {Math.round(infrastructure.training.speed * 100)}%</p>
               </>
-            ) : "暂无训练任务"}
+            ) : (intl("components_pages_SklandStatus.noTrainingTask"))}
             </div>
           </div>
         </OverviewTechnicalCard>
@@ -970,15 +985,15 @@ function InfrastructureTab({ snapshot }: { snapshot: SklandStatusSnapshot }) {
         >
           <div className="flex h-full flex-col">
             <OverviewTechnicalHeading icon={<Boxes className="size-4" aria-hidden="true" />}>
-              基建资产
+              {intl("components_pages_SklandStatus.infrastructureAssets")}
             </OverviewTechnicalHeading>
             <p className="mt-5 text-3xl font-semibold tabular-nums text-[var(--room-accent)]">
               {infrastructure.furnitureTotal}
-              <span className="ml-1 text-sm font-normal text-white/58">件家具</span>
+              <span className="ml-1 text-sm font-normal text-white/58">{intl("components_pages_SklandStatus.furnitureItems")}</span>
             </p>
             <div className="mt-auto flex flex-wrap gap-x-4 gap-y-1 pt-4 text-xs text-white/58">
-              <span className="font-number">无人机 {infrastructure.labor.value}/{infrastructure.labor.maxValue}</span>
-              <span className="font-number">低心情干员 {infrastructure.tiredOperators.length} 名</span>
+              <span className="font-number">{intl("components_pages_SklandStatus.drones")} {infrastructure.labor.value}/{infrastructure.labor.maxValue}</span>
+              <span className="font-number">{intl("components_pages_SklandStatus.lowMoraleOperators", { length: infrastructure.tiredOperators.length })}</span>
             </div>
           </div>
         </OverviewTechnicalCard>
@@ -995,9 +1010,9 @@ function InfrastructureTab({ snapshot }: { snapshot: SklandStatusSnapshot }) {
       <section aria-labelledby="skland-compact-layout-title">
         <div className="mb-3 flex min-w-0 items-end justify-between gap-3 border-b border-border/70 pb-3">
           <h3 id="skland-compact-layout-title" className="min-w-0 text-lg font-semibold tracking-[-0.025em]">
-            当前基建
+            {intl("components_pages_SklandStatus.currentInfrastructure")}
           </h3>
-          <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{infrastructure.rooms.length} 个设施</span>
+          <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{infrastructure.rooms.length} {intl("components_pages_SklandStatus.facilities")}</span>
         </div>
 
         <div
@@ -1391,9 +1406,11 @@ export function ProgressTab({ snapshot }: { snapshot: SklandStatusSnapshot }) {
 }
 
 function LoadingState() {
+  const intl = useTranslations();
+
   return (
     <StatusCenterPage data-skland-page>
-      <StatusCenterLoading label="正在恢复森空岛会话" />
+      <StatusCenterLoading label={intl("components_pages_SklandStatus.restoringSklandSession")} />
     </StatusCenterPage>
   );
 }
@@ -1422,7 +1439,8 @@ export function SklandStatus({
   onOpenCalculator,
   onCopyUid,
 }: SklandStatusProps) {
-  const { locale } = useLanguageDemo();
+  const intl = useTranslations();
+  const locale = useLocale();
   const en = locale === "en";
   const [addAccountOpen, setAddAccountOpen] = useState(false);
   const [accountQuery, setAccountQuery] = useState<string | null>(null);
@@ -1430,30 +1448,8 @@ export function SklandStatus({
   if (sessionLoading) return <LoadingState />;
 
   if (!scheduleSnapshot) {
-    const loginTitle = en
-      ? bindingState === "renewal-due"
-        ? "Authorization expired — scan to renew"
-        : bindingState === "reauthorize"
-          ? "Skland is linked — authorize this browser"
-          : "Bring your Rhodes Island into the scheduler"
-      : bindingState === "renewal-due"
-        ? "七天授权期已结束，请重新授权"
-        : bindingState === "reauthorize"
-          ? "森空岛已绑定，请授权当前浏览器"
-          : "把当前罗德岛带进排班助手";
-    const loginDescription = en
-      ? bindingState === "renewal-due"
-        ? "Scan again to continue syncing. Existing schedule settings will be kept."
-        : bindingState === "reauthorize"
-          ? `Your website account keeps ${bindingCount} Skland link(s), but this browser needs authorization.`
-          : "Scan the QR code with the Skland app to sync operator and infrastructure data."
-      : bindingState === "renewal-due"
-      ? `最近一次授权${bindingSummary.latestExpiredAt
-        ? `已于 ${credentialExpiryLabel(bindingSummary.latestExpiredAt)} 到期`
-        : "已经到期"}。扫码或重新导入凭证后即可继续同步，现有排班设置不会被清除。`
-      : bindingState === "reauthorize"
-        ? `网站账号仍保留 ${bindingCount} 个森空岛绑定，但当前浏览器没有可用凭证。重新授权后即可继续同步。`
-        : "使用森空岛 App 扫码，或从已登录的森空岛网页导入凭证，同步当前角色的干员与基建数据。";
+    const loginTitle = localize_components_pages_SklandStatus.text(en, "additional1", { choice1: ((en)) && (bindingState === "renewal-due") ? "yes" : "no", choice2: ((en) && !(bindingState === "renewal-due")) && (bindingState === "reauthorize") ? "yes" : "no", choice3: (!(en)) && (bindingState === "renewal-due") ? "yes" : "no", choice4: (!(en) && !(bindingState === "renewal-due")) && (bindingState === "reauthorize") ? "yes" : "no" });
+    const loginDescription = localize_components_pages_SklandStatus.text(en, "additional2", { choice1: ((en)) && (bindingState === "renewal-due") ? "yes" : "no", choice2: ((en) && !(bindingState === "renewal-due")) && (bindingState === "reauthorize") ? "yes" : "no", value3: ((en) && !(bindingState === "renewal-due") && (bindingState === "reauthorize")) ? String(bindingCount) : "", choice4: (!(en)) && (bindingState === "renewal-due") ? "yes" : "no", choice5: (!(en) && (bindingState === "renewal-due")) && (bindingSummary.latestExpiredAt) ? "yes" : "no", value6: (!(en) && (bindingState === "renewal-due") && (bindingSummary.latestExpiredAt)) ? String(credentialExpiryLabel(bindingSummary.latestExpiredAt)) : "", choice7: (!(en) && !(bindingState === "renewal-due")) && (bindingState === "reauthorize") ? "yes" : "no", value8: (!(en) && !(bindingState === "renewal-due") && (bindingState === "reauthorize")) ? String(bindingCount) : "" });
     return (
       <StatusCenterPage
         className="min-h-[calc(100dvh-7rem)] place-items-center py-8 sm:py-12"
@@ -1461,16 +1457,16 @@ export function SklandStatus({
       >
         <div className="grid w-full max-w-4xl justify-items-center gap-7 text-center">
           <header className="grid max-w-lg gap-3" data-skland-login-copy>
-            <p className="text-xs font-medium tracking-wide text-primary">{en ? "Skland Status" : "森空岛状态中心"}</p>
+            <p className="text-xs font-medium tracking-wide text-primary">{intl("components_pages_SklandStatus.sklandStatus")}</p>
             <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">{loginTitle}</h2>
             <p className="text-pretty text-sm leading-6 text-muted-foreground">{loginDescription}</p>
             <p className="text-xs leading-5 text-muted-foreground/80">
-              {en ? "Credentials stay in this browser and expire after 7 days." : "登录凭证只保存在当前浏览器，7 天后失效。"}
+              {intl("components_pages_SklandStatus.credentialsStayInThisBrowserAndExpireAfter7")}
             </p>
           </header>
           {error ? (
             <Alert className="w-full max-w-lg text-start" variant="destructive">
-              <AlertDescription>{error.message}（{error.code}）</AlertDescription>
+              <AlertDescription>{error.message}{intl("components_pages_SklandStatus.label", { code: error.code })}</AlertDescription>
             </Alert>
           ) : null}
           <SklandLoginPanel
@@ -1492,24 +1488,24 @@ export function SklandStatus({
     return (
       <StatusCenterPage data-skland-page data-skland-status-load-error>
         <header className="max-w-2xl">
-          <p className="text-xs font-medium tracking-wide text-primary">{en ? "Skland Status" : "森空岛状态中心"}</p>
-          <h2 className="mt-2 text-2xl font-semibold tracking-tight">{en ? "Full status is temporarily unavailable" : "完整状态暂时无法加载"}</h2>
+          <p className="text-xs font-medium tracking-wide text-primary">{intl("components_pages_SklandStatus.sklandStatus")}</p>
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight">{intl("components_pages_SklandStatus.fullStatusIsTemporarilyUnavailable")}</h2>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            当前已登录{activeRole ? `“${activeRole.nickname}”` : "森空岛"}。你可以重新加载，或退出当前账号后重新授权。
+            {intl("components_pages_SklandStatus.signedInAsReloadOrSignOutAndAuthorize", { value1: (en) ? (activeRole ? `“${activeRole.nickname}”` : "Skland") : "", value2: (en) ? "" : (activeRole ? `“${activeRole.nickname}”` : "森空岛") })}
           </p>
         </header>
-        <Alert variant="destructive"><AlertDescription>{error.message}（{error.code}）</AlertDescription></Alert>
+        <Alert variant="destructive"><AlertDescription>{error.message}{intl("components_pages_SklandStatus.label", { code: error.code })}</AlertDescription></Alert>
         <Card>
           <CardHeader>
-            <CardTitle>{en ? "Reload status" : "重新加载状态中心"}</CardTitle>
+            <CardTitle>{intl("components_pages_SklandStatus.reloadStatus")}</CardTitle>
             <CardDescription className="max-w-2xl leading-6">
-              登录后会按隐私政策列明的范围读取并展示完整状态；完整快照只保留在当前页面内存中。
+              {intl("components_pages_SklandStatus.afterSignInCompleteStatusIsReadAndDisplayed")}
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">
-            <Button type="button" disabled={busy} onClick={onRetryStatus}>{en ? "Reload status" : "重新加载状态中心"}</Button>
+            <Button type="button" disabled={busy} onClick={onRetryStatus}>{intl("components_pages_SklandStatus.reloadStatus")}</Button>
             <Button type="button" variant="outline" disabled={busy} onClick={() => void onLogout()}>
-              <LogOut />{en ? "Sign out" : "退出当前账号"}
+              <LogOut />{intl("components_pages_SklandStatus.signOut")}
             </Button>
           </CardContent>
         </Card>
@@ -1528,7 +1524,7 @@ export function SklandStatus({
     const selectedRole = account.roles.find((role) => role.uid === account.selectedUid) ?? account.roles[0];
     return {
       value: account.accountId,
-      label: `森空岛账号 ${accountIndex + 1}${selectedRole ? ` · ${selectedRole.nickname}` : ""}`,
+      label: `${intl("components_pages_SklandStatus.sklandAccount")} ${accountIndex + 1}${selectedRole ? ` · ${selectedRole.nickname}` : ""}`,
       items: account.roles.map((role) => ({
         value: `${account.accountId}:${role.uid}`,
         label: `${role.nickname} · ${role.channelName}`,
@@ -1549,7 +1545,7 @@ export function SklandStatus({
           <div className="flex min-w-0 items-center gap-4">
             <RemoteAvatar
               src={snapshot.player.avatarUrl}
-              alt={`${snapshot.player.nickname}的森空岛头像`}
+              alt={intl("components_pages_SklandStatus.sSklandAvatar", { nickname: snapshot.player.nickname })}
               pixelSize={56}
               className="size-14 rounded-xl ring-1 ring-foreground/10"
               imageClassName="rounded-xl"
@@ -1558,7 +1554,7 @@ export function SklandStatus({
                 <div
                 className="grid size-14 shrink-0 place-items-center rounded-xl bg-primary text-lg font-semibold text-primary-foreground"
                 role="img"
-                aria-label={`${snapshot.player.nickname}的森空岛头像`}
+                aria-label={intl("components_pages_SklandStatus.sSklandAvatar", { nickname: snapshot.player.nickname })}
               >
                 {snapshot.player.nickname.slice(0, 1)}
                 </div>
@@ -1575,11 +1571,11 @@ export function SklandStatus({
                   type="button"
                   className="inline-flex items-center gap-1 rounded-sm hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                   onClick={() => onCopyUid(snapshot.player.uid)}
-                aria-label={en ? "Copy full UID" : "复制完整 UID"}
+                aria-label={intl("components_pages_SklandStatus.copyFullUid")}
                 >
                   UID {maskedUid(snapshot.player.uid)} <Clipboard className="size-3" />
                 </button>
-                <span>{en ? "Synced" : "同步于"} {formatDateTime(snapshot.infrastructure.storeTs)}</span>
+                <span>{intl("components_pages_SklandStatus.synced2")} {formatDateTime(snapshot.infrastructure.storeTs, en)}</span>
               </div>
             </div>
           </div>
@@ -1612,11 +1608,11 @@ export function SklandStatus({
             >
               <ComboboxInput
                 className="h-full w-full"
-                aria-label={en ? "Select account and character" : "选择账号与角色"}
-                placeholder={en ? "Search accounts and characters" : "搜索账号与角色"}
+                aria-label={intl("components_pages_SklandStatus.selectAccountAndCharacter")}
+                placeholder={intl("components_pages_SklandStatus.searchAccountsAndCharacters")}
               />
               <ComboboxContent>
-                <ComboboxEmpty>{en ? "No matching account or character" : "没有匹配的账号或角色"}</ComboboxEmpty>
+                <ComboboxEmpty>{intl("components_pages_SklandStatus.noMatchingAccountOrCharacter")}</ComboboxEmpty>
                 <ComboboxList>
                   {(group, groupIndex) => (
                     <ComboboxGroup key={group.value} items={group.items}>
@@ -1640,11 +1636,11 @@ export function SklandStatus({
               className="h-11"
             variant="outline"
             disabled={busy || accounts.length >= 5}
-            title={accounts.length >= 5 ? "最多可登录 5 个森空岛账号" : undefined}
+            title={accounts.length >= 5 ? (intl("components_pages_SklandStatus.upTo5SklandAccounts")) : undefined}
             onClick={() => setAddAccountOpen(true)}
             data-skland-add-account
           >
-            <UserPlus />{en ? "Add account" : "添加账号"}
+            <UserPlus />{intl("components_pages_SklandStatus.addAccount")}
             </Button>
             <Button
               type="button"
@@ -1654,7 +1650,7 @@ export function SklandStatus({
             onClick={() => void onLogout()}
             data-skland-logout
           >
-            <LogOut />{en ? "Sign out" : "退出"}
+            <LogOut />{intl("components_pages_SklandStatus.signOut2")}
             </Button>
           </div>
         )}
@@ -1663,9 +1659,9 @@ export function SklandStatus({
       <Dialog open={addAccountOpen} onOpenChange={setAddAccountOpen}>
         <DialogContent className="max-h-[calc(100dvh-1rem)] grid-rows-[auto_minmax(0,1fr)] sm:max-w-[min(960px,calc(100vw-2rem))]">
           <DialogHeader>
-            <DialogTitle>{en ? "Add Skland account" : "添加森空岛账号"}</DialogTitle>
+            <DialogTitle>{intl("components_pages_SklandStatus.addSklandAccount")}</DialogTitle>
             <DialogDescription>
-              扫码或导入凭证后会保留现有账号，并将新账号设为当前账号。最多同时登录 <span className="font-number">5</span> 个账号。
+              {intl.rich("components_pages_SklandStatus.rich2", { element1: (chunks) => (<span className="font-number">{chunks}</span>) })}
             </DialogDescription>
           </DialogHeader>
           <DialogBody className="min-h-0 overflow-y-auto pb-5 pt-0 sm:pb-7">
@@ -1686,7 +1682,7 @@ export function SklandStatus({
       {error ? (
         <Alert variant="destructive">
           <AlertDescription>
-            {error.message}（{error.code}）。已保留上一次成功同步的数据。
+            {error.message}{intl("components_pages_SklandStatus.lastSuccessfullySyncedDataWasKept", { code: error.code })}
           </AlertDescription>
         </Alert>
       ) : null}
@@ -1694,7 +1690,7 @@ export function SklandStatus({
       {bindingSummary.renewalDueCount > 0 ? (
         <Alert>
           <AlertDescription data-ui-number-font>
-            有 {bindingSummary.renewalDueCount} 个森空岛绑定已满七天，需要重新授权。当前仍有效的账号可以继续使用。
+            {intl("components_pages_SklandStatus.sklandLinkSReachedTheSevenDayLimitAnd", { renewalDueCount: bindingSummary.renewalDueCount })}
           </AlertDescription>
         </Alert>
       ) : null}
@@ -1711,8 +1707,8 @@ export function SklandStatus({
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-3" data-skland-view-header>
           <div className="-mx-3 min-w-0 overflow-x-auto overflow-y-hidden px-3 pb-1">
             <TabsList className="min-w-max" data-skland-view-tabs>
-              <TabsTrigger value="overview">{en ? "Overview" : "概览"}</TabsTrigger>
-              <TabsTrigger value="infrastructure">{en ? "Infrastructure" : "基建"}</TabsTrigger>
+              <TabsTrigger value="overview">{intl("components_pages_SklandStatus.overview")}</TabsTrigger>
+              <TabsTrigger value="infrastructure">{intl("components_pages_SklandStatus.infrastructure")}</TabsTrigger>
             </TabsList>
           </div>
           <LayoutSyncControl

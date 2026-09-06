@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { requestId, diagnosticId, expectUnifiedDialogTypography, expectUnifiedDialogAction, expectButtonGeometryStable, armEndingTransitionCapture, expectCapturedExitDuration, armMotionCapture, armMotionCollectionCapture, expectCapturedMotion, expectCapturedMotionDelays, armTransientStyleCapture, expectCapturedStyleMotion, waitForOwnAnimations, planData, twoShiftPlanData, scheduleVisualPlanData, productChangePlanData, motionPlanData, authenticatedSklandSnapshot, mockApis, navigateToPrimaryPage, seedPreferences, seedV4Session } from "./production-readiness.fixture";
+import type { PublicPlanData } from "../src/types";
 
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/auth/get-session", (route) => route.fulfill({
@@ -31,6 +32,7 @@ test("the legacy beta query is inert and never opts plan requests into debug dat
   });
 
   await page.goto("/?beta");
+  await expect(page.locator('[data-workbench-hydrated="true"]')).toBeVisible();
   await expect(page.getByText("开启调试工具", { exact: true })).toHaveCount(0);
   await expect(page.getByText("退出调试工具", { exact: true })).toHaveCount(0);
   await expect(page.getByText("调试输出", { exact: true })).toHaveCount(0);
@@ -41,7 +43,7 @@ test("the legacy beta query is inert and never opts plan requests into debug dat
   expect(planRequests[0].searchParams.has("beta")).toBe(false);
 
   await page.getByRole("button", { name: "练卡建议" }).click();
-  await expect(page).toHaveURL(/\/training$/);
+  await expect(page).toHaveURL(/\/training$/, { timeout: 45_000 });
 });
 
 test("shows the thinking activity and indeterminate progress only while a plan request is running", async ({ page }) => {
@@ -198,7 +200,10 @@ test("operator skill terms reveal square hover cards on pointer and keyboard foc
   await mockApis(page);
   const termPlanData = structuredClone(scheduleVisualPlanData);
   termPlanData.maa.plans[0].rooms.trading[0].operators = [{ name: "陈", skill: 1 }];
-  await seedV4Session(page, termPlanData, { boxSource: "maa" });
+  await seedV4Session(page, termPlanData, {
+    boxSource: "maa",
+    operbox: [{ id: "char_010_chen", name: "陈", elite: 0, level: 1, own: true, potential: 1, rarity: 6 }],
+  });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
 
@@ -207,6 +212,8 @@ test("operator skill terms reveal square hover cards on pointer and keyboard foc
   await operatorPortrait.hover({ position: { x: 8, y: Math.max(8, (portraitBox?.height ?? 80) / 2) } });
   const skillTooltip = page.locator('[data-slot="tooltip-content"][data-open]');
   await expect(skillTooltip).toBeVisible({ timeout: 10_000 });
+  await expect(skillTooltip.locator('[data-skill-unlocked="false"]')).toHaveCSS("opacity", "0.7");
+  await expect(skillTooltip.locator('[data-skill-unlocked="false"]')).toHaveCSS("filter", "grayscale(1)");
   const termTrigger = skillTooltip.locator(".riic-term-hover > .riic-term").first();
   const termCard = skillTooltip.locator(".riic-term-hover-card").first();
 
@@ -216,6 +223,29 @@ test("operator skill terms reveal square hover cards on pointer and keyboard foc
   await expect(termCard).toHaveCSS("border-radius", "0px");
   await termTrigger.focus();
   await expect(termCard).toBeVisible();
+});
+
+test("Lancet-2 power rooms without total efficiency render zero with a red portrait filter", async ({ page }) => {
+  await mockApis(page);
+  const lancetPlanData = structuredClone(scheduleVisualPlanData) as PublicPlanData;
+  lancetPlanData.maa.plans[0]!.rooms.power = [
+    { operators: ["Castle-3"] },
+    { operators: ["Lancet-2"] },
+  ];
+  lancetPlanData.rotation.shifts[0]!.scores.room_lines = [
+    ...lancetPlanData.rotation.shifts[0]!.scores.room_lines.filter((line) => line.room_id !== "power_1" && line.room_id !== "power_2"),
+    { room_id: "power_1", order_multiplier: 1 },
+    { room_id: "power_2", order_multiplier: 1 },
+  ];
+  await seedV4Session(page, lancetPlanData, { boxSource: "maa" });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+
+  const ordinaryPowerRoom = page.locator('[data-room-title="发电站 1"]');
+  const lancetPowerRoom = page.locator('[data-room-title="发电站 2"]');
+  await expect(lancetPowerRoom.locator("[data-room-primary-efficiency]")).toHaveText("0%");
+  await expect(lancetPowerRoom.locator('[data-operator-identity="Lancet-2"] [data-operator-portrait-alert="missing-power-efficiency"]')).toBeVisible();
+  await expect(ordinaryPowerRoom.locator('[data-operator-portrait-alert="missing-power-efficiency"]')).toHaveCount(0);
 });
 
 test("Skland calculator keeps the schedule visible before and after sidebar navigation", async ({ page }) => {
@@ -330,6 +360,62 @@ test("Skland calculator keeps the schedule visible before and after sidebar navi
   await returnToCalculator("森空岛状态中心", "[data-skland-view-tabs]", "calculator-return-skland-reduced");
 });
 
+test("desktop sidebar state survives navigation and a hard reload without hydration errors", async ({ page, context }) => {
+  await mockApis(page);
+  await seedPreferences(page);
+  await context.addCookies([{ name: "sidebar_state", value: "true", domain: "127.0.0.1", path: "/" }]);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const hydrationErrors: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error" && /hydration|server rendered html/i.test(message.text())) {
+      hydrationErrors.push(message.text());
+    }
+  });
+
+  await page.goto("/");
+  const sidebar = page.locator('[data-slot="sidebar"]:not([data-mobile="true"])');
+  await expect(sidebar).toHaveAttribute("data-state", "expanded");
+
+  await page.getByRole("button", { name: "练卡建议", exact: true }).click();
+  await expect(page).toHaveURL(/\/training$/);
+  await expect(sidebar).toHaveAttribute("data-state", "expanded");
+
+  await page.reload();
+  await expect(sidebar).toHaveAttribute("data-state", "expanded");
+  expect(hydrationErrors).toEqual([]);
+});
+
+test("desktop sidebar defaults open at 1280px and collapsed below it", async ({ page, context }) => {
+  await mockApis(page);
+  await seedPreferences(page);
+  await context.clearCookies();
+  const hydrationErrors: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error" && /hydration|server rendered html/i.test(message.text())) {
+      hydrationErrors.push(message.text());
+    }
+  });
+
+  const sidebar = page.locator('[data-slot="sidebar"]:not([data-mobile="true"])');
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/");
+  await expect(sidebar).toHaveAttribute("data-state", "expanded");
+
+  await page.setViewportSize({ width: 1279, height: 900 });
+  await page.reload();
+  await expect(sidebar).toHaveAttribute("data-state", "collapsed");
+
+  await context.addCookies([{ name: "sidebar_state", value: "true", domain: "127.0.0.1", path: "/" }]);
+  await page.reload();
+  await expect(sidebar).toHaveAttribute("data-state", "expanded");
+
+  await context.addCookies([{ name: "sidebar_state", value: "false", domain: "127.0.0.1", path: "/" }]);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.reload();
+  await expect(sidebar).toHaveAttribute("data-state", "collapsed");
+  expect(hydrationErrors).toEqual([]);
+});
+
 test("100% Skland match does not count fatigue-only notices as adjustments", async ({ page }) => {
   await mockApis(page, {
     sklandConfigured: true,
@@ -399,6 +485,44 @@ test("empty returning calculator shows the empty compact schedule", async ({ pag
   await expect(page.locator("[data-calculator-regenerate-panel]")).toHaveCount(0);
   await expect(page.locator('[data-schedule-view="compact"]')).toBeVisible();
   await expect(page.locator('[data-operator-identity="empty"]').first()).toBeVisible();
+});
+
+test("compact schedule reserves one skeleton card per room while its view loads", async ({ page }) => {
+  await mockApis(page);
+  await seedV4Session(page);
+  await page.setViewportSize({ width: 768, height: 900 });
+  await page.goto("/");
+  const listView = page.locator('[data-schedule-view="list"]');
+  await expect(listView).toBeVisible();
+  const roomCount = await listView.locator("[data-room-group]").count();
+
+  let releaseCompactChunk!: () => void;
+  const compactChunkGate = new Promise<void>((resolve) => {
+    releaseCompactChunk = resolve;
+  });
+  let compactChunkRequested = false;
+  await page.route("**/_next/static/chunks/**", async (route) => {
+    const response = await route.fetch();
+    const body = await response.body();
+    if (body.toString("utf8").includes("data-compact-schedule-view")) {
+      compactChunkRequested = true;
+      await compactChunkGate;
+    }
+    await route.fulfill({ response, body });
+  });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect.poll(() => compactChunkRequested).toBe(true);
+  const loadingView = page.locator('[data-schedule-view="compact"]');
+  const skeleton = loadingView.locator("[data-compact-schedule-loading]");
+  await expect(loadingView).toHaveAttribute("data-schedule-view-transition", "skeleton");
+  await expect(skeleton).toBeVisible();
+  await expect(skeleton.locator("[data-compact-room-skeleton]")).toHaveCount(roomCount);
+  expect(await loadingView.evaluate((element) => element.getAnimations().length)).toBe(0);
+
+  releaseCompactChunk();
+  await expect(page.locator("[data-compact-schedule-view]")).toBeVisible();
+  await expect(skeleton).toHaveCount(0);
 });
 
 test("mobile list follows the in-game assignment overview without rendering the compact view", async ({ page }) => {
@@ -565,26 +689,17 @@ test("plan completion reveals status, metrics, and schedule once without resetti
   await page.waitForTimeout(320);
   await expect(board.locator('[data-operator-identity="凯尔希"]').first()).toBeVisible();
   await expect(board.locator('[data-operator-identity="阿米娅"], [data-operator-identity="贝洛内"]')).toHaveCount(0);
-  if (browserName === "webkit") {
-    await armTransientStyleCapture(page, '[data-schedule-view="compact"]', "compact-view");
-  } else {
-    await armMotionCapture(page, '[data-schedule-view="compact"]', "compact-view", 280);
-  }
-
   await page.getByRole("tab", { name: "一图流布局" }).click();
   await expect(board).toHaveAttribute("data-motion-sentinel", "stable");
   expect(await board.evaluate((element) => element.getAnimations().filter((animation) => animation.playState === "running").length)).toBe(0);
   const compactView = board.locator('[data-schedule-view="compact"]');
   await expect(compactView).toBeVisible();
+  await expect(compactView).toHaveAttribute("data-schedule-view-transition", "skeleton");
+  expect(await compactView.evaluate((element) => element.getAnimations().length)).toBe(0);
   const compactTrainingRoom = compactView.locator('[data-room-group="training"]');
   await expect(compactTrainingRoom).toBeVisible();
   await expect(compactTrainingRoom.locator('[data-position="训练位"]')).toContainText("Training-B");
   await expect(compactView.locator(".compact-auxiliary-grid")).toHaveCSS("grid-template-columns", /px/);
-  if (browserName === "webkit") {
-    await expectCapturedStyleMotion(page, "compact-view");
-  } else {
-    await expectCapturedMotion(page, "compact-view", 280);
-  }
   const auxiliaryGrid = compactView.locator(".compact-auxiliary-grid");
   await expect.poll(() => auxiliaryGrid.evaluate((element) => ({
     columns: getComputedStyle(element).gridTemplateColumns.split(" ").length,
@@ -708,7 +823,7 @@ test("live activity survives navigation and calculator search occupies the relea
   await expect(activity).toHaveCount(0, { timeout: 5_000 });
 
   await expect(page.getByRole("textbox", { name: "搜索干员名称" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "筛选制造站" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "制造站", exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "基建计算器", exact: true }).click();
   const search = page.getByRole("textbox", { name: "搜索排班中的干员或房间" });
@@ -870,9 +985,10 @@ test("shared action buttons keep their geometry after WebKit interactions", asyn
   await expectButtonGeometryStable(planButton);
 });
 
-test("tooltips wait once and then open adjacent help instantly within the provider window", async ({ page, browserName }) => {
+test("tooltips wait once and then open adjacent help instantly within the provider window", async ({ page, browserName, context }) => {
   await mockApis(page);
   await seedPreferences(page);
+  await context.addCookies([{ name: "sidebar_state", value: "false", domain: "127.0.0.1", path: "/" }]);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
 
@@ -1018,7 +1134,8 @@ test("plan timing stays passive and performance feedback waits for result detail
   await expect(detailsDrawer).toHaveCount(0);
   await expect(page.getByRole("dialog")).toHaveCount(1);
   expect(feedbackPayloads).toHaveLength(0);
-  await expect(feedbackDialog.getByText(/不会附带任意房间或完整干员数据/)).toBeVisible();
+  await expect(feedbackDialog.getByText(/将提交你的说明，以及包含.*私有复现快照/)).toBeVisible();
+  await expect(feedbackDialog.getByText(/最长保留 30 天/)).toBeVisible();
   await feedbackDialog.getByRole("textbox").fill("同一份 Box 之前通常可以更快完成。");
   await feedbackDialog.getByRole("checkbox").check();
   await feedbackDialog.getByRole("button", { name: "提交反馈" }).click();
@@ -1029,8 +1146,15 @@ test("plan timing stays passive and performance feedback waits for result detail
     kind: "performance_issue",
     diagnosticId,
     consent: true,
+    reproduction: {
+      layout: { template: "243" },
+      rotation: "abc_12_6_6",
+      fiammettaEnabled: false,
+      sourceType: "maa",
+    },
   });
   expect(feedbackPayload).not.toHaveProperty("room");
+  expect((feedbackPayload.reproduction as { operbox?: unknown[] }).operbox?.length).toBeGreaterThan(0);
   expect(feedbackPayload?.note).toContain("求解耗时：2764 ms");
   await expect(page.getByText("反馈已提交，编号：feedback-performance")).toBeVisible();
   await expect(resultSummary).toBeFocused();

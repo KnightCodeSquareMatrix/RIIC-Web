@@ -99,6 +99,20 @@
       "when": 1788357462995,
       "tag": "0013_sudden_talon",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1788537740366,
+      "tag": "0014_slimy_rage",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1788615031833,
+      "tag": "0015_release_notes",
+      "breakpoints": true
     }
   ]
 }

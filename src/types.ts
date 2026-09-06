@@ -1039,7 +1039,9 @@ export type AppErrorCode =
   | "AIC-DATA-8001"
   | "AIC-DATA-8002"
   | "AIC-DATA-8003"
-  | "AIC-DATA-8004";
+  | "AIC-DATA-8004"
+  | "AIC-RELEASE-9001"
+  | "AIC-RELEASE-9002";
 
 export interface ApiFieldError {
   path: string;
@@ -1119,10 +1121,19 @@ export interface FeedbackRoom {
 
 export type FeedbackKind = "room_issue" | "performance_issue";
 
+export interface FeedbackReproductionSnapshot {
+  layout: BaseBlueprint;
+  operbox: OperBoxEntry[];
+  rotation: RotationProfile;
+  fiammettaEnabled: boolean;
+  sourceType: Exclude<BoxSource, "sample">;
+}
+
 type FeedbackRequestBase = {
   diagnosticId: string;
   note: string;
   consent: true;
+  reproduction: FeedbackReproductionSnapshot;
 };
 
 export type FeedbackRequest = FeedbackRequestBase & (
@@ -1250,6 +1261,34 @@ export interface AdminSessionData {
 
 export interface AdminSessionsData {
   sessions: AdminSessionData[];
+}
+
+export interface SkillAnnotationData {
+  id: string;
+  operatorId: string;
+  skillId: string;
+  note: string;
+  updatedAt: string;
+}
+
+export interface SkillAnnotationListData {
+  annotations: SkillAnnotationData[];
+}
+
+export interface AdminSkillAnnotationData extends SkillAnnotationData {
+  createdAt: string;
+}
+
+export interface AdminSkillAnnotationListData {
+  annotations: AdminSkillAnnotationData[];
+}
+
+export interface AdminSkillAnnotationMutationData {
+  annotation: AdminSkillAnnotationData;
+}
+
+export interface AdminSkillAnnotationDeleteData {
+  deleted: true;
 }
 
 export interface AdminUserUpdateData {

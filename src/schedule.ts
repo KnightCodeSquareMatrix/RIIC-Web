@@ -15,6 +15,8 @@ export interface RoomRow {
   product?: string;
   operators: string[];
   operatorSlots: RoomOperatorSlot[];
+  /** Fixed-position slots used by editors; unlike operatorSlots, empty gaps are preserved. */
+  slotAssignments?: Array<RoomOperatorSlot | undefined>;
   positionSlots?: RoomPositionSlot[];
   autofill: boolean;
   efficiency?: RoomEfficiency;
@@ -30,6 +32,7 @@ export interface RoomOperatorSlot {
   profession?: number;
   portrait?: string;
   buildingSkill?: BuildingSkillPresentation;
+  portraitAlert?: "missing-power-efficiency";
 }
 
 export interface RoomPositionSlot {
@@ -350,7 +353,7 @@ export function planToRows(
   const roomsByGroup = plan.rooms && typeof plan.rooms === "object" ? plan.rooms : {};
   for (const group of GROUP_ORDER) {
     if (group === "training") {
-      const layoutRoom = layoutRoomMap.get("training_room");
+      const layoutRoom = layout?.rooms.find((room) => room.kind === "training_room");
       if (!layoutRoom) continue;
       const positionSlots = trainingPositionSlots(trainingShift);
       const operatorSlots = positionSlots.flatMap((positionSlot) => positionSlot.slot ? [positionSlot.slot] : []);
@@ -374,10 +377,23 @@ export function planToRows(
     const rooms = Array.isArray(roomsByGroup[group]) ? roomsByGroup[group] : [];
     rooms.forEach((room, index) => {
       const operators = roomOperators(room);
-      const operatorSlots = roomOperatorSlots(room);
+      const sourceOperatorSlots = roomOperatorSlots(room);
       const roomId = roomIdFor(group, index);
       const layoutRoom = layoutRoomMap.get(roomId);
-      const efficiency = efficiencyMap.get(roomId);
+      const sourceEfficiency = efficiencyMap.get(roomId);
+      const missingLancetPowerEfficiency = group === "power"
+        && sourceOperatorSlots.some((slot) => slot.name === "Lancet-2")
+        && sourceEfficiency?.order_multiplier === 1
+        && sourceEfficiency.total_efficiency === undefined
+        && sourceEfficiency.final_efficiency === undefined;
+      const operatorSlots = missingLancetPowerEfficiency
+        ? sourceOperatorSlots.map((slot) => slot.name === "Lancet-2"
+          ? { ...slot, portraitAlert: "missing-power-efficiency" as const }
+          : slot)
+        : sourceOperatorSlots;
+      const efficiency = missingLancetPowerEfficiency
+        ? { ...sourceEfficiency, total_efficiency: 0 }
+        : sourceEfficiency;
       rows.push({
         key: `${group}-${index}`,
         group,

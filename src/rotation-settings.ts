@@ -1,3 +1,5 @@
+import { localize as rotationText } from "./i18n/helpers/RotationLabels.ts";
+import { localize as localize_rotation_settings } from "./i18n/helpers/rotation_settings.ts";
 import type { RotationProfile } from "./types";
 
 export type RotationOption = {
@@ -43,13 +45,18 @@ export function rotationOption(profile: RotationProfile): RotationOption {
   return ROTATION_OPTIONS.find((option) => option.profile === profile) ?? ROTATION_OPTIONS[0];
 }
 
-export function rotationDescription(profile: RotationProfile): string {
+export function rotationDurations(profile: RotationProfile): number[] {
+  const current = ROTATION_OPTIONS.find((option) => option.profile === profile);
+  return [...(current?.durations ?? LEGACY_ROTATION_OPTIONS[profile as keyof typeof LEGACY_ROTATION_OPTIONS].durations)];
+}
+
+export function rotationDescription(profile: RotationProfile, en = false): string {
   const current = ROTATION_OPTIONS.find((option) => option.profile === profile);
   const option = current ?? LEGACY_ROTATION_OPTIONS[profile as keyof typeof LEGACY_ROTATION_OPTIONS];
-  return `${option.label} · ${option.durations.join("/")} 小时`;
+
+  return `${rotationText.text(en, profile)} · ${option.durations.join("/")} ${localize_rotation_settings.text(en, "hours")}`;
 }
 
 export function rotationShiftCount(profile: RotationProfile): number {
-  const current = ROTATION_OPTIONS.find((option) => option.profile === profile);
-  return (current?.durations ?? LEGACY_ROTATION_OPTIONS[profile as keyof typeof LEGACY_ROTATION_OPTIONS].durations).length;
+  return rotationDurations(profile).length;
 }

@@ -1,3 +1,6 @@
+"use client";
+import { useTranslations } from "next-intl";
+
 import { StatusCenterLoading, StatusCenterPage } from "@/components/pages/StatusCenterShell";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -12,11 +15,13 @@ function PageHeadingSkeleton({ width }: { width: string }) {
 }
 
 export function TrainingRouteSkeleton() {
+  const intl = useTranslations();
+
   return (
     <div
       className="flex w-full flex-col gap-5 pt-5"
       role="status"
-      aria-label="正在加载练卡建议"
+      aria-label={intl("components_workbench_WorkbenchRouteSkeleton.loadingTrainingAdvice")}
       data-workbench-route-skeleton="training"
     >
       <section className="min-w-0">
@@ -60,11 +65,13 @@ export function TrainingRouteSkeleton() {
 }
 
 export function SkillQueryRouteSkeleton() {
+  const intl = useTranslations();
+
   return (
     <section
       className="min-w-0 pt-5"
       role="status"
-      aria-label="正在加载技能查询"
+      aria-label={intl("components_workbench_WorkbenchRouteSkeleton.loadingSkillReference")}
       data-workbench-route-skeleton="skill-query"
     >
       <PageHeadingSkeleton width="w-20" />
@@ -91,10 +98,13 @@ export function SkillQueryRouteSkeleton() {
   );
 }
 
-export function StatusRouteSkeleton({ label = "正在加载状态中心" }: { label?: string }) {
+export function StatusRouteSkeleton({ label }: { label?: string }) {
+  const intl = useTranslations();
+
+  const resolvedLabel = label ?? (intl("components_workbench_WorkbenchRouteSkeleton.loadingStatusCenter"));
   return (
     <StatusCenterPage data-workbench-route-skeleton="status">
-      <StatusCenterLoading label={label} />
+      <StatusCenterLoading label={resolvedLabel} />
     </StatusCenterPage>
   );
 }

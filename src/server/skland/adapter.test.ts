@@ -4,6 +4,7 @@ import test from "node:test";
 import { URL } from "node:url";
 
 import {
+  findOwnedScan,
   findReusableScan,
   hasScanStartCapacity,
   MAX_CONCURRENT_SCAN_STARTS,
@@ -47,6 +48,30 @@ test("an active QR code is reused only for the same website account and policy",
   assert.equal(findReusableScan(scans, scanActorKey("another-user"), consent, now), null);
   assert.equal(findReusableScan(scans, actorKey, { ...consent, privacyVersion: "privacy-v2" }, now), null);
   assert.equal(findReusableScan(scans, actorKey, consent, now + 10 * 60 * 1000), null);
+});
+
+test("QR polling cannot read or consume another website account's scan", () => {
+  const record: ReusableScanRecord = {
+    actorKey: scanActorKey("website-user-a"),
+    scanUrl: "https://example.com/scan",
+    createdAt: Date.now(),
+    policyConsent: consent,
+  };
+  const scans = new Map([["scan-a", record]]);
+
+  assert.equal(findOwnedScan(scans, "scan-a", "website-user-b"), null);
+  assert.equal(scans.get("scan-a"), record);
+  assert.equal(findOwnedScan(scans, "scan-a", "website-user-a"), record);
+});
+
+test("the QR status route scopes polling and consumption to the authenticated website account", async () => {
+  const route = await readFile(
+    new URL("../../app/api/skland/auth/qr/status/route.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(route, /pollScan\(scanId, website\.user\.id, request\.signal\)/);
+  assert.match(route, /finalizeSklandAuthentication\([\s\S]+request\.signal\)/);
+  assert.match(route, /setSklandAccountStoreCookies[\s\S]+request\.signal\.throwIfAborted\(\)[\s\S]+consumeScan\(scanId, website\.user\.id\)/);
 });
 
 test("global QR protection limits only concurrent upstream starts", () => {

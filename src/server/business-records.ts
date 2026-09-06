@@ -202,6 +202,7 @@ export type FeedbackSummaryInput = {
   feedbackId: string;
   savedAt: Date;
   body: FeedbackRequest;
+  userId?: string | null;
   artifact?: PrivateArtifactDescriptor | null;
 };
 
@@ -217,7 +218,7 @@ export async function recordFeedbackStrict(input: FeedbackSummaryInput): Promise
       id: input.feedbackId,
       diagnosticId: input.body.diagnosticId,
       planRunDiagnosticId: linked[0]?.diagnosticId ?? null,
-      userId: linked[0]?.userId ?? null,
+      userId: input.userId ?? linked[0]?.userId ?? null,
       kind: input.body.kind ?? "room_issue",
       room: "room" in issue ? issue.room : null,
       note: issue.note,

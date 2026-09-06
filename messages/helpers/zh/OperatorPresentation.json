@@ -1,0 +1,8 @@
+{
+  "initialPrefix": "初始",
+  "levelPrefix": "等级 {level} ",
+  "elitePrefix": "精英 {elite} ",
+  "eliteLevelPrefix": "精英 {elite} · 等级 {level} ",
+  "unlock": "解锁",
+  "enhanced": "提升"
+}

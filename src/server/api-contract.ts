@@ -6,6 +6,9 @@ import {
   areRequestRateLimitsEnabled,
   isDebugToolsFeatureEnabled,
 } from "../deployment.ts";
+import { validateLayoutJson } from "../layout-validation.ts";
+import { assertOperbox } from "../operbox.ts";
+import { isRotationProfile } from "../rotation-settings.ts";
 import type {
   ApiFailure,
   ApiFieldError,
@@ -52,6 +55,8 @@ export const ERROR_DEFINITIONS: Record<AppErrorCode, ErrorDefinition> = {
   "AIC-DATA-8002": { status: 503, message: "账号云端数据暂不可用，请继续使用本地模式。", retryable: true },
   "AIC-DATA-8003": { status: 422, message: "云端工作区数据无效，请检查后重试。", retryable: false },
   "AIC-DATA-8004": { status: 404, message: "请求的云端数据不存在或已过期。", retryable: false },
+  "AIC-RELEASE-9001": { status: 409, message: "更新日志已变化或版本号重复，请刷新后重试。", retryable: false },
+  "AIC-RELEASE-9002": { status: 404, message: "当前环境中找不到这条更新日志。", retryable: false },
 };
 
 export class PublicApiError extends Error {
@@ -455,8 +460,26 @@ export function validateFeedbackRequest(value: unknown): asserts value is Feedba
   const room = body?.room && typeof body.room === "object" && !Array.isArray(body.room)
     ? body.room as Record<string, unknown>
     : null;
+  const reproduction = body?.reproduction && typeof body.reproduction === "object" && !Array.isArray(body.reproduction)
+    ? body.reproduction as Record<string, unknown>
+    : null;
   const kind = body?.kind === undefined ? "room_issue" : body.kind;
   const note = typeof body?.note === "string" ? body.note.trim() : "";
+  let operboxValid = false;
+  try {
+    operboxValid = Array.isArray(reproduction?.operbox)
+      && reproduction.operbox.length <= 1000
+      && assertOperbox(reproduction.operbox).length > 0;
+  } catch {
+    operboxValid = false;
+  }
+  const reproductionValid = Boolean(reproduction)
+    && validateLayoutJson(reproduction?.layout).length === 0
+    && operboxValid
+    && isRotationProfile(reproduction?.rotation)
+    && typeof reproduction?.fiammettaEnabled === "boolean"
+    && !(reproduction?.rotation === "fiammetta_8_8_4_4" && reproduction.fiammettaEnabled === false)
+    && (reproduction?.sourceType === "maa" || reproduction?.sourceType === "skland");
   const commonValid =
     Boolean(body)
     && typeof body?.diagnosticId === "string"
@@ -464,7 +487,8 @@ export function validateFeedbackRequest(value: unknown): asserts value is Feedba
     && body.diagnosticId.length <= 80
     && note.length >= 1
     && note.length <= 1000
-    && body?.consent === true;
+    && body?.consent === true
+    && reproductionValid;
   const roomValid = kind === "room_issue"
     && Boolean(room)
     && typeof room?.id === "string"
@@ -486,7 +510,7 @@ export function validateFeedbackRequest(value: unknown): asserts value is Feedba
       fieldErrors: [{
         path: "body",
         code: "invalid_feedback",
-        message: "请填写 1–1000 字说明，选择有效的反馈类型，并确认提交本次排班问题。",
+        message: "请填写 1–1000 字说明，选择有效的反馈类型，并确认提交本次排班的私有复现资料。",
       }],
     });
   }

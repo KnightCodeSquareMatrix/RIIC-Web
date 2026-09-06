@@ -1,4 +1,5 @@
 "use client";
+import { useTranslations } from "next-intl";
 
 /*
  * Drawer interaction adapted from interior.dev by Dominic Doemann.
@@ -37,12 +38,14 @@ export function Drawer({
   className?: string;
   onCloseComplete?: () => void;
 }) {
+  const intl = useTranslations();
   const titleId = useId();
   const hintId = useId();
   const [host, setHost] = useState<HTMLElement | null>(null);
   const [mounted, setMounted] = useState(open);
   const [dragging, setDragging] = useState(false);
   const reducedMotion = useReducedMotion();
+
   const controls = useDragControls();
   const shellRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -241,10 +244,10 @@ export function Drawer({
         >
           <span className="mt-0.5 h-8 w-1 shrink-0 bg-primary" aria-hidden="true" />
           <div className="min-w-0 flex-1"><h2 id={titleId} className="truncate font-heading text-base font-semibold">{title}</h2>{description ? <p className="mt-0.5 truncate text-xs text-[#313131]/58">{description}</p> : null}</div>
-          <Button type="button" variant="ghost" size="icon" className="-mr-2 size-10" aria-label="关闭详情" onPointerDown={(event) => event.stopPropagation()} onClick={close}><XIcon /><span className="sr-only">关闭详情</span></Button>
+          <Button type="button" variant="ghost" size="icon" className="-mr-2 size-10" aria-label={intl("components_ui_drawer.closeDetails")} onPointerDown={(event) => event.stopPropagation()} onClick={close}><XIcon /><span className="sr-only">{intl("components_ui_drawer.closeDetails")}</span></Button>
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain" data-slot="drawer-body">{children}</div>
-        <span id={hintId} className="sr-only">按 Esc 关闭面板，或将标题栏向右拖向屏幕边缘。</span>
+        <span id={hintId} className="sr-only">{intl("components_ui_drawer.pressEscapeToCloseThePanelOrDragThe")}</span>
       </motion.div>
     </div>,
     host,

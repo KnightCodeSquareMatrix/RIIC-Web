@@ -1,3 +1,6 @@
+"use client";
+import { useTranslations } from "next-intl";
+
 import { ChevronLeft, ChevronRight, MoreHorizontal } from "lucide-react";
 import * as React from "react";
 
@@ -46,6 +49,8 @@ function PaginationLink({ className, isActive, size = "icon", ...props }: Pagina
 }
 
 function PaginationPrevious({ className, ...props }: React.ComponentProps<typeof PaginationLink>) {
+  const intl = useTranslations();
+
   return (
     <PaginationLink
       aria-label="Go to previous page"
@@ -54,12 +59,14 @@ function PaginationPrevious({ className, ...props }: React.ComponentProps<typeof
       {...props}
     >
       <ChevronLeft aria-hidden="true" />
-      <span>上一页</span>
+      <span>{intl("components_ui_pagination.previous")}</span>
     </PaginationLink>
   );
 }
 
 function PaginationNext({ className, ...props }: React.ComponentProps<typeof PaginationLink>) {
+  const intl = useTranslations();
+
   return (
     <PaginationLink
       aria-label="Go to next page"
@@ -67,13 +74,15 @@ function PaginationNext({ className, ...props }: React.ComponentProps<typeof Pag
       className={cn("gap-1 pr-2.5", className)}
       {...props}
     >
-      <span>下一页</span>
+      <span>{intl("components_ui_pagination.next")}</span>
       <ChevronRight aria-hidden="true" />
     </PaginationLink>
   );
 }
 
 function PaginationEllipsis({ className, ...props }: React.ComponentProps<"span">) {
+  const intl = useTranslations();
+
   return (
     <span
       aria-hidden
@@ -81,7 +90,7 @@ function PaginationEllipsis({ className, ...props }: React.ComponentProps<"span"
       {...props}
     >
       <MoreHorizontal className="size-4" />
-      <span className="sr-only">更多页面</span>
+      <span className="sr-only">{intl("components_ui_pagination.morePages")}</span>
     </span>
   );
 }

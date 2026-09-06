@@ -6,8 +6,11 @@ import { operatorProfessionPresentationForCode } from "./operator-presentation.t
 export {
   BUILDING_SKILL_ENHANCED_WORD,
   PROFESSION_LABELS,
+  PROFESSION_LABELS_ENGLISH,
   buildingSkillUnlockLabel,
+  buildingSkillUnlockLabelEnglish,
   buildingSkillUnlockPrefix,
+  operatorProfessionLabelEnglishForCode,
 } from "./operator-presentation.ts";
 
 export interface OperatorBuildingSkillRef {

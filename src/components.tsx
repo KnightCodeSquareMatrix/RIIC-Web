@@ -1,3 +1,7 @@
+import { localize as rotationText } from "./i18n/helpers/RotationLabels.ts";
+import { localize as localize_components } from "./i18n/helpers/components.ts";
+import { useTranslations, useLocale } from "next-intl";
+import { messageRecord } from "@/i18n/translate";
 import {
   AlertTriangle,
   Check,
@@ -37,17 +41,21 @@ import {
 } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
 import { loadClientFeature } from "@/client-lazy-loader";
-import { demoBuildingSkill, demoOperatorName, demoRoomTitle, useLanguageDemo } from "@/language-demo";
+import { localizedBuildingSkill, localizedOperatorName, localizedRoomTitle } from "@/i18n/game-data";
+import { useGameCatalog } from "@/i18n/game-data-client";
 import {
   BUILDING_SKILL_ENHANCED_WORD,
   buildingSkillUnlockLabel,
+  buildingSkillUnlockLabelEnglish,
   buildingSkillUnlockPrefix,
+  operatorProfessionLabelEnglishForCode,
   operatorProfessionPresentationForCode,
 } from "@/operator-presentation";
 import { roomVisualFor } from "@/room-visuals";
@@ -80,7 +88,7 @@ import {
   shiftTeamSummary,
   type RotationMetricKind,
 } from "./rotation-presentation";
-import { DEFAULT_ROTATION_PROFILE, rotationOption } from "./rotation-settings";
+import { DEFAULT_ROTATION_PROFILE } from "./rotation-settings";
 import { RoomRow } from "./schedule";
 import {
   COMPACT_OPERATOR_SIZE_CLASS,
@@ -116,15 +124,74 @@ const OperatorSkillTooltip = lazy(() => loadClientFeature("operatorSkillTooltip"
   default: module.OperatorSkillTooltip,
 })));
 
-function CompactScheduleLoading() {
-  const { locale } = useLanguageDemo();
+function CompactScheduleLoading({ rows }: { rows: RoomRow[] }) {
+  const intl = useTranslations();
+
+  const grouped = new Map<string, RoomRow[]>();
+  for (const row of rows) {
+    grouped.set(row.group, [...(grouped.get(row.group) ?? []), row]);
+  }
+  const workstations = [...(grouped.get("trading") ?? []), ...(grouped.get("manufacture") ?? [])];
+  const power = grouped.get("power") ?? [];
+  const dormitories = grouped.get("dormitory") ?? [];
+  const skeleton = (
+    row: RoomRow,
+    className: string,
+    style?: CSSProperties,
+  ) => (
+    <Skeleton
+      key={row.key}
+      className={cn("min-w-0 flex-1 rounded-none border border-[#313131]/10 bg-[#313131]/14", className)}
+      data-compact-room-skeleton
+      data-room-group={row.group}
+      style={style}
+    />
+  );
+
   return (
     <div
-      className="grid min-h-[560px] place-items-center border-y border-dashed border-border/70 text-sm text-muted-foreground"
+      className="min-h-[560px]"
       data-compact-schedule-loading
       role="status"
+      aria-label={intl("components.preparingOverview")}
     >
-      {locale === "en" ? "Preparing overview" : "正在准备一图流布局"}
+      <span className="sr-only">{intl("components.preparingOverview")}</span>
+      <div className="flex items-stretch gap-3" aria-hidden="true">
+        <div className="flex min-w-0 flex-col gap-3" style={{ flexBasis: "55%" }}>
+          {(grouped.get("control") ?? []).map((room) => skeleton(room, "h-32"))}
+          {[0, 2, 4].map((start) => (
+            <div key={start} className="flex gap-3">
+              {workstations.slice(start, start + 2).map((room) => skeleton(room, "h-36"))}
+            </div>
+          ))}
+          {power.length === 3 ? (
+            <div className="flex gap-3">
+              {power.map((room) => skeleton(room, "h-24"))}
+            </div>
+          ) : (
+            <div className="flex gap-3">
+              <div className="flex gap-3" style={{ flexBasis: "50%" }}>
+                {power.slice(0, 2).map((room) => skeleton(room, "h-24"))}
+              </div>
+              {workstations[6] ? skeleton(workstations[6], "h-24", { flexBasis: "50%" }) : null}
+            </div>
+          )}
+        </div>
+        <div className="flex min-w-0 flex-col gap-3" style={{ flexBasis: "45%" }}>
+          <div className="compact-auxiliary-container min-w-0">
+            <div className="compact-auxiliary-grid">
+              {["meeting", "training", "hire", "processing"].flatMap((group) => (
+                (grouped.get(group) ?? []).map((room) => skeleton(room, "h-28"))
+              ))}
+            </div>
+          </div>
+          {dormitories.slice(0, 4).map((room) => (
+            <div key={room.key} className="flex min-h-24 flex-1">
+              {skeleton(room, "h-full")}
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -158,7 +225,7 @@ export function ProductToggleGroup<T extends string>({
   ariaLabel: string;
   disabledValue?: T;
 }) {
-  const { locale } = useLanguageDemo();
+  const locale = useLocale();
   const roomProductControls = surface === "room" && (tone === "trade" || tone === "factory");
   const compactRoomProductControls = roomProductControls && layout === "compact";
   const fillRoomProductControls = roomProductControls && layout === "fill";
@@ -265,7 +332,8 @@ export function FileDrop({
   fileName: string | null;
   onFile: (file: File) => void;
 }) {
-  const { locale } = useLanguageDemo();
+  const intl = useTranslations();
+  const locale = useLocale();
   const en = locale === "en";
   const [dragActive, setDragActive] = useState(false);
 
@@ -302,7 +370,7 @@ export function FileDrop({
         "flex min-h-32 cursor-pointer flex-col items-center justify-center gap-2 rounded-[4px] border border-dashed bg-background px-4 py-5 text-center transition-[color,background-color,border-color] duration-[var(--motion-duration-state)] ease-[var(--motion-ease-out)] hover:border-primary/40 hover:bg-muted/40",
         dragActive && "border-primary bg-primary/10 text-primary ring-2 ring-primary/25 ring-offset-2",
       )}
-      aria-label={en ? "Drop or select an operator data file" : "拖放或选择干员数据文件"}
+      aria-label={intl("components.dropOrSelectAnOperatorDataFile")}
       data-slot="file-drop"
       data-dragging={dragActive || undefined}
       onDragEnter={handleDragEnter}
@@ -312,19 +380,17 @@ export function FileDrop({
     >
       <Upload className="size-5 text-primary" />
       <span className="font-medium text-foreground">
-        {dragActive ? (en ? "Drop to import" : "松开即可导入") : fileName ?? (en ? "Upload roster JSON / XLSX" : "上传练度 JSON / XLSX")}
+        {dragActive ? (intl("components.dropToImport")) : fileName ?? (intl("components.uploadRosterJsonXlsx"))}
       </span>
-      <span className="flex flex-wrap items-center justify-center gap-1.5 text-xs" role="list" aria-label={en ? "Supported MAA JSON languages" : "支持的 MAA JSON 语言"}>
-        {(en ? ["Simplified Chinese", "Traditional Chinese", "Japanese", "English"] : ["简中", "繁中", "日文", "英文"]).map((language) => (
+      <span className="flex flex-wrap items-center justify-center gap-1.5 text-xs" role="list" aria-label={intl("components.supportedMaaJsonLanguages")}>
+        {(messageRecord(en, "components_labels")).map((language) => (
           <span key={language} role="listitem" className="rounded-full border border-border bg-muted/70 px-2 py-0.5 font-medium text-foreground">
             {language}
           </span>
         ))}
       </span>
       <span className="text-xs leading-relaxed text-muted-foreground">
-        {en
-          ? "Drop a file or choose one. Names are converted locally to Simplified Chinese before scheduling · XLSX imports are also supported"
-          : "可直接拖入文件；MAA JSON 会在本地统一转换为简中后提交排班，也支持一图流 XLSX"}
+        {intl("components.dropAFileOrChooseOneNamesAreConverted")}
       </span>
       <input className="sr-only" type="file" accept=".json,.xlsx,.xls" onChange={handleChange} />
     </Label>
@@ -340,11 +406,11 @@ export function PresetSelector({
   selected: PresetDef;
   onSelect: (preset: PresetDef) => void;
 }) {
-  const { locale } = useLanguageDemo();
-  const en = locale === "en";
+  const intl = useTranslations();
+
   return (
     <ToggleGroup
-      aria-label={en ? "Layout presets" : "布局预设"}
+      aria-label={intl("components.layoutPresets")}
       value={[selected.label]}
       onValueChange={(nextValue) => {
         const next = presets.find((preset) => preset.label === nextValue[0]);
@@ -373,7 +439,7 @@ export function PresetSelector({
           <span className="relative z-10 flex min-w-0 flex-col items-start gap-1">
             <span className="text-lg font-semibold leading-none tabular-nums">{preset.label}</span>
             <span className="text-xs font-normal text-white/58">
-              <span className="font-number">{preset.trading}</span> {en ? "trade" : "贸"} / <span className="font-number">{preset.manufacture}</span> {en ? "factory" : "制"} / <span className="font-number">{preset.power}</span> {en ? "power" : "电"}
+              <span className="font-number">{preset.trading}</span> {intl("components.trade")} / <span className="font-number">{preset.manufacture}</span> {intl("components.factory")} / <span className="font-number">{preset.power}</span> {intl("components.power")}
             </span>
           </span>
           {selected.label === preset.label ? <Check className="relative z-10 size-4 shrink-0 text-[#FFD800]" aria-hidden="true" /> : null}
@@ -396,8 +462,8 @@ function RoomLevelControl({
   onChange: (level: number) => void;
   surface?: "default" | "room";
 }) {
-  const { locale } = useLanguageDemo();
-  const en = locale === "en";
+  const intl = useTranslations();
+
   const [draft, setDraft] = useState<string | null>(null);
   const display = draft ?? String(level);
 
@@ -421,7 +487,7 @@ function RoomLevelControl({
           type="button"
           variant="ghost"
           size="icon-sm"
-          aria-label={en ? `${roomId} decrease level` : `${roomId} 等级减一`}
+          aria-label={intl("components.decreaseLevel", { roomId: roomId })}
           className={cn(
             "h-full w-7 rounded-none",
             surface === "room" ? "text-white/62 hover:bg-white/10 hover:text-white disabled:text-white/28" : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -437,7 +503,7 @@ function RoomLevelControl({
         <Input
           type="text"
           inputMode="numeric"
-          aria-label={en ? `${roomId} level` : `${roomId} 等级`}
+          aria-label={intl("components.level", { roomId: roomId })}
           value={display}
           onFocus={() => setDraft(String(level))}
           onChange={(event) => setDraft(event.target.value)}
@@ -457,7 +523,7 @@ function RoomLevelControl({
           type="button"
           variant="ghost"
           size="icon-sm"
-          aria-label={en ? `${roomId} increase level` : `${roomId} 等级加一`}
+          aria-label={intl("components.increaseLevel", { roomId: roomId })}
           className={cn(
             "h-full w-7 rounded-none",
             surface === "room" ? "text-white/62 hover:bg-white/10 hover:text-white disabled:text-white/28" : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -484,7 +550,7 @@ function RoomLevelControl({
           itemToStringValue={(item) => item}
         >
           <ComboboxInput
-            aria-label={en ? `${roomId} level` : `${roomId} 等级`}
+            aria-label={intl("components.level", { roomId: roomId })}
             className={cn(
               "w-20 rounded-[4px] [&_[data-slot=input-group-control]]:text-center",
               surface === "room" && "border-white/20 bg-[#3C3C3C]/78 text-white shadow-none [&_[data-slot=input-group-button]]:text-white/62 [&_[data-slot=input-group-control]]:text-white"
@@ -539,19 +605,21 @@ export function LayoutEditor({
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
   onRoomLevelChange: (roomId: string, level: number) => void;
 }) {
-  const { locale } = useLanguageDemo();
-  const en = locale === "en";
+  const intl = useTranslations();
+  const locale = useLocale();
+  const gameCatalog = useGameCatalog();
+
   const factoryRecipesUnlocked = hasUnlockedFactoryRecipes(layout);
   const roomGroups = [
-    { key: "trade", label: en ? "Trading Posts" : "贸易站", rooms: layout.rooms.filter((room) => room.kind === "trade_post") },
-    { key: "factory", label: en ? "Factories" : "制造站", rooms: layout.rooms.filter((room) => room.kind === "factory") },
-    { key: "power", label: en ? "Power Plants" : "发电站", rooms: layout.rooms.filter((room) => room.kind === "power_plant") },
-    { key: "function", label: en ? "Control & Functional" : "控制与功能区", rooms: layout.rooms.filter((room) => !["trade_post", "factory", "power_plant", "dormitory"].includes(room.kind)) },
-    { key: "dormitory", label: en ? "Dormitories" : "宿舍", rooms: layout.rooms.filter((room) => room.kind === "dormitory") },
+    { key: "trade", label: intl("components.tradingPosts"), rooms: layout.rooms.filter((room) => room.kind === "trade_post") },
+    { key: "factory", label: intl("components.factories"), rooms: layout.rooms.filter((room) => room.kind === "factory") },
+    { key: "power", label: intl("components.powerPlants"), rooms: layout.rooms.filter((room) => room.kind === "power_plant") },
+    { key: "function", label: intl("components.controlFunctional"), rooms: layout.rooms.filter((room) => !["trade_post", "factory", "power_plant", "dormitory"].includes(room.kind)) },
+    { key: "dormitory", label: intl("components.dormitories"), rooms: layout.rooms.filter((room) => room.kind === "dormitory") },
   ].filter((group) => group.rooms.length > 0);
 
   return (
-    <Accordion multiple defaultValue={["trade", "factory"]} aria-label={en ? "Facility settings" : "设施设置"} className="gap-2.5">
+    <Accordion multiple defaultValue={["trade", "factory"]} aria-label={intl("components.facilitySettings")} className="gap-2.5">
       {roomGroups.map((group) => (
         <AccordionItem key={group.key} value={group.key} data-facility-group={group.key}>
           <AccordionTrigger>
@@ -571,8 +639,8 @@ export function LayoutEditor({
               const hasRestrictedProduct = isTrade ? room.level < 3 : isFactory && !factoryRecipesUnlocked;
               const showRestrictionHint = hasRestrictedProduct && (!isFactory || roomIndex === 0);
               const restrictionHint = isTrade
-                ? en ? "Originium Orders require a level 3 Trading Post" : "开采协力仅限 3 级贸易站"
-                : en ? "Unlock Originium Shards by owning at least one level 3 Factory" : "需先拥有至少一个 3 级制造站解锁源石碎片配方";
+                ? intl("components.originiumOrdersRequireALevel3TradingPost")
+                : intl("components.unlockOriginiumShardsByOwningAtLeastOneLevel");
               const availableProductOptions: Option<TradeOrder | FactoryRecipe>[] = isTrade
                 ? TRADE_ORDER_OPTIONS
                 : isFactory
@@ -582,7 +650,7 @@ export function LayoutEditor({
               const levelMax = maxRoomLevel(room.kind);
               const visualGroup = roomVisualGroupForKind(room.kind);
               const originalName = group.rooms.length > 1 ? `${roomKindLabel(room.kind)} ${roomIndex + 1}` : roomKindLabel(room.kind);
-              const displayName = demoRoomTitle(originalName, visualGroup, locale);
+              const displayName = localizedRoomTitle(originalName, visualGroup, locale, gameCatalog);
 
               return (
                 <div
@@ -613,7 +681,7 @@ export function LayoutEditor({
                   {activeProduct ? (
                     <div className="col-span-2 sm:col-span-1">
                       <ProductToggleGroup<TradeOrder | FactoryRecipe>
-                        ariaLabel={`${displayName} ${isTrade ? (en ? "orders" : "订单") : (en ? "recipe" : "配方")}${hasRestrictedProduct ? `, ${restrictionHint}` : ""}`}
+                        ariaLabel={`${displayName} ${isTrade ? (intl("components.orders")) : (intl("components.recipe"))}${hasRestrictedProduct ? `, ${restrictionHint}` : ""}`}
                         value={activeProduct}
                         options={availableProductOptions}
                         columns={isTrade ? 2 : 3}
@@ -650,20 +718,20 @@ export function RunButton({
   plannerReady: boolean;
   onRun: () => void;
 }) {
-  const { locale } = useLanguageDemo();
-  const en = locale === "en";
-  const unavailableLabel = plannerReady ? (en ? "Import operator data first" : "请先导入干员数据") : (en ? "Planner unavailable" : "排班服务暂不可用");
+  const intl = useTranslations();
+
+  const unavailableLabel = plannerReady ? (intl("components.importOperatorDataFirst")) : (intl("components.plannerUnavailable"));
   return (
     <Button
       size="sm"
       className="h-9 min-w-0 max-sm:h-11 max-sm:px-3 max-sm:text-xs"
-      aria-label={loading ? (en ? "Calculating" : "计算中") : canRun ? (en ? "Generate schedule" : "生成排班") : unavailableLabel}
-      title={!canRun ? (plannerReady ? (en ? "Import operator data first." : "请先导入干员数据。") : (en ? "Planner unavailable. Try again later." : "排班服务暂不可用，请稍后重试。")) : undefined}
+      aria-label={loading ? (intl("components.calculating")) : canRun ? (intl("components.generateSchedule")) : unavailableLabel}
+      title={!canRun ? (plannerReady ? (intl("components.importOperatorDataFirst2")) : (intl("components.plannerUnavailableTryAgainLater"))) : undefined}
       onClick={onRun}
       disabled={!canRun || loading}
     >
       {loading ? <Loader2 className="animate-spin" /> : <Play />}
-      <span>{loading ? (en ? "Calculating" : "计算中") : canRun ? (en ? "Generate" : "生成排班") : (en ? "Import to generate" : "导入后生成")}</span>
+      <span>{loading ? (intl("components.calculating")) : canRun ? (intl("components.generate")) : (intl("components.importToGenerate"))}</span>
     </Button>
   );
 }
@@ -671,24 +739,27 @@ export function RunButton({
 export function ShiftTabs({
   maaJson,
   rotation,
+  durations,
   active,
   closest,
   onChange,
 }: {
   maaJson?: MaaJson;
   rotation?: RotationJson;
+  durations?: readonly number[];
   active: number;
   closest?: number;
   onChange: (index: number) => void;
 }) {
-  const { locale } = useLanguageDemo();
+  const intl = useTranslations();
+  const locale = useLocale();
   const en = locale === "en";
   const plans = maaJson?.plans ?? [];
 
   if (plans.length === 0) {
     return (
       <Button type="button" variant="outline" disabled size="sm">
-        {locale === "en" ? "Awaiting result" : "等待结果"}
+        {intl("components.awaitingResult")}
       </Button>
     );
   }
@@ -702,17 +773,18 @@ export function ShiftTabs({
       >
         {plans.map((plan, index) => {
           const shift = rotation?.shifts[index];
-          const label = en ? `Shift ${index + 1}${shift ? ` · ${compactNumber(shift.duration_hours)}h` : ""}` : shiftTabLabel(shift, index);
+          const durationHours = shift?.duration_hours ?? durations?.[index];
+          const label = localize_components.text(en, "additional1", { value1: ((en)) ? String(index + 1) : "", choice2: ((en)) && (durationHours !== undefined) ? "yes" : "no", value3: ((en) && (durationHours !== undefined)) ? String(compactNumber(durationHours)) : "", choice4: (!(en)) && (durationHours !== undefined) ? "yes" : "no", value5: (!(en) && (durationHours !== undefined)) ? String(index + 1) : "", value6: (!(en) && (durationHours !== undefined)) ? String(compactNumber(durationHours)) : "", value7: (!(en) && !(durationHours !== undefined)) ? String(shiftTabLabel(shift, index)) : "" });
           const originalTeamSummary = shiftTeamSummary(shift, rotation?.profile ?? DEFAULT_ROTATION_PROFILE);
           const teamSummary = en && originalTeamSummary ? originalTeamSummary.replaceAll("主力", "Main").replaceAll("替补", "Backup").replaceAll("上班", "working").replaceAll("休息", "resting") : originalTeamSummary;
           return (
             <TabsTrigger
               key={`${plan.name}-${index}`}
               value={String(index)}
-              aria-label={teamSummary ? `${label}，${teamSummary}` : label}
+              aria-label={teamSummary ? `${label}${intl("components.label")}${teamSummary}` : label}
             >
               {label}
-              {closest === index ? <span className="rounded-full bg-primary/10 px-1.5 text-xs text-primary max-md:hidden">最接近</span> : null}
+              {closest === index ? <span className="rounded-full bg-primary/10 px-1.5 text-xs text-primary max-md:hidden">{intl("components.closest")}</span> : null}
             </TabsTrigger>
           );
         })}
@@ -745,13 +817,19 @@ export function PlanTelemetry({
   activeShift: number;
   planRevision?: string;
 }) {
+  const intl = useTranslations();
   const shouldReduceMotion = useReducedMotion();
+  const locale = useLocale();
+  const en = locale === "en";
   if (!profile && !rotation) return null;
 
   const active = rotation?.shifts?.[activeShift];
   const rotationProfile = rotation?.profile ?? profile?.rotation_profile ?? DEFAULT_ROTATION_PROFILE;
-  const selectedRotation = rotationOption(rotationProfile);
-  const activeTeamSummary = shiftTeamSummary(active, rotationProfile);
+  const selectedRotationLabel = rotationText.text(en, rotationProfile);
+  const originalActiveTeamSummary = shiftTeamSummary(active, rotationProfile);
+  const activeTeamSummary = en && originalActiveTeamSummary
+    ? originalActiveTeamSummary.replaceAll("主力", "Main").replaceAll("替补", "Backup").replaceAll("上班", "working").replaceAll("休息", "resting")
+    : originalActiveTeamSummary;
   const summary = profile?.summary;
   const manufactureReady = summary ? manufacturePoolReady(summary) : undefined;
   const currentProfileRotation = profile?.rotation;
@@ -759,21 +837,21 @@ export function PlanTelemetry({
   const dailyMetrics = [
     {
       kind: "trade" as const,
-      label: "24h 贸易",
+      label: intl("components.24hTrading"),
       value: rotation?.daily.trade ?? currentProfileRotation?.daily_trade_efficiency ?? currentProfileRotation?.daily_trade,
       baseline: baselineProfileRotation?.daily_trade_efficiency ?? baselineProfileRotation?.daily_trade,
       suffix: "×",
     },
     {
       kind: "manu" as const,
-      label: "24h 制造",
+      label: intl("components.24hManufacturing"),
       value: rotation?.daily.manufacture ?? currentProfileRotation?.daily_manufacture_efficiency ?? currentProfileRotation?.daily_manu,
       baseline: baselineProfileRotation?.daily_manufacture_efficiency ?? baselineProfileRotation?.daily_manu,
       suffix: "%",
     },
     {
       kind: "power" as const,
-      label: "24h 发电",
+      label: intl("components.24hPower"),
       value: rotation?.daily.power ?? currentProfileRotation?.daily_power_efficiency ?? currentProfileRotation?.daily_power,
       baseline: baselineProfileRotation?.daily_power_efficiency ?? baselineProfileRotation?.daily_power,
       suffix: "%",
@@ -790,7 +868,7 @@ export function PlanTelemetry({
   return (
     <motion.section
       className="mb-4 overflow-hidden border-y border-[#313131]/15 bg-[#F3F1EA]"
-      aria-label="效率概览"
+      aria-label={intl("components.efficiencyOverview")}
       data-plan-summary
       data-plan-revision={planRevision}
       initial={{
@@ -813,13 +891,13 @@ export function PlanTelemetry({
     >
       <div className="grid grid-cols-[auto_1fr] items-stretch max-md:grid-cols-1">
         <div className="flex min-w-36 flex-col justify-center bg-[#313131] px-4 py-3 text-white">
-          <span className="text-xs font-semibold uppercase tracking-[0.12em] text-white/55">效率概览</span>
-          <strong className="mt-0.5 text-xl font-medium">当前方案</strong>
+          <span className="text-xs font-semibold uppercase tracking-[0.12em] text-white/55">{intl("components.efficiencyOverview")}</span>
+          <strong className="mt-0.5 text-xl font-medium">{intl("components.currentPlan")}</strong>
           <span className="mt-1 text-xs text-white/62">
-            <span className="font-number">{layout.template}</span> · <span className="font-number">{layout.rooms.length}</span> 个设施
+            <span className="font-number">{layout.template}</span> · <span className="font-number">{layout.rooms.length}</span> {intl("components.facilities")}
           </span>
           <span className="mt-0.5 text-xs text-white/62">
-            {selectedRotation.label} · <span className="font-number">{rotation?.shifts.length ?? 0}</span> 班
+            {selectedRotationLabel} · <span className="font-number">{rotation?.shifts.length ?? 0}</span> {intl("components.shifts")}
           </span>
         </div>
         <div className="grid grid-cols-[repeat(auto-fit,minmax(112px,1fr))] divide-x divide-[#313131]/10 max-sm:divide-x-0 max-sm:grid-cols-2">
@@ -853,7 +931,7 @@ export function PlanTelemetry({
                   <AnimatedNumber value={`${compactNumber(value, displayDigits)}${metric.suffix}`} />
                 </strong>
                 <span className="mt-0.5 block whitespace-nowrap text-[10px] tabular-nums text-[#313131]/52">
-                  参考 {baseline === undefined ? "—" : `${compactNumber(baseline, displayDigits)}${metric.suffix}`}
+                  {intl("components.reference")} {baseline === undefined ? "—" : `${compactNumber(baseline, displayDigits)}${metric.suffix}`}
                   {delta === undefined ? null : (
                     <span className={cn("ml-1", delta >= 0 ? "text-emerald-700" : "text-red-700")}>
                       · {delta >= 0 ? "+" : ""}{compactNumber(delta)}%
@@ -878,7 +956,7 @@ export function PlanTelemetry({
                 ease: MOTION_EASE_OUT,
               }}
             >
-              <span className="block text-xs text-[#313131]/58">当前班次</span>
+              <span className="block text-xs text-[#313131]/58">{intl("components.currentShift")}</span>
               <strong className="font-technical mt-0.5 block text-lg font-semibold tabular-nums tracking-[0.01em] text-[#313131]">
                 <AnimatedNumber value={`${compactNumber(active.duration_hours)}h`} />
               </strong>
@@ -894,20 +972,20 @@ export function PlanTelemetry({
 
       {summary ? (
         <div className="flex flex-wrap gap-x-5 gap-y-1 border-t border-[#313131]/10 px-4 py-2 text-xs text-[#313131]/68">
-          <span>已拥有 <strong className="font-number text-[#313131]">{summary.owned}</strong></span>
-          <span>进阶可用 <strong className="font-number text-[#313131]">{summary.tier_up_owned}</strong></span>
-          <span>贸易候选 <strong className="font-number text-[#313131]">{summary.trade_pool_ready}</strong></span>
-          {manufactureReady !== undefined ? <span>制造候选 <strong className="font-number text-[#313131]">{manufactureReady}</strong></span> : null}
-          <span>中枢等级 Lv<span className="font-number">.{layout.rooms.find((room) => room.kind === "control_center")?.level ?? "—"}</span></span>
+          <span>{intl("components.owned")} <strong className="font-number text-[#313131]">{summary.owned}</strong></span>
+          <span>{intl("components.promotionReady")} <strong className="font-number text-[#313131]">{summary.tier_up_owned}</strong></span>
+          <span>{intl("components.tradingCandidates")} <strong className="font-number text-[#313131]">{summary.trade_pool_ready}</strong></span>
+          {manufactureReady !== undefined ? <span>{intl("components.manufacturingCandidates")} <strong className="font-number text-[#313131]">{manufactureReady}</strong></span> : null}
+          <span>{intl("components.controlCenter")} Lv<span className="font-number">.{layout.rooms.find((room) => room.kind === "control_center")?.level ?? "—"}</span></span>
         </div>
       ) : null}
 
       {domains.length > 0 || profile?.actions.length || profile?.flags.length || profile?.narration_hints.length ? (
         <details className="group border-t border-[#313131]/10">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-2.5 text-xs font-medium text-[#313131] marker:content-none">
-            <span>效率详情 · <span className="font-number">{domains.length}</span> 个指标</span>
-            <span className="text-[#313131]/50 group-open:hidden">展开</span>
-            <span className="hidden text-[#313131]/50 group-open:inline">收起</span>
+            <span>{intl("components.efficiencyDetails")} · <span className="font-number">{domains.length}</span> {intl("components.metrics")}</span>
+            <span className="text-[#313131]/50 group-open:hidden">{intl("components.expand")}</span>
+            <span className="hidden text-[#313131]/50 group-open:inline">{intl("components.collapse")}</span>
           </summary>
           <div className="border-t border-[#313131]/10 bg-white/55 px-4 py-3">
             {domains.length > 0 ? (
@@ -923,17 +1001,17 @@ export function PlanTelemetry({
                         {domain.current.mechanic_equivalent_efficiency !== undefined
                           || domain.baseline.mechanic_equivalent_efficiency !== undefined ? (
                             <span className="mt-0.5 block truncate text-[10px] tabular-nums text-[#313131]/48">
-                              机制等效 当前 {domain.current.mechanic_equivalent_efficiency === undefined
+                              {intl("components.mechanicEquivalentCurrent")} {domain.current.mechanic_equivalent_efficiency === undefined
                                 ? "—"
                                 : compactNumber(domain.current.mechanic_equivalent_efficiency, 3)}
-                              {" · "}参考 {domain.baseline.mechanic_equivalent_efficiency === undefined
+                              {" · "}{intl("components.reference")} {domain.baseline.mechanic_equivalent_efficiency === undefined
                                 ? "—"
                                 : compactNumber(domain.baseline.mechanic_equivalent_efficiency, 3)}
                             </span>
                           ) : null}
                       </div>
-                      <span className="tabular-nums text-[#313131]">当前 {current === undefined ? "—" : compactNumber(current, 2)}</span>
-                      <span className="tabular-nums text-[#313131]/55 max-sm:hidden">基准 {baseline === undefined ? "—" : compactNumber(baseline, 2)}</span>
+                      <span className="tabular-nums text-[#313131]">{intl("components.current")} {current === undefined ? "—" : compactNumber(current, 2)}</span>
+                      <span className="tabular-nums text-[#313131]/55 max-sm:hidden">{intl("components.baseline")} {baseline === undefined ? "—" : compactNumber(baseline, 2)}</span>
                       <span className={cn("rounded-sm px-1.5 py-0.5 text-xs font-semibold", profileSeverityClass(domain.severity))}>
                         {domain.gap_ratio >= 0 ? "+" : ""}{compactNumber(domain.gap_ratio * 100)}%
                       </span>
@@ -983,14 +1061,15 @@ export function LevelDiamonds({
   maxLevel?: number;
   variant?: LevelDiamondVariant;
 }) {
-  const { locale } = useLanguageDemo();
+  const intl = useTranslations();
+
   const count = levelDiamondCount(level);
   if (!count || !level) return null;
 
   return (
     <span
       className="flex shrink-0 items-center gap-1.5"
-      aria-label={locale === "en" ? `Level ${level}, maximum ${maxLevel ?? level}` : `${level} 级，最高 ${maxLevel ?? level} 级`}
+      aria-label={intl("components.levelMaximum", { level: level, value2: maxLevel ?? level })}
       title={variant === "compact" ? `Lv.${level}/${maxLevel ?? level}` : undefined}
     >
       <span className="level-diamonds" data-variant={variant} aria-hidden="true">
@@ -1016,7 +1095,7 @@ export function RoomEfficiencyReadout({
   details?: boolean;
   trend?: ShiftDirection;
 }) {
-  const { locale } = useLanguageDemo();
+  const locale = useLocale();
   const efficiencyLabel = (label?: string) => locale === "en" && label ? ({ "纯技能": "Skill", "技能效率": "Skill efficiency", "跨设施": "Cross-facility", "综合加成": "Combined bonus", "仓储上限": "Capacity", "订单机制": "Order mechanic", "总充能": "Total charge" }[label] ?? label) : label;
   return (
     <div className="min-w-0" title={value.details.map((detail) => detail.label ? `${efficiencyLabel(detail.label)} ${detail.value}` : detail.value).join(" · ")}>
@@ -1055,7 +1134,7 @@ function RoomEfficiencyDetails({
   compactFactory?: boolean;
   trend?: ShiftDirection;
 }) {
-  const { locale } = useLanguageDemo();
+  const locale = useLocale();
   const efficiencyLabel = (label?: string) => locale === "en" && label ? ({ "纯技能": "Skill", "技能效率": "Skill efficiency", "跨设施": "Cross-facility", "综合加成": "Combined bonus", "仓储上限": "Capacity", "订单机制": "Order mechanic", "总充能": "Total charge" }[label] ?? label) : label;
   if (!value?.details.length) return null;
 
@@ -1094,8 +1173,10 @@ export function RoomProductControls({
   onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
 }) {
-  const { locale } = useLanguageDemo();
-  const en = locale === "en";
+  const intl = useTranslations();
+  const locale = useLocale();
+  const gameCatalog = useGameCatalog();
+
   if (row.group === "training") {
     return null;
   }
@@ -1110,7 +1191,7 @@ export function RoomProductControls({
     return (
       <div className={cn("w-full", isTrade ? "max-sm:w-fit" : "max-w-[220px]")}>
         <ProductToggleGroup<TradeOrder | FactoryRecipe>
-          ariaLabel={`${demoRoomTitle(row.title, row.group, locale)} ${isTrade ? (en ? "orders" : "订单") : (en ? "recipe" : "配方")}`}
+          ariaLabel={`${localizedRoomTitle(row.title, row.group, locale, gameCatalog)} ${isTrade ? (intl("components.orders")) : (intl("components.recipe"))}`}
           value={activeProduct}
           options={isTrade ? TRADE_ORDER_OPTIONS : FACTORY_RECIPE_OPTIONS}
           columns={isTrade ? 2 : 4}
@@ -1135,37 +1216,52 @@ function OperatorSlotShell({
   centerFrameInList,
   compactFactory,
   compactView,
+  editableHint,
   frameClassName,
   frameContent,
+  frameFocusable = false,
   frameWrapper = (frame) => frame,
   label,
   labelClassName,
   positionLabel,
   title,
+  onActivate,
 }: {
   ariaLabel?: string;
   centerFrameInList: boolean;
   compactFactory: boolean;
   compactView: boolean;
+  editableHint?: string;
   frameClassName: string;
   frameContent?: ReactNode;
+  frameFocusable?: boolean;
   /** 可选：包装头像框元素（例如包上技能 tooltip 的 trigger）。默认原样返回。 */
   frameWrapper?: (frame: ReactElement) => ReactElement;
   label: ReactNode;
   labelClassName: string;
   positionLabel?: string;
   title?: string;
+  onActivate?: () => void;
 }) {
   const frame = (
     <div
       className={cn(
         "relative aspect-square h-[var(--operator-slot-size)] min-w-0 shrink-0 overflow-hidden border-2 max-sm:border",
         frameClassName,
+        frameFocusable && "cursor-help outline-none transition-[border-color,box-shadow] hover:border-white/90 focus-visible:border-[#FFD501] focus-visible:ring-2 focus-visible:ring-[#FFD501]/70",
+        onActivate && "border-[#FFD800] shadow-[0_0_0_1px_rgba(255,216,0,0.42),0_0_12px_rgba(255,216,0,0.2)]",
         centerFrameInList && "max-sm:h-auto max-sm:w-full sm:absolute sm:left-0 sm:top-1/2 sm:-translate-y-1/2",
       )}
       aria-label={ariaLabel}
+      role={frameFocusable ? "button" : undefined}
+      tabIndex={frameFocusable ? 0 : undefined}
     >
       {frameContent}
+      {editableHint ? (
+        <span className="pointer-events-none absolute bottom-0.5 right-0.5 z-20 bg-black/72 px-1 py-0.5 text-[9px] font-medium leading-none tracking-wide text-[#FFD800]">
+          {editableHint}
+        </span>
+      ) : null}
     </div>
   );
 
@@ -1178,9 +1274,19 @@ function OperatorSlotShell({
           : "[--operator-slot-size:clamp(70px,7.3vw,80px)] max-sm:[--operator-slot-size:clamp(56px,16vw,76px)]",
         compactFactory && "min-[1800px]:[--operator-slot-size:70px]",
         centerFrameInList && "max-sm:w-full sm:relative sm:h-full sm:w-[var(--operator-slot-size)]",
+        onActivate && "cursor-pointer rounded-[4px] outline-none focus-visible:ring-2 focus-visible:ring-[#FFD800] focus-visible:ring-offset-2 focus-visible:ring-offset-[#313131]",
       )}
       data-position={positionLabel || undefined}
       title={title}
+      role={onActivate ? "button" : undefined}
+      tabIndex={onActivate ? 0 : undefined}
+      onClick={onActivate}
+      onKeyDown={onActivate ? (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onActivate();
+        }
+      } : undefined}
     >
       {frameWrapper(frame)}
       <span
@@ -1197,11 +1303,31 @@ function OperatorSlotShell({
   );
 }
 
-function BuildingSkillBadge({ skill }: { skill: NonNullable<RoomRow["operatorSlots"][number]["buildingSkill"]> }) {
+function BuildingSkillBadge({
+  skill,
+  interactive = true,
+}: {
+  skill: NonNullable<RoomRow["operatorSlots"][number]["buildingSkill"]>;
+  interactive?: boolean;
+}) {
+  const intl = useTranslations();
   const [open, setOpen] = useState(false);
-  const { locale } = useLanguageDemo();
-  const displaySkill = demoBuildingSkill(skill.id, locale, skill);
-  const unlockLabel = buildingSkillUnlockLabel(skill.elite, skill.level, skill.enhanced);
+  const locale = useLocale();
+  const gameCatalog = useGameCatalog();
+  const displaySkill = localizedBuildingSkill(skill.id, locale, skill, gameCatalog);
+  const unlockLabel = locale === "en"
+    ? buildingSkillUnlockLabelEnglish(skill.elite, skill.level, skill.enhanced)
+    : buildingSkillUnlockLabel(skill.elite, skill.level, skill.enhanced);
+  if (!interactive) {
+    return (
+      <span
+        className="pointer-events-none absolute right-0 top-0 z-10 flex size-10 items-center justify-center border-b border-l border-white/22 bg-black/76 text-white max-sm:size-11"
+        aria-hidden="true"
+      >
+        <img src={skill.icon} alt="" className="size-9 shrink-0 object-contain" />
+      </span>
+    );
+  }
   return (
     <Tooltip open={open} onOpenChange={setOpen}>
       <TooltipTrigger
@@ -1210,7 +1336,7 @@ function BuildingSkillBadge({ skill }: { skill: NonNullable<RoomRow["operatorSlo
           <button
             type="button"
             className="absolute right-0 top-0 z-10 flex size-10 items-center justify-center border-b border-l border-white/22 bg-black/76 text-white outline-none transition-colors hover:bg-black/88 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#FFD800] max-sm:size-11"
-            aria-label={locale === "en" ? `Infrastructure skill S${skill.index}: ${displaySkill.name}, ${unlockLabel}` : `基建技能 S${skill.index}：${skill.name}，${unlockLabel}`}
+            aria-label={intl("components.infrastructureSkillS", { index: skill.index, name: (locale === "en") ? (displaySkill.name) : "", unlockLabel: unlockLabel, nameValue: (locale === "en") ? "" : (skill.name) })}
             onFocus={() => setOpen(true)}
             onBlur={() => setOpen(false)}
             onClick={() => setOpen(true)}
@@ -1226,7 +1352,9 @@ function BuildingSkillBadge({ skill }: { skill: NonNullable<RoomRow["operatorSlo
       >
         <span className="font-semibold">S<span className="font-number">{skill.index}</span> · {displaySkill.name}</span>
         <span className="text-background/72">
-          {skill.enhanced ? (
+          {locale === "en" ? (
+            unlockLabel
+          ) : skill.enhanced ? (
             <>
               <span>{buildingSkillUnlockPrefix(skill.elite, skill.level)}</span>
               <span className="text-[#22BBFF]">{BUILDING_SKILL_ENHANCED_WORD}</span>
@@ -1244,6 +1372,8 @@ function BuildingSkillBadge({ skill }: { skill: NonNullable<RoomRow["operatorSlo
 export function OperatorSlot({
   slot,
   currentMorale,
+  elite,
+  operatorLevel,
   autofill = false,
   compactFactory = false,
   compactView = false,
@@ -1253,10 +1383,18 @@ export function OperatorSlot({
   portraitSize = 180,
   positionLabel,
   showSkillTooltip = false,
+  skillTooltipFocusable = false,
+  skillTooltipHighlightIds = [],
+  skillTooltipContextLabel,
   searchQuery = "",
+  onActivate,
 }: {
   slot: RoomRow["operatorSlots"][number] | undefined;
   currentMorale?: number;
+  /** 干员精英化等级（0/1/2），传入后会在头像左下角显示对应角标。 */
+  elite?: number;
+  /** 干员当前等级，用于判断带等级要求的基建技能是否已解锁。 */
+  operatorLevel?: number;
   autofill?: boolean;
   compactFactory?: boolean;
   compactView?: boolean;
@@ -1267,21 +1405,33 @@ export function OperatorSlot({
   positionLabel?: string;
   /** 悬停卡片时展示干员全部基建技能 tooltip，并关闭卡片自身的原生 title hover。 */
   showSkillTooltip?: boolean;
+  /** 让头像进入键盘焦点顺序；仅用于需要主动查看技能的界面，避免排班图产生过多 Tab 停靠点。 */
+  skillTooltipFocusable?: boolean;
+  /** 练卡建议等场景中，需要在技能 tooltip 内强调的技能。 */
+  skillTooltipHighlightIds?: readonly string[];
+  skillTooltipContextLabel?: string;
   searchQuery?: string;
+  onActivate?: () => void;
 }) {
+  const intl = useTranslations();
   const shouldReduceMotion = useReducedMotion();
-  const { locale } = useLanguageDemo();
-  const displayName = slot ? demoOperatorName(slot.name, locale) : undefined;
+  const locale = useLocale();
+  const gameCatalog = useGameCatalog();
+  const displayName = slot ? localizedOperatorName(slot.name, locale, gameCatalog) : undefined;
   const displayPositionLabel = locale === "en" ? (positionLabel === "训练位" ? "Trainee" : positionLabel === "协助位" ? "Trainer" : positionLabel) : positionLabel;
   const identity = slot?.name ?? (autofill ? "autofill" : "empty");
   const suppressNativeTitles = showSkillTooltip && slot !== undefined;
   const profession = slot ? operatorProfessionPresentationForCode(slot.profession) : undefined;
+  const professionLabelEnglish = slot ? operatorProfessionLabelEnglishForCode(slot.profession) : undefined;
   const enterX = shouldReduceMotion ? 0 : shiftDirection * 6;
   const exitX = shouldReduceMotion ? 0 : shiftDirection * -4;
-  const occupantLabel = displayName ?? (autofill ? (locale === "en" ? "Auto-fill" : "自动补位") : (locale === "en" ? "Empty" : "空置"));
-  const ariaLabel = displayPositionLabel
-    ? `${displayPositionLabel}${locale === "en" ? ": " : "："}${occupantLabel}`
+  const occupantLabel = displayName ?? (autofill ? (intl("components.autoFill")) : (intl("components.empty")));
+  const occupantAriaLabel = displayPositionLabel
+    ? `${displayPositionLabel}${intl("components.label2")}${occupantLabel}`
     : occupantLabel;
+  const ariaLabel = showSkillTooltip && skillTooltipFocusable && slot
+    ? `${occupantAriaLabel}${intl("components.focusToViewInfrastructureSkills")}`
+    : occupantAriaLabel;
   const searchMatched = Boolean(slot && searchQuery && slot.name.toLocaleLowerCase("zh-CN").includes(searchQuery));
   const frameClassName = slot
     ? "border-[#7F7F7F] bg-[#3C3C3C] shadow-[inset_0_0_18px_rgba(255,255,255,0.16)]"
@@ -1295,6 +1445,7 @@ export function OperatorSlot({
       centerFrameInList={centerFrameInList}
       compactFactory={compactFactory}
       compactView={compactView}
+      editableHint={onActivate ? (intl("components.edit")) : undefined}
       frameClassName={frameClassName}
       frameContent={
         <AnimatePresence initial={false} mode="sync">
@@ -1337,7 +1488,7 @@ export function OperatorSlot({
                         src={profession.icon}
                         alt=""
                         aria-hidden="true"
-                        title={suppressNativeTitles ? undefined : `职业：${profession.label}`}
+                        title={suppressNativeTitles ? undefined : intl("components.profession", { value1: (locale === "en") ? (professionLabelEnglish ?? "Unknown") : "", label: (locale === "en") ? "" : (profession.label) })}
                         className="absolute left-0 top-0 z-10 h-[25%] w-auto"
                       />
                     ) : null}
@@ -1348,25 +1499,40 @@ export function OperatorSlot({
                   </div>
                 )}
                 {slot.buildingSkill ? (
-                  <BuildingSkillBadge skill={slot.buildingSkill} />
+                  <BuildingSkillBadge skill={slot.buildingSkill} interactive={!onActivate} />
                 ) : typeof slot.skill === "number" ? (
                   <span
                     className="absolute right-0 top-0 z-10 flex size-9 items-center justify-center border-b border-l border-white/22 bg-black/76 text-xs font-semibold text-white"
-                    aria-label={`基建技能 S${slot.skill}，暂无技能资料`}
+                    aria-label={intl("components.infrastructureSkillSNoSkillData", { skill: slot.skill })}
                   >
                     S<span className="font-number">{slot.skill}</span>
                   </span>
                 ) : null}
-                {typeof currentMorale === "number" ? (
+                {typeof elite === "number" && elite >= 0 && elite <= 2 ? (
+                  <img
+                    src={`/images/elite/elite_${elite}.png`}
+                    alt={intl("components.elite", { elite: elite })}
+                    className="pointer-events-none absolute bottom-0 left-0 z-10 h-[30%] w-auto"
+                    data-elite-badge={elite}
+                  />
+                ) : null}
+                {elite === undefined && typeof currentMorale === "number" ? (
                   <span
                     className="absolute bottom-0.5 left-0.5 flex items-center gap-0.5 whitespace-nowrap rounded-sm bg-black/72 px-1 py-0.5 text-xs font-normal leading-none text-white shadow-[0_1px_3px_rgba(0,0,0,0.5)] [&_svg]:size-2.5 max-sm:bottom-0.5 max-sm:left-0.5 max-sm:px-0.5 max-sm:[&_svg]:size-2.5"
-                    aria-label={`当前心情 ${currentMorale}/24`}
-                    title={suppressNativeTitles ? undefined : `当前心情 ${currentMorale}/24`}
+                    aria-label={intl("components.currentMorale24", { currentMorale: currentMorale })}
+                    title={suppressNativeTitles ? undefined : intl("components.currentMorale24", { currentMorale: currentMorale })}
                   >
                     <Smile className="text-[#FFD501]" />
-                    <span className="max-sm:hidden">当前</span>
+                    <span className="max-sm:hidden">{intl("components.now")}</span>
                     <span className="font-number"><AnimatedText value={currentMorale} trend={shiftDirection} /></span>
                   </span>
+                ) : null}
+                {slot.portraitAlert === "missing-power-efficiency" ? (
+                  <span
+                    className="pointer-events-none absolute inset-0 z-30 bg-red-600/45 mix-blend-color"
+                    aria-hidden="true"
+                    data-operator-portrait-alert="missing-power-efficiency"
+                  />
                 ) : null}
               </>
             ) : autofill ? (
@@ -1379,12 +1545,20 @@ export function OperatorSlot({
           </motion.div>
         </AnimatePresence>
       }
+      frameFocusable={showSkillTooltip && skillTooltipFocusable && Boolean(slot)}
       frameWrapper={showSkillTooltip && slot ? (frame) => (
         <Suspense fallback={frame}>
-          <OperatorSkillTooltip name={slot.name} trigger={frame} />
+          <OperatorSkillTooltip
+            name={slot.name}
+            trigger={frame}
+            highlightedSkillIds={skillTooltipHighlightIds}
+            contextLabel={skillTooltipContextLabel}
+            currentElite={elite}
+            currentLevel={operatorLevel}
+          />
         </Suspense>
       ) : undefined}
-      label={slot ? <AnimatedText value={displayName ?? slot.name} trend={shiftDirection} /> : autofill ? (locale === "en" ? "Auto-fill" : "自动补位") : (locale === "en" ? "Slot" : "占")}
+      label={slot ? <AnimatedText value={displayName ?? slot.name} trend={shiftDirection} /> : autofill ? (intl("components.autoFill")) : (intl("components.slot"))}
       labelClassName={slot
         ? (searchMatched ? "bg-[#FFD501] px-1 text-[#202020]" : "text-white")
         : autofill
@@ -1392,6 +1566,7 @@ export function OperatorSlot({
           : "text-transparent select-none"}
       positionLabel={displayPositionLabel}
       title={suppressNativeTitles ? undefined : displayName ?? slot?.label}
+      onActivate={onActivate}
     />
   );
 
@@ -1402,7 +1577,8 @@ export function ScheduleBoard({
   rows,
   layout,
   planRevision,
-  currentMoraleByOperator,
+  eliteByOperator,
+  levelByOperator,
   viewControlsSlot,
   mobileActionsSlot,
   shiftInfoSlot,
@@ -1416,11 +1592,15 @@ export function ScheduleBoard({
   onFactoryRecipeChange,
   onTradeOrderChange,
   onViewModeChange,
+  onSlotClick,
 }: {
   rows: RoomRow[];
   layout: BaseBlueprint;
   planRevision?: string;
-  currentMoraleByOperator?: ReadonlyMap<string, number>;
+  /** 按干员名查精英化等级（0/1/2），用于在排班头像左下角显示角标。 */
+  eliteByOperator?: ReadonlyMap<string, number>;
+  /** 按干员名查当前等级，用于技能解锁状态。 */
+  levelByOperator?: ReadonlyMap<string, number>;
   viewControlsSlot?: ReactNode;
   mobileActionsSlot?: ReactNode;
   shiftInfoSlot?: ReactNode;
@@ -1429,13 +1609,16 @@ export function ScheduleBoard({
   activePlan?: MaaPlan;
   searchQuery?: string;
   animateInitialView?: boolean;
-  onIssue: (row: RoomRow) => void;
+  onIssue?: (row: RoomRow) => void;
   feedbackDisabled?: boolean;
   onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
   onViewModeChange?: (viewMode: "list" | "compact") => void;
+  onSlotClick?: (row: RoomRow, slotIndex: number) => void;
 }) {
-  const { locale } = useLanguageDemo();
+  const intl = useTranslations();
+  const locale = useLocale();
+  const gameCatalog = useGameCatalog();
   const en = locale === "en";
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [hiddenGroups, setHiddenGroups] = useState<Record<string, boolean>>({});
@@ -1481,7 +1664,7 @@ export function ScheduleBoard({
   if (rows.length === 0) {
     return (
       <div className="flex min-h-[420px] items-center justify-center border-y border-dashed border-border/70 py-6 text-center text-sm text-muted-foreground">
-        {en ? "No rooms to display." : "没有可展示的布局房间。"}
+        {intl("components.noRoomsToDisplay")}
       </div>
     );
   }
@@ -1539,8 +1722,8 @@ export function ScheduleBoard({
 
   return (
     <div className="flex flex-col gap-7">
-      <div className="flex flex-wrap items-center justify-between gap-3 max-sm:flex-col max-sm:items-stretch">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-3 max-sm:flex-col max-sm:items-stretch" data-schedule-toolbar>
+        <div className="flex flex-wrap items-center gap-2 max-sm:w-full" data-schedule-view-controls>
           {supportsCompactLayout && viewMode ? (
             <Tabs
               className="hidden lg:block"
@@ -1552,16 +1735,16 @@ export function ScheduleBoard({
                 onViewModeChange?.(nextViewMode);
               }}
             >
-              <TabsList>
-                <TabsTrigger value="compact">{en ? "Overview" : "一图流布局"}</TabsTrigger>
-                <TabsTrigger value="list">{en ? "List" : "列表式布局"}</TabsTrigger>
+              <TabsList aria-label={intl("components.scheduleLayout")}>
+                <TabsTrigger value="compact">{intl("components.overview")}</TabsTrigger>
+                <TabsTrigger value="list">{intl("components.list")}</TabsTrigger>
               </TabsList>
             </Tabs>
           ) : null}
           {viewControlsSlot}
           {viewMode === "list" && hiddenAuxiliaryCount ? (
             <Button type="button" variant="ghost" size="sm" onClick={restoreHiddenAuxiliaryGroups}>
-              {en ? "Restore hidden" : "恢复已隐藏"}（<span className="font-number">{hiddenAuxiliaryCount}</span>）
+              {intl("components.restoreHidden")}{intl("components.label3")}<span className="font-number">{hiddenAuxiliaryCount}</span>{intl("components.label4")}
             </Button>
           ) : null}
           {viewMode === "list" && auxiliaryGroups.length ? (
@@ -1575,7 +1758,7 @@ export function ScheduleBoard({
                 >
                   <ChevronDown className="size-4" />
                 </motion.span>
-                {allAuxiliaryCollapsed ? (en ? "Expand auxiliary facilities" : "展开辅助设施") : (en ? "Collapse auxiliary facilities" : "一键折叠辅助设施")}
+                {allAuxiliaryCollapsed ? (intl("components.expandAuxiliaryFacilities")) : (intl("components.collapseAuxiliaryFacilities"))}
               </Button>
               {mobileActionsSlot ? <div className="min-w-0 flex-1 md:hidden">{mobileActionsSlot}</div> : null}
             </div>
@@ -1591,12 +1774,13 @@ export function ScheduleBoard({
             <motion.div
               key={viewMode}
               data-schedule-view={viewMode || undefined}
-              initial={{
+              data-schedule-view-transition={viewMode === "compact" ? "skeleton" : "motion"}
+              initial={viewMode === "compact" ? false : {
                 opacity: 0,
                 y: shouldReduceMotion ? 0 : 8,
               }}
               animate={{ opacity: 1, y: 0, pointerEvents: "auto" }}
-              exit={{
+              exit={viewMode === "compact" ? undefined : {
                 opacity: 0,
                 y: shouldReduceMotion ? 0 : -6,
                 pointerEvents: "none",
@@ -1606,7 +1790,7 @@ export function ScheduleBoard({
                 },
               }}
               transition={{
-                duration: shouldReduceMotion ? MOTION_DURATION.feedback : MOTION_DURATION.content,
+                duration: viewMode === "compact" ? 0 : shouldReduceMotion ? MOTION_DURATION.feedback : MOTION_DURATION.content,
                 ease: MOTION_EASE_OUT,
               }}
             >
@@ -1659,7 +1843,7 @@ export function ScheduleBoard({
                   className="shrink-0 text-muted-foreground"
                   onClick={() => setHiddenGroups((current) => ({ ...current, [group.label]: true }))}
                 >
-                  {en ? "Hide" : "暂不显示"}
+                  {intl("components.hide")}
                 </Button>
               ) : null}
             </div>
@@ -1688,7 +1872,7 @@ export function ScheduleBoard({
                   positionLabel?: string;
                 }> = row.positionSlots
                   ? row.positionSlots.map(({ slot, positionLabel }) => ({ slot, positionLabel }))
-                  : Array.from({ length: slotCount }, (_, index) => ({ slot: row.operatorSlots[index] }));
+                  : Array.from({ length: slotCount }, (_, index) => ({ slot: row.slotAssignments ? row.slotAssignments[index] : row.operatorSlots[index] }));
                 const gridTone = roomGridTone(row.group);
                 const rowStyle = {
                   "--room-accent": rowVisual.accent,
@@ -1727,7 +1911,7 @@ export function ScheduleBoard({
                           <div>
                             <div className="flex items-center gap-2.5 max-sm:gap-1.5">
                               <div className={cn("font-number min-w-0 truncate font-medium tracking-[-0.02em] text-white [text-shadow:0_2px_3px_rgba(0,0,0,0.75)]", listRoomTitleSizeClass())}>
-                                {demoRoomTitle(row.title, row.group, locale)}
+                                {localizedRoomTitle(row.title, row.group, locale, gameCatalog)}
                               </div>
                               <LevelDiamonds level={row.level} maxLevel={layoutRoom ? maxRoomLevel(layoutRoom.kind) : row.level} />
                             </div>
@@ -1775,7 +1959,8 @@ export function ScheduleBoard({
                           <OperatorSlot
                             key={`${row.key}-${index}`}
                             slot={slot}
-                            currentMorale={slot ? currentMoraleByOperator?.get(slot.name) : undefined}
+                            elite={slot ? eliteByOperator?.get(slot.name) : undefined}
+                            operatorLevel={slot ? levelByOperator?.get(slot.name) : undefined}
                             autofill={row.group === "dormitory" && row.autofill}
                             compactFactory={compactFactoryRoom}
                             centerFrameInList
@@ -1784,6 +1969,7 @@ export function ScheduleBoard({
                             transitionDelay={Math.min(index, 2) * 0.02}
                             searchQuery={normalizedQuery}
                             positionLabel={positionLabel}
+                            onActivate={onSlotClick ? () => onSlotClick(row, index) : undefined}
                           />
                         ))}
                       </div>
@@ -1792,7 +1978,7 @@ export function ScheduleBoard({
                       )}
                     </div>
 
-                    <Tooltip>
+                    {onIssue ? <Tooltip>
                       <TooltipTrigger
                         render={
                           <span className="absolute right-2 top-2 z-10">
@@ -1802,7 +1988,7 @@ export function ScheduleBoard({
                             variant="ghost"
                             size="icon-sm"
                             className="border border-white/10 bg-[#3C3C3C]/55 text-white/70 hover:bg-[#4B4B4B] hover:text-white disabled:cursor-not-allowed disabled:opacity-45 max-sm:size-11"
-                            aria-label={en ? `${demoRoomTitle(row.title, row.group, locale)} report schedule issue` : `${row.title} 反馈排班问题`}
+                            aria-label={intl("components.reportScheduleIssue", { value1: (en) ? (localizedRoomTitle(row.title, row.group, locale, gameCatalog)) : "", title: (en) ? "" : (row.title) })}
                             disabled={feedbackDisabled}
                             onClick={() => onIssue(row)}
                           >
@@ -1813,10 +1999,10 @@ export function ScheduleBoard({
                       />
                       <TooltipContent side="left">
                         {feedbackDisabled
-                          ? en ? "Sample data cannot submit feedback" : "全角色导入为体验数据，不能提交反馈"
-                          : en ? "Report schedule issue" : "反馈排班问题"}
+                          ? intl("components.sampleDataCannotSubmitFeedback")
+                          : intl("components.reportScheduleIssue2")}
                       </TooltipContent>
-                    </Tooltip>
+                    </Tooltip> : null}
                   </div>
                 );
               })}
@@ -1830,19 +2016,21 @@ export function ScheduleBoard({
             <CompactScheduleView
               rows={visibleRows}
               layout={layout}
-              currentMoraleByOperator={currentMoraleByOperator}
+              eliteByOperator={eliteByOperator}
+              levelByOperator={levelByOperator}
               activeShift={activeShift}
               activePlan={activePlan}
               shiftDirection={shiftDirection}
               onIssue={onIssue}
               feedbackDisabled={feedbackDisabled}
+              onSlotClick={onSlotClick}
             />
           ) : compactScheduleLoadFailed ? (
             <div className="grid min-h-[420px] place-items-center border-y border-destructive/35 text-sm text-destructive" role="alert">
-              {en ? "Overview failed to load. Switch to the list view." : "一图流布局加载失败，请切换到列表式布局。"}
+              {intl("components.overviewFailedToLoadSwitchToTheListView")}
             </div>
           ) : (
-            <CompactScheduleLoading />
+            <CompactScheduleLoading rows={visibleRows} />
           )
         ) : (
           <div className="min-h-[420px]" data-schedule-view-pending aria-hidden="true" />
@@ -1861,27 +2049,27 @@ export function ShortcutGuideDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { locale } = useLanguageDemo();
-  const en = locale === "en";
+  const intl = useTranslations();
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="gap-5 sm:max-w-2xl sm:p-6">
         <DialogHeader className="gap-1.5 px-1 sm:px-2">
-          <DialogTitle className="text-xl font-semibold">{en ? "Keyboard shortcuts" : "快捷键"}</DialogTitle>
-          <DialogDescription className="max-w-lg text-sm leading-6">{en ? "Quickly focus search, close temporary states, or toggle navigation from the scheduler." : "在排班主界面快速定位搜索、关闭临时状态或切换导航。"}</DialogDescription>
+          <DialogTitle className="text-xl font-semibold">{intl("components.keyboardShortcuts")}</DialogTitle>
+          <DialogDescription className="max-w-lg text-sm leading-6">{intl("components.quicklyFocusSearchCloseTemporaryStatesOrToggleNavigation")}</DialogDescription>
         </DialogHeader>
         <div className="divide-y divide-border/70 border-y border-border/70 px-1 sm:px-2">
           <div className="flex min-h-14 items-center justify-between gap-8 py-3 max-sm:flex-wrap max-sm:gap-2">
-            <span className="text-[15px] font-medium leading-6">{en ? "Focus schedule search" : "聚焦排班搜索"}</span>
-            <KbdGroup className="shrink-0" aria-label={en ? "Control plus K" : "Control 加 K"}><Kbd>Ctrl</Kbd><span aria-hidden="true">+</span><Kbd>K</Kbd></KbdGroup>
+            <span className="text-[15px] font-medium leading-6">{intl("components.focusScheduleSearch")}</span>
+            <KbdGroup className="shrink-0" aria-label={intl("components.controlPlusK")}><Kbd>Ctrl</Kbd><span aria-hidden="true">+</span><Kbd>K</Kbd></KbdGroup>
           </div>
           <div className="flex min-h-14 items-center justify-between gap-8 py-3 max-sm:flex-wrap max-sm:gap-2">
-            <span className="text-[15px] font-medium leading-6">{en ? "Clear search; cancel an active calculation" : "清空搜索；计算中取消请求"}</span>
+            <span className="text-[15px] font-medium leading-6">{intl("components.clearSearchCancelAnActiveCalculation")}</span>
             <Kbd className="shrink-0">Esc</Kbd>
           </div>
           <div className="flex min-h-14 items-center justify-between gap-8 py-3 max-sm:flex-wrap max-sm:gap-2">
-            <span className="text-[15px] font-medium leading-6">{en ? "Expand or collapse sidebar" : "展开或收起侧边栏"}</span>
-            <KbdGroup className="shrink-0" aria-label={en ? "Control plus B" : "Control 加 B"}><Kbd>Ctrl</Kbd><span aria-hidden="true">+</span><Kbd>B</Kbd></KbdGroup>
+            <span className="text-[15px] font-medium leading-6">{intl("components.expandOrCollapseSidebar")}</span>
+            <KbdGroup className="shrink-0" aria-label={intl("components.controlPlusB")}><Kbd>Ctrl</Kbd><span aria-hidden="true">+</span><Kbd>B</Kbd></KbdGroup>
           </div>
         </div>
       </DialogContent>
@@ -1908,8 +2096,8 @@ export function IssueNoteModal({
   onSave: () => void;
   onCancel: () => void;
 }) {
-  const { locale } = useLanguageDemo();
-  const en = locale === "en";
+  const intl = useTranslations();
+
   const [consented, setConsented] = useState(false);
   const returnFocusId = useRef<string | null>(null);
   const returnToPlanSummary = useRef(false);
@@ -1946,20 +2134,20 @@ export function IssueNoteModal({
         }}
       >
         <DialogHeader>
-          <DialogTitle>{isPerformance ? (en ? "Submit performance feedback" : "提交性能反馈") : row?.title ?? (en ? "Report schedule issue" : "反馈排班问题")}</DialogTitle>
-          <DialogDescription>{isPerformance ? (en ? "Share feedback about this solve" : "反馈本次求解性能") : (en ? "Report a schedule issue" : "反馈排班问题")}</DialogDescription>
+          <DialogTitle>{isPerformance ? (intl("components.submitPerformanceFeedback")) : row?.title ?? (intl("components.reportScheduleIssue2"))}</DialogTitle>
+          <DialogDescription>{isPerformance ? (intl("components.shareFeedbackAboutThisSolve")) : (intl("components.reportAScheduleIssue"))}</DialogDescription>
         </DialogHeader>
         <DialogBody>
           <p className="text-[13px] leading-5 text-muted-foreground">
             {isPerformance
-              ? (en ? "This submits the diagnostic ID, solve time, rotation, layout, and your note. It does not include arbitrary rooms or the complete operator roster." : "将提交本次排班的诊断编号、求解耗时、换班方式、布局和你的说明；不会附带任意房间或完整干员数据。")
-              : (en ? "This submits the diagnostic ID, room name, current operators, and your note. It does not upload the complete roster or debug bundle again." : "将提交本次排班的诊断编号、房间名称、当前干员和你的说明；不会重复上传完整干员数据或调试包。")}
+              ? (intl("components.thisSubmitsYourNotePlusAPrivateReproductionSnapshot"))
+              : (intl("components.thisSubmitsTheRoomIssueAndAPrivateReproduction"))}
           </p>
           <Textarea
             autoFocus
             value={note}
             onChange={(event) => onNoteChange(event.target.value)}
-            placeholder={isPerformance ? (en ? "Example: This same BOX usually completed faster before." : "例如：同一份 Box 之前通常可以更快完成。") : (en ? "Example: This team should use Closure / the current placement is wrong." : "例如：这组应该换成可露希尔 / 当前站位有误。")}
+            placeholder={isPerformance ? (intl("components.exampleThisSameBoxUsuallyCompletedFasterBefore")) : (intl("components.exampleThisTeamShouldUseClosureTheCurrentPlacement"))}
             className="min-h-36 text-[13px]"
             maxLength={1000}
           />
@@ -1970,16 +2158,16 @@ export function IssueNoteModal({
               onChange={(event) => setConsented(event.target.checked)}
               className="size-4"
             />
-            <span>{en ? `I confirm submitting the ${isPerformance ? "performance" : "schedule issue"} information above.` : <>我确认提交以上{isPerformance ? "性能" : "排班问题"}信息。</>}</span>
+            <span>{intl("Common.consentFeedback", { kind: isPerformance ? "performance" : "issue" })}</span>
           </label>
         </DialogBody>
         <DialogFooter>
           <Button className="max-sm:min-w-16 sm:min-w-[88px]" size="dialog" variant="ghost" onClick={onCancel}>
-            {en ? "Cancel" : "取消"}
+            {intl("components.cancel")}
           </Button>
           <Button size="dialog" onClick={onSave} disabled={!note.trim() || note.trim().length > 1000 || !consented || saving}>
             {saving ? <Loader2 className="animate-spin" /> : <Save />}
-            {saving ? (en ? "Submitting" : "提交中") : (en ? "Submit feedback" : "提交反馈")}
+            {saving ? (intl("components.submitting")) : (intl("components.submitFeedback"))}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -2004,7 +2192,8 @@ export function ProductChangeConfirmModal({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
-  const { locale } = useLanguageDemo();
+  const intl = useTranslations();
+  const locale = useLocale();
   const en = locale === "en";
   return (
     <Dialog
@@ -2021,24 +2210,24 @@ export function ProductChangeConfirmModal({
         data-product-change-confirm
       >
         <DialogHeader>
-          <DialogTitle>{en ? "Change settings and regenerate?" : "更改配置并重新排班？"}</DialogTitle>
+          <DialogTitle>{intl("components.changeSettingsAndRegenerate")}</DialogTitle>
           <DialogDescription>
-            {en ? `${roomLabel}'s ${changeKind === "制造配方" ? "factory recipe" : "trade strategy"} will change to “${nextValueLabel}”. The current result will be replaced and regenerated immediately.` : `${roomLabel} 的${changeKind}将切换为「${nextValueLabel}」。当前排班结果会被替换，并立即使用新配置重新排班。`}
+            {intl("components.sWillChangeToTheCurrentResultWillBe", { roomLabel: roomLabel, value2: (en) ? (changeKind === "制造配方" ? "factory recipe" : "trade strategy") : "", nextValueLabel: nextValueLabel, changeKind: (en) ? "" : (changeKind) })}
           </DialogDescription>
         </DialogHeader>
         <DialogBody className="py-2">
           <p className="flex items-start gap-2 text-[13px] leading-5 text-muted-foreground">
             <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden="true" />
-            {en ? "Settings remain locked until regeneration completes." : "重新排班完成前，配置修改会暂时锁定。"}
+            {intl("components.settingsRemainLockedUntilRegenerationCompletes")}
           </p>
         </DialogBody>
         <DialogFooter>
           <Button className="max-sm:min-w-16 sm:min-w-[88px]" type="button" size="dialog" variant="ghost" disabled={busy} autoFocus onClick={onCancel}>
-            {en ? "Cancel" : "取消"}
+            {intl("components.cancel")}
           </Button>
           <Button type="button" size="dialog" variant="destructive" disabled={busy} onClick={onConfirm}>
             {busy ? <Loader2 className="animate-spin" /> : <RotateCcw />}
-            {busy ? (en ? "Regenerating" : "重新排班中") : (en ? "Confirm and regenerate" : "确认并重新排班")}
+            {busy ? (intl("components.regenerating")) : (intl("components.confirmAndRegenerate"))}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -1,9 +1,9 @@
 "use client";
+import { useTranslations } from "next-intl";
 
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Check } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
-import { useLanguageDemo } from "@/language-demo";
 
 export type WizardStep = {
   id: string;
@@ -27,9 +27,9 @@ export function WizardSteps({
   label,
   className = "",
 }: WizardStepsProps) {
-  const { locale } = useLanguageDemo();
-  const en = locale === "en";
-  const accessibleLabel = label ?? (en ? "Setup steps" : "设置步骤");
+  const intl = useTranslations();
+
+  const accessibleLabel = label ?? (intl("components_interior_wizard_steps.setupSteps"));
   const currentIndex = Math.max(0, steps.findIndex((step) => step.id === value));
   const [furthest, setFurthest] = useState(currentIndex);
   const reduced = useReducedMotion();
@@ -69,7 +69,7 @@ export function WizardSteps({
             animate={{ opacity: index === currentIndex ? 1 : 0 }}
             transition={reduced ? { duration: 0 } : RAIL_TRANSITION}
           >
-            {en ? <>Step <span className="font-number">{index + 1}</span> of <span className="font-number">{steps.length}</span>: {step.label}</> : <>第 <span className="font-number">{index + 1}</span> 步，共 <span className="font-number">{steps.length}</span> 步：{step.label}</>}
+            {intl.rich("components_interior_wizard_steps.rich1", { element1: (chunks) => (<span className="font-number">{chunks}</span>), value2: () => (index + 1), value3: () => (steps.length), value4: () => (step.label) })}
           </motion.span>
         ))}
       </span>
@@ -102,7 +102,7 @@ export function WizardSteps({
                 <button
                   type="button"
                   aria-current={current ? "step" : undefined}
-                  aria-label={en ? `Step ${index + 1} of ${steps.length}: ${step.label}` : `第 ${index + 1} 步，共 ${steps.length} 步：${step.label}`}
+                  aria-label={intl("components_interior_wizard_steps.stepOf", { value1: index + 1, length: steps.length, label: step.label })}
                   tabIndex={current ? 0 : -1}
                   onKeyDown={handleKeyDown}
                   onClick={() => goTo(index)}
@@ -111,7 +111,7 @@ export function WizardSteps({
                   {tile}
                 </button>
               ) : (
-                <span aria-label={en ? `Step ${index + 1} of ${steps.length}: ${step.label}` : `第 ${index + 1} 步，共 ${steps.length} 步：${step.label}`}>{tile}</span>
+                <span aria-label={intl("components_interior_wizard_steps.stepOf", { value1: index + 1, length: steps.length, label: step.label })}>{tile}</span>
               )}
               {index < steps.length - 1 ? (
                 <span aria-hidden="true" className="relative h-[3px] flex-1 overflow-hidden rounded-[2px] bg-muted shadow-inner">

@@ -18,6 +18,16 @@ const validEvent = {
 
 test("telemetry validation accepts only the public field whitelist", () => {
   assert.deepEqual(validateTelemetryEvent(validEvent), validEvent);
+  assert.ok(validateTelemetryEvent({
+    ...validEvent,
+    type: "interaction",
+    name: "upgrade_simulation_submit",
+  }));
+  assert.ok(validateTelemetryEvent({
+    ...validEvent,
+    type: "interaction",
+    name: "upgrade_simulation_response",
+  }));
   assert.equal(validateTelemetryEvent({ ...validEvent, createdAt: Date.now() }), null);
   assert.equal(validateTelemetryEvent({ ...validEvent, token: "secret" }), null);
   assert.equal(validateTelemetryEvent({ ...validEvent, meta: { unknown: "value" } }), null);

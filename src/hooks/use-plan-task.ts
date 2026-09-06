@@ -31,11 +31,14 @@ export type PlanTaskUiState = {
 type PlanTaskOptions = {
   onDone: (result: PublicPlanData) => void;
   onFailed: (message: string) => void;
+  /** Disable persistence for secondary task flows that cannot be restored without their local context. */
+  storageKey?: string | null;
 };
 
-function readStoredTaskId(): string | null {
+function readStoredTaskId(storageKey: string | null): string | null {
+  if (!storageKey) return null;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(storageKey);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as { taskId?: unknown };
     return typeof parsed.taskId === "string" && parsed.taskId ? parsed.taskId : null;
@@ -44,23 +47,26 @@ function readStoredTaskId(): string | null {
   }
 }
 
-function writeStoredTaskId(taskId: string) {
+function writeStoredTaskId(storageKey: string | null, taskId: string) {
+  if (!storageKey) return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ taskId, savedAt: Date.now() }));
+    localStorage.setItem(storageKey, JSON.stringify({ taskId, savedAt: Date.now() }));
   } catch {
     // localStorage 不可用时降级为纯内存轮询。
   }
 }
 
-function clearStoredTaskId() {
+function clearStoredTaskId(storageKey: string | null) {
+  if (!storageKey) return;
   try {
-    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(storageKey);
   } catch {
     // ignore
   }
 }
 
-export function usePlanTask({ onDone, onFailed }: PlanTaskOptions) {
+export function usePlanTask({ onDone, onFailed, storageKey }: PlanTaskOptions) {
+  const taskStorageKey = storageKey === undefined ? STORAGE_KEY : storageKey;
   const [state, setState] = useState<PlanTaskUiState>({
     taskId: null,
     status: null,
@@ -78,6 +84,10 @@ export function usePlanTask({ onDone, onFailed }: PlanTaskOptions) {
   const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const onDoneRef = useRef(onDone);
   const onFailedRef = useRef(onFailed);
+  const waiterRef = useRef<{
+    resolve: (result: PublicPlanData) => void;
+    reject: (reason: Error) => void;
+  } | null>(null);
   const restoredRef = useRef(false);
 
   useEffect(() => {
@@ -120,10 +130,22 @@ export function usePlanTask({ onDone, onFailed }: PlanTaskOptions) {
     }, 1_000);
   }, []);
 
+  const resolveWaiter = useCallback((result: PublicPlanData) => {
+    const waiter = waiterRef.current;
+    waiterRef.current = null;
+    waiter?.resolve(result);
+  }, []);
+
+  const rejectWaiter = useCallback((message: string) => {
+    const waiter = waiterRef.current;
+    waiterRef.current = null;
+    waiter?.reject(new Error(message));
+  }, []);
+
   const finish = useCallback((next: Partial<PlanTaskUiState> & { status: PlanTaskStatus }) => {
     clearTimer();
     stopResumeCooldown();
-    clearStoredTaskId();
+    clearStoredTaskId(taskStorageKey);
     taskIdRef.current = null;
     setState((current) => ({
       ...current,
@@ -135,7 +157,7 @@ export function usePlanTask({ onDone, onFailed }: PlanTaskOptions) {
       error: null,
       ...next,
     }));
-  }, [clearTimer, stopResumeCooldown]);
+  }, [clearTimer, stopResumeCooldown, taskStorageKey]);
 
   const pollOnceRef = useRef<(taskId: string, attempt: number) => Promise<void>>(async () => undefined);
   const schedulePoll = useCallback((taskId: string, attempt: number, delayMs: number) => {
@@ -148,12 +170,21 @@ export function usePlanTask({ onDone, onFailed }: PlanTaskOptions) {
       isCurrent: (candidate) => taskIdRef.current === candidate,
       errorCode: (error) => error instanceof ApiClientError ? error.code : null,
       finishDone: (result) => {
+        if (!result) {
+          const message = "排班任务已完成，但没有返回可用结果。";
+          finish({ status: "failed", error: message });
+          onFailedRef.current(message);
+          rejectWaiter(message);
+          return;
+        }
         finish({ status: "done", result, error: null });
-        if (result) onDoneRef.current(result);
+        onDoneRef.current(result);
+        resolveWaiter(result);
       },
       finishTerminal: (status, message, notifyFailure) => {
         finish({ status, error: message });
         if (notifyFailure) onFailedRef.current(message);
+        rejectWaiter(message);
       },
       continueActive: (decision) => setState((current) => ({
         ...current,
@@ -172,7 +203,7 @@ export function usePlanTask({ onDone, onFailed }: PlanTaskOptions) {
         startResumeCooldown();
       },
     });
-  }, [clearTimer, finish, schedulePoll, startResumeCooldown]);
+  }, [clearTimer, finish, rejectWaiter, resolveWaiter, schedulePoll, startResumeCooldown]);
   useEffect(() => {
     pollOnceRef.current = pollOnce;
   }, [pollOnce]);
@@ -185,7 +216,7 @@ export function usePlanTask({ onDone, onFailed }: PlanTaskOptions) {
     clearTimer();
     stopResumeCooldown();
     taskIdRef.current = taskId;
-    writeStoredTaskId(taskId);
+    writeStoredTaskId(taskStorageKey, taskId);
     setState({
       taskId,
       status: initial.status,
@@ -196,12 +227,26 @@ export function usePlanTask({ onDone, onFailed }: PlanTaskOptions) {
       error: null,
     });
     void pollOnce(taskId, 0);
-  }, [clearTimer, pollOnce, stopResumeCooldown]);
+  }, [clearTimer, pollOnce, stopResumeCooldown, taskStorageKey]);
 
   const complete = useCallback((result: PublicPlanData) => {
     finish({ status: "done", result, error: null });
     onDoneRef.current(result);
   }, [finish]);
+
+  const run = useCallback((submitted: PlanTaskSubmitData): Promise<PublicPlanData> => {
+    if (submitted.status === "done") {
+      complete(submitted.result);
+      return Promise.resolve(submitted.result);
+    }
+    if (waiterRef.current || taskIdRef.current) {
+      return Promise.reject(new Error("已有排班任务正在查询，请等待完成后再试。"));
+    }
+    return new Promise<PublicPlanData>((resolve, reject) => {
+      waiterRef.current = { resolve, reject };
+      begin(submitted);
+    });
+  }, [begin, complete]);
 
   const resume = useCallback(() => {
     const taskId = taskIdRef.current;
@@ -223,6 +268,7 @@ export function usePlanTask({ onDone, onFailed }: PlanTaskOptions) {
       const decision = planTaskCancellationDecision(response);
       if (decision.clearTask) {
         finish({ status: "cancelled", error: null });
+        rejectWaiter("任务已取消。");
         return true;
       }
       setState((current) => ({
@@ -240,16 +286,16 @@ export function usePlanTask({ onDone, onFailed }: PlanTaskOptions) {
     }
     void pollOnceRef.current(taskId, 0);
     return false;
-  }, [clearTimer, finish, stopResumeCooldown]);
+  }, [clearTimer, finish, rejectWaiter, stopResumeCooldown]);
 
   // 只在真正挂载（刷新/重新打开）时从 localStorage 恢复轮询；
   // 切换侧边栏子页面不触发恢复。
   useEffect(() => {
     if (restoredRef.current) return;
     restoredRef.current = true;
-    const stored = readStoredTaskId();
+    const stored = readStoredTaskId(taskStorageKey);
     if (stored) begin(stored);
-  }, [begin]);
+  }, [begin, taskStorageKey]);
 
   // 卸载清理。
   useEffect(() => () => {
@@ -262,6 +308,7 @@ export function usePlanTask({ onDone, onFailed }: PlanTaskOptions) {
     resumeDisabled,
     resumeCountdown,
     begin,
+    run,
     complete,
     resume,
     cancel,

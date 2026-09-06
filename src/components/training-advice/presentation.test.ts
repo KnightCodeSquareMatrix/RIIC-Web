@@ -16,6 +16,7 @@ import {
   trainingScaleLabel,
 } from "./presentation.ts";
 import type { TrainingCombination, TrainingRecommendation } from "@/types";
+import { legacyTrainingTarget, trainingAdviceSkillSummary } from "./skill-selection.ts";
 
 const target = { kind: "explicit" as const, elite: 1, level: 30 };
 
@@ -95,4 +96,24 @@ test("preserves the server-defined combination and recommendation order", () => 
 
   assert.deepEqual(sortTrainingCombinations(combinations).map((item) => item.id), ["complete-first", "missing-second"]);
   assert.deepEqual(sortTrainingRecommendations(recommendations).map((item) => item.operator), ["服务端第一名", "服务端第二名"]);
+});
+
+test("marks the infrastructure skill unlocked by the recommended training target", () => {
+  const summary = trainingAdviceSkillSummary(
+    "清流",
+    { elite: 0, level: 30 },
+    { kind: "explicit", elite: 1, level: 1 },
+  );
+
+  assert.deepEqual(
+    summary.skills.filter((skill) => summary.highlightedSkillIds.includes(skill.id)).map((skill) => skill.name),
+    ["再生能源"],
+  );
+});
+
+test("legacy training requirements are parsed without guessing missing targets", () => {
+  assert.deepEqual(legacyTrainingTarget("需精2"), { kind: "explicit", elite: 2, level: 1 });
+  assert.deepEqual(legacyTrainingTarget("Elite 1"), { kind: "explicit", elite: 1, level: 1 });
+  assert.equal(legacyTrainingTarget("按技能要求"), undefined);
+  assert.equal(legacyTrainingTarget("提升 2 级"), undefined);
 });

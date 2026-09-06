@@ -5,11 +5,15 @@ import { createContext, useContext } from "react";
 import type { AccountStatusCenterProps } from "@/components/pages/AccountStatusCenter";
 import type { DevelopmentSklandStatusCenterProps } from "@/components/pages/DevelopmentSklandStatusCenter";
 import type { InfraCalculatorProps } from "@/components/pages/InfraCalculator";
+import type { ManualSchedulePageProps } from "@/components/pages/ManualSchedulePage";
 import type { TrainingAdviceProps } from "@/components/pages/TrainingAdvice";
+import type { MasteryPlannerProps } from "@/components/pages/MasteryPlanner";
 
 export interface WorkbenchContextValue {
   calculator: InfraCalculatorProps;
+  manual: ManualSchedulePageProps;
   training: TrainingAdviceProps;
+  mastery: MasteryPlannerProps;
   account: AccountStatusCenterProps & {
     authenticated: boolean;
     pending: boolean;

@@ -457,7 +457,7 @@
   }
 
   .compact-auxiliary-grid .infra-operator-slot {
-    --operator-slot-size: clamp(56px, 9cqw, 70px);
+    --operator-slot-size: clamp(64px, 12cqw, 70px);
   }
 }
 

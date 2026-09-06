@@ -41,10 +41,11 @@ const CLUE_NAMES: Record<string, string> = {
 
 type FactoryProduct = SklandManufactureRoom["product"];
 
-// Skland's manufacture array reports rooms 3 and 4 opposite to the numbering shown in-game.
+// Match the in-game manufacture labels after swapping 4↔2, then 1↔2.
+// The first four upstream entries therefore map to displayed rooms as 3, 1, 4, 2.
 export function manufacturesInGameOrder<T>(rooms: readonly T[]): T[] {
   if (rooms.length < 4) return [...rooms];
-  return [rooms[0]!, rooms[1]!, rooms[3]!, rooms[2]!, ...rooms.slice(4)];
+  return [rooms[2]!, rooms[0]!, rooms[3]!, rooms[1]!, ...rooms.slice(4)];
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -207,16 +208,21 @@ function infrastructureFromPlayerInfo(
       remaining: null,
       completeWorkTime: value.completeWorkTime || null,
     },
-    orders: value.stock.map((order) => ({
-      delivery: order.delivery.map((item) => ({
-        type: item.type === "DIAMOND_SHD" ? "originium_shard" : "material",
-        count: nonNegative(item.count),
-      })),
-      reward: {
-        type: order.gain.type === "DIAMOND" ? "orundum" : "lmd",
-        count: nonNegative(order.gain.count),
-      },
-    })),
+    orders: value.stock.map((order) => {
+      const isOrundumOrder = order.type === "O_DIAMOND"
+        || order.gain.type === "DIAMOND"
+        || order.delivery.some((item) => item.type === "DIAMOND_SHD");
+      return {
+        delivery: order.delivery.map((item) => ({
+          type: item.type === "DIAMOND_SHD" ? "originium_shard" as const : "material" as const,
+          count: nonNegative(item.count),
+        })),
+        reward: {
+          type: isOrundumOrder ? "orundum" as const : "lmd" as const,
+          count: nonNegative(order.gain.count),
+        },
+      };
+    }),
     lastUpdateTime: nonNegative(value.lastUpdateTime),
   }));
   const manufactures: SklandManufactureRoom[] = manufacturesInGameOrder(building.manufactures).map((value, index) => ({

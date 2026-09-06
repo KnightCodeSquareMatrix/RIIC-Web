@@ -55,6 +55,7 @@ function useSidebar() {
 
 function SidebarProvider({
   defaultOpen = true,
+  defaultOpenBreakpoint,
   open: openProp,
   onOpenChange: setOpenProp,
   className,
@@ -63,6 +64,7 @@ function SidebarProvider({
   ...props
 }: React.ComponentProps<"div"> & {
   defaultOpen?: boolean
+  defaultOpenBreakpoint?: number
   open?: boolean
   onOpenChange?: (open: boolean) => void
 }) {
@@ -71,7 +73,19 @@ function SidebarProvider({
 
   // This is the internal state of the sidebar.
   // We use openProp and setOpenProp for control from outside the component.
+  // 挂载时读回 sidebar_state cookie，避免整页刷新后侧边栏被复位成收起。
   const [_open, _setOpen] = React.useState(defaultOpen)
+
+  React.useEffect(() => {
+    const cookie = document.cookie
+      .split("; ")
+      .find((entry) => entry.startsWith(`${SIDEBAR_COOKIE_NAME}=`))
+    if (cookie) {
+      _setOpen(cookie.split("=")[1] === "true")
+    } else if (defaultOpenBreakpoint !== undefined) {
+      _setOpen(window.innerWidth >= defaultOpenBreakpoint)
+    }
+  }, [defaultOpenBreakpoint])
   const open = openProp ?? _open
   const setOpen = React.useCallback(
     (value: boolean | ((value: boolean) => boolean)) => {
@@ -401,7 +415,7 @@ function SidebarGroupLabel({
     props: mergeProps<"div">(
       {
         className: cn(
-          "flex h-8 shrink-0 items-center rounded-md px-2 text-xs font-medium text-sidebar-foreground/70 ring-sidebar-ring outline-hidden group-data-[collapsible=icon]:-mt-8 group-data-[collapsible=icon]:opacity-0 focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0",
+          "flex h-8 shrink-0 items-center rounded-md px-2 text-xs font-medium text-sidebar-foreground/70 ring-sidebar-ring outline-hidden group-data-[collapsible=icon]:pointer-events-none group-data-[collapsible=icon]:-mt-8 group-data-[collapsible=icon]:opacity-0 focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0",
           className
         ),
       },

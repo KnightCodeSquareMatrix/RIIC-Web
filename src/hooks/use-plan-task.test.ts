@@ -72,11 +72,13 @@ test("usePlanTask owns polling timers and resumable storage across terminal and 
   const { usePlanTask } = await import("./use-plan-task.ts");
   const doneResults: unknown[] = [];
   const failureMessages: string[] = [];
+  let hookStorageKey: string | null | undefined = undefined;
   let hook: ReturnType<typeof usePlanTask> | null = null;
   function Harness() {
     hook = usePlanTask({
       onDone: (result) => doneResults.push(result),
       onFailed: (message) => failureMessages.push(message),
+      ...(hookStorageKey === null ? { storageKey: null } : {}),
     });
     return null;
   }
@@ -113,6 +115,14 @@ test("usePlanTask owns polling timers and resumable storage across terminal and 
   assert.equal(timeouts.size, 0);
   assert.equal(storage.has("aic-plan-task-v1"), false);
   assert.deepEqual(doneResults, [result]);
+
+  pollOutcomes.push({ taskId: "task-awaited", status: "done", result });
+  let awaitedResult: unknown;
+  await act(async () => {
+    awaitedResult = await current().run({ taskId: "task-awaited", status: "pending", queuePosition: 1 });
+  });
+  assert.equal((awaitedResult as typeof result).diagnosticId, result.diagnosticId);
+  assert.deepEqual(doneResults, [result, result]);
 
   await begin("task-failed", [{ taskId: "task-failed", status: "failed", error: "solver failed" }]);
   assert.equal(storage.has("aic-plan-task-v1"), false);
@@ -156,5 +166,15 @@ test("usePlanTask owns polling timers and resumable storage across terminal and 
   await act(async () => { renderer.unmount(); });
   assert.equal(timeouts.size, 0);
   assert.equal(intervals.size, 0);
+
+  storage.clear();
+  hookStorageKey = null;
+  hook = null;
+  await act(async () => { renderer = create(React.createElement(Harness)); });
+  await begin("task-nonpersistent", [{ taskId: "task-nonpersistent", status: "pending", queuePosition: 2 }]);
+  assert.equal(storage.size, 0);
+  assert.equal(timeouts.size, 1);
+  await act(async () => { renderer.unmount(); });
+  assert.equal(timeouts.size, 0);
   delete (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT;
 });

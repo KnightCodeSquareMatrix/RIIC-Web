@@ -1,11 +1,16 @@
+"use client";
+import { useTranslations } from "next-intl";
+
 import { Skeleton } from "@/components/ui/skeleton";
 
 export function PlanResultSummarySkeleton() {
+  const intl = useTranslations();
+
   return (
     <section
       className="relative mb-5 overflow-hidden border border-[#313131]/18 bg-[#F3F1EA] text-[#313131] shadow-[0_12px_30px_rgba(35,38,39,0.10)]"
       role="status"
-      aria-label="正在恢复排班结果"
+      aria-label={intl("components_PlanResultSummarySkeleton.restoringScheduleResult")}
       data-plan-result-summary-skeleton
     >
       <div className="grid min-h-[84px] grid-cols-[minmax(10rem,1.05fr)_minmax(0,5fr)] items-stretch max-[820px]:grid-cols-1">

@@ -71,6 +71,6 @@ console.log(`## arkntools 自动资源同步
 - 新增技能定义：${[...afterSkillIds].filter((id) => !beforeSkillIds.has(id)).length}
 - 移除技能定义：${[...beforeSkillIds].filter((id) => !afterSkillIds.has(id)).length}
 
-同步工作流已执行资源完整性检查、lint、单元测试、API 契约测试和生产构建；完整 Chromium E2E 由随后调度的 Frontend quality 工作流执行。
+同步工作流已执行资源完整性检查、lint、单元测试、API 契约测试和生产构建；合并到 develop 后，Post-merge release 工作流会执行完整 Chromium E2E 和部署前检查。
 
 本 PR 只修改当前前端仓库的受管资源，不会向 arkntools 仓库写入内容。`);

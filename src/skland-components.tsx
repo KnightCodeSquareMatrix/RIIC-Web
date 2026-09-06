@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useEffectEvent, useId, useRef, useState, type KeyboardEvent } from "react";
 import {
   ExternalLink,
   KeyRound,
@@ -18,13 +18,13 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { buildSklandAppOpenUrl } from "@/skland-auth-url";
+import { nextSklandQrPollDelay, remainingSklandQrPollDelay } from "@/skland-qr-polling";
 import {
   currentSklandPolicyConsent,
   SklandPolicyConsent,
 } from "@/skland-policy-consent";
 import type { SklandSessionData } from "@/types";
 
-const SKLAND_QR_POLL_INTERVAL_MS = 6_000;
 const SklandCredentialPanel = dynamic(
   () => import("@/skland-credential-panel").then((module) => module.SklandCredentialPanel),
   {
@@ -39,6 +39,8 @@ const SklandCredentialPanel = dynamic(
 
 type ScanState = "idle" | "loading" | "waiting" | "scanned" | "expired";
 type AuthMethod = "qr" | "credential";
+
+const sklandQrStatusIconClassName = "text-neutral-700 [forced-color-adjust:none]";
 
 interface SklandLoginPanelProps {
   configured: boolean;
@@ -69,6 +71,7 @@ export function SklandLoginPanel({
   const createQrPromiseRef = useRef<Promise<void> | null>(null);
   const mountedRef = useRef(true);
   const consentReady = termsAccepted && privacyAccepted;
+  const notifyAuthenticated = useEffectEvent(onAuthenticated);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -131,20 +134,68 @@ export function SklandLoginPanel({
   }, [scanExpiresAt, scanId]);
 
   useEffect(() => {
-    if (!scanId || authMethod !== "qr") return;
+    if (!scanId || !scanExpiresAt || authMethod !== "qr") return;
     let cancelled = false;
     let timer: number | null = null;
+    let pollInFlight = false;
+    let failedAttempts = 0;
+    let nextPollAt: number | null = null;
+    let activePollController: AbortController | null = null;
+
+    const clearTimer = () => {
+      if (timer === null) return;
+      window.clearTimeout(timer);
+      timer = null;
+    };
+
+    const canPoll = () => !document.hidden && navigator.onLine && Date.now() < scanExpiresAt;
+
+    const armTimer = (delayMs: number) => {
+      clearTimer();
+      timer = window.setTimeout(() => {
+        timer = null;
+        nextPollAt = null;
+        void poll();
+      }, delayMs);
+    };
+
+    const scheduleNext = (retryAfterSeconds?: number) => {
+      clearTimer();
+      if (cancelled || Date.now() >= scanExpiresAt) return;
+      const delay = nextSklandQrPollDelay({
+        failedAttempts,
+        expiresAt: scanExpiresAt,
+        retryAfterSeconds,
+      });
+      if (delay === null) {
+        nextPollAt = null;
+        return;
+      }
+      nextPollAt = Date.now() + delay;
+      if (!canPoll()) return;
+      armTimer(delay);
+    };
+
     const poll = async () => {
+      clearTimer();
+      if (cancelled || pollInFlight || !canPoll()) return;
+      pollInFlight = true;
+      const controller = new AbortController();
+      activePollController = controller;
+      let shouldContinue = true;
+      let retryAfterSeconds: number | undefined;
       try {
-        const result = await pollSklandQr(scanId);
+        const result = await pollSklandQr(scanId, controller.signal);
         if (cancelled) return;
+        failedAttempts = 0;
         if (
           result.status === "authenticated"
           && result.scheduleSnapshot
           && result.accounts
           && result.activeAccountId
         ) {
-          onAuthenticated({
+          shouldContinue = false;
+          notifyAuthenticated({
             authenticated: true,
             configured: true,
             authMethods: { qr: true, credential: true },
@@ -166,23 +217,63 @@ export function SklandLoginPanel({
           setScanId(null);
           setScanState("expired");
           setScanError(null);
+          shouldContinue = false;
           return;
         }
         setScanState(result.status === "scanned" ? "scanned" : "waiting");
         setScanError(null);
       } catch (error) {
-        if (cancelled) return;
+        if (cancelled || controller.signal.aborted) return;
         const detail = toDisplayError(error, "登录状态查询失败，将继续重试。");
         setScanError(`${detail.message}（${detail.code}${detail.requestId ? ` · ${detail.requestId}` : ""}）`);
+        failedAttempts += 1;
+        retryAfterSeconds = detail.retryAfterSeconds;
+        shouldContinue = detail.retryable;
+      } finally {
+        if (activePollController === controller) activePollController = null;
+        pollInFlight = false;
+        if (!cancelled && shouldContinue) scheduleNext(retryAfterSeconds);
       }
-      if (!cancelled) timer = window.setTimeout(() => void poll(), SKLAND_QR_POLL_INTERVAL_MS);
     };
-    timer = window.setTimeout(() => void poll(), SKLAND_QR_POLL_INTERVAL_MS);
+
+    const resumePolling = () => {
+      clearTimer();
+      if (cancelled || pollInFlight || document.hidden || !navigator.onLine) return;
+      if (Date.now() >= scanExpiresAt) {
+        setScanId(null);
+        setScanState("expired");
+        return;
+      }
+      const delay = remainingSklandQrPollDelay({ nextPollAt, expiresAt: scanExpiresAt });
+      if (delay === null) {
+        setScanId(null);
+        setScanState("expired");
+      } else if (delay === 0) {
+        nextPollAt = null;
+        void poll();
+      } else {
+        armTimer(delay);
+      }
+    };
+    const handleVisibilityChange = () => {
+      if (document.hidden) clearTimer();
+      else resumePolling();
+    };
+    const handleOffline = () => clearTimer();
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("online", resumePolling);
+    window.addEventListener("offline", handleOffline);
+    scheduleNext();
     return () => {
       cancelled = true;
-      if (timer !== null) window.clearTimeout(timer);
+      clearTimer();
+      activePollController?.abort();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("online", resumePolling);
+      window.removeEventListener("offline", handleOffline);
     };
-  }, [authMethod, onAuthenticated, scanId]);
+  }, [authMethod, scanExpiresAt, scanId]);
 
   useEffect(() => {
     if (
@@ -303,15 +394,41 @@ export function SklandLoginPanel({
                 </div>
 
                 <div className="order-1 grid place-items-center gap-3 md:order-2">
-                  <div className="grid size-52 place-items-center rounded-xl bg-white p-3 ring-1 ring-black/10 sm:size-56 md:size-52" data-skland-qr-visual>
+                  <div
+                    className="grid size-52 place-items-center rounded-xl bg-white p-3 text-black ring-1 ring-black/10 dark:bg-white dark:text-black sm:size-56 md:size-52"
+                    style={{ colorScheme: "only light", forcedColorAdjust: "none" }}
+                    data-skland-qr-visual
+                  >
                     {scanState === "scanned" ? (
-                      <LoaderCircle className="size-9 animate-spin text-muted-foreground motion-reduce:animate-none" aria-hidden="true" data-skland-login-progress />
+                      <LoaderCircle
+                        className={cn("size-9 animate-spin motion-reduce:animate-none", sklandQrStatusIconClassName)}
+                        aria-hidden="true"
+                        data-skland-login-progress
+                        data-skland-login-status-icon="scanned"
+                      />
                     ) : scanUrl ? (
-                      <QRCodeSVG value={scanUrl} size={196} className="size-full" title="森空岛登录二维码" role="img" aria-label="森空岛登录二维码" />
+                      <QRCodeSVG
+                        value={scanUrl}
+                        size={196}
+                        bgColor="#FFFFFF"
+                        fgColor="#000000"
+                        className="size-full"
+                        title="森空岛登录二维码"
+                        role="img"
+                        aria-label="森空岛登录二维码"
+                      />
                     ) : scanState === "loading" ? (
-                      <LoaderCircle className="size-8 animate-spin text-muted-foreground motion-reduce:animate-none" aria-hidden="true" />
+                      <LoaderCircle
+                        className={cn("size-8 animate-spin motion-reduce:animate-none", sklandQrStatusIconClassName)}
+                        aria-hidden="true"
+                        data-skland-login-status-icon="loading"
+                      />
                     ) : (
-                      <ScanLine className="size-12 text-muted-foreground" aria-hidden="true" />
+                      <ScanLine
+                        className={cn("size-12", sklandQrStatusIconClassName)}
+                        aria-hidden="true"
+                        data-skland-login-status-icon="idle"
+                      />
                     )}
                   </div>
                   <p className="text-center text-sm leading-6 text-muted-foreground" role="status" aria-live="polite">{pageStatusText}</p>

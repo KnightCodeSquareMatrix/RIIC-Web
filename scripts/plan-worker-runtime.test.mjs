@@ -74,6 +74,7 @@ function executionHarness(overrides = {}) {
     markSolverFinished: async () => { calls.push("solver-finished"); return true; },
     toPublicPlanData: () => result,
     describeArtifact: async () => ({ key: "artifact", bytes: 1, sha256: "b".repeat(64) }),
+    saveFailureArtifact: async () => { calls.push("failure-artifact"); return null; },
     releaseCacheLease: async () => { calls.push("lease-release"); },
     completeCache: async () => { calls.push("cache-complete"); },
     updateRunExecution: async () => { calls.push("timing"); return true; },
@@ -144,6 +145,14 @@ test("a solver lease is cached and the artifact is queued only after task public
 
 test("a failed solver releases its cache lease before recording the terminal task", async () => {
   const lease = { kind: "lease", keyHmac: "cache-key", leaseOwner: "lease-owner" };
+  const task = claimedTask();
+  task.payload.operbox = [
+    { id: "owned", name: "Owned", own: true, level: 80, elite: 2, potential: 6, rarity: 6 },
+    { id: "unowned", name: "Unowned", own: false, level: 1, elite: 0, potential: 1, rarity: 5 },
+  ];
+  const expectedFailureOperbox = task.payload.operbox.map((operator) => ({ ...operator }));
+  const recorded = [];
+  const failureArtifacts = [];
   const { calls, dependencies } = executionHarness({
     getCacheSolverIdentity: async () => ({
       protocol_version: 1,
@@ -152,14 +161,37 @@ test("a failed solver releases its cache lease before recording the terminal tas
       observed_at: "2026-09-02T00:00:00.000Z",
     }),
     resolveCache: async () => lease,
-    runPlan: async () => { throw new Error("solver unavailable"); },
+    runPlan: async (input) => {
+      input.operbox.splice(0, input.operbox.length, input.operbox[0]);
+      throw new Error("solver unavailable");
+    },
+    saveFailureArtifact: async (input) => {
+      calls.push("failure-artifact");
+      failureArtifacts.push(input);
+      return { key: input.diagnosticId, bytes: 1, sha256: "d".repeat(64) };
+    },
+    recordRun: async (input) => { recorded.push(input); calls.push(`record:${input.status}`); return true; },
   });
 
-  assert.equal(await executePlanTask(claimedTask(), 1, dependencies), null);
+  assert.equal(await executePlanTask(task, 1, dependencies), null);
   assert.equal(await waitForPlanExecutionUpdates(1_000), true);
+  assert.deepEqual(failureArtifacts, [{
+    diagnosticId: task.id,
+    layout: task.payload.layout,
+    operbox: expectedFailureOperbox,
+    sourceName: task.payload.sourceName,
+    rotation: task.payload.rotation,
+    fiammettaEnable: task.payload.fiammettaEnable,
+    dataOwnerTag: task.payload.dataOwnerTag,
+    errorCode: "AIC-SYS-5000",
+  }]);
+  assert.deepEqual(task.payload.operbox, expectedFailureOperbox);
+  assert.equal(recorded[0].artifact.key, task.id);
+  assert.equal(recorded[0].artifactStatus, "complete");
   assert.deepEqual(calls, [
     "start:solver",
     "lease-release",
+    "failure-artifact",
     "record:failed",
     "task:failed",
     "timing",
@@ -210,6 +242,7 @@ test("an unsuccessful solver response preserves its public error and queues the 
   assert.deepEqual(calls, [
     "start:solver",
     "solver-finished",
+    "failure-artifact",
     "record:failed",
     "task:failed",
     "artifact-enqueue",

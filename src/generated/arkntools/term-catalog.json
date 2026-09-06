@@ -461,6 +461,12 @@
     "desc": "包含以下干员\nLancet-2、Castle-3、THRM-EX、正义骑士号、Friston-3、PhonoR-0、CONFESS-47、GALLUS²",
     "descText": "包含以下干员 Lancet-2、Castle-3、THRM-EX、正义骑士号、Friston-3、PhonoR-0、CONFESS-47、GALLUS²"
   },
+  "cc_tag_sees": {
+    "id": "cc_tag_sees",
+    "name": "S.E.E.S.",
+    "desc": "包含以下干员\n结城理、埃癸斯、岳羽由加莉、虎狼丸",
+    "descText": "包含以下干员 结城理、埃癸斯、岳羽由加莉、虎狼丸"
+  },
   "cc_tra_closure": {
     "id": "cc_tra_closure",
     "name": "可露希尔特别订单",

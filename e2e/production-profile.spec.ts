@@ -32,6 +32,11 @@ test("production profile exposes explicitly enabled Skland while preserving secu
   await expect(setupGate.getByText("继续使用受账号保护的数据导入与排班功能。", { exact: true })).toBeVisible();
   await expect(page.getByText("上传练度 JSON / XLSX", { exact: true })).toHaveCount(0);
 
+  await page.goto("/manual");
+  await expect(page.locator("[data-manual-schedule-unavailable]")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "手动排班待开发" })).toBeVisible();
+  await expect(page.locator("[data-manual-schedule-page]")).toHaveCount(0);
+
   const sklandPageResponse = await request.get("/skland");
   expect(sklandPageResponse.status()).toBe(200);
   expect(await sklandPageResponse.text()).toContain("森空岛");

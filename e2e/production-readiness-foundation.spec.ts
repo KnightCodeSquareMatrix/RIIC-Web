@@ -1,4 +1,5 @@
 import { expect, test, type Route } from "@playwright/test";
+import { TERMS_VERSION, PRIVACY_VERSION } from "../src/legal-policy";
 import { amiyaPortrait, requestId, diagnosticId, layout243, waitForOwnAnimations, planData, twoShiftPlanData, fourShiftPlanData, adjacentPortraitPlanData, lazyPortraitPlanData, authenticatedSklandSnapshot, mockApis, mockAnonymousWebsiteSession, openSklandOverview, navigateToPrimaryPage, seedPreferences, seedV4Session } from "./production-readiness.fixture";
 
 test.beforeEach(async ({ page }) => {
@@ -117,6 +118,13 @@ test("the anonymous sample trial fetches and solves once before showing the sche
   await expect(page.locator("[data-plan-board]")).toHaveAttribute("data-plan-revision", diagnosticId);
   await expect(page.locator("[data-anonymous-sample-trial]")).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => window.localStorage.getItem("arknights-infra-calc-beta-onboarding-v1"))).toBe("completed");
+
+  const adjustmentTrigger = page.getByRole("button", { name: "修改练度并重算", exact: true });
+  await adjustmentTrigger.click();
+  await expect(page.getByRole("dialog", { name: "登录网站账号" })).toBeVisible();
+  await expect(page.locator("[data-upgrade-simulation-dialog]")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(adjustmentTrigger).toBeFocused();
 });
 
 test("the anonymous sample trial is absent for a signed-in onboarding session", async ({ page }) => {
@@ -1212,13 +1220,9 @@ test("two-shift output drives product estimates, room formulas, and profile deta
   await expect(detailsSheet).not.toContainText("拆分为前端估算，总量以求解器为准");
   await expect(detailsSheet.getByText(/限制环节：/)).toHaveCount(1);
   await expect(detailsSheet.locator("[data-production-method]")).toHaveCount(0);
-  await expect(detailsSheet.getByRole("heading", { name: "产线提升空间" })).toBeVisible();
-  await expect(detailsSheet.getByText("贸易产线", { exact: true }).locator("..")).toContainText("领先推荐方案 6.4%");
-  await expect(detailsSheet.getByText("制造产线", { exact: true }).locator("..")).toContainText("领先推荐方案 7.9%");
-  await expect(detailsSheet.locator('[data-efficiency-insights] [data-insight-state="positive"]')).toHaveCount(3);
-  await expect(detailsSheet.getByRole("heading", { name: "设施组合提升空间" })).toBeVisible();
-  await expect(detailsSheet.getByText("领先推荐组合 10.7%", { exact: true })).toBeVisible();
-  await expect(detailsSheet.getByText("状态良好", { exact: true })).toBeVisible();
+  await expect(detailsSheet.getByRole("heading", { name: "产线提升空间" })).toHaveCount(0);
+  await expect(detailsSheet.locator("[data-efficiency-insights]")).toHaveCount(0);
+  await expect(detailsSheet.getByRole("heading", { name: "设施组合提升空间" })).toHaveCount(0);
   await expect(detailsSheet.getByText("下一步建议", { exact: true })).toHaveCount(0);
   await expect(detailsSheet.getByText("原效率与基准", { exact: true })).toHaveCount(0);
   await expect(detailsSheet.getByText("领域指标", { exact: true })).toHaveCount(0);
@@ -1454,8 +1458,8 @@ for (const viewport of [
         expect(body).toMatchObject({
           termsAccepted: true,
           privacyAccepted: true,
-          termsVersion: "2026-08-21-cloud-workspace",
-          privacyVersion: "2026-09-03-solver-reproduction-retention",
+          termsVersion: TERMS_VERSION,
+          privacyVersion: PRIVACY_VERSION,
         });
         consentCurrent = true;
       } else if (route.request().method() === "DELETE") {
@@ -1465,8 +1469,8 @@ for (const viewport of [
       }
       return fulfill(route, {
         current: consentCurrent,
-        termsVersion: "2026-08-21-cloud-workspace",
-        privacyVersion: "2026-09-03-solver-reproduction-retention",
+        termsVersion: TERMS_VERSION,
+        privacyVersion: PRIVACY_VERSION,
         acceptedAt: consentCurrent ? timestamp : null,
         revokedAt: null,
         cloudSyncEnabled: true,
@@ -1834,5 +1838,16 @@ for (const scenario of [
     await expect(page.getByText("独立推荐", { exact: true })).toBeVisible();
     await expect(page.getByText("待核对", { exact: true }).first()).toBeVisible();
     await expect(page.getByText(/needs_review|originium_shards|standalone/, { exact: false })).toHaveCount(0);
+
+    if (scenario.status === "shown") {
+      const combinationMember = page
+        .locator('[data-slot="training-combination-card"]')
+        .getByRole("button")
+        .first();
+      await combinationMember.hover();
+      const profession = page.locator('[data-slot="tooltip-content"][data-open] [data-operator-profession]');
+      await expect(profession).toHaveText("重装");
+      await expect(profession.locator("img")).toHaveAttribute("src", "/images/profession/重装.webp");
+    }
   });
 }

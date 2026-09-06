@@ -1,4 +1,5 @@
 "use client";
+import { useTranslations } from "next-intl";
 
 /*
  * Interaction adapted from interior.dev by Dominic Doemann.
@@ -31,12 +32,14 @@ export function LoadMore({
   className?: string;
   labels?: Partial<Record<LoadMoreStatus, string>>;
 }) {
+  const intl = useTranslations();
   const [phase, setPhase] = useState<Exclude<LoadMoreStatus, "end">>("idle");
   const sentinelRef = useRef<HTMLDivElement>(null);
   const busyRef = useRef(false);
   const autoRunsRef = useRef(0);
   const mountedRef = useRef(true);
   const reducedMotion = useReducedMotion();
+
   const status: LoadMoreStatus = hasMore ? phase : "end";
 
   useEffect(() => {
@@ -76,10 +79,10 @@ export function LoadMore({
   }, [auto, hasMore, load, rootMargin]);
 
   const defaultLabels: Record<LoadMoreStatus, string> = {
-    idle: "加载更多",
-    loading: "正在加载",
-    error: "加载失败，点击重试",
-    end: "已显示全部结果",
+    idle: intl("components_ui_load_more.loadMore"),
+    loading: intl("components_ui_load_more.loading"),
+    error: intl("components_ui_load_more.loadFailedSelectToRetry"),
+    end: intl("components_ui_load_more.allResultsShown"),
   };
   const presentation = {
     idle: { label: labels?.idle ?? defaultLabels.idle, icon: ChevronDown },

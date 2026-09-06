@@ -127,6 +127,20 @@ function playerInfo(avatarUrl = "https://example.com/avatar.png", formulaItemId 
         strategy: "O_GOLD",
         completeWorkTime: 1_700_001_200,
         lastUpdateTime: 1_700_000_000,
+      }, {
+        ...baseRoom("trade_2"),
+        stock: [{
+          delivery: [{ id: 3141, count: 2, type: "DIAMOND_SHD" }],
+          // The live endpoint may retain GOLD here; the order and delivery types
+          // remain authoritative for an originium-shard trade.
+          gain: { id: 4002, count: 20, type: "GOLD" },
+          instId: 2,
+          type: "O_DIAMOND",
+        }],
+        stockLimit: 10,
+        strategy: "O_DIAMOND",
+        completeWorkTime: 1_700_001_200,
+        lastUpdateTime: 1_700_000_000,
       }],
       dormitories: [{ ...baseRoom("dorm_1", 5), comfort: 5_000 }],
       hire: {
@@ -296,8 +310,15 @@ test("normalizes the complete public Skland dashboard without leaking raw respon
   assert.equal(snapshot.progress.campaign?.records[0]?.name, "切尔诺伯格");
   assert.equal(snapshot.progress.activities?.[0]?.clearedStages, 8);
 
-  const trading = snapshot.infrastructure.rooms.find((room) => room.group === "trading");
-  assert.equal(trading?.orders[0]?.reward.count, 1_500);
+  const trading = snapshot.infrastructure.rooms.find((room) => room.group === "trading" && room.product === "gold");
+  if (trading?.group !== "trading") assert.fail("gold trading room was not normalized");
+  assert.equal(trading.orders[0]?.reward.count, 1_500);
+  const originiumTrading = snapshot.infrastructure.rooms.find((room) => room.group === "trading" && room.product === "originium");
+  if (originiumTrading?.group !== "trading") assert.fail("originium trading room was not normalized");
+  assert.deepEqual(originiumTrading.orders[0], {
+    delivery: [{ type: "originium_shard", count: 2 }],
+    reward: { type: "orundum", count: 20 },
+  });
   const manufacture = snapshot.infrastructure.rooms.find((room) => room.group === "manufacture");
   assert.equal(manufacture?.product, "gold");
   assert.equal(manufacture?.production.unitCapacity, 10);
@@ -329,7 +350,7 @@ test("normalizes the complete public Skland dashboard without leaking raw respon
   }
 });
 
-test("maps Skland manufacture entries 3 and 4 to their in-game room numbers", () => {
+test("maps Skland manufacture entries to displayed rooms as 3, 1, 4, 2", () => {
   const info = playerInfo();
   const template = info.building.manufactures[0]!;
   info.building.manufactures = ["slot_14", "slot_5", "slot_6", "slot_7"].map((slotId) => ({
@@ -343,10 +364,10 @@ test("maps Skland manufacture entries 3 and 4 to their in-game room numbers", ()
   assert.deepEqual(
     manufactureRooms.map((room) => ({ key: room.key, index: room.index })),
     [
-      { key: "slot_14", index: 0 },
-      { key: "slot_5", index: 1 },
+      { key: "slot_6", index: 0 },
+      { key: "slot_14", index: 1 },
       { key: "slot_7", index: 2 },
-      { key: "slot_6", index: 3 },
+      { key: "slot_5", index: 3 },
     ]
   );
 });
