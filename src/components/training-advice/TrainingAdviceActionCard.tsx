@@ -1,4 +1,5 @@
 "use client";
+import { useTranslations, useLocale } from "next-intl";
 
 import { motion, useReducedMotion } from "motion/react";
 
@@ -11,7 +12,7 @@ import type {
   TrainingNewbieItem,
   TrainingRecommendation,
 } from "@/types";
-import { demoOperatorName, useLanguageDemo } from "@/language-demo";
+import { localizedOperatorName } from "@/i18n/game-data";
 
 import {
   trainingAcquisitionLabel,
@@ -24,7 +25,6 @@ import {
 } from "./presentation";
 import { trainingAdviceSkillSummary } from "./skill-selection";
 
-const ACTION_LABELS: Record<string, string> = { acquire: "获取", train: "培养" };
 type ActionCardItem = TrainingNewbieItem | TrainingRecommendation;
 
 export function TrainingAdviceActionCard({
@@ -36,13 +36,14 @@ export function TrainingAdviceActionCard({
   entry?: OperBoxEntry;
   index: number;
 }) {
+  const intl = useTranslations();
   const reduceMotion = useReducedMotion();
-  const { locale } = useLanguageDemo();
+  const locale = useLocale();
   const en = locale === "en";
-  const actionLabel = en ? ({ acquire: "Obtain", train: "Train" }[action.action] ?? action.action) : ACTION_LABELS[action.action];
-  const currentText = action.current ? `${en ? "Current" : "当前"} ${trainingLevelText(action.current, en)} → ` : "";
+  const actionLabel = action.action === "acquire" || action.action === "train" ? intl(`components_training_advice_TrainingAdviceActionCard.${action.action}`) : action.action;
+  const currentText = action.current ? `${intl("components_training_advice_TrainingAdviceActionCard.current")} ${trainingLevelText(action.current, en)} → ` : "";
   const targetText = trainingLevelText(action.target, en);
-  const operatorName = demoOperatorName(action.operator, locale);
+  const operatorName = localizedOperatorName(action.operator, locale);
   const skillSummary = trainingAdviceSkillSummary(action.operator, action.current, action.target);
 
   return (
@@ -73,8 +74,8 @@ export function TrainingAdviceActionCard({
             skillTooltipFocusable={skillSummary.skills.length > 0}
             skillTooltipHighlightIds={skillSummary.highlightedSkillIds}
             skillTooltipContextLabel={skillSummary.highlightedSkillIds.length
-              ? (en ? "Operator skills · target skill highlighted" : "干员基建技能 · 已标出本次目标")
-              : (en ? "Operator infrastructure skills" : "该干员的基建技能")}
+              ? (intl("components_training_advice_TrainingAdviceActionCard.operatorSkillsTargetSkillHighlighted"))
+              : (intl("components_training_advice_TrainingAdviceActionCard.operatorInfrastructureSkills"))}
           />
           <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
             <div className="min-w-0">
@@ -90,16 +91,16 @@ export function TrainingAdviceActionCard({
                 ) : null}
               </div>
               <p className="mt-2 max-w-[72ch] text-pretty text-sm leading-6 text-white/82">
-                {actionLabel} {en ? operatorName : `「${operatorName}」`} · {currentText}{en ? "Target" : "目标"} {targetText}
+                {actionLabel} {en ? operatorName : `「${operatorName}」`} · {currentText}{intl("components_training_advice_TrainingAdviceActionCard.target")} {targetText}
               </p>
               {action.acquisition ? (
                 <p className="mt-1 text-xs leading-5 text-white/58">
-                  {en ? "Acquisition" : "获取方式"}：{trainingAcquisitionLabel(action.acquisition.kind, en)} · {action.acquisition.detail}
+                  {intl("components_training_advice_TrainingAdviceActionCard.acquisition")}：{trainingAcquisitionLabel(action.acquisition.kind, en)} · {action.acquisition.detail}
                 </p>
               ) : null}
               {"efficiency" in action && action.efficiency ? (
                 <p className="mt-1 text-xs leading-5 text-white/58">
-                  {en ? "Efficiency insight" : "效率知识"}：{action.efficiency.value}%
+                  {intl("components_training_advice_TrainingAdviceActionCard.efficiencyInsight")}：{action.efficiency.value}%
                   {action.efficiency.note ? ` · ${action.efficiency.note}` : ""}
                 </p>
               ) : null}

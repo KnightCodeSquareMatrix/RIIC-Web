@@ -1,0 +1,17 @@
+{
+  "noChange": "No change",
+  "changeAtLeastOneOperatorSOwnershipOrElite": "Change at least one operator''s ownership or elite stage before recalculating.",
+  "recalculationWithTheUpdatedProgressionFailedPleaseTryAgain": "Recalculation with the updated progression failed. Please try again later.",
+  "modifyProgressionAndRecalculate": "Modify progression and recalculate",
+  "modifyProgressionAndRecalculate2": "Modify progression and recalculate",
+  "updateOwnershipOrEliteStageAndRecalculateWithThe": "Update ownership or elite stage and recalculate with the same layout. After success, the current BOX is updated and the original plan remains available for comparison.",
+  "operatorsForThisRecalculation": "Operators for this recalculation",
+  "changeAtLeastOneOperatorTheseUpdatesAreSaved": "Change at least one operator. These updates are saved to the same BOX used by Schedule Settings.",
+  "solvingAgain": "Solving again…",
+  "saveProgressionAndRecalculate": "Save progression and recalculate",
+  "recalculatingWithTheUpdatedProgressionAndSameLayout": "Recalculating with the updated progression and same layout…",
+  "progressionRecalculationResult": "Progression recalculation result",
+  "recalculationComplete": "Recalculation complete",
+  "theBoxIsUpdatedSwitchBetweenTheOriginalAnd": "The BOX is updated. Switch between the original and progression-adjusted plans on the main screen.",
+  "vsCurrent": "vs current {change}"
+}

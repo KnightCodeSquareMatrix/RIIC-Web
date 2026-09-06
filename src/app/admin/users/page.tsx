@@ -1,3 +1,4 @@
+import { pageMetadata } from "@/i18n/metadata";
 import { AdminUserManagement } from "./users-client";
 
 export const dynamic = "force-dynamic";
@@ -9,3 +10,5 @@ export default function AdminUsersPage() {
     </main>
   );
 }
+
+export function generateMetadata() { return pageMetadata("admin_users"); }

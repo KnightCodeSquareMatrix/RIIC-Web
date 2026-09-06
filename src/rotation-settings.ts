@@ -1,3 +1,5 @@
+import { localize as rotationText } from "./i18n/helpers/RotationLabels.ts";
+import { localize as localize_rotation_settings } from "./i18n/helpers/rotation_settings.ts";
 import type { RotationProfile } from "./types";
 
 export type RotationOption = {
@@ -51,14 +53,8 @@ export function rotationDurations(profile: RotationProfile): number[] {
 export function rotationDescription(profile: RotationProfile, en = false): string {
   const current = ROTATION_OPTIONS.find((option) => option.profile === profile);
   const option = current ?? LEGACY_ROTATION_OPTIONS[profile as keyof typeof LEGACY_ROTATION_OPTIONS];
-  const englishLabel: Record<RotationProfile, string> = {
-    abc_12_6_6: "Three shifts per day",
-    main_backup_12_12: "Primary / backup rotation",
-    abc_12_12_12: "Two changes per day",
-    fiammetta_8_8_4_4: "Fiammetta rotation",
-    abyssal_7_5_7_5: "Abyssal Hunters rotation",
-  };
-  return `${en ? englishLabel[profile] : option.label} · ${option.durations.join("/")} ${en ? "hours" : "小时"}`;
+
+  return `${rotationText.text(en, profile)} · ${option.durations.join("/")} ${localize_rotation_settings.text(en, "hours")}`;
 }
 
 export function rotationShiftCount(profile: RotationProfile): number {

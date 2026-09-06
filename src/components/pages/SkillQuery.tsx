@@ -1,4 +1,5 @@
 "use client";
+import { useTranslations } from "next-intl";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
@@ -9,19 +10,23 @@ import { filterOperators, ROOM_SKILL_TAGS, type BuildingRoomPrefix } from "@/bui
 import { SkillTagBar } from "@/components/skill-query/SkillTagBar";
 import { SkillResultRow } from "@/components/skill-query/SkillResultRow";
 import { SkillRoomTagBar } from "@/components/skill-query/SkillRoomTagBar";
+import { SkillFilterRow } from "@/components/skill-query/SkillFilterRow";
+import { OperatorRarityFilter, OperatorProfessionFilter } from "@/components/operators/OperatorPickerParts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { LoadMore } from "@/components/ui/load-more";
 import { BUILDING_SKILL_CATALOG, OPERATOR_CATALOG } from "@/operatorPortraits";
 import { indexSkillAnnotations } from "@/skill-annotations";
 import type { ApiResponse, SkillAnnotationListData } from "@/types";
-import { useLanguageDemo } from "@/language-demo";
 
 export const SKILL_QUERY_PAGE_SIZE = 10;
 
 export function SkillQuery() {
-  const { locale } = useLanguageDemo();
-  const en = locale === "en";
+  const intl = useTranslations();
+
+  const filters = useTranslations("SkillFilters");
+  const [rarity, setRarity] = useState("all");
+  const [profession, setProfession] = useState("all");
   const [selectedRoom, setSelectedRoom] = useState<BuildingRoomPrefix | null>(null);
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -55,8 +60,9 @@ export function SkillQuery() {
       selectedTag,
       query,
       (skillId) => BUILDING_SKILL_CATALOG[skillId],
+      { rarity: rarity === "all" ? null : Number(rarity), profession: profession === "all" ? null : Number(profession) },
     ),
-    [query, selectedRoom, selectedTag],
+    [query, selectedRoom, selectedTag, rarity, profession],
   );
   const visible = filtered.slice(0, visibleCount);
   const annotationIndex = useMemo(() => indexSkillAnnotations(annotations), [annotations]);
@@ -81,6 +87,8 @@ export function SkillQuery() {
   }
 
   function handleClearFilters() {
+    setRarity("all");
+    setProfession("all");
     setSelectedRoom(null);
     setSelectedTag(null);
     setVisibleCount(SKILL_QUERY_PAGE_SIZE);
@@ -98,33 +106,32 @@ export function SkillQuery() {
   }
 
   return (
-    <section className="min-w-0 pt-5" aria-label={en ? "Skill Search" : "技能查询"} data-skill-query-page>
+    <section className="min-w-0 pt-5" aria-label={intl("components_pages_SkillQuery.skillSearch")} data-skill-query-page>
       <div className="mb-2 flex min-w-0 items-center gap-2.5">
         <span className="h-7 w-1.5 shrink-0 bg-[#FFD501]" aria-hidden="true" />
-        <h1 className="truncate text-[21px] font-medium leading-none">{en ? "Skill Search" : "技能查询"}</h1>
-        <span className="font-number text-xs text-muted-foreground">{filtered.length} {en ? "operators" : "名干员"}</span>
-      </div>
-
-      <div className="mt-3">
-        <SkillRoomTagBar selected={selectedRoom} onChange={handleRoomChange} />
-      </div>
-
-      {selectedRoom ? (
-        <SkillTagBar tags={availableTags} selected={selectedTag} onChange={handleTagChange} />
-      ) : null}
-
-      <div className="mt-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={!selectedRoom && !selectedTag}
-          onClick={handleClearFilters}
-          aria-label={en ? "Clear filters" : "清除选择"}
-        >
-          <X aria-hidden="true" />
-          {en ? "Clear filters" : "清除选择"}
+        <h1 className="truncate text-[21px] font-medium leading-none">{intl("components_pages_SkillQuery.skillSearch")}</h1>
+        <span className="font-number text-xs text-muted-foreground" aria-live="polite">{filters("operators", { count: filtered.length })}</span>
+        <Button type="button" variant="ghost" size="sm" className="ml-auto shrink-0"
+          disabled={rarity === "all" && profession === "all" && !selectedRoom && !selectedTag}
+          onClick={handleClearFilters} aria-label={filters("clear")}>
+          <X aria-hidden="true" />{filters("clear")}
         </Button>
+      </div>
+
+      <div className="mt-3 grid min-w-0 gap-1" data-skill-filters>
+        <SkillFilterRow label={filters("rarity")}>
+          <OperatorRarityFilter value={rarity} onChange={(value) => { setRarity(value); setVisibleCount(SKILL_QUERY_PAGE_SIZE); }} />
+        </SkillFilterRow>
+        <SkillFilterRow label={filters("profession")}>
+          <OperatorProfessionFilter value={profession} onChange={(value) => { setProfession(value); setVisibleCount(SKILL_QUERY_PAGE_SIZE); }} />
+        </SkillFilterRow>
+        <SkillFilterRow label={filters("room")}>
+          <SkillRoomTagBar selected={selectedRoom} onChange={handleRoomChange} />
+        </SkillFilterRow>
+        <SkillFilterRow label={filters("tag")}>
+          {selectedRoom && availableTags.length ? <SkillTagBar tags={availableTags} selected={selectedTag} onChange={handleTagChange} />
+            : <p className="flex min-h-7 items-center text-xs text-muted-foreground max-sm:min-h-11">{filters(selectedRoom ? "noTags" : "chooseRoom")}</p>}
+        </SkillFilterRow>
       </div>
 
       <label className="relative mt-3 block">
@@ -137,16 +144,16 @@ export function SkillQuery() {
           value={query}
           onChange={(event) => handleQueryChange(event.target.value)}
           className="h-11 pr-10 pl-9 max-sm:pr-12"
-          placeholder={en ? "Search operator, skill name, or effect" : "搜索干员名称/技能名称/技能效果"}
-          aria-label={en ? "Search operator, skill name, or effect" : "搜索干员名称/技能名称/技能效果"}
+          placeholder={intl("components_pages_SkillQuery.searchOperatorSkillNameOrEffect")}
+          aria-label={intl("components_pages_SkillQuery.searchOperatorSkillNameOrEffect")}
         />
         {query ? (
           <button
             type="button"
             onClick={handleClearQuery}
             className="absolute top-1/2 right-1 grid size-9 -translate-y-1/2 place-items-center rounded-md text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#FFD800] max-sm:size-11"
-            aria-label={en ? "Clear search" : "清空搜索"}
-            title={en ? "Clear search" : "清空搜索"}
+            aria-label={intl("components_pages_SkillQuery.clearSearch")}
+            title={intl("components_pages_SkillQuery.clearSearch")}
           >
             <X className="size-4" aria-hidden="true" />
           </button>
@@ -155,16 +162,16 @@ export function SkillQuery() {
 
       {annotationError ? (
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-l-2 border-amber-400 bg-amber-400/8 px-3 py-2 text-sm text-muted-foreground" role="status">
-          <span>{en ? "Manual skill notes could not be loaded." : "技能补充说明暂未加载。"}</span>
+          <span>{intl("components_pages_SkillQuery.manualSkillNotesCouldNotBeLoaded")}</span>
           <Button type="button" variant="ghost" size="sm" onClick={() => setAnnotationRequest((value) => value + 1)}>
-            {en ? "Retry notes" : "重新加载说明"}
+            {intl("components_pages_SkillQuery.retryNotes")}
           </Button>
         </div>
       ) : null}
 
       <div className="mt-4">
         {filtered.length === 0 ? (
-          <p className="py-12 text-center text-sm text-muted-foreground">{en ? "No operators match these filters." : "没有符合筛选条件的干员。"}</p>
+          <p className="py-12 text-center text-sm text-muted-foreground">{intl("components_pages_SkillQuery.noOperatorsMatchTheseFilters")}</p>
         ) : (
           <>
             <div className="grid gap-3">
@@ -175,11 +182,10 @@ export function SkillQuery() {
               ))}
             </div>
             <LoadMore
-              key={`${query}:${selectedRoom ?? ""}:${selectedTag ?? ""}`}
+              key={`${query}:${rarity}:${profession}:${selectedRoom ?? ""}:${selectedTag ?? ""}`}
               hasMore={hasMore}
               onLoad={loadMore}
               className="mt-4 border-t border-border/60 pt-2"
-              labels={en ? { idle: "Load more", loading: "Loading", error: "Load failed — retry", end: "All results shown" } : undefined}
             />
           </>
         )}

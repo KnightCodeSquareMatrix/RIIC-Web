@@ -5,7 +5,9 @@ import "overlayscrollbars/overlayscrollbars.css";
 
 import "./globals.css";
 import { TelemetryLoader } from "@/components/telemetry/TelemetryLoader";
-import { LanguageDemoProvider } from "@/language-demo";
+import { LocaleProvider } from "@/i18n/client";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale, getTranslations } from "next-intl/server";
 
 const technicalFont = Barlow_Condensed({
   variable: "--font-technical-source",
@@ -28,27 +30,31 @@ const numberFont = localFont({
   ],
 });
 
-export const metadata: Metadata = {
-  title: "可露希尔基建终端",
-  description: "导入干员数据，生成三班排班并导出到 MAA。",
-  other: {
-    "riic-build-id": process.env.APP_CLIENT_BUILD_ID ?? "local-development",
-  },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("Metadata");
+  return {
+    title: t("siteTitle"),
+    description: t("description"),
+    other: {
+      "riic-build-id": process.env.APP_CLIENT_BUILD_ID ?? "local-development",
+    },
+  };
+}
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const locale = await getLocale();
   return (
     <html
-      lang="zh-CN"
+      lang={locale === "zh" ? "zh-CN" : "en"}
       className={`${technicalFont.variable} ${numberFont.variable} antialiased`}
       suppressHydrationWarning
     >
       <body>
-        <LanguageDemoProvider>{children}</LanguageDemoProvider>
+        <NextIntlClientProvider><LocaleProvider>{children}</LocaleProvider></NextIntlClientProvider>
         <TelemetryLoader />
       </body>
     </html>

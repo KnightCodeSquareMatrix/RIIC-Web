@@ -1,9 +1,9 @@
 "use client";
+import { useTranslations, useLocale } from "next-intl";
 
 import { useEffect, useState, type ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
-import { useLanguageDemo } from "@/language-demo";
 
 type IssueId = "unexpected-operators" | "saved-box" | "box-not-applied" | "busy";
 
@@ -19,7 +19,8 @@ function parseIssue(value: string | null): IssueId | null {
 }
 
 export function IssueSolutionPicker({ children }: { children: ReactNode }) {
-  const { locale } = useLanguageDemo();
+  const intl = useTranslations();
+  const locale = useLocale();
   const en = locale === "en";
   const [selected, setSelected] = useState<IssueId | null>(null);
 
@@ -42,7 +43,7 @@ export function IssueSolutionPicker({ children }: { children: ReactNode }) {
   return (
     <section className="grid gap-5" data-help-issue-picker>
       <fieldset className="grid gap-4 rounded-[4px] border border-border bg-card p-4 sm:p-5">
-        <legend className="px-1 text-lg font-semibold">{en ? "What problem are you seeing?" : "你遇到什么问题？"}</legend>
+        <legend className="px-1 text-lg font-semibold">{intl("components_help_IssueSolutionPicker.whatProblemAreYouSeeing")}</legend>
         <div className="grid gap-2 sm:grid-cols-2">
           {issues.map((item) => (
             <label className={cn("cursor-pointer rounded-[4px] border border-border p-3 text-sm font-semibold transition-colors hover:bg-muted has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring", selected === item.id && "border-foreground bg-foreground text-background")} key={item.id}>
@@ -55,7 +56,7 @@ export function IssueSolutionPicker({ children }: { children: ReactNode }) {
 
       {selected === "unexpected-operators" ? children : null}
       {issue && selected !== "unexpected-operators" ? <section className="rounded-[4px] border border-border bg-card p-5 text-sm leading-6" data-help-issue-solution>{(en ? issue.en : issue.zh)[1]}</section> : null}
-      {!selected ? <p className="rounded-[4px] border border-dashed border-border px-5 py-10 text-center text-sm text-muted-foreground">{en ? "Choose a problem to view its solution." : "选择一个问题，查看对应解决方案。"}</p> : null}
+      {!selected ? <p className="rounded-[4px] border border-dashed border-border px-5 py-10 text-center text-sm text-muted-foreground">{intl("components_help_IssueSolutionPicker.chooseAProblemToViewItsSolution")}</p> : null}
     </section>
   );
 }

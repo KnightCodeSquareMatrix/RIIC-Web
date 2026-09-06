@@ -1,0 +1,12 @@
+{
+  "noTrainer": "空协助位",
+  "removeThePreviousTrainerBeforeStartingDiscardTheSaved": "先移走上一阶段教官，清除待用减半效果，再开启本阶段。",
+  "startMWithToApplyThe50Reduction": "保留{value2}，先开启专{level}，确认减半效果生效。",
+  "thenImmediatelySwitchTo": "减半生效后，立即换为{firstName}。",
+  "startMWith": "使用{firstName}开启专{level}。",
+  "switchTo": "换为{name}。",
+  "trainForAtTotalSpeed": "{name}训练 {value2}，总训练效率 {value3}%。",
+  "completeM": "收取专{level}。",
+  "keepBothOperatorsInTheTrainingRoomStartThe": "保留学员和教官在训练室；先开启下一阶段，再按下一步换人。",
+  "additional1": "{choice2, select, yes {省操作} other {极速}}"
+}

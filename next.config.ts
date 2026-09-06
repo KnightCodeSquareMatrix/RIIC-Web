@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import createNextIntlPlugin from "next-intl/plugin";
 
 import buildTracingPolicy from "./build-tracing-policy.json";
 import { isSklandFeatureEnabled } from "./src/deployment";
@@ -26,6 +27,7 @@ const uncachedDocumentRoutes = [
 const documentCacheControl = "private, no-cache, no-store, max-age=0, must-revalidate";
 
 const nextConfig: NextConfig = {
+  distDir: process.env.RIIC_NEXT_DIST_DIR || ".next",
   allowedDevOrigins: ["127.0.0.1"],
   compress: true,
   deploymentId: process.env.APP_BUILD_ID,
@@ -101,4 +103,4 @@ const nextConfig: NextConfig = {
   typedRoutes: false,
 };
 
-export default nextConfig;
+export default createNextIntlPlugin()(nextConfig);

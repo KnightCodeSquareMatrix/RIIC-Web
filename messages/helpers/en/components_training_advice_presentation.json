@@ -1,0 +1,11 @@
+{
+  "general": "General",
+  "systemCombination": "System combination",
+  "smallCombination": "Small combination",
+  "unknown": "Unknown",
+  "noAdditionalTraining": "No additional training",
+  "useSkillUnlockRequirement": "Use skill unlock requirement",
+  "targetNeedsReview": "Target needs review",
+  "elite": "Elite",
+  "basicGoal": "Basic goal"
+}
