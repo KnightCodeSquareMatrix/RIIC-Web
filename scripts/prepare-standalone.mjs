@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { log } from "node:console";
 import { cp, lstat, mkdir } from "node:fs/promises";
 import path from "node:path";
+import process from "node:process";
 import { fileURLToPath, URL } from "node:url";
 
 const repoRoot = path.resolve(fileURLToPath(new URL("../", import.meta.url)));
