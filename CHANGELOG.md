@@ -2,6 +2,23 @@
 
 All notable changes to RIIC-Web are documented in this file.
 
+## [0.7.0] - 2026-09-06
+
+### Added
+
+- The website now uses next-intl for cookie-backed Chinese and English rendering, including server-rendered document language, localized metadata, workbench pages, help pages, account flows and administration interfaces.
+- Skill Reference now provides rarity, profession, facility and skill-tag filters in four dedicated rows, reusing the operator picker's controls and placing Clear selection in the page header.
+
+### Changed
+
+- Operator names, infrastructure-skill names and descriptions continue to use the separately loaded unpacked-game English catalog instead of being duplicated in website translation messages.
+- Translation catalogs are split between ICU interface messages, structured presentation records and pure-helper namespaces, with parity and formatting validation for both locales.
+- Standalone build preparation and production bundle checks can target an isolated Next.js output directory, preventing local runtime artifacts from contaminating release verification.
+
+### For contributors
+
+- Unit and browser coverage verifies locale-cookie migration, server rendering, translated public pages, preserved search state, intersecting skill filters, room/tag reset behavior and mobile overflow boundaries.
+
 ## [0.6.1] - 2026-09-05
 
 ### Added

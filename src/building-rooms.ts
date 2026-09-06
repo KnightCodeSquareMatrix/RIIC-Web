@@ -62,6 +62,8 @@ export function buildingRoomPrefixForSkillId(skillId: string): BuildingRoomPrefi
 
 export interface OperatorWithSkills {
   name: string;
+  rarity?: number;
+  profession?: number;
   buildingSkills: readonly { id: string }[];
   /** 数据仓库 building.json char 字段中的原始顺序（生成时写入），用于默认倒序展示。 */
   order?: number;
@@ -75,6 +77,11 @@ export interface SkillRecord {
 }
 
 export type SkillRecordLookup = (skillId: string) => SkillRecord | undefined;
+
+export interface OperatorFilters {
+  rarity?: number | null;
+  profession?: number | null;
+}
 
 export function operatorMatchesRoom(
   skillIds: readonly string[],
@@ -129,12 +136,16 @@ export function filterOperators<T extends OperatorWithSkills>(
   tag: string | null,
   query: string,
   skillLookup: SkillRecordLookup,
+  filters: OperatorFilters = {},
 ): T[] {
   const normalizedQuery = query.trim();
   return operators
     .filter((operator) => {
       const skillIds = operator.buildingSkills.map((skill) => skill.id);
       return (
+        (filters.rarity == null || operator.rarity === filters.rarity)
+        && (filters.profession == null || operator.profession === filters.profession)
+        &&
         operatorMatchesRoom(skillIds, room)
         && operatorMatchesTag(skillIds, room, tag, skillLookup)
         && operatorMatchesQuery(operator.name, skillIds, query, skillLookup)

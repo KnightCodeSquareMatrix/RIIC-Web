@@ -1,0 +1,8 @@
+{
+  "initialPrefix": "Initial ",
+  "levelPrefix": "Level {level} ",
+  "elitePrefix": "Elite {elite} ",
+  "eliteLevelPrefix": "Elite {elite} · Level {level} ",
+  "unlock": "unlock",
+  "enhanced": "upgrade"
+}

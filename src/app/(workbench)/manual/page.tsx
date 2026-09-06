@@ -1,3 +1,4 @@
+import { pageMetadata } from "@/i18n/metadata";
 import { Construction } from "lucide-react";
 
 import { LocalizedText } from "@/components/LocalizedText";
@@ -16,13 +17,10 @@ function ManualScheduleUnavailable() {
           <Construction />
         </span>
         <h1 id="manual-schedule-unavailable-title" className="mt-5 text-2xl font-semibold tracking-tight">
-          <LocalizedText zh="手动排班待开发" en="Manual scheduling is under development" />
+          <LocalizedText message="app__workbench__manual_page_tsx1" />
         </h1>
         <p className="mx-auto mt-3 max-w-lg text-base leading-6 text-muted-foreground">
-          <LocalizedText
-            zh="该功能正在继续完善，开放后可在这里手动编辑基建排班。"
-            en="This feature is still being refined. Once available, you will be able to edit infrastructure schedules here."
-          />
+          <LocalizedText message="app__workbench__manual_page_tsx2" />
         </p>
       </div>
     </section>
@@ -33,3 +31,5 @@ export default function Page() {
   if (!isManualScheduleEnabled()) return <ManualScheduleUnavailable />;
   return <ManualScheduleRoute />;
 }
+
+export function generateMetadata() { return pageMetadata("manual"); }

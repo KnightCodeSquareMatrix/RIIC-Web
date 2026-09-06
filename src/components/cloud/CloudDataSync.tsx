@@ -1,4 +1,5 @@
 "use client";
+import { useTranslations, useLocale } from "next-intl";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -16,7 +17,6 @@ import {
 import { PRIVACY_VERSION, TERMS_VERSION } from "@/legal-policy";
 import type { CloudWorkspaceData, CloudWorkspacePutRequest } from "@/types";
 import { DataConsentDialog } from "./DataConsentDialog";
-import { useLanguageDemo } from "@/language-demo";
 
 type UploadRequest = Exclude<CloudWorkspacePutRequest, { restoreRevisionId: string }>;
 
@@ -35,7 +35,8 @@ export function CloudDataSync({
   onApply: (workspace: CloudWorkspaceData) => void;
   onWorkspaceChanged: (workspace: CloudWorkspaceData | null) => void;
 }) {
-  const { locale } = useLanguageDemo();
+  const intl = useTranslations();
+  const locale = useLocale();
   const en = locale === "en";
   const latestWorkspace = useRef(workspace);
   const syncController = useRef<AbortController | null>(null);
@@ -119,7 +120,7 @@ export function CloudDataSync({
       await synchronizeFirst(userId, controller.signal);
     }).catch((cause) => {
       if (!cancelled && !(cause instanceof DOMException && cause.name === "AbortError")) {
-        setError(cause instanceof Error ? cause.message : (en ? "Cloud sync is temporarily unavailable. Current data remains stored locally." : "云端同步暂不可用，当前数据仍保存在本地。"));
+        setError(cause instanceof Error ? cause.message : (intl("components_cloud_CloudDataSync.cloudSyncIsTemporarilyUnavailableCurrentDataRemainsStored")));
       }
     });
     return () => {
@@ -127,7 +128,7 @@ export function CloudDataSync({
       controller.abort();
       if (syncController.current === controller) syncController.current = null;
     };
-  }, [en, onWorkspaceChanged, refreshKey, synchronizeFirst, userId]);
+  }, [intl, en, onWorkspaceChanged, refreshKey, synchronizeFirst, userId]);
 
   useEffect(() => {
     if (!userId || initializedUser.current !== userId) return;
@@ -143,7 +144,7 @@ export function CloudDataSync({
         setError(null);
       }).catch((cause) => {
         if (!(cause instanceof DOMException && cause.name === "AbortError")) {
-          setError(cause instanceof Error ? cause.message : (en ? "Cloud sync failed. A local copy has been retained." : "云端同步失败，已保留本地副本。"));
+          setError(cause instanceof Error ? cause.message : (intl("components_cloud_CloudDataSync.cloudSyncFailedALocalCopyHasBeenRetained")));
         }
       });
     }, 1200);
@@ -151,7 +152,7 @@ export function CloudDataSync({
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [en, onWorkspaceChanged, userId, workspace]);
+  }, [intl, en, onWorkspaceChanged, userId, workspace]);
 
   async function accept() {
     if (!userId) return;
@@ -170,7 +171,7 @@ export function CloudDataSync({
       setConsentOpen(false);
       await synchronizeFirst(userId, controller.signal, true);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : (en ? "Could not save consent. Try again later." : "无法保存同意状态，请稍后重试。"));
+      setError(cause instanceof Error ? cause.message : (intl("components_cloud_CloudDataSync.couldNotSaveConsentTryAgainLater")));
     } finally {
       setSaving(false);
     }

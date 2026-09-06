@@ -1,4 +1,5 @@
 "use client";
+import { useTranslations } from "next-intl";
 
 import { ArrowRight, TriangleAlert } from "lucide-react";
 
@@ -11,7 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useLanguageDemo } from "@/language-demo";
+
 import type { ManualScheduleDraft } from "@/manual-schedule";
 
 export function ManualDraftReplaceDialog({
@@ -23,11 +24,11 @@ export function ManualDraftReplaceDialog({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
-  const { locale } = useLanguageDemo();
-  const en = locale === "en";
+  const intl = useTranslations();
+
   const sourceLabel = draft?.source?.variant === "progression-adjusted"
-    ? (en ? "progression-adjusted plan" : "练度调整后方案")
-    : (en ? "original plan" : "原方案");
+    ? (intl("components_ManualDraftReplaceDialog.progressionAdjustedPlan"))
+    : (intl("components_ManualDraftReplaceDialog.originalPlan"));
 
   return (
     <Dialog open={Boolean(draft)} onOpenChange={(open) => { if (!open) onCancel(); }}>
@@ -37,20 +38,18 @@ export function ManualDraftReplaceDialog({
             <TriangleAlert className="size-5" />
           </div>
           <DialogTitle className="text-lg font-semibold">
-            {en ? "Replace the existing manual draft?" : "替换现有手动草稿？"}
+            {intl("components_ManualDraftReplaceDialog.replaceTheExistingManualDraft")}
           </DialogTitle>
           <DialogDescription className="text-sm leading-6">
-            {en
-              ? `Creating a manual schedule from the ${sourceLabel} will replace your saved manual draft. This cannot be undone automatically.`
-              : `基于「${sourceLabel}」创建手动排班会替换你已保存的手动草稿，且无法自动撤销。`}
+            {intl("components_ManualDraftReplaceDialog.creatingAManualScheduleFromTheWillReplaceYour", { sourceLabel: sourceLabel })}
           </DialogDescription>
         </DialogHeader>
         <DialogFooter className="gap-2">
           <Button type="button" variant="outline" onClick={onCancel}>
-            {en ? "Keep existing draft" : "保留现有草稿"}
+            {intl("components_ManualDraftReplaceDialog.keepExistingDraft")}
           </Button>
           <Button type="button" onClick={onConfirm}>
-            {en ? "Replace and continue" : "替换并进入"}<ArrowRight />
+            {intl("components_ManualDraftReplaceDialog.replaceAndContinue")}<ArrowRight />
           </Button>
         </DialogFooter>
       </DialogContent>

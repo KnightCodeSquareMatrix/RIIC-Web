@@ -823,7 +823,7 @@ test("live activity survives navigation and calculator search occupies the relea
   await expect(activity).toHaveCount(0, { timeout: 5_000 });
 
   await expect(page.getByRole("textbox", { name: "搜索干员名称" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "筛选制造站" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "制造站", exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "基建计算器", exact: true }).click();
   const search = page.getByRole("textbox", { name: "搜索排班中的干员或房间" });

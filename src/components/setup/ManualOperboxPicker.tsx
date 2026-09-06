@@ -1,4 +1,6 @@
 "use client";
+import { localize as localize_components_setup_ManualOperboxPicker } from "../../i18n/helpers/components_setup_ManualOperboxPicker.ts";
+import { useTranslations, useLocale } from "next-intl";
 
 import {
   memo,
@@ -16,7 +18,8 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { OperatorSkillTooltip } from "@/components/OperatorSkillTooltip";
 import { SetupActionButton } from "@/components/setup/SetupActionButton";
-import { demoOperatorName, useLanguageDemo, type DemoLocale } from "@/language-demo";
+import type { AppLocale } from "@/i18n/config";
+import { localizedOperatorName } from "@/i18n/game-data";
 import { cn } from "@/lib/utils";
 import {
   buildManualOperbox,
@@ -85,12 +88,12 @@ function initialStages(operbox: OperBoxEntry[] | null): Record<string, ManualOpe
   );
 }
 
-function stageLabel(stage: ManualOperboxStage, locale: DemoLocale): string {
+function stageLabel(stage: ManualOperboxStage, locale: AppLocale): string {
   const en = locale === "en";
-  if (stage === "none") return en ? "Unowned" : "未拥有";
-  if (stage === "e0") return en ? "E0" : "精0";
-  if (stage === "e1") return en ? "E1" : "精1";
-  return en ? "E2" : "精2";
+  if (stage === "none") return localize_components_setup_ManualOperboxPicker.text(en, "unowned");
+  if (stage === "e0") return localize_components_setup_ManualOperboxPicker.text(en, "e0");
+  if (stage === "e1") return localize_components_setup_ManualOperboxPicker.text(en, "e1");
+  return localize_components_setup_ManualOperboxPicker.text(en, "e2");
 }
 
 function maximumStageForRarity(rarity: number): ManualOperboxStage {
@@ -110,13 +113,13 @@ const ManualOperatorCard = memo(function ManualOperatorCard({
 }: {
   operator: ManualRosterOperator;
   stage: ManualOperboxStage;
-  locale: DemoLocale;
+  locale: AppLocale;
   compact?: boolean;
   scheduledShifts?: readonly number[];
   onStageChange: (id: string, stage: ManualOperboxStage) => void;
 }) {
   const en = locale === "en";
-  const displayName = demoOperatorName(operator.name, locale);
+  const displayName = localizedOperatorName(operator.name, locale);
   const maxElite = maxEliteForRarity(operator.rarity);
   const selectedElite = stage === "none" ? null : stage === "e2" ? 2 : stage === "e1" ? 1 : 0;
   const selectedLevel = selectedElite === null ? undefined : manualLevelFor(operator.rarity, selectedElite);
@@ -129,11 +132,11 @@ const ManualOperatorCard = memo(function ManualOperatorCard({
           ? "col-span-2 grid grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-2 sm:col-span-2"
           : "flex items-center gap-3",
       )}
-      aria-label={en ? `Show ${displayName} infrastructure skills` : `查看${displayName}的基建技能`}
+      aria-label={localize_components_setup_ManualOperboxPicker.text(en, "showInfrastructureSkills", { displayName: displayName })}
     >
       <OperatorIdentity name={operator.name} portrait={operator.portrait} compact={compact}>
           <span className="font-number text-xs text-muted-foreground">
-            {operator.rarity}★ · {en ? `Up to E${maxElite}` : `最高精${maxElite}`}
+            {operator.rarity}★ · {localize_components_setup_ManualOperboxPicker.text(en, "upToE", { maxElite: maxElite })}
           </span>
           {scheduledShifts?.map((shift) => (
             <span
@@ -162,8 +165,8 @@ const ManualOperatorCard = memo(function ManualOperatorCard({
         name={operator.name}
         trigger={identity}
         contextLabel={selectedElite === null
-          ? (en ? "Current selection: Unowned" : "当前选择：未拥有")
-          : (en ? `Current selection: E${selectedElite} Lv.${selectedLevel}` : `当前选择：精${selectedElite} Lv.${selectedLevel}`)}
+          ? (localize_components_setup_ManualOperboxPicker.text(en, "currentSelectionUnowned"))
+          : (localize_components_setup_ManualOperboxPicker.text(en, "currentSelectionELv", { selectedElite: selectedElite, selectedLevel: selectedLevel ?? 1 }))}
         currentElite={selectedElite}
         currentLevel={selectedLevel}
         delay={400}
@@ -171,7 +174,7 @@ const ManualOperatorCard = memo(function ManualOperatorCard({
 
       <div
         role="radiogroup"
-        aria-label={en ? `${displayName} ownership and elite stage` : `${displayName}持有与精英阶段`}
+        aria-label={localize_components_setup_ManualOperboxPicker.text(en, "ownershipAndEliteStage", { displayName: displayName })}
         className={cn("grid grid-cols-4", compact ? "col-span-2 gap-1 sm:col-span-1" : "gap-1.5")}
       >
         {STAGES.map((option) => {
@@ -187,9 +190,9 @@ const ManualOperatorCard = memo(function ManualOperatorCard({
               role="radio"
               aria-checked={selected}
               aria-label={disabled
-                ? (en ? `${stageLabel(option, locale)} is unavailable for ${operator.rarity}-star operators` : `${operator.rarity} 星干员无法选择${stageLabel(option, locale)}`)
+                ? (localize_components_setup_ManualOperboxPicker.text(en, "isUnavailableForStarOperators", { value1: stageLabel(option, locale), rarity: operator.rarity }))
                 : stageLabel(option, locale)}
-              title={disabled ? (en ? `Unavailable for ${operator.rarity}-star operators` : `${operator.rarity} 星干员无法达到此阶段`) : undefined}
+              title={disabled ? (localize_components_setup_ManualOperboxPicker.text(en, "unavailableForStarOperators", { rarity: operator.rarity })) : undefined}
               disabled={disabled}
               onClick={() => onStageChange(operator.id, option)}
               style={selected ? { backgroundColor: STAGE_COLOR[option], borderColor: STAGE_COLOR[option] } : undefined}
@@ -236,7 +239,8 @@ export function ManualOperboxPicker({
   compact?: boolean;
   showProfessionFilter?: boolean;
 }) {
-  const { locale } = useLanguageDemo();
+  const intl = useTranslations();
+  const locale = useLocale();
   const en = locale === "en";
   const [query, setQuery] = useState("");
   const [onlyOwned, setOnlyOwned] = useState(false);
@@ -248,7 +252,7 @@ export function ManualOperboxPicker({
   const [stages, setStages] = useState<Record<string, ManualOperboxStage>>(() => initialStages(operbox));
   const [allMaximumStages, setAllMaximumStages] = useState(false);
   const stagesBeforeAllMaximum = useRef<Record<string, ManualOperboxStage> | null>(null);
-  const deferredQuery = useDeferredValue(query.trim().toLocaleLowerCase(locale === "en" ? "en-US" : "zh-CN"));
+  const deferredQuery = useDeferredValue(query.trim().toLocaleLowerCase((locale === "en" ? "en-US" : "zh-CN")));
   const scheduledNames = useMemo(() => new Set([
     ...(scheduledOperatorNames ?? []),
     ...Object.keys(scheduledOperatorShifts ?? {}),
@@ -282,7 +286,7 @@ export function ManualOperboxPicker({
     if (rarity !== "all" && operator.rarity !== Number(rarity)) return false;
     if (showProfessionFilter && profession !== "all" && operator.profession !== Number(profession)) return false;
     if (!deferredQuery) return true;
-    const displayName = demoOperatorName(operator.name, locale).toLocaleLowerCase(locale === "en" ? "en-US" : "zh-CN");
+    const displayName = localizedOperatorName(operator.name, locale).toLocaleLowerCase((locale === "en" ? "en-US" : "zh-CN"));
     return operator.name.toLocaleLowerCase("zh-CN").includes(deferredQuery)
       || displayName.includes(deferredQuery)
       || operator.id.toLocaleLowerCase("en-US").includes(deferredQuery);
@@ -329,12 +333,12 @@ export function ManualOperboxPicker({
         resetListView();
       }}
     >
-      <TabsList aria-label={en ? "Operator list scope" : "干员列表范围"}>
+      <TabsList aria-label={intl("components_setup_ManualOperboxPicker.operatorListScope")}>
         <TabsTrigger value="scheduled">
-          {en ? "In schedule" : "进入排班"}<span className="font-number opacity-65">{scheduledNames.size}</span>
+          {intl("components_setup_ManualOperboxPicker.inSchedule")}<span className="font-number opacity-65">{scheduledNames.size}</span>
         </TabsTrigger>
         <TabsTrigger value="other">
-          {en ? "Not scheduled" : "未进排班"}<span className="font-number opacity-65">{MANUAL_ROSTER.length - scheduledNames.size}</span>
+          {intl("components_setup_ManualOperboxPicker.notScheduled")}<span className="font-number opacity-65">{MANUAL_ROSTER.length - scheduledNames.size}</span>
         </TabsTrigger>
       </TabsList>
     </Tabs>
@@ -349,9 +353,9 @@ export function ManualOperboxPicker({
         resetListView();
       }}
     >
-      <TabsList aria-label={en ? "Schedule shift" : "排班班次"}>
+      <TabsList aria-label={intl("components_setup_ManualOperboxPicker.scheduleShift")}>
         <TabsTrigger value="all">
-          {en ? "All shifts" : "全部班次"}
+          {intl("components_setup_ManualOperboxPicker.allShifts")}
         </TabsTrigger>
         {shiftCounts.map((count, index) => {
           const shift = index + 1;
@@ -368,16 +372,14 @@ export function ManualOperboxPicker({
   const professionTabs = showProfessionFilter ? <OperatorProfessionFilter value={profession} disabled={applyDisabled} onChange={(value) => { setProfession(value); resetListView(); }} /> : null;
 
   const resolvedDescription = description === undefined
-    ? (en
-        ? "Choose ownership and elite stage. Levels use each stage cap so level-gated infrastructure skills remain available."
-        : "选择持有状态与精英阶段；等级按该阶段上限估算，避免漏掉有等级要求的基建技能。")
+    ? (intl("components_setup_ManualOperboxPicker.chooseOwnershipAndEliteStageLevelsUseEachStage"))
     : description;
 
   return (
     <div className={cn("grid", compact ? "gap-2.5" : "gap-4")} data-manual-operbox-picker data-density={compact ? "compact" : "comfortable"}>
       <div className={cn("flex flex-wrap justify-between gap-3 border-b border-border/70", compact ? "items-center pb-2.5" : "items-start pb-4")}>
         <div className={cn("min-w-0", compact && "flex flex-1 flex-wrap items-baseline gap-x-3 gap-y-1 max-sm:w-full max-sm:flex-none")}>
-          <h4 className="shrink-0 text-sm font-semibold">{title ?? (en ? "Build your operator Box" : "手动选择干员 Box")}</h4>
+          <h4 className="shrink-0 text-sm font-semibold">{title ?? (intl("components_setup_ManualOperboxPicker.buildYourOperatorBox"))}</h4>
           {resolvedDescription ? (
             <p className={cn("max-w-2xl text-xs text-muted-foreground", compact ? "leading-4" : "mt-1 leading-5")}>
               {resolvedDescription}
@@ -385,9 +387,9 @@ export function ManualOperboxPicker({
           ) : null}
           {compact ? (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs" aria-live="polite">
-              <strong className="font-number text-foreground">{en ? `${ownedCount} owned` : `已拥有 ${ownedCount} 名`}</strong>
-              <span className="font-number text-muted-foreground">{en ? `E0 ${summary.e0} · E1 ${summary.e1} · E2 ${summary.e2}` : `精0 ${summary.e0} · 精1 ${summary.e1} · 精2 ${summary.e2}`}</span>
-              <span className="font-number text-muted-foreground">{en ? `${summary.none} unowned` : `未拥有 ${summary.none} 名`}</span>
+              <strong className="font-number text-foreground">{intl("components_setup_ManualOperboxPicker.owned", { ownedCount: ownedCount })}</strong>
+              <span className="font-number text-muted-foreground">{intl("components_setup_ManualOperboxPicker.e0E1E2", { e0: summary.e0, e1: summary.e1, e2: summary.e2 })}</span>
+              <span className="font-number text-muted-foreground">{intl("components_setup_ManualOperboxPicker.unowned2", { none: summary.none })}</span>
             </div>
           ) : null}
         </div>
@@ -398,15 +400,15 @@ export function ManualOperboxPicker({
           disabled={!ownedCount || applyDisabled}
           onClick={applySelection}
         >
-          <Check />{applyLabel ?? (en ? "Use this Box" : "使用这份 Box")}
+          <Check />{applyLabel ?? (intl("components_setup_ManualOperboxPicker.useThisBox"))}
         </SetupActionButton>
       </div>
 
       {!compact ? (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs" aria-live="polite">
-          <strong className="font-number text-foreground">{en ? `${ownedCount} owned` : `已拥有 ${ownedCount} 名`}</strong>
-          <span className="font-number text-muted-foreground">{en ? `E0 ${summary.e0} · E1 ${summary.e1} · E2 ${summary.e2}` : `精0 ${summary.e0} · 精1 ${summary.e1} · 精2 ${summary.e2}`}</span>
-          <span className="font-number text-muted-foreground">{en ? `${summary.none} unowned` : `未拥有 ${summary.none} 名`}</span>
+          <strong className="font-number text-foreground">{intl("components_setup_ManualOperboxPicker.owned", { ownedCount: ownedCount })}</strong>
+          <span className="font-number text-muted-foreground">{intl("components_setup_ManualOperboxPicker.e0E1E2", { e0: summary.e0, e1: summary.e1, e2: summary.e2 })}</span>
+          <span className="font-number text-muted-foreground">{intl("components_setup_ManualOperboxPicker.unowned2", { none: summary.none })}</span>
         </div>
       ) : null}
 
@@ -423,7 +425,7 @@ export function ManualOperboxPicker({
               resetListView();
             }}
           >
-            {en ? "Owned only" : "只看已拥有"}
+            {intl("components_setup_ManualOperboxPicker.ownedOnly")}
           </SetupActionButton>
           <SetupActionButton
             type="button"
@@ -432,7 +434,7 @@ export function ManualOperboxPicker({
             aria-pressed={allMaximumStages}
             onClick={toggleAllMaximumStages}
           >
-            {en ? "Select all at max elite" : "全选最高精英"}
+            {intl("components_setup_ManualOperboxPicker.selectAllAtMaxElite")}
           </SetupActionButton>
           <Button
             type="button"
@@ -447,7 +449,7 @@ export function ManualOperboxPicker({
               resetListView();
             }}
           >
-            <RotateCcw />{en ? "Clear" : "清空选择"}
+            <RotateCcw />{intl("components_setup_ManualOperboxPicker.clear")}
           </Button>
         </div>
       </div>
@@ -469,12 +471,12 @@ export function ManualOperboxPicker({
             data-upgrade-operbox-operator-filters
           >
             <div className="flex shrink-0 items-center gap-1" data-manual-operbox-rarity-filter>
-              <div className="shrink-0 text-xs font-medium text-muted-foreground">{en ? "Rarity" : "星级"}</div>
+              <div className="shrink-0 text-xs font-medium text-muted-foreground">{intl("components_setup_ManualOperboxPicker.rarity")}</div>
               {rarityTabs}
             </div>
             {professionTabs ? (
               <div className="flex shrink-0 items-center gap-1 border-l border-border/70 pl-2" data-manual-operbox-profession-filter>
-                <div className="shrink-0 text-xs font-medium text-muted-foreground">{en ? "Profession" : "职业"}</div>
+                <div className="shrink-0 text-xs font-medium text-muted-foreground">{intl("components_setup_ManualOperboxPicker.profession")}</div>
                 {professionTabs}
               </div>
             ) : null}
@@ -484,12 +486,12 @@ export function ManualOperboxPicker({
         <>
           <div className="flex min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto pb-1 [scrollbar-width:thin]">
             <div className="flex shrink-0 items-center gap-1" data-manual-operbox-rarity-filter>
-              <div className="shrink-0 text-xs font-medium text-muted-foreground">{en ? "Rarity" : "星级"}</div>
+              <div className="shrink-0 text-xs font-medium text-muted-foreground">{intl("components_setup_ManualOperboxPicker.rarity")}</div>
               {rarityTabs}
             </div>
             {professionTabs ? (
               <div className="flex shrink-0 items-center gap-1 border-l border-border/70 pl-2" data-manual-operbox-profession-filter>
-                <div className="shrink-0 text-xs font-medium text-muted-foreground">{en ? "Profession" : "职业"}</div>
+                <div className="shrink-0 text-xs font-medium text-muted-foreground">{intl("components_setup_ManualOperboxPicker.profession")}</div>
                 {professionTabs}
               </div>
             ) : null}
@@ -525,7 +527,7 @@ export function ManualOperboxPicker({
                 disabled={!ownedCount || applyDisabled}
                 onClick={applySelection}
               >
-                <Check />{applyLabel ?? (en ? `Use this Box (${ownedCount})` : `使用这份 Box（${ownedCount} 名）`)}
+                <Check />{applyLabel ?? (intl("components_setup_ManualOperboxPicker.useThisBox2", { ownedCount: ownedCount }))}
               </SetupActionButton>
             </div>
           ) : null}
@@ -533,8 +535,8 @@ export function ManualOperboxPicker({
       ) : (
         <div className="grid min-h-32 place-items-center border border-dashed border-border text-center text-sm text-muted-foreground">
           {onlyOwned && !ownedCount
-            ? (en ? "No operators selected yet." : "还没有选择已拥有的干员。")
-            : (en ? "No matching operators." : "没有符合条件的干员。")}
+            ? (intl("components_setup_ManualOperboxPicker.noOperatorsSelectedYet"))
+            : (intl("components_setup_ManualOperboxPicker.noMatchingOperators"))}
         </div>
       )}
     </div>

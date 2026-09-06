@@ -3,7 +3,7 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { env, stdout } from "node:process";
 
-const buildRoot = path.resolve(".next");
+const buildRoot = path.resolve(env.RIIC_NEXT_DIST_DIR || ".next");
 const clientRoot = path.join(buildRoot, "static");
 const appRoot = path.join(buildRoot, "server", "app");
 const forbiddenMarkers = [

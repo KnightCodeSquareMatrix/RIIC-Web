@@ -1,3 +1,4 @@
+import { localize as localize_solver_diagnostic } from "./i18n/helpers/solver_diagnostic.ts";
 import type { DisplayError } from "./types.ts";
 
 export interface SolverDiagnostic { title: string; suggestion: string }
@@ -34,9 +35,9 @@ export function formatSolverDiagnostic(error: DisplayError, en = false) {
   return [
     diagnostic.title,
     error.message,
-    `${en ? "Error code" : "错误码"}：${error.code}`,
-    ...(error.requestId ? [`${en ? "Request ID" : "请求编号"}：${error.requestId}`] : []),
-    ...(error.retryAfterSeconds ? [`${en ? "Suggested wait" : "建议等待"}：${error.retryAfterSeconds} ${en ? "seconds" : "秒"}`] : []),
-    `${en ? "Suggestion" : "建议"}：${diagnostic.suggestion}`,
+    `${localize_solver_diagnostic.text(en, "errorCode")}：${error.code}`,
+    ...(error.requestId ? [`${localize_solver_diagnostic.text(en, "requestId")}：${error.requestId}`] : []),
+    ...(error.retryAfterSeconds ? [`${localize_solver_diagnostic.text(en, "suggestedWait")}：${error.retryAfterSeconds} ${localize_solver_diagnostic.text(en, "seconds")}`] : []),
+    `${localize_solver_diagnostic.text(en, "suggestion")}：${diagnostic.suggestion}`,
   ].join("\n");
 }
