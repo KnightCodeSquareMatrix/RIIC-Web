@@ -13,6 +13,7 @@ import type {
   TrainingRecommendation,
 } from "@/types";
 import { localizedOperatorName } from "@/i18n/game-data";
+import { useGameCatalog } from "@/i18n/game-data-client";
 
 import {
   trainingAcquisitionLabel,
@@ -39,11 +40,12 @@ export function TrainingAdviceActionCard({
   const intl = useTranslations();
   const reduceMotion = useReducedMotion();
   const locale = useLocale();
+  const gameCatalog = useGameCatalog();
   const en = locale === "en";
   const actionLabel = action.action === "acquire" || action.action === "train" ? intl(`components_training_advice_TrainingAdviceActionCard.${action.action}`) : action.action;
   const currentText = action.current ? `${intl("components_training_advice_TrainingAdviceActionCard.current")} ${trainingLevelText(action.current, en)} → ` : "";
   const targetText = trainingLevelText(action.target, en);
-  const operatorName = localizedOperatorName(action.operator, locale);
+  const operatorName = localizedOperatorName(action.operator, locale, gameCatalog);
   const skillSummary = trainingAdviceSkillSummary(action.operator, action.current, action.target);
 
   return (

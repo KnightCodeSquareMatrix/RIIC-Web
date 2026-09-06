@@ -3,7 +3,7 @@ import { localize as localize_components_pages_MasteryPlanner } from "../../i18n
 
 import { useTranslations, useLocale } from "next-intl";
 
-import { lazy, Suspense, useMemo, useState, type ComponentProps } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
 import { Timer } from "lucide-react";
 import { calculateMastery, eligibleMasteryTargets, normalizeMasteryBox, availableMasteryEnvironments, formatMasteryTime, MASTERY_ENVIRONMENTS, type MasteryInput, type MasteryResult } from "@/mastery";
 import { masteryClipboard, masteryInstructions } from "@/mastery-presentation";
@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { localizedOperatorName } from "@/i18n/game-data";
+import { useGameCatalog } from "@/i18n/game-data-client";
 import catalog from "@/generated/arkntools/operator-catalog.json";
 import type { OperBoxEntry } from "@/types";
 
@@ -39,6 +40,7 @@ export interface MasteryPlannerProps {
 export function MasteryPlanner({ operbox, sourceName, requiresAccount, pending, onOpenSetup, onRequestAccount, pickerRequested, onPickerRequestConsumed }: MasteryPlannerProps) {
   const intl = useTranslations();
   const locale = useLocale();
+  const gameCatalog = useGameCatalog();
   const en = locale === "en";
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -51,6 +53,17 @@ export function MasteryPlanner({ operbox, sourceName, requiresAccount, pending, 
   const [calculation, setCalculation] = useState<{ signature: string; result: MasteryResult } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const resultsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!calculation) return;
+    const frame = requestAnimationFrame(() => {
+      resultsRef.current?.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",
+        block: "start",
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [calculation]);
   const normalizedBox = useMemo(() => normalizeMasteryBox(operbox ?? []),[operbox]);
   const eligible = useMemo(() => eligibleMasteryTargets(normalizedBox),[normalizedBox]);
   const selected = eligible.find((o) => o.id === selectedId) ?? null;
@@ -61,7 +74,7 @@ export function MasteryPlanner({ operbox, sourceName, requiresAccount, pending, 
   const signature = JSON.stringify(input);
   const stale = !!calculation && calculation.signature !== signature;
   const plan = !stale ? calculation?.result[mode] : null;
-  const displayName = (name: string) => localizedOperatorName(name,locale);
+  const displayName = (name: string) => localizedOperatorName(name,locale,gameCatalog);
   const conditions = intl("components_pages_MasteryPlanner.assumesSufficientMoraleMaterialsAndTrainingRoomLevelEnvironment");
   const activeEnvironment = environmentKeys.map((key) => `${en ? MASTERY_ENVIRONMENTS[key]!.english : MASTERY_ENVIRONMENTS[key]!.label} ${input.environment[key]}`).join(" · ");
   const settingsSummary = `${intl("components_pages_MasteryPlanner.controlBonus")} ${controlBonus ? "+5%" : "0%"} · ${intl("components_pages_MasteryPlanner.buffer")} ${bufferMinutes} ${intl("components_pages_MasteryPlanner.min")}${activeEnvironment ? ` · ${activeEnvironment}` : ""}`;
@@ -121,7 +134,7 @@ export function MasteryPlanner({ operbox, sourceName, requiresAccount, pending, 
 
     <p className="text-xs leading-5 text-muted-foreground">{conditions}</p>
     {stale ? <p role="status" className="rounded-[4px] border border-border p-4 text-sm">{intl("components_pages_MasteryPlanner.inputsOrBoxChangedGeneratePlansAgainToSee")}</p> : null}
-    {plan && calculation ? <div className="grid min-w-0 gap-4" data-mastery-results>
+    {plan && calculation ? <div ref={resultsRef} className="grid min-w-0 scroll-mt-[calc(5rem+env(safe-area-inset-top))] gap-4 md:scroll-mt-6" data-mastery-results>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Tabs value={mode} onValueChange={(value) => { setMode(value as "simple"|"fast"); setCopied(false); }}><TabsList aria-label={intl("components_pages_MasteryPlanner.planStyle")}><TabsTrigger value="simple">{intl("components_pages_MasteryPlanner.simple")}</TabsTrigger><TabsTrigger value="fast">{intl("components_pages_MasteryPlanner.fast")}</TabsTrigger></TabsList></Tabs>
         <SetupActionButton variant="outline" onClick={() => void copyPlan()}>{copied ? (intl("components_pages_MasteryPlanner.copied")) : (intl("components_pages_MasteryPlanner.copyInstructions"))}</SetupActionButton>

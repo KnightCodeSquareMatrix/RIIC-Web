@@ -66,6 +66,7 @@ import {
 } from "@/components/pages/StatusCenterShell";
 import { cn } from "@/lib/utils";
 import { localizedOperatorName } from "@/i18n/game-data";
+import { useGameCatalog } from "@/i18n/game-data-client";
 import { operatorPortraitFor, operatorProfessionFor } from "@/operatorPortraits";
 import { roomGridTone } from "@/schedule-view-presentation";
 import { SklandLoginPanel } from "@/skland-components";
@@ -360,6 +361,7 @@ function OverviewTab({
 }) {
   const intl = useTranslations();
   const locale = useLocale();
+  const gameCatalog = useGameCatalog();
   const en = locale === "en";
   const { infrastructure, player, progress } = snapshot;
   const fullProductionRooms = infrastructure.rooms.filter(
@@ -547,7 +549,7 @@ function OverviewTab({
             </div>
             <div className="border-t border-white/10 pt-2">
               <dt className="text-white/50">{intl("components_pages_SklandStatus.assistant")}</dt>
-              <dd className="mt-1 font-medium text-white">{player.secretary?.name ? localizedOperatorName(player.secretary.name, locale) : (intl("components_pages_SklandStatus.notProvided"))}</dd>
+              <dd className="mt-1 font-medium text-white">{player.secretary?.name ? localizedOperatorName(player.secretary.name, locale, gameCatalog) : (intl("components_pages_SklandStatus.notProvided"))}</dd>
             </div>
             <div className="border-t border-white/10 pt-2">
               <dt className="text-white/50">{intl("components_pages_SklandStatus.monthlyCardExpires")}</dt>
@@ -926,6 +928,7 @@ function LayoutSyncControl({
 function InfrastructureTab({ snapshot }: { snapshot: SklandStatusSnapshot }) {
   const intl = useTranslations();
   const locale = useLocale();
+  const gameCatalog = useGameCatalog();
   const en = locale === "en";
   const { infrastructure } = snapshot;
   const now = useMinuteTimestamp(infrastructure.currentTs);
@@ -961,12 +964,12 @@ function InfrastructureTab({ snapshot }: { snapshot: SklandStatusSnapshot }) {
               {intl("components_pages_SklandStatus.trainingRoom")}
             </OverviewTechnicalHeading>
             <p className="mt-5 text-2xl font-semibold tracking-[-0.02em] text-[var(--room-accent)]">
-              {infrastructure.training?.trainee ? localizedOperatorName(infrastructure.training.trainee, locale) : (intl("components_pages_SklandStatus.currentlyIdle"))}
+              {infrastructure.training?.trainee ? localizedOperatorName(infrastructure.training.trainee, locale, gameCatalog) : (intl("components_pages_SklandStatus.currentlyIdle"))}
             </p>
             <div className="mt-auto pt-4 text-xs leading-5 text-white/58">
             {infrastructure.training ? (
               <>
-                <p className="font-number">{intl("components_pages_SklandStatus.skill")} {infrastructure.training.skillIndex} · {intl("components_pages_SklandStatus.trainer2")}: {infrastructure.training.trainer ? localizedOperatorName(infrastructure.training.trainer, locale) : (intl("components_pages_SklandStatus.none"))}</p>
+                <p className="font-number">{intl("components_pages_SklandStatus.skill")} {infrastructure.training.skillIndex} · {intl("components_pages_SklandStatus.trainer2")}: {infrastructure.training.trainer ? localizedOperatorName(infrastructure.training.trainer, locale, gameCatalog) : (intl("components_pages_SklandStatus.none"))}</p>
                 <p className="font-number">{intl("components_pages_SklandStatus.remaining")} {formatDuration(infrastructure.training.remainSecs, en)} · {intl("components_pages_SklandStatus.speed")} {Math.round(infrastructure.training.speed * 100)}%</p>
               </>
             ) : (intl("components_pages_SklandStatus.noTrainingTask"))}

@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { downloadJson } from "@/download";
 import { localizedOperatorName } from "@/i18n/game-data";
+import { useGameCatalog } from "@/i18n/game-data-client";
 import {
   assignManualOperator,
   createManualScheduleDraft,
@@ -82,7 +83,8 @@ function ManualOperatorChoice({
   tooltipDisabled: boolean;
   onChoose: () => void;
 }) {
-  const displayName = localizedOperatorName(operator.name, en ? "en" : "zh");
+  const gameCatalog = useGameCatalog();
+  const displayName = localizedOperatorName(operator.name, en ? "en" : "zh", gameCatalog);
   const portrait = operatorPortraitFor(operator.name, operator.id);
   const card = (
     <button

@@ -1,6 +1,6 @@
 import { createHmac, randomUUID } from "node:crypto";
 
-import { and, count, eq, gt, gte, inArray, lt, min, or, sql } from "drizzle-orm";
+import { and, count, eq, gt, gte, inArray, lt, or, sql } from "drizzle-orm";
 import type { Notification, PoolClient } from "pg";
 
 import type { BaseBlueprint, OperBoxEntry, PublicPlanData, SavedPlanCalculationContext } from "@/types";
@@ -259,8 +259,12 @@ export async function createPlanTask(input: {
   const expiresAt = new Date(now.getTime() + PLAN_TASK_TTL_MS);
   const startsSince = new Date(now.getTime() - PLAN_START_WINDOW_MS);
 
+  const transactionStartedAt = performance.now();
+  let lockWaitMs = 0;
   return getDatabase().transaction(async (tx) => {
+    const lockStartedAt = performance.now();
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext('plan-task-admission-v1'))`);
+    lockWaitMs = performance.now() - lockStartedAt;
     // Release only this account's expired reservation. Global retention cleanup is
     // owned by the worker and no longer runs on every submission.
     await tx.update(planTask).set({
@@ -281,37 +285,40 @@ export async function createPlanTask(input: {
     )).limit(1);
     if (existing) throw new PublicApiError("AIC-PLAN-3005");
 
-    const [globalCount] = await tx.select({ value: count() }).from(planTask).where(active);
-    const [newAccountCount] = await tx.select({ value: count() }).from(planTask)
-      .where(and(active, eq(planTask.accountClass, "new")));
-    const [ipCount] = await tx.select({ value: count() }).from(planTask)
-      .where(and(active, eq(planTask.requestIpHmac, input.requestIpHmac)));
-    const [accountStarts] = await tx.select({ value: count(), oldest: min(planTask.createdAt) }).from(planTask).where(and(
-      eq(planTask.userId, input.userId),
-      gte(planTask.createdAt, startsSince),
-    ));
-    const [ipStarts] = await tx.select({ value: count(), oldest: min(planTask.createdAt) }).from(planTask).where(and(
-      eq(planTask.requestIpHmac, input.requestIpHmac),
+    const [activeCounts] = await tx.select({
+      total: count(),
+      newAccounts: sql<number>`count(*) filter (where ${planTask.accountClass} = 'new')`.mapWith(Number),
+      ip: sql<number>`count(*) filter (where ${planTask.requestIpHmac} = ${input.requestIpHmac})`.mapWith(Number),
+    }).from(planTask).where(active);
+    const accountMatch = eq(planTask.userId, input.userId);
+    const ipMatch = eq(planTask.requestIpHmac, input.requestIpHmac);
+    const [starts] = await tx.select({
+      account: sql<number>`count(*) filter (where ${accountMatch})`.mapWith(Number),
+      ip: sql<number>`count(*) filter (where ${ipMatch})`.mapWith(Number),
+      accountOldest: sql<Date | null>`min(${planTask.createdAt}) filter (where ${accountMatch})`.mapWith(planTask.createdAt),
+      ipOldest: sql<Date | null>`min(${planTask.createdAt}) filter (where ${ipMatch})`.mapWith(planTask.createdAt),
+    }).from(planTask).where(and(
+      or(accountMatch, ipMatch),
       gte(planTask.createdAt, startsSince),
     ));
 
-    if ((ipCount?.value ?? 0) >= MAX_CONCURRENT_PLAN_ACCOUNTS_PER_IP) {
+    if ((activeCounts?.ip ?? 0) >= MAX_CONCURRENT_PLAN_ACCOUNTS_PER_IP) {
       throw new PublicApiError("AIC-PLAN-3007", { retryAfter: 5 });
     }
-    if ((accountStarts?.value ?? 0) >= MAX_PLAN_STARTS_PER_ACCOUNT) {
+    if ((starts?.account ?? 0) >= MAX_PLAN_STARTS_PER_ACCOUNT) {
       throw new PublicApiError("AIC-PLAN-3006", {
-        retryAfter: startWindowRetryAfter(accountStarts?.oldest ?? null, now),
+        retryAfter: startWindowRetryAfter(starts?.accountOldest ?? null, now),
       });
     }
-    if ((ipStarts?.value ?? 0) >= MAX_PLAN_STARTS_PER_IP) {
+    if ((starts?.ip ?? 0) >= MAX_PLAN_STARTS_PER_IP) {
       throw new PublicApiError("AIC-PLAN-3007", {
-        retryAfter: startWindowRetryAfter(ipStarts?.oldest ?? null, now),
+        retryAfter: startWindowRetryAfter(starts?.ipOldest ?? null, now),
       });
     }
 
     const status = planTaskAdmissionStatus({
-      activeTotal: globalCount?.value ?? 0,
-      activeNewAccounts: newAccountCount?.value ?? 0,
+      activeTotal: activeCounts?.total ?? 0,
+      activeNewAccounts: activeCounts?.newAccounts ?? 0,
       accountClass: input.accountClass,
     });
     if (status === "buffered") {
@@ -338,6 +345,16 @@ export async function createPlanTask(input: {
     if (!inserted) throw new Error("Plan task insert did not return a row.");
     if (status === "pending") await tx.execute(sql`select pg_notify(${PLAN_TASK_NOTIFY_CHANNEL}, ${taskId})`);
     return mapPlanTaskRow(inserted);
+  }).finally(() => {
+    const transactionMs = performance.now() - transactionStartedAt;
+    if (transactionMs >= 100 || lockWaitMs >= 100) {
+      console.log(JSON.stringify({
+        level: "info",
+        event: "plan_task_admission_slow",
+        lockWaitMs: Math.round(lockWaitMs),
+        transactionMs: Math.round(transactionMs),
+      }));
+    }
   });
 }
 

@@ -49,6 +49,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
 import { loadClientFeature } from "@/client-lazy-loader";
 import { localizedBuildingSkill, localizedOperatorName, localizedRoomTitle } from "@/i18n/game-data";
+import { useGameCatalog } from "@/i18n/game-data-client";
 import {
   BUILDING_SKILL_ENHANCED_WORD,
   buildingSkillUnlockLabel,
@@ -606,6 +607,7 @@ export function LayoutEditor({
 }) {
   const intl = useTranslations();
   const locale = useLocale();
+  const gameCatalog = useGameCatalog();
 
   const factoryRecipesUnlocked = hasUnlockedFactoryRecipes(layout);
   const roomGroups = [
@@ -648,7 +650,7 @@ export function LayoutEditor({
               const levelMax = maxRoomLevel(room.kind);
               const visualGroup = roomVisualGroupForKind(room.kind);
               const originalName = group.rooms.length > 1 ? `${roomKindLabel(room.kind)} ${roomIndex + 1}` : roomKindLabel(room.kind);
-              const displayName = localizedRoomTitle(originalName, visualGroup, locale);
+              const displayName = localizedRoomTitle(originalName, visualGroup, locale, gameCatalog);
 
               return (
                 <div
@@ -1173,6 +1175,7 @@ export function RoomProductControls({
 }) {
   const intl = useTranslations();
   const locale = useLocale();
+  const gameCatalog = useGameCatalog();
 
   if (row.group === "training") {
     return null;
@@ -1188,7 +1191,7 @@ export function RoomProductControls({
     return (
       <div className={cn("w-full", isTrade ? "max-sm:w-fit" : "max-w-[220px]")}>
         <ProductToggleGroup<TradeOrder | FactoryRecipe>
-          ariaLabel={`${localizedRoomTitle(row.title, row.group, locale)} ${isTrade ? (intl("components.orders")) : (intl("components.recipe"))}`}
+          ariaLabel={`${localizedRoomTitle(row.title, row.group, locale, gameCatalog)} ${isTrade ? (intl("components.orders")) : (intl("components.recipe"))}`}
           value={activeProduct}
           options={isTrade ? TRADE_ORDER_OPTIONS : FACTORY_RECIPE_OPTIONS}
           columns={isTrade ? 2 : 4}
@@ -1310,7 +1313,8 @@ function BuildingSkillBadge({
   const intl = useTranslations();
   const [open, setOpen] = useState(false);
   const locale = useLocale();
-  const displaySkill = localizedBuildingSkill(skill.id, locale, skill);
+  const gameCatalog = useGameCatalog();
+  const displaySkill = localizedBuildingSkill(skill.id, locale, skill, gameCatalog);
   const unlockLabel = locale === "en"
     ? buildingSkillUnlockLabelEnglish(skill.elite, skill.level, skill.enhanced)
     : buildingSkillUnlockLabel(skill.elite, skill.level, skill.enhanced);
@@ -1412,7 +1416,8 @@ export function OperatorSlot({
   const intl = useTranslations();
   const shouldReduceMotion = useReducedMotion();
   const locale = useLocale();
-  const displayName = slot ? localizedOperatorName(slot.name, locale) : undefined;
+  const gameCatalog = useGameCatalog();
+  const displayName = slot ? localizedOperatorName(slot.name, locale, gameCatalog) : undefined;
   const displayPositionLabel = locale === "en" ? (positionLabel === "训练位" ? "Trainee" : positionLabel === "协助位" ? "Trainer" : positionLabel) : positionLabel;
   const identity = slot?.name ?? (autofill ? "autofill" : "empty");
   const suppressNativeTitles = showSkillTooltip && slot !== undefined;
@@ -1613,6 +1618,7 @@ export function ScheduleBoard({
 }) {
   const intl = useTranslations();
   const locale = useLocale();
+  const gameCatalog = useGameCatalog();
   const en = locale === "en";
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [hiddenGroups, setHiddenGroups] = useState<Record<string, boolean>>({});
@@ -1905,7 +1911,7 @@ export function ScheduleBoard({
                           <div>
                             <div className="flex items-center gap-2.5 max-sm:gap-1.5">
                               <div className={cn("font-number min-w-0 truncate font-medium tracking-[-0.02em] text-white [text-shadow:0_2px_3px_rgba(0,0,0,0.75)]", listRoomTitleSizeClass())}>
-                                {localizedRoomTitle(row.title, row.group, locale)}
+                                {localizedRoomTitle(row.title, row.group, locale, gameCatalog)}
                               </div>
                               <LevelDiamonds level={row.level} maxLevel={layoutRoom ? maxRoomLevel(layoutRoom.kind) : row.level} />
                             </div>
@@ -1982,7 +1988,7 @@ export function ScheduleBoard({
                             variant="ghost"
                             size="icon-sm"
                             className="border border-white/10 bg-[#3C3C3C]/55 text-white/70 hover:bg-[#4B4B4B] hover:text-white disabled:cursor-not-allowed disabled:opacity-45 max-sm:size-11"
-                            aria-label={intl("components.reportScheduleIssue", { value1: (en) ? (localizedRoomTitle(row.title, row.group, locale)) : "", title: (en) ? "" : (row.title) })}
+                            aria-label={intl("components.reportScheduleIssue", { value1: (en) ? (localizedRoomTitle(row.title, row.group, locale, gameCatalog)) : "", title: (en) ? "" : (row.title) })}
                             disabled={feedbackDisabled}
                             onClick={() => onIssue(row)}
                           >

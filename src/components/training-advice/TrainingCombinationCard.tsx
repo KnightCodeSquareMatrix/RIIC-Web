@@ -15,6 +15,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { TrainingCombination, TrainingAdviceMember } from "@/types";
 import { localizedOperatorName } from "@/i18n/game-data";
+import { useGameCatalog } from "@/i18n/game-data-client";
 
 import {
   trainingCombinationStateLabel,
@@ -42,6 +43,7 @@ const STATE_CLASSES: Record<string, string> = {
 function MemberRow({ member }: { member: TrainingAdviceMember }) {
   const intl = useTranslations();
   const locale = useLocale();
+  const gameCatalog = useGameCatalog();
   const en = locale === "en";
   const isReady = member.progress === "ready";
   const isMissing = member.progress === "missing";
@@ -91,7 +93,7 @@ function MemberRow({ member }: { member: TrainingAdviceMember }) {
       <span className="size-8 shrink-0 overflow-hidden border border-white/10 bg-[#272A2B]">
         <img src={operatorPortraitFor(member.operator)} alt="" className="size-full object-cover" loading="lazy" />
       </span>
-      <span className="shrink truncate text-sm text-white/85">{localizedOperatorName(member.operator, locale)}</span>
+      <span className="shrink truncate text-sm text-white/85">{localizedOperatorName(member.operator, locale, gameCatalog)}</span>
       <span className={cn("shrink-0 border px-1.5 py-0.5 text-xs", roleClass)}>
         {trainingMemberRoleLabel(member.role, en)}
       </span>

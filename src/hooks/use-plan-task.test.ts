@@ -16,13 +16,16 @@ type PollOutcome = {
 } | Error;
 
 test("usePlanTask owns polling timers and resumable storage across terminal and recoverable states", async (context) => {
-  const pollOutcomes: PollOutcome[] = [];
+  const pollOutcomes: Array<PollOutcome | Promise<PollOutcome>> = [];
+  let pollCalls = 0;
   class MockApiClientError extends Error {
     readonly code: string;
+    readonly retryAfterSeconds?: number;
 
-    constructor(code: string) {
+    constructor(code: string, retryAfterSeconds?: number) {
       super(code);
       this.code = code;
+      this.retryAfterSeconds = retryAfterSeconds;
     }
   }
   await context.mock.module(new URL("../api.ts", import.meta.url), {
@@ -30,13 +33,27 @@ test("usePlanTask owns polling timers and resumable storage across terminal and 
       ApiClientError: MockApiClientError,
       cancelPlanTask: async () => ({ cancelled: true, reason: null }),
       pollPlanTask: async () => {
-        const outcome = pollOutcomes.shift();
+        pollCalls++;
+        const outcome = await pollOutcomes.shift();
         if (outcome instanceof Error) throw outcome;
         if (!outcome) throw new Error("missing poll fixture");
         return outcome;
       },
     },
   });
+
+  const windowMock = new EventTarget();
+  const documentMock = Object.assign(new EventTarget(), { visibilityState: "visible" });
+  for (const [key, value] of [["window", windowMock], ["document", documentMock]] as const) {
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis, key);
+    Object.defineProperty(globalThis, key, { configurable: true, value });
+    context.after(() => {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    });
+  }
+  let now = 100_000;
+  context.mock.method(Date, "now", () => now);
 
   const storage = new Map<string, string>();
   const localStorageMock = {
@@ -137,6 +154,21 @@ test("usePlanTask owns polling timers and resumable storage across terminal and 
   await begin("task-login", [new MockApiClientError("AIC-AUTH-2001")]);
   assert.ok(storage.has("aic-plan-task-v1"));
   assert.equal(timeouts.size, 0);
+  await act(async () => {
+    windowMock.dispatchEvent(new Event("online"));
+    documentMock.dispatchEvent(new Event("visibilitychange"));
+  });
+  assert.equal(timeouts.size, 0, "login pauses must not automatically retry");
+
+  await begin("task-website-login", [new MockApiClientError("AIC-AUTH-2008")]);
+  const beforeWebsiteLoginRecovery = pollCalls;
+  await act(async () => {
+    windowMock.dispatchEvent(new Event("online"));
+    documentMock.dispatchEvent(new Event("visibilitychange"));
+  });
+  assert.equal(timeouts.size, 0, "website session expiry pauses without network backoff");
+  assert.equal(pollCalls, beforeWebsiteLoginRecovery);
+  assert.ok(storage.has("aic-plan-task-v1"));
 
   await begin("task-retry", [new Error("network")]);
   assert.ok(storage.has("aic-plan-task-v1"));
@@ -147,7 +179,49 @@ test("usePlanTask owns polling timers and resumable storage across terminal and 
   assert.ok(storage.has("aic-plan-task-v1"));
   assert.equal(timeouts.size, 0);
   assert.equal(current().pollStopped, true);
-  assert.equal(intervals.size, 1);
+  assert.equal(intervals.size, 0, "network recovery has no extra 30-second lock");
+  assert.equal(current().resumeDisabled, false);
+  pollOutcomes.push({ taskId: "task-stopped", status: "running" });
+  await act(async () => {
+    windowMock.dispatchEvent(new Event("online"));
+    documentMock.dispatchEvent(new Event("visibilitychange"));
+    current().resume();
+  });
+  assert.equal(current().pollStopped, false);
+  assert.equal(pollOutcomes.length, 0);
+  assert.equal(timeouts.size, 1, "simultaneous recovery and manual triggers use one poll");
+  await act(async () => { current().resume(); });
+  assert.equal(timeouts.size, 1, "manual queries inside one second cannot replace the timer");
+
+  now += 1_000;
+  await begin("task-limited", [new MockApiClientError("AIC-RATE-6001", 10)]);
+  assert.equal(current().resumeCountdown, 10);
+  assert.equal(timeouts.size, 1);
+  await act(async () => { current().resume(); });
+  assert.equal(timeouts.size, 1);
+  now += 9_999;
+  await act(async () => { current().resume(); });
+  assert.equal(timeouts.size, 1);
+  now += 1;
+  pollOutcomes.push({ taskId: "task-limited", status: "done", result });
+  await act(async () => { current().resume(); });
+  assert.equal(current().status, "done");
+  assert.equal(timeouts.size, 0);
+
+  let resolveSlow!: (value: PollOutcome) => void;
+  pollOutcomes.push(new Promise<PollOutcome>((resolve) => { resolveSlow = resolve; }));
+  await act(async () => { current().begin("task-slow"); });
+  const callsBefore = pollCalls;
+  now += 2_000;
+  await act(async () => { current().resume(); current().resume(); });
+  assert.equal(pollCalls, callsBefore, "in-flight query blocks duplicates even after the one-second interval");
+  await act(async () => { await current().cancel(); });
+  assert.equal(current().status, "cancelled");
+  const completedBefore = doneResults.length;
+  await act(async () => { resolveSlow({ taskId: "task-slow", status: "done", result }); });
+  assert.equal(current().status, "cancelled", "late query response cannot undo confirmed cancellation");
+  assert.equal(doneResults.length, completedBefore);
+  assert.equal(timeouts.size, 0);
 
   await act(async () => { renderer.unmount(); });
   assert.equal(timeouts.size, 0);
@@ -176,5 +250,18 @@ test("usePlanTask owns polling timers and resumable storage across terminal and 
   assert.equal(timeouts.size, 1);
   await act(async () => { renderer.unmount(); });
   assert.equal(timeouts.size, 0);
+  hookStorageKey = undefined;
+  storage.set("aic-plan-task-v1", JSON.stringify({ taskId: "task-strict-restore" }));
+  pollOutcomes.push({ taskId: "task-strict-restore", status: "pending" });
+  const beforeStrictRestore = pollCalls;
+  await act(async () => { renderer = create(React.createElement(React.StrictMode, null, React.createElement(Harness))); });
+  assert.equal(pollCalls, beforeStrictRestore + 1, "StrictMode effect replay restores the task exactly once");
+  assert.equal(current().taskId, "task-strict-restore");
+  assert.equal(timeouts.size, 1, "StrictMode cleanup does not lose the restored polling loop");
+  pollOutcomes.push({ taskId: "task-strict-restore", status: "done", result });
+  await fireNextPoll();
+  assert.equal(current().status, "done");
+  assert.equal(storage.has("aic-plan-task-v1"), false);
+  await act(async () => { renderer.unmount(); });
   delete (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT;
 });
