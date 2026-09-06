@@ -1,4 +1,5 @@
 import { expect, test, type Route } from "@playwright/test";
+import { TERMS_VERSION, PRIVACY_VERSION } from "../src/legal-policy";
 import { amiyaPortrait, requestId, diagnosticId, layout243, waitForOwnAnimations, planData, twoShiftPlanData, fourShiftPlanData, adjacentPortraitPlanData, lazyPortraitPlanData, authenticatedSklandSnapshot, mockApis, mockAnonymousWebsiteSession, openSklandOverview, navigateToPrimaryPage, seedPreferences, seedV4Session } from "./production-readiness.fixture";
 
 test.beforeEach(async ({ page }) => {
@@ -1457,8 +1458,8 @@ for (const viewport of [
         expect(body).toMatchObject({
           termsAccepted: true,
           privacyAccepted: true,
-          termsVersion: "2026-08-21-cloud-workspace",
-          privacyVersion: "2026-09-03-solver-reproduction-retention",
+          termsVersion: TERMS_VERSION,
+          privacyVersion: PRIVACY_VERSION,
         });
         consentCurrent = true;
       } else if (route.request().method() === "DELETE") {
@@ -1468,8 +1469,8 @@ for (const viewport of [
       }
       return fulfill(route, {
         current: consentCurrent,
-        termsVersion: "2026-08-21-cloud-workspace",
-        privacyVersion: "2026-09-03-solver-reproduction-retention",
+        termsVersion: TERMS_VERSION,
+        privacyVersion: PRIVACY_VERSION,
         acceptedAt: consentCurrent ? timestamp : null,
         revokedAt: null,
         cloudSyncEnabled: true,
