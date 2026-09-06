@@ -147,9 +147,6 @@ function cliCandidates() {
   const platformCliName = process.platform === "win32" ? "infra-cli.exe" : "infra-cli";
   const fallbackCliName = process.platform === "win32" ? "infra-cli" : "infra-cli.exe";
   const bundledPlatformCli = path.join(bundledCliRoot, platformCliName);
-  if (process.env.INFRA_CLI_EXPECTED_SHA256 !== undefined) {
-    return [bundledPlatformCli];
-  }
   const candidates = [
     process.env.INFRA_CLI_PATH,
     readActiveCliPath(),
@@ -164,6 +161,15 @@ function cliCandidates() {
   ].filter(Boolean) as string[];
 
   return [...new Set(candidates.map((candidate) => path.resolve(candidate)))];
+}
+
+/**
+ * A solver published independently of the website may be selected by the
+ * durable active-cli pointer.  The website release hash is only a fallback
+ * pin for installations that do not have an active solver release.
+ */
+function expectedSolverSha256ForSelectedCli() {
+  return readActiveCliPath() ? undefined : process.env.INFRA_CLI_EXPECTED_SHA256;
 }
 
 function readActiveCliPath() {
@@ -932,7 +938,7 @@ export async function warmPlanServeLane(serveLane: number): Promise<void> {
   }
   const readiness = inspectSolverDeploymentReadiness(
     capability,
-    process.env.INFRA_CLI_EXPECTED_SHA256,
+    expectedSolverSha256ForSelectedCli(),
   );
   if (!readiness.ready) {
     throw new Error(`Plan solver lane ${serveLane} is not ready: ${readiness.reason ?? "unknown reason"}`);
@@ -994,7 +1000,7 @@ export async function getHealth(): Promise<HealthApiResponse> {
         const fingerprint = inspectSolverPingFingerprint(pingResult.response);
         const deploymentReadiness = inspectSolverDeploymentReadiness(
           planCompute,
-          process.env.INFRA_CLI_EXPECTED_SHA256
+          expectedSolverSha256ForSelectedCli()
         );
         serve = {
           ...healthServeClient.info(),
@@ -1077,7 +1083,7 @@ export async function getPlanCacheSolverIdentity(): Promise<SolverObservation | 
         ? await getPlanServeCapability(0, planClient)
         : inspectPlanComputeCapability((await serveClient.ping()).response);
       if (capability.supported && capability.solverExecutableSha256) {
-        const readiness = inspectSolverDeploymentReadiness(capability, process.env.INFRA_CLI_EXPECTED_SHA256);
+        const readiness = inspectSolverDeploymentReadiness(capability, expectedSolverSha256ForSelectedCli());
         if (readiness.ready) value = createSolverObservation(capability, new Date().toISOString());
       }
     } catch {
@@ -1103,7 +1109,7 @@ export function getCachedPlanCacheSolverIdentity(): SolverObservation | null {
     void getPlanCacheSolverIdentity().catch(() => undefined);
   }
   if (current) return current;
-  const expectedSha256 = process.env.INFRA_CLI_EXPECTED_SHA256?.trim();
+  const expectedSha256 = expectedSolverSha256ForSelectedCli()?.trim();
   if (!expectedSha256 || !/^[a-f0-9]{64}$/.test(expectedSha256)) return null;
   return {
     protocol_version: PLAN_PROTOCOL_VERSION,
