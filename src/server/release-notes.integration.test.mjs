@@ -40,9 +40,9 @@ test("release lifecycle protects drafts, environment boundaries, permissions and
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
   }
-  async function decoded(response, status = 200) {
+  async function decoded(response, status = 200, isPublic = false) {
     assert.equal(response.status, status, await response.clone().text());
-    assert.match(response.headers.get("cache-control"), /no-store/);
+    assert.match(response.headers.get("cache-control"), isPublic ? /public, max-age=15, must-revalidate/ : /no-store/);
     const body = await response.json();
     assert.ok(body.success ? body.requestId : body.error.requestId);
     return body;
@@ -88,7 +88,7 @@ test("release lifecycle protects drafts, environment boundaries, permissions and
       return body;
     }
     await mutation("publish");
-    const publicBody = (await decoded(await handlePublicReleases(request("GET", undefined, undefined, "/api/releases?environment=development")))).data;
+    const publicBody = (await decoded(await handlePublicReleases(request("GET", undefined, undefined, "/api/releases?environment=development")), 200, true)).data;
     assert.equal(publicBody.environment, "local");
     assert.equal(publicBody.releases[0].title.zh, "integration draft");
     for (const note of publicBody.releases) {
@@ -101,7 +101,7 @@ test("release lifecycle protects drafts, environment boundaries, permissions and
     await mutation("save", { draft: { ...edited, version: "999999.2.0" } }, 400);
     await mutation("publish");
     assert.equal((await listPublishedReleases("local"))[0].title.zh, edited.title.zh);
-    const announcement = (await decoded(await handlePublicReleases(request("GET", undefined, undefined, "/api/releases?mode=announcement")))).data;
+    const announcement = (await decoded(await handlePublicReleases(request("GET", undefined, undefined, "/api/releases?mode=announcement")), 200, true)).data;
     assert.equal(announcement.releases.some((note) => note.version === draft.version), false);
     await mutation("delete", {}, 400);
     await mutation("withdraw");

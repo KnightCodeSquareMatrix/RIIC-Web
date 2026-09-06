@@ -206,7 +206,7 @@ export function cancelPlanTask(taskId: string): Promise<{
 }
 
 export function getHealth(): Promise<PublicHealthData> {
-  return requestData("/api/health");
+  return requestData("/api/readiness");
 }
 
 export function getSklandAccounts(mode: "full" | "summary" = "full"): Promise<SklandSessionData> {
