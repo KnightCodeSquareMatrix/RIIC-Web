@@ -134,7 +134,7 @@ export function MasteryPlanner({ operbox, sourceName, requiresAccount, pending, 
 
     <p className="text-xs leading-5 text-muted-foreground">{conditions}</p>
     {stale ? <p role="status" className="rounded-[4px] border border-border p-4 text-sm">{intl("components_pages_MasteryPlanner.inputsOrBoxChangedGeneratePlansAgainToSee")}</p> : null}
-    {plan && calculation ? <div ref={resultsRef} className="grid min-w-0 scroll-mt-6 gap-4" data-mastery-results>
+    {plan && calculation ? <div ref={resultsRef} className="grid min-w-0 scroll-mt-[calc(5rem+env(safe-area-inset-top))] gap-4 md:scroll-mt-6" data-mastery-results>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Tabs value={mode} onValueChange={(value) => { setMode(value as "simple"|"fast"); setCopied(false); }}><TabsList aria-label={intl("components_pages_MasteryPlanner.planStyle")}><TabsTrigger value="simple">{intl("components_pages_MasteryPlanner.simple")}</TabsTrigger><TabsTrigger value="fast">{intl("components_pages_MasteryPlanner.fast")}</TabsTrigger></TabsList></Tabs>
         <SetupActionButton variant="outline" onClick={() => void copyPlan()}>{copied ? (intl("components_pages_MasteryPlanner.copied")) : (intl("components_pages_MasteryPlanner.copyInstructions"))}</SetupActionButton>
