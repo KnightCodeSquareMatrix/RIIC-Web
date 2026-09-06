@@ -193,6 +193,10 @@
     "Strong"
   ],
   "components_layout_AppSidebar_labels": {
+    "schedulingGroup": "Base Scheduling",
+    "progressionGroup": "Progression Planning",
+    "skillsGroup": "Skill Search",
+    "personalGroup": "Personal Center",
     "calculator": "Infrastructure Calculator",
     "manual": "Manual Scheduling",
     "training": "Training Advice",

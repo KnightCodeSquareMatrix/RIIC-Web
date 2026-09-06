@@ -193,6 +193,10 @@
     "强"
   ],
   "components_layout_AppSidebar_labels": {
+    "schedulingGroup": "基建排班",
+    "progressionGroup": "养成规划",
+    "skillsGroup": "技能查询",
+    "personalGroup": "个人中心",
     "calculator": "基建计算器",
     "manual": "手动排班",
     "training": "练卡建议",
