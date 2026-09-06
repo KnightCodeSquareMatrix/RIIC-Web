@@ -1,14 +1,17 @@
 "use client";
-import { localize as localize_components_pages_ManualSchedulePage } from "../../i18n/helpers/components_pages_ManualSchedulePage.ts";
 import { useTranslations, useLocale } from "next-intl";
 
 import { ArrowLeft, Download, Search, Settings2, Sparkles, X } from "lucide-react";
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { FactoryRecipe, TradeOrder } from "@/blueprint";
-import { loadClientFeature } from "@/client-lazy-loader";
-import { ScheduleBoard, ShiftTabs } from "@/components";
+import { filterOperators, ROOM_SKILL_TAGS, type BuildingRoomPrefix } from "@/building-rooms";
+import { OperatorSlot, ScheduleBoard, ShiftTabs } from "@/components";
 import { FiammettaTargetChip } from "@/components/FiammettaTargetChip";
+import { OperatorRarityFilter, OperatorSearch } from "@/components/operators/OperatorPickerParts";
+import { Pagination } from "@/components/skill-query/Pagination";
+import { SkillRoomTagBar } from "@/components/skill-query/SkillRoomTagBar";
+import { SkillTagBar } from "@/components/skill-query/SkillTagBar";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -21,7 +24,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { downloadJson } from "@/download";
-import { localizedOperatorName } from "@/i18n/game-data";
+import { localizedOperatorName, localizedRoomTitle } from "@/i18n/game-data";
 import { useGameCatalog } from "@/i18n/game-data-client";
 import {
   assignManualOperator,
@@ -35,14 +38,25 @@ import {
   type ManualOperatorConflict,
   type ManualScheduleDraft,
 } from "@/manual-schedule";
-import { operatorPortraitFor } from "@/operatorPortraits";
+import { BUILDING_SKILL_CATALOG, OPERATOR_CATALOG, operatorPortraitFor, operatorPresentationFor } from "@/operatorPortraits";
 import { addOperatorPresentations } from "@/schedule-presentation";
 import { planToRows, type RoomRow } from "@/schedule";
 import type { BaseBlueprint, OperBoxEntry } from "@/types";
 
-const OperatorSkillTooltip = lazy(() => loadClientFeature("operatorSkillTooltip").then((module) => ({
-  default: module.OperatorSkillTooltip,
-})));
+const MANUAL_PICKER_PAGE_SIZE = 18;
+const ROOM_GROUP_TO_SKILL_PREFIX: Readonly<Record<RoomRow["group"], BuildingRoomPrefix>> = {
+  control: "control",
+  power: "power",
+  manufacture: "manu",
+  trading: "trade",
+  dormitory: "dorm",
+  hire: "hire",
+  meeting: "meet",
+  training: "train",
+  processing: "workshop",
+};
+const OPERATOR_CATALOG_BY_ID = new Map(OPERATOR_CATALOG.map((operator) => [operator.id, operator]));
+const OPERATOR_CATALOG_BY_NAME = new Map(OPERATOR_CATALOG.map((operator) => [operator.name, operator]));
 
 export interface ManualSchedulePageProps {
   layout: BaseBlueprint;
@@ -73,45 +87,46 @@ type PendingMove = {
 function ManualOperatorChoice({
   operator,
   selected,
+  assignmentLabel,
   en,
   tooltipDisabled,
   onChoose,
 }: {
   operator: OperBoxEntry;
   selected: boolean;
+  assignmentLabel?: string;
   en: boolean;
   tooltipDisabled: boolean;
   onChoose: () => void;
 }) {
+  const intl = useTranslations();
   const gameCatalog = useGameCatalog();
   const displayName = localizedOperatorName(operator.name, en ? "en" : "zh", gameCatalog);
-  const portrait = operatorPortraitFor(operator.name, operator.id);
-  const card = (
-    <button
-      type="button"
-      aria-pressed={selected}
-      className={`flex min-w-0 items-center gap-3 rounded-[4px] border bg-background p-3 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[#FFD800] focus-visible:ring-offset-2 ${selected ? "border-[#FFD800] bg-[#FFF9D8]" : "border-border/80 hover:border-foreground/45 hover:bg-muted/45"}`}
-      onClick={onChoose}
-      data-manual-operator-choice
-    >
-      <span className="size-12 shrink-0 overflow-hidden border border-border bg-muted sm:size-14">
-        {portrait ? (
-          <img src={portrait} alt={localize_components_pages_ManualSchedulePage.text(en, "portrait", { displayName: displayName })} className="size-full object-cover" loading="lazy" decoding="async" />
-        ) : null}
-      </span>
-      <span className="min-w-0">
-        <span className="block truncate text-sm font-semibold">{displayName}</span>
-        <span className="font-number mt-1 block text-xs text-muted-foreground">
-          {operator.rarity}★ · {localize_components_pages_ManualSchedulePage.text(en, "eLv", { elite: operator.elite, level: operator.level })}
-        </span>
-        <span className="mt-1 block text-[11px] text-muted-foreground/80">{localize_components_pages_ManualSchedulePage.text(en, "hoverForInfrastructureSkills")}</span>
-      </span>
-    </button>
-  );
+  const presentation = operatorPresentationFor({ name: operator.name, id: operator.id });
   return (
-    <Suspense fallback={card}>
-      <OperatorSkillTooltip name={operator.name} trigger={card} delay={300} disabled={tooltipDisabled} />
-    </Suspense>
+    <div
+      className="flex min-h-[calc(clamp(70px,7.3vw,80px)+2.5rem)] flex-col items-center justify-start rounded-[4px] border border-transparent p-2 transition-colors hover:border-border hover:bg-muted/45 max-sm:min-h-[calc(clamp(56px,16vw,76px)+2.5rem)]"
+      data-manual-operator-choice
+      data-current-selection={selected ? "" : undefined}
+    >
+      <span className={`mb-1 block h-4 max-w-full truncate text-center text-[11px] font-medium leading-4 ${assignmentLabel ? "text-popover-foreground" : "invisible"}`}>
+        {assignmentLabel ?? intl("components_pages_ManualSchedulePage.unassigned")}
+      </span>
+      <OperatorSlot
+        slot={{
+          name: operator.name,
+          label: displayName,
+          portrait: presentation.portrait,
+          profession: presentation.operator?.profession,
+        }}
+        elite={operator.elite}
+        operatorLevel={operator.level}
+        showSkillTooltip
+        selectionMode
+        tooltipDisabled={tooltipDisabled}
+        onActivate={onChoose}
+      />
+    </div>
   );
 }
 
@@ -131,17 +146,25 @@ export function ManualSchedulePage({
   onTradeOrderChange,
 }: ManualSchedulePageProps) {
   const intl = useTranslations();
+  const skillFilters = useTranslations("SkillFilters");
   const locale = useLocale();
+  const gameCatalog = useGameCatalog();
   const en = locale === "en";
   const [draft, setDraft] = useState<ManualScheduleDraft>(() => createManualScheduleDraft(shiftDurations));
   const [restored, setRestored] = useState(false);
   const [picker, setPicker] = useState<PickerTarget | null>(null);
   const [pickerQuery, setPickerQuery] = useState("");
+  const [pickerRoomFilter, setPickerRoomFilter] = useState<BuildingRoomPrefix | null>(null);
+  const [pickerSkillTag, setPickerSkillTag] = useState<string | null>(null);
+  const [pickerRarity, setPickerRarity] = useState<number | null>(null);
+  const [pickerPage, setPickerPage] = useState(1);
   const [pendingMove, setPendingMove] = useState<PendingMove | null>(null);
   const [storageWarning, setStorageWarning] = useState<string | null>(null);
   const [scheduleQuery, setScheduleQuery] = useState("");
   const [pickerScrolling, setPickerScrolling] = useState(false);
   const pickerScrollTimer = useRef<number | null>(null);
+  const pickerScrollContainerRef = useRef<HTMLDivElement>(null);
+  const pickerResultsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => () => {
     if (pickerScrollTimer.current !== null) window.clearTimeout(pickerScrollTimer.current);
@@ -227,10 +250,43 @@ export function ManualSchedulePage({
   const selectedRoom = picker?.kind === "slot" ? rows.find((row) => row.roomId === picker.roomId) : undefined;
   const selectedAssignment = picker?.kind === "slot" ? draft.shifts[activeShift]?.rooms[picker.roomId] : undefined;
   const selectedOperator = picker?.kind === "slot" ? selectedAssignment?.operators[picker.slotIndex] ?? null : null;
-  const normalizedQuery = pickerQuery.trim().toLocaleLowerCase("zh-CN");
-  const visibleOperators = normalizedQuery
-    ? ownedOperators.filter((operator) => operator.name.toLocaleLowerCase("zh-CN").includes(normalizedQuery))
-    : ownedOperators;
+  const filteredOperators = useMemo(() => {
+    const filterableOwnedOperators = ownedOperators.map((operator) => {
+      const catalog = OPERATOR_CATALOG_BY_ID.get(operator.id) ?? OPERATOR_CATALOG_BY_NAME.get(operator.name);
+      return {
+        box: operator,
+        name: operator.name,
+        order: catalog?.order ?? 0,
+        buildingSkills: catalog?.buildingSkills ?? [],
+      };
+    });
+    return filterOperators(
+      filterableOwnedOperators,
+      pickerRoomFilter,
+      pickerSkillTag,
+      pickerQuery,
+      (skillId) => BUILDING_SKILL_CATALOG[skillId],
+    )
+      .filter((operator) => pickerRarity === null || operator.box.rarity === pickerRarity)
+      .map((operator) => operator.box);
+  }, [ownedOperators, pickerQuery, pickerRarity, pickerRoomFilter, pickerSkillTag]);
+  const pickerPageCount = Math.max(1, Math.ceil(filteredOperators.length / MANUAL_PICKER_PAGE_SIZE));
+  const visibleOperators = filteredOperators.slice(
+    (pickerPage - 1) * MANUAL_PICKER_PAGE_SIZE,
+    pickerPage * MANUAL_PICKER_PAGE_SIZE,
+  );
+  const emptyOperatorChoiceCount = MANUAL_PICKER_PAGE_SIZE - visibleOperators.length;
+  const availableSkillTags = pickerRoomFilter ? ROOM_SKILL_TAGS[pickerRoomFilter] : [];
+  const activeAssignmentRoomByOperator = useMemo(() => {
+    const assignments = new Map<string, string>();
+    for (const row of rows) {
+      const room = draft.shifts[activeShift]?.rooms[row.roomId];
+      for (const name of room?.operators ?? []) {
+        if (name) assignments.set(name, localizedRoomTitle(row.title, row.group, locale, gameCatalog));
+      }
+    }
+    return assignments;
+  }, [activeShift, draft.shifts, gameCatalog, locale, rows]);
 
   function setActiveShift(index: number) {
     setDraft((current) => ({ ...current, activeShift: index }));
@@ -239,7 +295,36 @@ export function ManualSchedulePage({
   function openSlotPicker(row: RoomRow, slotIndex: number) {
     setPickerScrolling(false);
     setPickerQuery("");
+    setPickerRoomFilter(ROOM_GROUP_TO_SKILL_PREFIX[row.group]);
+    setPickerSkillTag(null);
+    setPickerRarity(null);
+    setPickerPage(1);
     setPicker({ kind: "slot", roomId: row.roomId, slotIndex });
+  }
+
+  function changePickerRoomFilter(next: BuildingRoomPrefix | null) {
+    setPickerRoomFilter(next);
+    setPickerSkillTag(null);
+    setPickerPage(1);
+  }
+
+  function changePickerSkillTag(next: string | null) {
+    setPickerSkillTag(next);
+    setPickerPage(1);
+  }
+
+  function changePickerPage(next: number) {
+    setPickerPage(next);
+    window.requestAnimationFrame(() => {
+      const container = pickerScrollContainerRef.current;
+      const results = pickerResultsRef.current;
+      if (!container || !results) return;
+      const top = container.scrollTop + results.getBoundingClientRect().top - container.getBoundingClientRect().top;
+      container.scrollTo({
+        top,
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+      });
+    });
   }
 
   function handlePickerScroll() {
@@ -374,7 +459,14 @@ export function ManualSchedulePage({
               <FiammettaTargetChip
                 target={fiammettaTarget}
                 portrait={fiammettaPortrait}
-                onClick={() => { setPickerQuery(""); setPicker({ kind: "fiammetta" }); }}
+                onClick={() => {
+                  setPickerQuery("");
+                  setPickerRoomFilter(null);
+                  setPickerSkillTag(null);
+                  setPickerRarity(null);
+                  setPickerPage(1);
+                  setPicker({ kind: "fiammetta" });
+                }}
               />
             ) : null}
             <ShiftTabs
@@ -391,37 +483,91 @@ export function ManualSchedulePage({
       />
 
       <Dialog open={Boolean(picker)} onOpenChange={(open) => { if (!open) setPicker(null); }}>
-        <DialogContent className="max-h-[min(720px,calc(100svh-2rem))] max-w-[min(760px,calc(100vw-2rem))] overflow-hidden">
+        <DialogContent className="grid max-h-[min(820px,calc(100svh-1rem))] w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] grid-rows-[auto_minmax(0,1fr)] overflow-hidden sm:w-[calc(100vw-2rem)] sm:max-w-[min(960px,calc(100vw-2rem))]">
           <DialogHeader>
             <DialogTitle>{picker?.kind === "fiammetta" ? (intl("components_pages_ManualSchedulePage.fiammettaMoraleTarget")) : (intl("components_pages_ManualSchedulePage.assign", { value1: (en) ? (selectedRoom?.title ?? "room") : "", value2: (en) ? "" : (selectedRoom?.title ?? "设施") }))}</DialogTitle>
             <DialogDescription>{picker?.kind === "fiammetta" ? (intl("components_pages_ManualSchedulePage.thisTargetIsStoredOnlyForTheActiveShift")) : (intl("components_pages_ManualSchedulePage.onlyOwnedOperatorsInTheCurrentBoxAreShown"))}</DialogDescription>
           </DialogHeader>
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-            <Input autoFocus value={pickerQuery} onChange={(event) => setPickerQuery(event.target.value)} className="pl-9" placeholder={intl("components_pages_ManualSchedulePage.searchOperators")} aria-label={intl("components_pages_ManualSchedulePage.searchSelectableOperators")} />
-          </div>
-          <div className="grid max-h-[52svh] grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2" data-manual-operator-picker onScroll={handlePickerScroll}>
-            <TooltipProvider delay={300} timeout={100}>
+          <div ref={pickerScrollContainerRef} className="min-h-0 overflow-y-auto px-5 pb-5 sm:px-7 sm:pb-6" data-manual-operator-picker onScroll={handlePickerScroll}>
+            {picker?.kind === "slot" ? (
+              <div className="grid gap-2">
+                <div>
+                  <div className="mb-1.5 text-xs font-medium text-muted-foreground">{skillFilters("room")}</div>
+                  <SkillRoomTagBar selected={pickerRoomFilter} onChange={changePickerRoomFilter} />
+                </div>
+                <div>
+                  <div className="mb-1.5 text-xs font-medium text-muted-foreground">{skillFilters("tag")}</div>
+                  {availableSkillTags.length > 0
+                    ? <SkillTagBar tags={availableSkillTags} selected={pickerSkillTag} onChange={changePickerSkillTag} />
+                    : <div className="flex min-h-7 items-center text-xs text-muted-foreground max-sm:min-h-11" data-empty-skill-tags>{intl("components_pages_ManualSchedulePage.noSkillTagsAvailable")}</div>}
+                </div>
+              </div>
+            ) : null}
+
+            <div className={picker?.kind === "slot" ? "mt-3" : ""} role="group" aria-label={skillFilters("rarity")}>
+              <div className="mb-1.5 text-xs font-medium text-muted-foreground">{skillFilters("rarity")}</div>
+              <OperatorRarityFilter
+                value={pickerRarity === null ? "all" : String(pickerRarity)}
+                onChange={(value) => {
+                  setPickerRarity(value === "all" ? null : Number(value));
+                  setPickerPage(1);
+                }}
+              />
+            </div>
+
+            <div className="mt-3">
+              <OperatorSearch
+                autoFocus
+                value={pickerQuery}
+                label={intl("components_pages_ManualSchedulePage.searchSelectableOperatorsAndSkills")}
+                placeholder={intl("components_pages_ManualSchedulePage.searchOperatorSkillOrEffect")}
+                onChange={(value) => {
+                  setPickerQuery(value);
+                  setPickerPage(1);
+                }}
+              />
+            </div>
+
+            <div className="mt-3 flex items-center justify-between gap-3">
               {picker?.kind === "slot" ? (
-                <div className="col-span-full grid grid-cols-2 gap-2">
+                <div className="flex min-w-0 gap-2">
                   <Button type="button" variant="outline" className="min-w-0 justify-center" onClick={() => chooseOperator(null)}><X />{intl("components_pages_ManualSchedulePage.leaveEmpty")}</Button>
                   {selectedRoom?.group === "dormitory" ? (
                     <Button type="button" variant={selectedAssignment?.autofill ? "default" : "outline"} className="min-w-0 justify-center" onClick={enableDormAutofill}><Sparkles />{intl("components_pages_ManualSchedulePage.autoFill")}</Button>
-                  ) : <span aria-hidden="true" />}
+                  ) : null}
                 </div>
-              ) : null}
-              {visibleOperators.map((operator) => (
-                <ManualOperatorChoice
-                  key={operator.id}
-                  operator={operator}
-                  selected={selectedOperator === operator.name || (picker?.kind === "fiammetta" && fiammettaTarget === operator.name)}
-                  en={en}
-                  tooltipDisabled={pickerScrolling}
-                  onChoose={() => chooseOperator(operator.name)}
-                />
-              ))}
-              {visibleOperators.length === 0 ? <p className="col-span-full py-8 text-center text-sm text-muted-foreground">{intl("components_pages_ManualSchedulePage.noMatchingOperators")}</p> : null}
+              ) : <span />}
+              <span className="font-number text-xs text-muted-foreground">{intl("components_pages_ManualSchedulePage.operatorCount", { count: filteredOperators.length })}</span>
+            </div>
+
+            <TooltipProvider delay={0} timeout={0}>
+              <div ref={pickerResultsRef} className="relative mt-3 grid scroll-mt-2 grid-cols-3 gap-3 min-[430px]:grid-cols-4 sm:grid-cols-6 sm:gap-4">
+                {visibleOperators.map((operator) => (
+                  <ManualOperatorChoice
+                    key={operator.id}
+                    operator={operator}
+                    selected={selectedOperator === operator.name || (picker?.kind === "fiammetta" && fiammettaTarget === operator.name)}
+                    assignmentLabel={activeAssignmentRoomByOperator.get(operator.name)}
+                    en={en}
+                    tooltipDisabled={pickerScrolling}
+                    onChoose={() => chooseOperator(operator.name)}
+                  />
+                ))}
+                {Array.from({ length: emptyOperatorChoiceCount }, (_, index) => (
+                  <div
+                    key={`empty-${index}`}
+                    className="invisible min-h-[calc(clamp(70px,7.3vw,80px)+2.5rem)] max-sm:min-h-[calc(clamp(56px,16vw,76px)+2.5rem)]"
+                    aria-hidden="true"
+                    data-manual-operator-placeholder
+                  />
+                ))}
+                {visibleOperators.length === 0 ? <p className="pointer-events-none absolute inset-0 flex items-center justify-center text-center text-sm text-muted-foreground">{intl("components_pages_ManualSchedulePage.noMatchingOperators")}</p> : null}
+              </div>
             </TooltipProvider>
+
+            <div className="mt-4 border-t border-border/60 pt-3">
+              <Pagination page={pickerPage} pageCount={pickerPageCount} onPageChange={changePickerPage} alwaysVisible />
+            </div>
           </div>
         </DialogContent>
       </Dialog>

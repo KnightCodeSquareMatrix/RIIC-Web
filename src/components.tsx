@@ -1216,6 +1216,7 @@ function OperatorSlotShell({
   centerFrameInList,
   compactFactory,
   compactView,
+  editableAppearance = true,
   editableHint,
   frameClassName,
   frameContent,
@@ -1231,6 +1232,7 @@ function OperatorSlotShell({
   centerFrameInList: boolean;
   compactFactory: boolean;
   compactView: boolean;
+  editableAppearance?: boolean;
   editableHint?: string;
   frameClassName: string;
   frameContent?: ReactNode;
@@ -1249,7 +1251,7 @@ function OperatorSlotShell({
         "relative aspect-square h-[var(--operator-slot-size)] min-w-0 shrink-0 overflow-hidden border-2 max-sm:border",
         frameClassName,
         frameFocusable && "cursor-help outline-none transition-[border-color,box-shadow] hover:border-white/90 focus-visible:border-[#FFD501] focus-visible:ring-2 focus-visible:ring-[#FFD501]/70",
-        onActivate && "border-[#FFD800] shadow-[0_0_0_1px_rgba(255,216,0,0.42),0_0_12px_rgba(255,216,0,0.2)]",
+        onActivate && editableAppearance && "border-[#FFD800] shadow-[0_0_0_1px_rgba(255,216,0,0.42),0_0_12px_rgba(255,216,0,0.2)]",
         centerFrameInList && "max-sm:h-auto max-sm:w-full sm:absolute sm:left-0 sm:top-1/2 sm:-translate-y-1/2",
       )}
       aria-label={ariaLabel}
@@ -1274,7 +1276,8 @@ function OperatorSlotShell({
           : "[--operator-slot-size:clamp(70px,7.3vw,80px)] max-sm:[--operator-slot-size:clamp(56px,16vw,76px)]",
         compactFactory && "min-[1800px]:[--operator-slot-size:70px]",
         centerFrameInList && "max-sm:w-full sm:relative sm:h-full sm:w-[var(--operator-slot-size)]",
-        onActivate && "cursor-pointer rounded-[4px] outline-none focus-visible:ring-2 focus-visible:ring-[#FFD800] focus-visible:ring-offset-2 focus-visible:ring-offset-[#313131]",
+        onActivate && "cursor-pointer rounded-[4px] outline-none focus-visible:ring-2 focus-visible:ring-[#FFD800]",
+        onActivate && editableAppearance && "focus-visible:ring-offset-2 focus-visible:ring-offset-[#313131]",
       )}
       data-position={positionLabel || undefined}
       title={title}
@@ -1377,6 +1380,7 @@ export function OperatorSlot({
   autofill = false,
   compactFactory = false,
   compactView = false,
+  selectionMode = false,
   centerFrameInList = false,
   shiftDirection = 0,
   transitionDelay = 0,
@@ -1384,6 +1388,7 @@ export function OperatorSlot({
   positionLabel,
   showSkillTooltip = false,
   skillTooltipFocusable = false,
+  tooltipDisabled = false,
   skillTooltipHighlightIds = [],
   skillTooltipContextLabel,
   searchQuery = "",
@@ -1398,6 +1403,8 @@ export function OperatorSlot({
   autofill?: boolean;
   compactFactory?: boolean;
   compactView?: boolean;
+  /** 选择器样式：保留点击与技能提示，但不显示排班卡片的“可编辑”标记和常驻黄框。 */
+  selectionMode?: boolean;
   centerFrameInList?: boolean;
   shiftDirection?: ShiftDirection;
   transitionDelay?: number;
@@ -1407,6 +1414,8 @@ export function OperatorSlot({
   showSkillTooltip?: boolean;
   /** 让头像进入键盘焦点顺序；仅用于需要主动查看技能的界面，避免排班图产生过多 Tab 停靠点。 */
   skillTooltipFocusable?: boolean;
+  /** 滚动等临时交互期间关闭技能提示，避免 tooltip 跟随已移动的头像。 */
+  tooltipDisabled?: boolean;
   /** 练卡建议等场景中，需要在技能 tooltip 内强调的技能。 */
   skillTooltipHighlightIds?: readonly string[];
   skillTooltipContextLabel?: string;
@@ -1445,7 +1454,8 @@ export function OperatorSlot({
       centerFrameInList={centerFrameInList}
       compactFactory={compactFactory}
       compactView={compactView}
-      editableHint={onActivate ? (intl("components.edit")) : undefined}
+      editableAppearance={!selectionMode}
+      editableHint={onActivate && !selectionMode ? (intl("components.edit")) : undefined}
       frameClassName={frameClassName}
       frameContent={
         <AnimatePresence initial={false} mode="sync">
@@ -1555,12 +1565,13 @@ export function OperatorSlot({
             contextLabel={skillTooltipContextLabel}
             currentElite={elite}
             currentLevel={operatorLevel}
+            disabled={tooltipDisabled || undefined}
           />
         </Suspense>
       ) : undefined}
       label={slot ? <AnimatedText value={displayName ?? slot.name} trend={shiftDirection} /> : autofill ? (intl("components.autoFill")) : (intl("components.slot"))}
       labelClassName={slot
-        ? (searchMatched ? "bg-[#FFD501] px-1 text-[#202020]" : "text-white")
+        ? (searchMatched ? "bg-[#FFD501] px-1 text-[#202020]" : selectionMode ? "text-popover-foreground" : "text-white")
         : autofill
           ? "text-white/55"
           : "text-transparent select-none"}
