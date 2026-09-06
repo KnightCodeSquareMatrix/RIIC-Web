@@ -260,11 +260,19 @@
     "theSignInInterfaceIsLoading": "The sign-in interface is loading."
   },
   "components_cloud_CloudDataSync": {
+    "syncError_consent": "Cloud sync is paused until you accept the current terms and privacy policy. Your local data is unchanged.",
+    "syncError_policy": "The terms or privacy policy have changed since this page was opened. Refresh to review the latest versions before consenting. Your local data is retained.",
+    "syncError_invalid": "Cloud sync rejected this data and will not resend it unchanged. Check your operator progression or re-import your data. Your local copy is retained.",
+    "syncError_retry": "Cloud sync is temporarily unavailable or rate limited. It will retry after a cooldown; your local data is retained.",
+    "syncError_session": "Your login has expired. Sign in again to resume cloud sync. Your local data is retained.",
+    "syncError_paused": "Cloud sync is paused after an error. Your local data is retained; you can try again later.",
+    "resumeSync": "Resume cloud sync",
     "cloudSyncIsTemporarilyUnavailableCurrentDataRemainsStored": "Cloud sync is temporarily unavailable. Current data remains stored locally.",
     "cloudSyncFailedALocalCopyHasBeenRetained": "Cloud sync failed. A local copy has been retained.",
     "couldNotSaveConsentTryAgainLater": "Could not save consent. Try again later."
   },
   "components_cloud_DataConsentDialog": {
+    "reloadUpdatedPolicy": "Refresh to review updated policies",
     "enableAccountCloudWorkspace": "Enable account cloud workspace",
     "afterYouConsentTheSiteAutomaticallySyncsYourMaa": "After you consent, the site automatically syncs your MAA BOX, layout, settings, and recent schedules. You can keep using local-only mode instead.",
     "eachMaaBoxUsesAnIndependentKeyAndAes": "Each MAA BOX uses an independent key and AES-256-GCM envelope encryption. Cloud data is retained on a rolling 30-day basis.",

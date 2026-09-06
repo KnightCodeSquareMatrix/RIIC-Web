@@ -616,7 +616,7 @@ test("Skland login replaces a scanned QR with progress while authentication fini
   await expect(page.getByRole("img", { name: "森空岛登录二维码" })).toBeVisible();
   await expect(page.locator("[data-skland-login-progress]")).toBeVisible({ timeout: 10_000 });
   await expect(page.getByRole("img", { name: "森空岛登录二维码" })).toHaveCount(0);
-  await expect(page.getByRole("status")).toContainText("已扫码，正在等待森空岛 App 确认并完成登录…");
+  await expect(page.locator("[data-skland-login-panel]").getByRole("status")).toContainText("已扫码，正在等待森空岛 App 确认并完成登录…");
 });
 
 test("Skland restore waits for website authentication and then starts summary and full requests once", async ({ page }) => {

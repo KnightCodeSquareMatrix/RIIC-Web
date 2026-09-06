@@ -189,6 +189,9 @@ test("the plan worker centrally dispatches an eight-task pipeline across four is
   assert.match(workerRuntime, /warmPlanServeLane[\s\S]+length: PLAN_TASK_WORKER_CONCURRENCY[\s\S]+warmPlanServeLane\(serveLane\)[\s\S]+recoverStaleRunningTasks[\s\S]+recordPlanWorkerHeartbeat/);
   const startup = workerRuntime.slice(workerRuntime.indexOf("export async function runPlanWorker"));
   const firstHeartbeat = startup.indexOf("await recordPlanWorkerHeartbeat");
+  const storageProbe = startup.indexOf("await assertPlanArtifactStorageReady()");
+  assert.ok(storageProbe >= 0 && storageProbe < startup.indexOf("warmPlanServeLane(serveLane)"));
+  assert.ok(storageProbe < firstHeartbeat);
   const heartbeatTimer = startup.indexOf("const heartbeatTimer = setInterval");
   const artifactRecovery = startup.indexOf("void resumePendingPlanArtifactFinalizations");
   assert.ok(firstHeartbeat >= 0 && firstHeartbeat < heartbeatTimer);

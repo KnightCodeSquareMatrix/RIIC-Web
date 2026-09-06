@@ -21,6 +21,7 @@ import type {
 import { legacyAdminFeedbackStatus, toAdminReproductionData } from "./admin-record-dto";
 import { isSklandConfigured, sklandDisabledReason } from "@/server/skland/session";
 import { PublicApiError } from "./api-contract";
+import { diagnosticText } from "./diagnostic-text.ts";
 import { feedbackDirectoryGroup, toStoredFeedbackIssue } from "./feedback-record";
 import {
   createPlanComputeParams,
@@ -391,6 +392,23 @@ async function ensurePrivateStorageBoundaries(): Promise<void> {
     || resolvedRoots.some((root) => !isPrivateStorageChild(resolvedStorageRoot, root))
   ) {
     throw new Error("存储目录的真实路径越过了整体存储边界。");
+  }
+}
+
+export async function assertPlanArtifactStorageReady(): Promise<void> {
+  if (!process.env.BETA_STORAGE_DIR?.trim() || !path.isAbsolute(process.env.BETA_STORAGE_DIR)) {
+    throw new Error("Worker requires an absolute BETA_STORAGE_DIR shared with the website.");
+  }
+  await ensurePrivateStorageBoundaries();
+  // Probe the actual run directory inside the service sandbox before claiming tasks.
+  const probe = path.join(cliRunRoot, `.worker-storage-probe-${randomUUID()}`);
+  const handle = await open(probe, "wx", 0o600);
+  try {
+    await handle.writeFile("ready");
+    await handle.sync();
+  } finally {
+    await handle.close();
+    await rm(probe, { force: true });
   }
 }
 
@@ -1213,6 +1231,7 @@ export async function saveFeedback(
 export async function savePlanFailureArtifact(input: PlanRequestBody & {
   diagnosticId: string;
   errorCode: string;
+  diagnosticReason?: string | null;
 }): Promise<PrivateArtifactDescriptor | null> {
   assertPlanBody(input);
   if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(input.diagnosticId)) {
@@ -1258,7 +1277,7 @@ export async function savePlanFailureArtifact(input: PlanRequestBody & {
         success: false,
         startedAt,
         durationMs: 0,
-        error: input.errorCode,
+        error: diagnosticText(input.diagnosticReason) ?? input.errorCode,
         runId: input.diagnosticId,
       } satisfies PlanApiResponse),
     ]);
@@ -1309,7 +1328,7 @@ export async function savePlanFailureArtifact(input: PlanRequestBody & {
         success: false,
         startedAt,
         durationMs: 0,
-        error: input.errorCode,
+        error: diagnosticText(input.diagnosticReason) ?? input.errorCode,
         runId: input.diagnosticId,
       } satisfies PlanApiResponse),
       ...(input.dataOwnerTag ? [

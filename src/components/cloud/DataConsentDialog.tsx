@@ -20,12 +20,14 @@ export function DataConsentDialog({
   open,
   saving,
   error,
+  reloadRequired = false,
   onAccept,
   onDecline,
 }: {
   open: boolean;
   saving: boolean;
   error: string | null;
+  reloadRequired?: boolean;
   onAccept: () => void;
   onDecline: () => void;
 }) {
@@ -64,7 +66,7 @@ export function DataConsentDialog({
         </DialogBody>
         <DialogFooter className="flex-col items-stretch border-t border-border/50 sm:flex-row sm:items-center">
           <Button className="w-full sm:w-auto" type="button" size="dialog" variant="outline" disabled={saving} onClick={onDecline}>{intl("components_cloud_DataConsentDialog.keepLocalOnlyMode")}</Button>
-          <Button className="w-full sm:w-auto" type="button" size="dialog" disabled={saving || !terms || !privacy} onClick={onAccept}>{saving ? (intl("components_cloud_DataConsentDialog.enabling")) : (intl("components_cloud_DataConsentDialog.agreeAndStartSyncing"))}</Button>
+          <Button className="w-full sm:w-auto" type="button" size="dialog" disabled={saving || (!reloadRequired && (!terms || !privacy))} onClick={onAccept}>{saving ? intl("components_cloud_DataConsentDialog.enabling") : reloadRequired ? intl("components_cloud_DataConsentDialog.reloadUpdatedPolicy") : intl("components_cloud_DataConsentDialog.agreeAndStartSyncing")}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
