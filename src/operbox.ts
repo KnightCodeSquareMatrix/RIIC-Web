@@ -89,6 +89,22 @@ export async function readOperboxText(text: string): Promise<OperBoxEntry[]> {
       "MAA JSON 无法解析，请确认粘贴了完整的 Arknights_OperBox_Export.json 内容。",
     );
   }
+  if (Array.isArray(parsed)) {
+    parsed = parsed.map((row) => {
+      if (!row || typeof row !== "object") return row;
+      const value = row as Record<string, unknown>;
+      const rarity = Number(value.rarity);
+      const elite = Number(value.elite);
+      if (Number.isInteger(rarity) && Number.isInteger(elite) && elite > maxEliteForRarity(rarity)) {
+        const safeElite = maxEliteForRarity(rarity);
+        return { ...value, elite: safeElite, level: manualLevelFor(rarity, safeElite) };
+      }
+      if (Number.isInteger(rarity) && Number.isInteger(elite) && Number.isFinite(Number(value.level))) {
+        return { ...value, level: Math.min(Number(value.level), manualLevelFor(rarity, elite)) };
+      }
+      return row;
+    });
+  }
   return normalizeImportedEntries(assertOperbox(parsed));
 }
 
