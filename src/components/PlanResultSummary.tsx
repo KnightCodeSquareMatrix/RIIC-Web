@@ -87,7 +87,7 @@ export function PlanResultSummary({
 
   const solverDaily = rotation?.daily?.production ?? null;
   const production = rotation ? estimateDailyProduction({ layout, maa, rotation }) : null;
-  const productGroups = dailyProductionGroups(production, solverDaily);
+  const productGroups = dailyProductionGroups(production, solverDaily, rotation?.daily?.drone_production);
   const adjustmentCount = countShiftPlacementAdjustments(comparison);
   const activeDetailSection = detailSection === "comparison" && comparison ? "comparison" : "efficiency";
   const openDetails = (section: DetailSection) => {

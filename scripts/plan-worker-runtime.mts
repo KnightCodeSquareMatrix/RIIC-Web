@@ -219,6 +219,7 @@ export async function executePlanTask(
       {
         layoutLabel: payload.layoutTemplate,
         sourceName: payload.sourceName ?? "已导入的干员数据",
+        layout: payload.layout,
       },
       id,
     );
