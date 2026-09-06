@@ -11,7 +11,7 @@ test.beforeEach(async ({page}) => {
 
 for (const mobile of [false,true]) {
   test.describe(mobile ? "mastery mobile" : "mastery desktop", () => {
-    test.use({viewport:mobile ? {width:390,height:844} : {width:1440,height:1000}});
+    test.use({viewport:mobile ? {width:390,height:844} : {width:1440,height:1000}, reducedMotion:mobile ? "reduce" : "no-preference"});
     test("owned E2 picker filters and complete mastery calculation", async ({page},testInfo) => {
       test.setTimeout(120000);
       await mockApis(page);
@@ -47,6 +47,13 @@ for (const mobile of [false,true]) {
       await page.getByRole("button",{name:"生成方案",exact:true}).click();
       const result = page.locator("[data-mastery-results]");
       await expect(result).toContainText("17:16:57");
+      const expectResultsAtTop = async () => {
+        await expect.poll(async () => Math.round((await result.boundingBox())?.y ?? -1)).toBe(24);
+      };
+      await expectResultsAtTop();
+      // Re-generating unchanged inputs must also return to the results.
+      await page.getByRole("button",{name:"生成方案",exact:true}).click();
+      await expectResultsAtTop();
       await expect(result.locator("[data-setup-action] svg")).toHaveCount(0);
       await expect(result).toContainText("保留艾丽妮，先开启专3，确认减半效果生效。");
       await expect(result).toContainText("减半生效后，立即换为W。");
@@ -72,6 +79,7 @@ for (const mobile of [false,true]) {
       await expect(page.getByText("输入或 Box 已变化，请重新生成方案。",{exact:true})).toBeVisible();
       await page.getByRole("button",{name:"生成方案",exact:true}).click();
       await expect(result).toBeVisible();
+      await expectResultsAtTop();
       await page.getByRole("tablist",{name:"当前专精等级",exact:true}).getByRole("tab",{name:"专2",exact:true}).click();
       await expect(page.getByRole("tablist",{name:"目标专精等级",exact:true}).getByRole("tab",{name:"专1",exact:true})).toBeDisabled();
       await page.getByRole("button",{name:"生成方案",exact:true}).click();
