@@ -3,10 +3,18 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { diagnosticCategory, diagnosticSummary, makeDiagnostic, persistDiagnostic, readDiagnostics, summarizeDiagnostics } from "./request-diagnostics.ts";
+import { assertDiagnosticRoot, diagnosticCategory, diagnosticSummary, makeDiagnostic, persistDiagnostic, readDiagnostics, summarizeDiagnostics } from "./request-diagnostics.ts";
 import { failureResponse, PublicApiError } from "./api-contract.ts";
 
 const input={code:"AIC-DATA-8003",status:422,route:"/api/workspace",requestId:"request-1",durationMs:12};
+
+test("diagnostics reject the public directory itself as well as descendants and broad roots",()=>{
+  const cwd=path.resolve("fixture-app"); const home=path.resolve("fixture-home");
+  for(const root of [cwd,path.join(cwd,"public"),path.join(cwd,"public","logs"),home,path.parse(cwd).root]) {
+    assert.throws(()=>assertDiagnosticRoot(root,cwd,home));
+  }
+  assert.doesNotThrow(()=>assertDiagnosticRoot(path.resolve("fixture-private"),cwd,home));
+});
 
 test("API response keeps its contract while internal logs retain sanitized context",async context=>{
   const logs:unknown[]=[];

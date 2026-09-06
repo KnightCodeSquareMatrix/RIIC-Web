@@ -69,15 +69,20 @@ export function makeDiagnostic(input: {
   };
 }
 
+export function assertDiagnosticRoot(root: string, cwd: string, home: string): void {
+  const publicRoot = path.join(cwd,"public");
+  if (!isSafePrivateStorageRoot(root,[cwd,home]) || root === publicRoot || isPrivateStorageChild(publicRoot,root)) {
+    throw new Error("diagnostic_storage_must_be_private");
+  }
+}
+
 function diagnosticRoot(): string | null {
   const configured = process.env.BETA_STORAGE_DIR;
   if (!configured) return null;
   if (!path.isAbsolute(configured)) throw new Error("diagnostic_storage_must_be_absolute");
   const root = realpathSync(configured);
   const cwd = path.resolve(process.cwd());
-  if (!isSafePrivateStorageRoot(root, [cwd, homedir()]) || root === cwd || isPrivateStorageChild(path.join(cwd, "public"), root)) {
-    throw new Error("diagnostic_storage_must_be_private");
-  }
+  assertDiagnosticRoot(root,cwd,homedir());
   const directory = path.join(root, "diagnostic-logs");
   mkdirSync(directory, {recursive: true, mode: 0o700});
   if (lstatSync(directory).isSymbolicLink() || realpathSync(directory) !== directory) throw new Error("diagnostic_storage_symlink");
