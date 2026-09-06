@@ -590,7 +590,7 @@ export function SetupDialog({
                       </section>
                     ) : null}
                     {inputError ? <p id="setup-box-error" className="mt-3 text-sm text-destructive" role="alert">{inputError}</p> : null}
-                    {boxSource === "maa" && hasBox && !maaReview && !inputError ? (
+                    {inputMode === "maa" && boxSource === "maa" && hasBox && !maaReview && !inputError ? (
                       <p className="mt-3 rounded-md border border-emerald-500/25 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300" role="status">
                         MAA Box 已导入 {operbox?.length ?? 0} 名干员，其中已拥有 {importedOwnedCount} 名。
                       </p>
