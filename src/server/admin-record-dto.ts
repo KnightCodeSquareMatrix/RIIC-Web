@@ -13,6 +13,7 @@ import type {
 } from "@/types";
 import { validateLayoutJson } from "../layout-validation.ts";
 import { assertOperbox } from "../operbox.ts";
+import { diagnosticText } from "./diagnostic-text.ts";
 import { isRotationProfile, rotationShiftCount } from "../rotation-settings.ts";
 
 type UnknownRecord = Record<string, unknown>;
@@ -50,19 +51,6 @@ function nullableString(value: unknown): string | null {
 function boundedString(value: unknown, maxLength: number): string | null {
   const text = nullableString(value);
   return text ? text.slice(0, maxLength) : null;
-}
-
-function diagnosticText(value: unknown): string | null {
-  const text = boundedString(value, 16 * 1024);
-  if (!text) return null;
-  return text
-    .replace(/(\b(?:authorization|proxy-authorization|cookie|set-cookie)\s*:\s*)[^\r\n]+/gi, "$1[已隐藏敏感值]")
-    .replace(/(["']?[A-Za-z0-9_.-]*(?:token|secret|password|passwd|cookie|authorization|database[_-]?url|api[_-]?key|master[_-]?keys?|hmac[_-]?key)[A-Za-z0-9_.-]*["']?\s*[:=]\s*)(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s,;]+)/gi, "$1[已隐藏敏感值]")
-    .replace(/(https?:\/\/)[^\s/@:]+:[^\s/@]+@/gi, "$1[已隐藏敏感值]@")
-    .replace(/\\\\[^\\\s,;]+\\[^\r\n,;]+/g, "[已隐藏服务器路径]")
-    .replace(/\b[A-Za-z]:[\\/][^\r\n,，;；]+/g, "[已隐藏服务器路径]")
-    .replace(/file:\/\/[^\r\n,，;；]+/gi, "[已隐藏服务器路径]")
-    .replace(/(^|[\s(=:])\/(?:[^\r\n,，;；]+\/?)+/gm, "$1[已隐藏服务器路径]");
 }
 
 function reproductionLayout(value: unknown): BaseBlueprint | null {

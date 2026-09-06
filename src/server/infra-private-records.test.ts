@@ -236,6 +236,14 @@ test("Skland owned-data deletion removes only matching runs and feedback without
   });
 
   const { deleteFeedbackArtifacts, deletePlanRunArtifacts, deleteSklandOwnedData, maintainPrivateRecords, readFeedbackReproduction, readPlanReproduction, runPlan, saveFeedback, savePlanFailureArtifact, stopInfraServeClients } = await import("./infra.ts");
+  const { assertPlanArtifactStorageReady } = await import("./infra.ts");
+  await assertPlanArtifactStorageReady();
+  assert.equal((await readdir(runsRoot)).some((name) => name.startsWith(".worker-storage-probe-")), false);
+  delete process.env.BETA_STORAGE_DIR;
+  await assert.rejects(assertPlanArtifactStorageReady, /absolute BETA_STORAGE_DIR/);
+  process.env.BETA_STORAGE_DIR = "relative-storage";
+  await assert.rejects(assertPlanArtifactStorageReady, /absolute BETA_STORAGE_DIR/);
+  process.env.BETA_STORAGE_DIR = storageRoot;
   // runPlan can start an installed local solver even when the fingerprint is
   // deliberately invalid. Release the test-owned process after assertions.
   context.after(() => stopInfraServeClients("private record test finished"));
@@ -332,6 +340,7 @@ test("Skland owned-data deletion removes only matching runs and feedback without
     fiammettaEnable: false,
     dataOwnerTag: targetOwnerTag,
     errorCode: "AIC-SYS-5000",
+    diagnosticReason: "solver unavailable token=private-fixture-secret",
   });
   assert.equal(workerFailureArtifact?.key, workerFailureDiagnosticId);
   const workerFailureReproduction = await readPlanReproduction(workerFailureDiagnosticId);
@@ -340,7 +349,7 @@ test("Skland owned-data deletion removes only matching runs and feedback without
   assert.equal(workerFailureReproduction.operbox?.[1]?.own, false);
   assert.equal(workerFailureReproduction.rotationCount, 2);
   assert.equal(workerFailureReproduction.fiammettaEnabled, false);
-  assert.equal(workerFailureReproduction.error, "AIC-SYS-5000");
+  assert.equal(workerFailureReproduction.error, "solver unavailable token=[已隐藏敏感值]");
 
   const incompleteFailureDiagnosticId = "13131313-1313-4313-8313-131313131313";
   const incompleteFailureDir = path.join(

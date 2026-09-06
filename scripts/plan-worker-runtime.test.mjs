@@ -184,6 +184,7 @@ test("a failed solver releases its cache lease before recording the terminal tas
     fiammettaEnable: task.payload.fiammettaEnable,
     dataOwnerTag: task.payload.dataOwnerTag,
     errorCode: "AIC-SYS-5000",
+    diagnosticReason: "solver unavailable",
   }]);
   assert.deepEqual(task.payload.operbox, expectedFailureOperbox);
   assert.equal(recorded[0].artifact.key, task.id);
@@ -206,6 +207,8 @@ test("an unsuccessful solver response preserves its public error and queues the 
     durationMs: 30,
     solverDurationMs: 25,
     artifactEnvelopePath: "private/failed-run-envelope.json",
+    error: "assignment room trade_1 exceeds capacity 2",
+    solver: { solver_executable_sha256: "c".repeat(64) },
     profileJson: {
       schema_version: 4,
       rotation_profile: "abc_12_6_6",
@@ -239,6 +242,8 @@ test("an unsuccessful solver response preserves its public error and queues the 
   assert.equal(recorded[0].status, "failed");
   assert.equal(recorded[0].errorCode, "AIC-PLAN-3004");
   assert.equal(recorded[0].artifactStatus, "pending");
+  assert.equal(recorded[0].durationMs, 30);
+  assert.deepEqual(recorded[0].solver, unsuccessfulResult.solver);
   assert.deepEqual(calls, [
     "start:solver",
     "solver-finished",
@@ -248,6 +253,23 @@ test("an unsuccessful solver response preserves its public error and queues the 
     "artifact-enqueue",
     "timing",
   ]);
+});
+
+test("failed artifact writes still publish terminal tasks and log redacted diagnostic reasons", async (context) => {
+  const logs = [];
+  context.mock.method(console, "error", (value) => logs.push(JSON.parse(value)));
+  const { calls, dependencies } = executionHarness({
+    runPlan: async () => { throw new Error("solver failed token=private-test-value", { cause: new Error("upstream password=private-test-password") }); },
+    saveFailureArtifact: async () => { throw new Error("EACCES: mkdir /private/server/storage"); },
+  });
+  await executePlanTask(claimedTask(), 0, dependencies);
+  await waitForPlanExecutionUpdates(1000);
+  assert.ok(calls.includes("task:failed"));
+  assert.equal(logs[0].event, "plan_failure_artifact_write_failed");
+  assert.equal(logs[1].event, "plan_task_failed");
+  assert.match(logs[1].message, /solver failed/);
+  assert.match(logs[1].cause, /upstream/);
+  assert.doesNotMatch(JSON.stringify(logs), /private-test-value|private-test-password|\/private\/server/);
 });
 
 test("a missing run record releases the solver lease instead of caching an unowned result", async () => {
