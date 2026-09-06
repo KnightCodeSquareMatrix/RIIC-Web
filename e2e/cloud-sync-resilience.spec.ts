@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { PRIVACY_VERSION, TERMS_VERSION } from "../src/legal-policy";
+import { SESSION_KEY_V5 } from "../src/persistence";
 import { mockApis, planData, requestId, seedV4Session } from "./production-readiness.fixture";
 
 test.beforeEach(async ({ page }) => {
@@ -41,7 +42,7 @@ for (const failure of [
     await expect(page.locator("[data-cloud-sync-error]")).toContainText(failure.code);
     await page.waitForTimeout(2600);
     expect(writes).toBe(1);
-    const local = await page.evaluate(() => JSON.parse(localStorage.getItem("arknights-infra-calc-session-v4")!));
+    const local = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), SESSION_KEY_V5);
     expect(local.operbox[0].id).toBe("char_002_amiya");
   });
 }
