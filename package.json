@@ -32,14 +32,17 @@
     "assets:mastery": "node scripts/generate-mastery-data.mjs",
     "test:mastery": "node --test --experimental-strip-types src/mastery.test.ts",
     "lint": "eslint .",
-    "check": "npm run check:public-repository && npm run assets:check && npm run check:i18n && npm run lint && npm test && npm run test:api-contract && npm run test:shift-comparison",
+    "check": "npm run check:public-repository && npm run assets:check && npm run check:i18n && npm run lint && npm test && npm run test:api-contract && npm run test:feedback-workbench && npm run test:shift-comparison",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node --experimental-strip-types scripts/migrate-db.mts",
     "db:backfill-business": "node --experimental-strip-types scripts/backfill-business-data.mts",
     "auth:check": "node --experimental-strip-types scripts/check-auth-readiness.mts",
     "worker:plan": "node --experimental-strip-types --import ./scripts/register-hooks.mjs scripts/plan-worker.mts",
     "worker:build": "node scripts/build-worker.mjs",
-    "test:auth-email": "node --test --experimental-strip-types src/auth-email-brand.test.ts src/server/auth/email-transport.test.ts"
+    "test:auth-email": "node --test --experimental-strip-types src/auth-email-brand.test.ts src/server/auth/email-transport.test.ts",
+    "test:feedback-workbench": "node --test --experimental-strip-types src/reproduction-package.test.ts src/feedback-similarity.test.ts src/server/quality/import.test.ts src/server/quality/execution.test.ts src/server/admin-record-dto.test.ts src/server/admin-records-api.test.ts",
+    "test:quality-integration": "node --experimental-strip-types --import ./scripts/register-hooks.mjs --test src/server/quality/quality.integration.test.mjs",
+    "worker:quality": "node --experimental-strip-types --import ./scripts/register-hooks.mjs scripts/quality-worker.mts"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

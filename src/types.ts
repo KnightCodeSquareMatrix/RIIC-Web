@@ -1041,6 +1041,7 @@ export type AppErrorCode =
   | "AIC-PLAN-3008"
   | "AIC-FEEDBACK-4001"
   | "AIC-FEEDBACK-4002"
+  | "AIC-FEEDBACK-4003"
   | "AIC-SYS-5000"
   | "AIC-RATE-6001"
   | "AIC-LOCAL-7001"
@@ -1305,7 +1306,7 @@ export interface AdminUserUpdateData {
   updated: true;
 }
 
-export type AdminFeedbackStatus = "unreviewed" | "reproduced" | "fixed";
+export type AdminFeedbackStatus = "unreviewed" | "reviewed" | "ignored" | "reproduced" | "fixed";
 
 export type AdminFeedbackFacility =
   | "trading"
@@ -1403,6 +1404,8 @@ export type AdminReproductionData = AdminReproductionDataBase & ({
 export interface AdminFeedbackDetailData {
   feedback: AdminFeedbackRecordData;
   reproduction: AdminReproductionData;
+  history: { id: string; actorUserId: string | null; status: AdminFeedbackStatus; note: string | null; createdAt: string }[];
+  solverExecutableSha256: string | null;
 }
 
 export interface AdminPlanRunDetailData {

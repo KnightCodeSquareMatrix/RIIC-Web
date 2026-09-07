@@ -256,6 +256,53 @@ export const feedbackEvent = appSchema.table("feedback_event", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [index("feedback_event_feedback_created_at_idx").on(table.feedbackId, table.createdAt)]);
 
+export const qualityDraft = appSchema.table("quality_draft", {
+  id: text("id").primaryKey(),
+  creatorId: text("creator_id").notNull(),
+  revision: integer("revision").notNull().default(1),
+  inputHash: text("input_hash").notNull(),
+  sources: jsonb("sources").notNull().$type<import("../../quality.ts").QualitySource[]>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+});
+export const qualityBundle = appSchema.table("quality_bundle", {
+  id: text("id").primaryKey(),
+  label: text("label").notNull(),
+  executableSha256: text("executable_sha256").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+export const qualityBatch = appSchema.table("quality_batch", {
+  id: text("id").primaryKey(),
+  creatorId: text("creator_id").notNull(),
+  label: text("label").notNull(),
+  status: text("status").notNull().default("queued"),
+  bundleIds: jsonb("bundle_ids").notNull().$type<string[]>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+}, (table) => [index("quality_batch_status_idx").on(table.status, table.createdAt)]);
+export const qualityCase = appSchema.table("quality_case", {
+  id: text("id").primaryKey(),
+  batchId: text("batch_id").notNull().references(() => qualityBatch.id, { onDelete: "cascade" }),
+  inputHash: text("input_hash").notNull(),
+  status: text("status").notNull().default("queued"),
+  sources: jsonb("sources").notNull().$type<import("../../quality.ts").QualitySource[]>(),
+}, (table) => [index("quality_case_batch_idx").on(table.batchId)]);
+export const qualityAttempt = appSchema.table("quality_attempt", {
+  id: text("id").primaryKey(),
+  caseId: text("case_id").notNull().references(() => qualityCase.id, { onDelete: "cascade" }),
+  status: text("status").notNull(),
+  summary: jsonb("summary"),
+  startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+}, (table) => [index("quality_attempt_case_idx").on(table.caseId)]);
+export const feedbackLink = appSchema.table("feedback_link", {
+  feedbackId: text("feedback_id").primaryKey().references(() => feedback.id, { onDelete: "cascade" }),
+  masterId: text("master_id").notNull().references(() => feedback.id, { onDelete: "cascade" }),
+  actorId: text("actor_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+}, (table) => [index("feedback_link_master_idx").on(table.masterId)]);
+
 export const policyConsent = appSchema.table("policy_consent", {
   id: text("id").primaryKey(),
   userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),

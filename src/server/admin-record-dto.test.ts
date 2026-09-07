@@ -14,6 +14,10 @@ test("admin feedback statuses normalize legacy values to the current review work
   assert.equal(normalizeAdminFeedbackStatus("resolved"), "fixed");
   assert.equal(legacyAdminFeedbackStatus("fixed"), "fixed");
   assert.equal(legacyAdminFeedbackStatus("unknown"), null);
+  for (const status of ["reviewed", "ignored"]) {
+    assert.equal(normalizeAdminFeedbackStatus(status), status);
+    assert.equal(legacyAdminFeedbackStatus(status), status);
+  }
 });
 
 test("admin feedback records classify facilities and whitelist room data", () => {

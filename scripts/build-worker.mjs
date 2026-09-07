@@ -38,3 +38,12 @@ await build({
     },
   ],
 });
+
+await build({
+  entryPoints: ["scripts/quality-worker.mts"],
+  bundle: true,
+  platform: "node",
+  format: "cjs",
+  outfile: "dist/quality-worker.cjs",
+  logLevel: "info",
+});

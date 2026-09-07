@@ -1,0 +1,28 @@
+[Unit]
+Description=RIIC private feedback quality worker
+After=network-online.target
+
+[Service]
+Type=simple
+User=arkinfra
+Group=arkinfra
+WorkingDirectory=/opt/arknights-infra/current/.next/standalone
+Environment=NODE_ENV=production
+EnvironmentFile=/etc/arknights-infra-quality-private.env
+ExecStart=/usr/local/bin/node /opt/arknights-infra/current/worker/quality-worker.cjs
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+KillMode=control-group
+CPUQuota=200%
+MemoryMax=4G
+TasksMax=64
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/arknights-infra-quality-private
+
+[Install]
+WantedBy=multi-user.target

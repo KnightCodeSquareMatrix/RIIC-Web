@@ -42,6 +42,7 @@ export function AdminNav({ isAdmin }: { isAdmin: boolean }) {
           </Link>
         );
       })}
+      <Link href="/admin/quality" className={cn(buttonVariants({ variant: pathname === "/admin/quality" ? "secondary" : "ghost", size: "lg" }), "shrink-0")}>{en ? "Quality" : "测试工作台"}</Link>
       <Link
         href="/"
         data-motion-pressable=""
