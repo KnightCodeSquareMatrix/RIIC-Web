@@ -1216,7 +1216,7 @@ test("two-shift output drives product estimates, room formulas, and profile deta
   await expect(detailsSheet.locator('[data-production-detail="lmd-orders"]')).toContainText(/34,254.*估算自然订单.*估算无人机订单0 龙门币/s);
   await expect(detailsSheet.locator('[data-production-detail="gold"]')).toContainText(/106.*估算自然制造.*估算无人机制造0 枚/s);
   await expect(detailsSheet.locator('[data-production-detail="orundum"]')).toContainText(/360.*求解器日产量360 合成玉/s);
-  await expect(detailsSheet.locator('[data-production-detail="shards"]')).toContainText(/48.*求解器日产量48 碎片/s);
+  await expect(detailsSheet.locator('[data-production-detail="shards"]')).toContainText(/48.*求解器日产量48 枚/s);
   await expect(detailsSheet).not.toContainText("拆分为前端估算，总量以求解器为准");
   await expect(detailsSheet.getByText(/限制环节：/)).toHaveCount(0);
   await expect(detailsSheet.locator("[data-production-method]")).toHaveCount(0);
