@@ -733,9 +733,8 @@ test("calculator owns scheduling controls and training advice uses a single tech
   await expect(calculatorControls).toHaveCount(0);
   await expect(page.getByText("这里只展示求解器给出的结构化建议", { exact: false })).toHaveCount(0);
   await expect(page.locator('[data-slot="training-summary"]')).toHaveClass(/infra-room-surface/);
-  await expect(page.locator('[data-slot="training-data-check"]')).toHaveClass(/infra-room-surface/);
+  await expect(page.locator('[data-slot="training-data-check"]')).toHaveCount(0);
   await expect(page.locator('[data-slot="training-summary"] svg')).toHaveCount(1);
-  await expect(page.locator('[data-slot="training-data-check"] svg')).toHaveCount(1);
   await expect(page.locator('[data-slot^="training-"] .infra-room-emblem')).toHaveCount(0);
   const adviceCards = page.locator('[data-slot="training-advice-card"]');
   await expect(adviceCards).toHaveCount(2);
