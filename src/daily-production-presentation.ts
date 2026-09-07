@@ -152,8 +152,33 @@ function estimateGroups(production: DailyProductionEstimate): DailyProductionGro
   ];
 }
 
-function solverGroupsWithEstimate(production: SolverDailyProduction, drone?: NonNullable<RotationJson["daily"]["drone_production"]>): DailyProductionGroup[] {
-  return solverGroups(production, drone);
+function withSolverTotal(product: ProductionDetailProduct, value: number): ProductionDetailProduct {
+  return {
+    ...product,
+    amount: { ...product.amount, value },
+    rows: product.rows.map(([label, rowValue, unit]) => [`估算${label}`, rowValue, unit]),
+  };
+}
+
+function solverGroupsWithEstimate(
+  production: SolverDailyProduction,
+  estimate: DailyProductionEstimate,
+  drone?: NonNullable<RotationJson["daily"]["drone_production"]>,
+): DailyProductionGroup[] {
+  const groups = solverGroups(production, drone);
+  const estimated = estimateGroups(estimate);
+  const originium = estimated.find((group) => group.id === "orundum");
+  if (!originium) return groups;
+  return groups.map((group) => group.id !== "orundum"
+    ? group
+    : {
+        ...originium,
+        source: "solver" as const,
+        primary: withSolverTotal(originium.primary, production.orundum),
+        ...(originium.supporting
+          ? { supporting: withSolverTotal(originium.supporting, production.originium_shards) }
+          : {}),
+      });
 }
 
 export function dailyProductionGroups(
@@ -161,7 +186,7 @@ export function dailyProductionGroups(
   solverProduction: SolverDailyProduction | null,
   droneProduction?: NonNullable<RotationJson["daily"]["drone_production"]>,
 ): DailyProductionGroup[] {
-  if (solverProduction && estimate) return solverGroupsWithEstimate(solverProduction, droneProduction);
+  if (solverProduction && estimate) return solverGroupsWithEstimate(solverProduction, estimate, droneProduction);
   if (solverProduction) return solverGroups(solverProduction, droneProduction);
   return estimate ? estimateGroups(estimate) : [];
 }

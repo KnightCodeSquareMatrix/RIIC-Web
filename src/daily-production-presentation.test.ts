@@ -68,7 +68,7 @@ test("solver totals stay authoritative while estimate rows split natural and dro
   assert.equal(groups[1].primary.amount.value, 45_254);
   assert.equal(groups[1].supporting?.amount.value, Math.floor((52_999 + 22_000) / 500));
   assert.equal(groups[2].primary.amount.value, 360);
-  assert.equal(groups[2].primary.note, undefined);
+  assert.equal(groups[2].primary.note, "限制环节：合成玉订单");
   assert.equal(groups[2].supporting?.amount.value, 48);
 });
 

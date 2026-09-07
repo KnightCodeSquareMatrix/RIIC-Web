@@ -58,11 +58,38 @@ const DETAIL_LABEL_KEYS = {
   "总价值": "totalValue",
   "盈余": "surplus",
   "亏损": "loss",
+  "碎片阶段可供": "estimatedShardStageCapacity",
+  "估算碎片阶段可供": "estimatedShardStageCapacity",
+  "订单阶段可交付": "estimatedOrderStageCapacity",
+  "估算订单阶段可交付": "estimatedOrderStageCapacity",
+} as const;
+
+const DETAIL_NOTE_KEYS = {
+  "限制环节：源石碎片制造": "orundumBottleneckManufacture",
+  "限制环节：合成玉订单": "orundumBottleneckTrade",
+  "限制环节：两段持平": "orundumBottleneckBalanced",
+  "限制环节：暂无搓玉产线": "orundumBottleneckNone",
+  "限制环节：产出数据不足": "orundumBottleneckUnavailable",
+} as const;
+
+const RELATION_KEYS = {
+  "订单原料": "orderMaterial",
+  "制造环节": "manufactureStage",
 } as const;
 
 function detailLabel(label: string, en: boolean): string {
   const key = DETAIL_LABEL_KEYS[label as keyof typeof DETAIL_LABEL_KEYS];
   return en && key ? localize_components_PlanResultSummary.text(en, key) : label;
+}
+
+function detailNote(note: string, en: boolean): string {
+  const key = DETAIL_NOTE_KEYS[note as keyof typeof DETAIL_NOTE_KEYS];
+  return en && key ? localize_components_PlanResultSummary.text(en, key) : note;
+}
+
+function productRelation(relation: string, en: boolean): string {
+  const key = RELATION_KEYS[relation as keyof typeof RELATION_KEYS];
+  return en && key ? localize_components_PlanResultSummary.text(en, key) : relation;
 }
 
 export function PlanResultSummary({
@@ -281,7 +308,7 @@ function ProductionDetailItem({ product, supporting = false, en }: { product: Pr
         <div className="min-w-0">
           <span className="flex min-w-0 items-center gap-2">
             <span className="truncate text-[11px] font-semibold text-muted-foreground">{productLabel(product, en)}</span>
-            {product.relation ? <span className="shrink-0 bg-background/80 px-1.5 py-0.5 text-[9px] text-muted-foreground">{product.relation}</span> : null}
+            {product.relation ? <span className="shrink-0 bg-background/80 px-1.5 py-0.5 text-[9px] text-muted-foreground">{productRelation(product.relation, en)}</span> : null}
           </span>
           <strong className={cn("font-technical mt-0.5 flex items-baseline gap-1 leading-none tabular-nums", supporting ? "text-lg" : "text-xl")}>
             <span>{dailyNumber(product.amount.value)}</span>
@@ -293,13 +320,13 @@ function ProductionDetailItem({ product, supporting = false, en }: { product: Pr
       <div className="min-w-0 text-xs">
         <dl className="grid grid-cols-2 gap-x-3 gap-y-1">
           {product.rows.map(([label, value, unit]) => (
-            <div key={label} className="flex min-w-0 justify-between gap-2">
-              <dt className="truncate text-muted-foreground">{detailLabel(label, en)}</dt>
+            <div key={label} className="flex min-w-0 items-start justify-between gap-2">
+              <dt className="min-w-0 flex-1 break-words leading-4 text-muted-foreground">{detailLabel(label, en)}</dt>
               <dd className="font-number shrink-0 font-semibold">{dailyNumber(value)}{value === null || !unit ? "" : ` ${productUnit(unit, en)}`}</dd>
             </div>
           ))}
         </dl>
-        {product.note ? <p className="mt-1.5 text-muted-foreground">{product.note}</p> : null}
+        {product.note ? <p className="mt-1.5 text-muted-foreground">{detailNote(product.note, en)}</p> : null}
       </div>
     </article>
   );
