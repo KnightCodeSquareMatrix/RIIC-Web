@@ -17,6 +17,7 @@ export function AdminUserManagement() {
   const locale = useLocale();
   const en = locale === "en";
   const [users, setUsers] = useState<AdminUserData[]>([]);
+  const [verifiedUsers, setVerifiedUsers] = useState<number | null>(null);
   const [canManageAdminRoles, setCanManageAdminRoles] = useState<boolean | null>(null);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -27,11 +28,13 @@ export function AdminUserManagement() {
 
   const load = useCallback(async (search: string) => {
     setLoading(true);
+    setVerifiedUsers(null);
     try {
       const response = await fetch(`/api/admin/users?q=${encodeURIComponent(search)}`, { cache: "no-store" });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error?.message ?? (intl("app_admin_users_users_client.couldNotLoadUsers")));
       setUsers(body.data.users);
+      setVerifiedUsers(body.data.summary.verifiedUsers);
       setCanManageAdminRoles(body.data.permissions.canManageAdminRoles);
     } finally {
       setLoading(false);
@@ -97,14 +100,21 @@ export function AdminUserManagement() {
 
   return (
     <section id="users" className="scroll-mt-24 overflow-hidden rounded-2xl border bg-card" data-admin-user-management>
-      <header className="border-b px-5 py-5 sm:px-6">
-        <div>
+      <header className="flex flex-col gap-5 border-b px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <div className="min-w-0">
           <h2 className="text-lg font-semibold tracking-tight">{intl("app_admin_users_users_client.userManagement")}</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             {intl("app_admin_users_users_client.searchSuspendInspectOrRevokeSessions")}
             {canManageAdminRoles === true ? (intl("app_admin_users_users_client.theBootstrapAdministratorCanAlsoChangeAdministratorRoles")) : canManageAdminRoles === false ? (intl("app_admin_users_users_client.administratorRolesCanBeChangedOnlyByTheBootstrap")) : ""}
           </p>
         </div>
+        <dl className="shrink-0 rounded-xl border bg-muted/30 px-5 py-3 sm:text-right" data-admin-verified-users aria-busy={loading}>
+          <dt className="text-sm text-muted-foreground">{intl("app_admin_users_users_client.verifiedUsers")}</dt>
+          <dd className="mt-1 font-number text-3xl font-semibold tabular-nums tracking-tight" aria-live="polite">
+            {verifiedUsers === null ? "—" : new Intl.NumberFormat(locale).format(verifiedUsers)}
+          </dd>
+          <dd className="mt-1 text-xs text-muted-foreground">{intl("app_admin_users_users_client.verifiedUsersScope")}</dd>
+        </dl>
       </header>
 
       <div className="grid gap-5 px-5 py-5 sm:px-6">

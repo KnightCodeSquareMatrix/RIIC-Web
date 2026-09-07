@@ -1254,6 +1254,7 @@ export interface AdminUserData {
 
 export interface AdminUsersData {
   users: AdminUserData[];
+  summary: { verifiedUsers: number };
   permissions: {
     canManageAdminRoles: boolean;
   };

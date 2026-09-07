@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, desc, eq, gt, ilike, or } from "drizzle-orm";
+import { and, count, desc, eq, gt, ilike, or } from "drizzle-orm";
 
 import type {
   AdminSessionsData,
@@ -137,6 +137,8 @@ export async function handleListAdminUsers(request: Request, route: AdminUserRou
       banReason: user.banReason,
       createdAt: user.createdAt,
     }).from(user).where(where).orderBy(desc(user.createdAt)).limit(100);
+    const [summary] = await getDatabase().select({ verifiedUsers: count() })
+      .from(user).where(eq(user.emailVerified, true));
     const bindingSummaries = await sklandBindingSummariesByUserIds(records.map((record) => record.id));
     const bootstrapAdminIds = configuredAdminIds();
     return successResponse<AdminUsersData>({
@@ -150,6 +152,7 @@ export async function handleListAdminUsers(request: Request, route: AdminUserRou
         }, bootstrapAdminIds);
       }),
       permissions: { canManageAdminRoles: actor.canManageAdminRoles },
+      summary,
     }, requestId);
   } catch (error) {
     return failureResponse(error, requestId, route, startedAt);
