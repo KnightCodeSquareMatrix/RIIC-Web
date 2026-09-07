@@ -259,12 +259,12 @@ test("manual scheduling configures independent shifts, moves conflicts and enabl
   await expect(fiammettaPicker.getByRole("group", { name: "星级" })).toBeVisible();
   await expect(fiammettaPicker.getByRole("button", { name: "上一页" })).toBeDisabled();
   await expect(fiammettaPicker.getByRole("button", { name: "下一页" })).toBeDisabled();
-  await expect(fiammettaPicker.locator("[data-manual-operator-placeholder]")).toHaveCount(15);
+  await expect(fiammettaPicker.locator("[data-manual-operator-placeholder]")).toHaveCount(21);
   const pickerSearch = fiammettaPicker.getByLabel("搜索可选干员或基建技能");
   await pickerSearch.fill("锡兰");
   await fiammettaPicker.getByRole("button", { name: /锡兰/ }).hover();
   await expect(page.locator('[data-slot="tooltip-content"][data-open]')).toBeVisible({ timeout: 1_000 });
-  await fiammettaPicker.locator("[data-manual-operator-picker]").evaluate((element) => {
+  await fiammettaPicker.locator('[data-slot="scroll-area-viewport"]').evaluate((element) => {
     element.dispatchEvent(new Event("scroll"));
   });
   await expect(page.locator('[data-slot="tooltip-content"][data-open]')).toHaveCount(0);

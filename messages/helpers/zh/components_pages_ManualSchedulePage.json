@@ -23,7 +23,7 @@
   "onlyOwnedOperatorsInTheCurrentBoxAreShown": "这里只显示当前 Box 中已拥有的干员。",
   "searchOperators": "搜索干员",
   "searchSelectableOperators": "搜索可选干员",
-  "leaveEmpty": "保持空置",
+  "clearSlot": "清空",
   "autoFill": "自动补位",
   "noMatchingOperators": "没有匹配的干员。",
   "scheduleFileTooLarge": "排版文件不能超过 5 MB。",

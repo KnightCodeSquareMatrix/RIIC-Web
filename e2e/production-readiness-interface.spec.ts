@@ -62,6 +62,45 @@ test("an empty generated profile explains that no training action is needed", as
   await expect(page.getByText("先导入干员数据、确认基建布局并生成一次排班。")).toHaveCount(0);
 });
 
+for (const format of ["report", "legacy"] as const) {
+  test(`training owned filter uses Box ownership and restores all ${format} recommendations`, async ({ page }) => {
+    const operators = ["阿米娅", "清流", "凯尔希"];
+    const result = {
+      ...planData,
+      profile: { ...profile, actions: operators.map((operator) => ({
+        priority: "高", kind: "promote", operator, domain_id: "manufacture", message: "培养建议", current_elite: 0,
+      })) },
+      ...(format === "report" ? { trainingAdvice: {
+        schema_version: 2, context: {}, newbie_section_status: "complete", incomplete_newbie: [], combinations: [],
+        recommendations: operators.map((operator) => ({
+          action: "train", operator, priority: "high_efficiency_standalone", priority_rank: 1, reason: "standalone",
+          current: { elite: 0, level: 1 }, target: { kind: "explicit", elite: 1, level: 30 },
+        })),
+      } } : {}),
+    };
+    await mockApis(page);
+    await seedV4Session(page, result, { operbox: [
+      ...sampleData,
+      { id: "char_385_finlpp", name: "清流", elite: 0, level: 1, rarity: 4, own: false, potential: 1 },
+    ] });
+    await page.goto("/training");
+    const cards = page.locator('[data-training-advice-list] [data-slot="training-advice-card"]');
+    const filter = page.getByRole("button", { name: "只看已拥有", exact: true });
+    await expect(cards).toHaveCount(3);
+    await expect(filter).toHaveAttribute("aria-pressed", "false");
+    await filter.click();
+    await expect(filter).toHaveAttribute("aria-pressed", "true");
+    await expect(cards).toHaveCount(1);
+    await expect(cards.first()).toContainText("阿米娅");
+    await filter.click();
+    await expect(cards).toHaveCount(3);
+    await page.setViewportSize({ width: 375, height: 812 });
+    await expect(filter).toBeVisible();
+    await filter.click();
+    await expect(cards).toHaveCount(1);
+  });
+}
+
 test("setup keeps Box parse errors local and actionable", async ({ page }) => {
   await mockApis(page, {
     sklandConfigured: true,

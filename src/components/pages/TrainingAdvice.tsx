@@ -16,6 +16,7 @@ import {
   sortTrainingRecommendations,
 } from "@/components/training-advice/presentation";
 import { Button } from "@/components/ui/button";
+import { OwnedOperatorFilter } from "@/components/operators/OwnedOperatorFilter";
 import type {
   BaseBlueprint,
   OperBoxEntry,
@@ -98,6 +99,7 @@ function CollapsibleSection({
   count,
   collapsed,
   onToggle,
+  filter,
   children,
 }: {
   accent: string;
@@ -105,6 +107,7 @@ function CollapsibleSection({
   count: number;
   collapsed: boolean;
   onToggle: () => void;
+  filter?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -128,6 +131,7 @@ function CollapsibleSection({
             <ChevronDown className="size-4" />
           </motion.span>
         </button>
+        {filter}
       </div>
       <div className={cn("grid min-w-0 gap-3", collapsed && "hidden")}>{children}</div>
     </section>
@@ -146,20 +150,27 @@ export function TrainingAdvice({
   const locale = useLocale();
   const en = locale === "en";
   const shouldReduceMotion = useReducedMotion();
+  const [onlyOwned, setOnlyOwned] = useState(false);
   const entries = operbox ?? [];
   const ownedByName = new Map(entries.map((entry) => [entry.name, entry]));
   const roomCounts = countRooms(layout);
   const issues = contractIssues(layout, operbox, en);
-  const actions = profile?.actions ?? [];
+  const actions = (profile?.actions ?? []).filter((action) => !onlyOwned || ownedByName.get(action.operator)?.own === true);
   const ownedTotal = entries.filter((entry) => entry.own).length;
   const eliteTotal = entries.filter((entry) => entry.own && entry.elite >= 2).length;
   const advice = trainingAdvice ?? null;
-  const recommendations = advice ? sortTrainingRecommendations(advice.recommendations) : [];
+  const recommendations = advice ? sortTrainingRecommendations(advice.recommendations).filter((recommendation) => !onlyOwned || ownedByName.get(recommendation.operator)?.own === true) : [];
   const combinations = advice ? sortTrainingCombinations(advice.combinations) : [];
   const context = advice?.context;
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const toggleSection = (id: string) =>
     setCollapsedSections((current) => ({ ...current, [id]: !current[id] }));
+  const ownedFilter = <OwnedOperatorFilter value={onlyOwned} onChange={setOnlyOwned} />;
+  const ownedEmpty = (
+    <InfraTechnicalCard group="training" dataSlot="training-owned-empty" showEmblem={false}>
+      <p className="py-6 text-center text-sm text-white/76">{localize_components_pages_TrainingAdvice.text(en, "noOwnedRecommendations")}</p>
+    </InfraTechnicalCard>
+  );
 
   if (requiresAccount) {
     return (
@@ -313,6 +324,7 @@ export function TrainingAdvice({
             count={recommendations.length}
             collapsed={Boolean(collapsedSections.actions)}
             onToggle={() => toggleSection("actions")}
+            filter={ownedFilter}
           >
             {recommendations.length ? (
               <div className="grid min-w-0 gap-3" data-training-advice-list>
@@ -325,7 +337,7 @@ export function TrainingAdvice({
                   />
                 ))}
               </div>
-            ) : (
+            ) : onlyOwned ? ownedEmpty : (
               <InfraTechnicalCard group="training" className="min-h-[248px]" dataSlot="training-empty" showEmblem={false}>
                 <div className="grid min-h-[216px] place-content-center text-center">
                   <h3 className="text-xl font-semibold">{intl("components_pages_TrainingAdvice.noPriorityTrainingTargets")}</h3>
@@ -358,6 +370,7 @@ export function TrainingAdvice({
           count={actions.length}
           collapsed={Boolean(collapsedSections["legacy-actions"])}
           onToggle={() => toggleSection("legacy-actions")}
+          filter={ownedFilter}
         >
           {actions.length ? (
             <div className="grid min-w-0 gap-3" data-training-advice-list>
@@ -367,7 +380,7 @@ export function TrainingAdvice({
                 ))}
               </Suspense>
             </div>
-          ) : (
+          ) : onlyOwned ? ownedEmpty : (
             <InfraTechnicalCard
               group="training"
               className="min-h-[248px]"

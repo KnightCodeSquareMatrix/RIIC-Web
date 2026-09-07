@@ -23,7 +23,7 @@
   "onlyOwnedOperatorsInTheCurrentBoxAreShown": "Only owned operators in the current Box are shown.",
   "searchOperators": "Search operators",
   "searchSelectableOperators": "Search selectable operators",
-  "leaveEmpty": "Leave empty",
+  "clearSlot": "Clear",
   "autoFill": "Auto-fill",
   "noMatchingOperators": "No matching operators.",
   "scheduleFileTooLarge": "The schedule file must be 5 MB or smaller.",

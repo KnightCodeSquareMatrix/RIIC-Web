@@ -30,6 +30,7 @@ import {
   type ManualOperboxStage,
 } from "@/manual-operbox";
 import { OperatorIdentity, OperatorSearch, OperatorRarityFilter, OperatorProfessionFilter, OperatorRosterGrid, OPERATOR_PAGE_SIZE } from "@/components/operators/OperatorPickerParts";
+import { OwnedOperatorFilter } from "@/components/operators/OwnedOperatorFilter";
 import type { OperBoxEntry } from "@/types";
 
 const PAGE_SIZE = OPERATOR_PAGE_SIZE;
@@ -427,18 +428,13 @@ export function ManualOperboxPicker({
       <div className={cn("grid gap-2", compact ? "lg:grid-cols-[minmax(14rem,1fr)_auto]" : "sm:grid-cols-[minmax(0,1fr)_auto]")}>
         <OperatorSearch value={query} compact={compact} onChange={(value) => { setQuery(value); resetListView(); }} />
         <div className={cn("flex flex-nowrap items-center", compact ? "gap-1.5" : "gap-2")} data-manual-operbox-actions>
-          <SetupActionButton
-            type="button"
-            variant={onlyOwned ? "default" : "outline"}
-            className="min-w-[92px] px-2 text-[11px] font-normal max-sm:min-w-[92px] sm:min-w-[104px] sm:px-2 sm:text-xs"
-            aria-pressed={onlyOwned}
-            onClick={() => {
-              setOnlyOwned((current) => !current);
+          <OwnedOperatorFilter
+            value={onlyOwned}
+            onChange={(value) => {
+              setOnlyOwned(value);
               resetListView();
             }}
-          >
-            {intl("components_setup_ManualOperboxPicker.ownedOnly")}
-          </SetupActionButton>
+          />
           <SetupActionButton
             type="button"
             variant={allMaximumStages ? "default" : "outline"}
