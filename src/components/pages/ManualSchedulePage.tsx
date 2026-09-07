@@ -2,7 +2,7 @@
 import { useTranslations, useLocale } from "next-intl";
 
 import { ArrowLeft, Download, Search, Settings2, Sparkles, Trash2, Upload } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 
 import type { FactoryRecipe, TradeOrder } from "@/blueprint";
 import { filterOperators, ROOM_SKILL_TAGS, type BuildingRoomPrefix } from "@/building-rooms";
@@ -25,7 +25,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { downloadJson } from "@/download";
 import { localizedOperatorName, localizedRoomTitle } from "@/i18n/game-data";
@@ -57,6 +56,7 @@ import { addOperatorPresentations } from "@/schedule-presentation";
 import { planToRows, type RoomRow } from "@/schedule";
 import type { BaseBlueprint, MaaJson, MaaOperatorSlot, MaaRoom, OperBoxEntry } from "@/types";
 
+const ScrollArea = lazy(() => import("@/components/ui/scroll-area").then((module) => ({ default: module.ScrollArea })));
 const MANUAL_PICKER_PAGE_SIZE = 24;
 const ROOM_GROUP_TO_SKILL_PREFIX: Readonly<Record<RoomRow["group"], BuildingRoomPrefix>> = {
   control: "control",
@@ -685,6 +685,7 @@ export function ManualSchedulePage({
             <DialogTitle>{picker?.kind === "fiammetta" ? (intl("components_pages_ManualSchedulePage.fiammettaMoraleTarget")) : (intl("components_pages_ManualSchedulePage.assign", { value1: (en) ? (selectedRoom?.title ?? "room") : "", value2: (en) ? "" : (selectedRoom?.title ?? "设施") }))}</DialogTitle>
             <DialogDescription>{picker?.kind === "fiammetta" ? (intl("components_pages_ManualSchedulePage.thisTargetIsStoredOnlyForTheActiveShift")) : (intl("components_pages_ManualSchedulePage.onlyOwnedOperatorsInTheCurrentBoxAreShown"))}</DialogDescription>
           </DialogHeader>
+          <Suspense fallback={<div className="min-h-64" aria-busy="true" />}>
           <ScrollArea className="min-h-0" viewportClassName="overflow-x-hidden" viewportProps={{ ref: pickerScrollContainerRef, onScroll: handlePickerScroll }}>
           <DialogBody className="block pt-0 pb-5 sm:pb-6" data-manual-operator-picker>
             {picker?.kind === "slot" ? (
@@ -764,6 +765,7 @@ export function ManualSchedulePage({
             </div>
           </DialogBody>
           </ScrollArea>
+          </Suspense>
         </DialogContent>
       </Dialog>
 
