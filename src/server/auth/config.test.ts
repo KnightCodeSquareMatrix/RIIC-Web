@@ -22,7 +22,7 @@ test("administrator ids are explicit, trimmed Better Auth user ids", () => {
   assert.equal(configuredAdminIds("").size, 0);
 });
 
-test("bootstrap administrators can delegate without creating an administrator chain", () => {
+test("all administrators can assign roles while bootstrap administrators remain protected", () => {
   const bootstrapIds = new Set(["bootstrap"]);
   const bootstrap = websiteAdminAccess("bootstrap", "user", bootstrapIds);
   const delegated = websiteAdminAccess("delegated", "admin", bootstrapIds);
@@ -37,10 +37,14 @@ test("bootstrap administrators can delegate without creating an administrator ch
     canManageAdminRoles: true,
   });
   assert.equal(delegated.isAdmin, true);
-  assert.equal(delegated.canManageAdminRoles, false);
+  assert.equal(delegated.canManageAdminRoles, true);
   assert.equal(regular.isAdmin, false);
   assert.equal(canChangeWebsiteAdminRole(bootstrap, delegated), true);
-  assert.equal(canChangeWebsiteAdminRole(delegated, regular), false);
+  assert.equal(canChangeWebsiteAdminRole(delegated, regular), true);
+  assert.equal(canChangeWebsiteAdminRole(delegated, websiteAdminAccess("peer", "admin", bootstrapIds)), true);
+  assert.equal(canChangeWebsiteAdminRole(delegated, bootstrap), false);
+  assert.equal(regular.canManageAdminRoles, false);
+  assert.equal(canChangeWebsiteAdminRole(regular, delegated), false);
   assert.equal(canChangeWebsiteAdminRole(bootstrap, bootstrap), false);
   assert.equal(canModerateWebsiteUser(delegated, bootstrap), false);
   assert.equal(canModerateWebsiteUser(bootstrap, bootstrap), true);

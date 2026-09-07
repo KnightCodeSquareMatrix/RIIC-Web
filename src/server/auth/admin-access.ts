@@ -27,7 +27,7 @@ export function websiteAdminAccess(
     isReviewer,
     canAccessReview: isAdmin || isReviewer,
     isBootstrapAdmin,
-    canManageAdminRoles: isBootstrapAdmin,
+    canManageAdminRoles: isAdmin,
   };
 }
 
