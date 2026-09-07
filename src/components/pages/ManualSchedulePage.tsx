@@ -2,7 +2,7 @@
 import { localize as localize_components_pages_ManualSchedulePage } from "../../i18n/helpers/components_pages_ManualSchedulePage.ts";
 import { useTranslations, useLocale } from "next-intl";
 
-import { ArrowLeft, Download, Search, Settings2, Sparkles, Upload, X } from "lucide-react";
+import { ArrowLeft, Download, Search, Settings2, Sparkles, Trash2, Upload, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 
 import type { FactoryRecipe, TradeOrder } from "@/blueprint";
@@ -25,6 +25,8 @@ import { localizedOperatorName } from "@/i18n/game-data";
 import { useGameCatalog } from "@/i18n/game-data-client";
 import {
   assignManualOperator,
+  clearManualRoom,
+  clearManualShift,
   createManualScheduleDraft,
   createManualScheduleDraftFromCalculator,
   formatManualShiftDuration,
@@ -38,6 +40,7 @@ import {
   reconcileManualScheduleDraft,
   resizeManualScheduleDraft,
   setManualDormAutofill,
+  setManualDroneTarget,
   type ManualOperatorConflict,
   type ManualScheduleDraft,
   type ManualScheduleMode,
@@ -186,6 +189,7 @@ export function ManualSchedulePage({
   const [maaImportPreview, setMaaImportPreview] = useState<MaaImportPreview | null>(null);
   const [maaImportError, setMaaImportError] = useState<string | null>(null);
   const [pendingMove, setPendingMove] = useState<PendingMove | null>(null);
+  const [clearShiftConfirmationOpen, setClearShiftConfirmationOpen] = useState(false);
   const [storageWarning, setStorageWarning] = useState<string | null>(null);
   const [scheduleQuery, setScheduleQuery] = useState("");
   const [pickerScrolling, setPickerScrolling] = useState(false);
@@ -350,16 +354,34 @@ export function ManualSchedulePage({
     setPendingMove(null);
   }
 
-  function enableDormAutofill() {
-    if (!picker || picker.kind !== "slot" || selectedRoom?.group !== "dormitory") return;
+  function clearRoom(row: RoomRow) {
+    setDraft((current) => clearManualRoom(current, layout, activeShift, row.roomId));
+    if (picker?.kind === "slot" && picker.roomId === row.roomId) setPicker(null);
+  }
+
+  function clearCurrentShift() {
+    setDraft((current) => clearManualShift(current, layout, activeShift));
+    setPicker(null);
+    setClearShiftConfirmationOpen(false);
+  }
+
+  function setDormAutofill(row: RoomRow, enabled: boolean) {
     setDraft((current) => setManualDormAutofill(
       current,
       layout,
       activeShift,
-      picker.roomId,
-      true,
+      row.roomId,
+      enabled,
     ));
-    setPicker(null);
+  }
+
+  function toggleDroneTarget(row: RoomRow) {
+    setDraft((current) => setManualDroneTarget(
+      current,
+      layout,
+      activeShift,
+      current.shifts[activeShift]?.droneTargetRoomId === row.roomId ? null : row.roomId,
+    ));
   }
 
   function exportMaa() {
@@ -489,6 +511,11 @@ export function ManualSchedulePage({
         activeShift={activeShift}
         activePlan={activePlan}
         searchQuery={scheduleQuery}
+        viewModeActionSlot={(
+          <Button type="button" variant="outline" size="sm" onClick={() => setClearShiftConfirmationOpen(true)}>
+            <Trash2 />{intl("components_pages_ManualSchedulePage.clearEveryFacilityInShift")}
+          </Button>
+        )}
         shiftInfoSlot={(
           <div className="flex flex-wrap items-center justify-end gap-2 max-sm:w-full max-sm:justify-between" data-shift-actions data-manual-shift-actions>
             {fiammettaEnabled ? (
@@ -524,9 +551,28 @@ export function ManualSchedulePage({
           </div>
         )}
         onSlotClick={openSlotPicker}
+        onClearRoom={clearRoom}
+        onDormAutofillChange={setDormAutofill}
+        droneTargetRoomId={draft.shifts[activeShift]?.droneTargetRoomId}
+        onDroneTargetChange={toggleDroneTarget}
         onFactoryRecipeChange={onFactoryRecipeChange}
         onTradeOrderChange={onTradeOrderChange}
       />
+
+      <Dialog open={clearShiftConfirmationOpen} onOpenChange={setClearShiftConfirmationOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{intl("components_pages_ManualSchedulePage.clearEveryFacilityQuestion")}</DialogTitle>
+            <DialogDescription>
+              {intl("components_pages_ManualSchedulePage.clearShiftDescription", { shift: activeShift + 1 })}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setClearShiftConfirmationOpen(false)}>{intl("components_pages_ManualSchedulePage.cancel")}</Button>
+            <Button type="button" variant="destructive" onClick={clearCurrentShift}><Trash2 />{intl("components_pages_ManualSchedulePage.clearCurrentShift")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={Boolean(picker)} onOpenChange={(open) => { if (!open) setPicker(null); }}>
         <DialogContent className="max-h-[min(720px,calc(100svh-2rem))] max-w-[min(760px,calc(100vw-2rem))] overflow-hidden">
@@ -541,11 +587,8 @@ export function ManualSchedulePage({
           <div className="grid max-h-[52svh] grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2" data-manual-operator-picker onScroll={handlePickerScroll}>
             <TooltipProvider delay={300} timeout={100}>
               {picker?.kind === "slot" ? (
-                <div className="col-span-full grid grid-cols-2 gap-2">
+                <div className="col-span-full">
                   <Button type="button" variant="outline" className="min-w-0 justify-center" onClick={() => chooseOperator(null)}><X />{intl("components_pages_ManualSchedulePage.leaveEmpty")}</Button>
-                  {selectedRoom?.group === "dormitory" ? (
-                    <Button type="button" variant={selectedAssignment?.autofill ? "default" : "outline"} className="min-w-0 justify-center" onClick={enableDormAutofill}><Sparkles />{intl("components_pages_ManualSchedulePage.autoFill")}</Button>
-                  ) : <span aria-hidden="true" />}
                 </div>
               ) : null}
               {visibleOperators.map((operator) => (
