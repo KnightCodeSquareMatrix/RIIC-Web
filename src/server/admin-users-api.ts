@@ -76,7 +76,7 @@ async function applyAdminUserMutation(request: Request, userId: string, mutation
       throw new PublicApiError("AIC-AUTH-2009", {
         message: targetAccess.isBootstrapAdmin
           ? "初始管理员权限只能通过服务器环境变量调整。"
-          : "只有初始管理员可以调整后台角色。",
+          : "只有管理员可以调整后台角色。",
       });
     }
     if (mutation.enabled && !isEligibleForWebsiteAdmin(targetRecord.emailVerified, targetRecord.banned)) {
