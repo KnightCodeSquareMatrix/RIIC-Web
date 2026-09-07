@@ -30,7 +30,8 @@ import {
 import { DEFAULT_MANUAL_SHIFT_START_TIME } from "@/manual-schedule-config";
 
 import type { FactoryRecipe, PowerBudget, TradeOrder } from "./blueprint";
-import { FileDrop, LayoutEditor, PresetSelector } from "./components";
+import { FileDrop } from "@/components/setup/FileDrop";
+import { LayoutEditor, PresetSelector } from "./components";
 import { countOwned } from "./operbox";
 import type { SetupStep } from "./onboarding";
 import type { BaseBlueprint, BoxSource, DisplayError, OperBoxEntry, PresetDef, RotationProfile, SklandScheduleSnapshot } from "./types";

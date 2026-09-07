@@ -1,7 +1,6 @@
 import { localize as rotationText } from "./i18n/helpers/RotationLabels.ts";
 import { localize as localize_components } from "./i18n/helpers/components.ts";
 import { useTranslations, useLocale } from "next-intl";
-import { messageRecord } from "@/i18n/translate";
 import {
   AlertTriangle,
   Check,
@@ -14,13 +13,9 @@ import {
   RotateCcw,
   Save,
   Smile,
-  Sparkles,
-  Trash2,
-  Upload,
-  Zap,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { CSSProperties, ChangeEvent, DragEvent, lazy, ReactElement, ReactNode, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { CSSProperties, lazy, ReactElement, ReactNode, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { AnimatedNumber, AnimatedText } from "@/components/AnimatedText";
 import { Accordion, AccordionItem, AccordionPanel, AccordionTrigger } from "@/components/ui/accordion";
@@ -325,78 +320,6 @@ export function Panel({
       </header>
       <div>{children}</div>
     </section>
-  );
-}
-
-export function FileDrop({
-  fileName,
-  onFile,
-}: {
-  fileName: string | null;
-  onFile: (file: File) => void;
-}) {
-  const intl = useTranslations();
-  const locale = useLocale();
-  const en = locale === "en";
-  const [dragActive, setDragActive] = useState(false);
-
-  function importFirstFile(files: FileList | null) {
-    const file = files?.[0];
-    if (file) onFile(file);
-  }
-
-  function handleChange(event: ChangeEvent<HTMLInputElement>) {
-    importFirstFile(event.target.files);
-    event.currentTarget.value = "";
-  }
-
-  function handleDragEnter(event: DragEvent<HTMLLabelElement>) {
-    event.preventDefault();
-    if (event.dataTransfer.types.includes("Files")) setDragActive(true);
-  }
-
-  function handleDragLeave(event: DragEvent<HTMLLabelElement>) {
-    if (event.currentTarget.contains(event.relatedTarget as Node)) return;
-    setDragActive(false);
-  }
-
-  function handleDrop(event: DragEvent<HTMLLabelElement>) {
-    event.preventDefault();
-    setDragActive(false);
-    importFirstFile(event.dataTransfer.files);
-  }
-
-  return (
-    <Label
-      pressable
-      className={cn(
-        "flex min-h-32 cursor-pointer flex-col items-center justify-center gap-2 rounded-[4px] border border-dashed bg-background px-4 py-5 text-center transition-[color,background-color,border-color] duration-[var(--motion-duration-state)] ease-[var(--motion-ease-out)] hover:border-primary/40 hover:bg-muted/40",
-        dragActive && "border-primary bg-primary/10 text-primary ring-2 ring-primary/25 ring-offset-2",
-      )}
-      aria-label={intl("components.dropOrSelectAnOperatorDataFile")}
-      data-slot="file-drop"
-      data-dragging={dragActive || undefined}
-      onDragEnter={handleDragEnter}
-      onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; }}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-    >
-      <Upload className="size-5 text-primary" />
-      <span className="font-medium text-foreground">
-        {dragActive ? (intl("components.dropToImport")) : fileName ?? (intl("components.uploadRosterJsonXlsx"))}
-      </span>
-      <span className="flex flex-wrap items-center justify-center gap-1.5 text-xs" role="list" aria-label={intl("components.supportedMaaJsonLanguages")}>
-        {(messageRecord(en, "components_labels")).map((language) => (
-          <span key={language} role="listitem" className="rounded-full border border-border bg-muted/70 px-2 py-0.5 font-medium text-foreground">
-            {language}
-          </span>
-        ))}
-      </span>
-      <span className="text-xs leading-relaxed text-muted-foreground">
-        {intl("components.dropAFileOrChooseOneNamesAreConverted")}
-      </span>
-      <input className="sr-only" type="file" accept=".json,.xlsx,.xls" onChange={handleChange} />
-    </Label>
   );
 }
 
@@ -1622,6 +1545,7 @@ export function ScheduleBoard({
   onDormAutofillChange,
   droneTargetRoomId,
   onDroneTargetChange,
+  renderListRoomActions,
 }: {
   rows: RoomRow[];
   layout: BaseBlueprint;
@@ -1649,6 +1573,7 @@ export function ScheduleBoard({
   onDormAutofillChange?: (row: RoomRow, enabled: boolean) => void;
   droneTargetRoomId?: string | null;
   onDroneTargetChange?: (row: RoomRow) => void;
+  renderListRoomActions?: (row: RoomRow, position: "header" | "clear") => ReactNode;
 }) {
   const intl = useTranslations();
   const locale = useLocale();
@@ -1977,50 +1902,7 @@ export function ScheduleBoard({
                                 {localizedRoomTitle(row.title, row.group, locale, gameCatalog)}
                               </div>
                               <LevelDiamonds level={row.level} maxLevel={layoutRoom ? maxRoomLevel(layoutRoom.kind) : row.level} />
-                              {row.group === "dormitory" && onDormAutofillChange ? (
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  aria-pressed={row.autofill}
-                                  aria-label={`${localizedRoomTitle(row.title, row.group, locale, gameCatalog)}${intl("components.label")}${intl("components.autoFill")}`}
-                                  className={cn(
-                                    "ml-1 h-7 border px-2 text-xs text-white hover:text-white",
-                                    row.autofill ? "border-[#FFD800]/70 bg-[#FFD800]/18" : "border-white/15 bg-[#3C3C3C]/55",
-                                  )}
-                                  onClick={() => onDormAutofillChange(row, !row.autofill)}
-                                >
-                                  <Sparkles className="size-3.5" />{intl("components.autoFill")}
-                                </Button>
-                              ) : null}
-                              {(row.group === "trading" || row.group === "manufacture") && onDroneTargetChange ? (
-                                <Tooltip>
-                                  <TooltipTrigger
-                                    render={
-                                      <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="sm"
-                                        aria-pressed={droneTargetRoomId === row.roomId}
-                                        aria-label={intl("components_CompactScheduleView.droneAcceleration", { roomTitle: localizedRoomTitle(row.title, row.group, locale, gameCatalog) })}
-                                        className={cn(
-                                          "ml-auto h-7 border px-2 text-xs text-white hover:text-white",
-                                          droneTargetRoomId === row.roomId ? "border-[#FFD800]/70 bg-[#FFD800]/18" : "border-white/15 bg-[#3C3C3C]/55",
-                                        )}
-                                        onClick={() => onDroneTargetChange(row)}
-                                      >
-                                        <Zap className="size-3.5" aria-hidden="true" />
-                                        <span className="sm:hidden">{intl("components_CompactScheduleView.drones")}</span>
-                                      </Button>
-                                    }
-                                  />
-                                  <TooltipContent side="left">
-                                    {droneTargetRoomId === row.roomId
-                                      ? intl("components_CompactScheduleView.disableDroneAcceleration")
-                                      : intl("components_CompactScheduleView.useDronesForShift")}
-                                  </TooltipContent>
-                                </Tooltip>
-                              ) : null}
+                              {renderListRoomActions?.(row, "header")}
                             </div>
                           </div>
                           {efficiency ? (
@@ -2090,25 +1972,7 @@ export function ScheduleBoard({
                       )}
                     </div>
 
-                    {onClearRoom ? <Tooltip>
-                      <TooltipTrigger
-                        render={
-                          <span className="absolute right-2 top-2 z-20">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 border border-white/10 bg-[#3C3C3C]/55 px-2 text-xs text-white/70 hover:bg-[#4B4B4B] hover:text-white max-sm:h-11"
-                              aria-label={intl("components_CompactScheduleView.clearRoom", { roomTitle: localizedRoomTitle(row.title, row.group, locale, gameCatalog) })}
-                              onClick={() => onClearRoom(row)}
-                            >
-                              <Trash2 className="size-3.5" /><span className="sm:hidden">{intl("components_CompactScheduleView.clear")}</span>
-                            </Button>
-                          </span>
-                        }
-                      />
-                      <TooltipContent side="left">{intl("components_CompactScheduleView.clearThisFacility")}</TooltipContent>
-                    </Tooltip> : null}
+                    {renderListRoomActions?.(row, "clear")}
 
                     {onIssue ? <Tooltip>
                       <TooltipTrigger

@@ -9,6 +9,7 @@ import { filterOperators, ROOM_SKILL_TAGS, type BuildingRoomPrefix } from "@/bui
 import { OperatorSlot, ScheduleBoard, ShiftTabs } from "@/components";
 import { FiammettaTargetChip } from "@/components/FiammettaTargetChip";
 import { OperatorRarityFilter, OperatorSearch } from "@/components/operators/OperatorPickerParts";
+import { ManualScheduleRoomActions } from "@/components/ManualScheduleRoomActions";
 import { Pagination } from "@/components/skill-query/Pagination";
 import { SkillRoomTagBar } from "@/components/skill-query/SkillRoomTagBar";
 import { SkillTagBar } from "@/components/skill-query/SkillTagBar";
@@ -641,6 +642,17 @@ export function ManualSchedulePage({
           </div>
         )}
         onSlotClick={openSlotPicker}
+        renderListRoomActions={(row, position) => (
+          <ManualScheduleRoomActions
+            row={row}
+            position={position}
+            roomTitle={localizedRoomTitle(row.title, row.group, locale, gameCatalog)}
+            onClearRoom={clearRoom}
+            onDormAutofillChange={setDormAutofill}
+            droneTargetRoomId={draft.shifts[activeShift]?.droneTargetRoomId}
+            onDroneTargetChange={toggleDroneTarget}
+          />
+        )}
         onClearRoom={clearRoom}
         onDormAutofillChange={setDormAutofill}
         droneTargetRoomId={draft.shifts[activeShift]?.droneTargetRoomId}
