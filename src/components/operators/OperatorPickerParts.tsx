@@ -45,8 +45,8 @@ export function OperatorSearch({ value, onChange, compact = false, autoFocus = f
   const intl = useTranslations();
 
   const defaultLabel = intl("components_operators_OperatorPickerParts.searchOperator");
-  return <label className="relative min-w-0">
-    <Search className={cn("pointer-events-none absolute left-3 size-4 text-muted-foreground", compact ? "top-2.5 max-sm:top-3.5" : "top-3.5")} aria-hidden="true" />
+  return <label className="relative block min-w-0">
+    <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
     <Input autoFocus={autoFocus} value={value} onChange={(event) => onChange(event.target.value)} className={cn("pl-9", compact ? "h-9 max-sm:h-11" : "h-11")} placeholder={placeholder ?? label ?? defaultLabel} aria-label={label ?? defaultLabel} />
   </label>;
 }

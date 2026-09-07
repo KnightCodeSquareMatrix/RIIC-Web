@@ -1,8 +1,8 @@
 "use client";
 import { useTranslations, useLocale } from "next-intl";
 
-import { ArrowLeft, Download, Search, Settings2, Sparkles, Trash2, Upload, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeft, Download, Search, Settings2, Sparkles, Trash2, Upload } from "lucide-react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 
 import type { FactoryRecipe, TradeOrder } from "@/blueprint";
 import { filterOperators, ROOM_SKILL_TAGS, type BuildingRoomPrefix } from "@/building-rooms";
@@ -11,11 +11,13 @@ import { FiammettaTargetChip } from "@/components/FiammettaTargetChip";
 import { OperatorRarityFilter, OperatorSearch } from "@/components/operators/OperatorPickerParts";
 import { ManualScheduleRoomActions } from "@/components/ManualScheduleRoomActions";
 import { Pagination } from "@/components/skill-query/Pagination";
+import { SkillFilterRow } from "@/components/skill-query/SkillFilterRow";
 import { SkillRoomTagBar } from "@/components/skill-query/SkillRoomTagBar";
 import { SkillTagBar } from "@/components/skill-query/SkillTagBar";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -54,7 +56,8 @@ import { addOperatorPresentations } from "@/schedule-presentation";
 import { planToRows, type RoomRow } from "@/schedule";
 import type { BaseBlueprint, MaaJson, MaaOperatorSlot, MaaRoom, OperBoxEntry } from "@/types";
 
-const MANUAL_PICKER_PAGE_SIZE = 18;
+const ScrollArea = lazy(() => import("@/components/ui/scroll-area").then((module) => ({ default: module.ScrollArea })));
+const MANUAL_PICKER_PAGE_SIZE = 24;
 const ROOM_GROUP_TO_SKILL_PREFIX: Readonly<Record<RoomRow["group"], BuildingRoomPrefix>> = {
   control: "control",
   power: "power",
@@ -151,7 +154,7 @@ function ManualOperatorChoice({
   const presentation = operatorPresentationFor({ name: operator.name, id: operator.id });
   return (
     <div
-      className="flex min-h-[calc(clamp(70px,7.3vw,80px)+2.5rem)] flex-col items-center justify-start rounded-[4px] border border-transparent p-2 transition-colors hover:border-border hover:bg-muted/45 max-sm:min-h-[calc(clamp(56px,16vw,76px)+2.5rem)]"
+      className="flex min-h-[calc(var(--manual-picker-portrait-size)+2.5rem)] flex-col items-center justify-start rounded-[4px] py-1 transition-colors hover:bg-muted/45 [&_.infra-operator-slot]:[--operator-slot-size:var(--manual-picker-portrait-size)]"
       data-manual-operator-choice
       data-current-selection={selected ? "" : undefined}
     >
@@ -682,31 +685,37 @@ export function ManualSchedulePage({
             <DialogTitle>{picker?.kind === "fiammetta" ? (intl("components_pages_ManualSchedulePage.fiammettaMoraleTarget")) : (intl("components_pages_ManualSchedulePage.assign", { value1: (en) ? (selectedRoom?.title ?? "room") : "", value2: (en) ? "" : (selectedRoom?.title ?? "设施") }))}</DialogTitle>
             <DialogDescription>{picker?.kind === "fiammetta" ? (intl("components_pages_ManualSchedulePage.thisTargetIsStoredOnlyForTheActiveShift")) : (intl("components_pages_ManualSchedulePage.onlyOwnedOperatorsInTheCurrentBoxAreShown"))}</DialogDescription>
           </DialogHeader>
-          <div ref={pickerScrollContainerRef} className="min-h-0 overflow-y-auto px-5 pb-5 sm:px-7 sm:pb-6" data-manual-operator-picker onScroll={handlePickerScroll}>
+          <Suspense fallback={<div className="min-h-64" aria-busy="true" />}>
+          <ScrollArea className="min-h-0" viewportClassName="overflow-x-hidden" viewportProps={{ ref: pickerScrollContainerRef, onScroll: handlePickerScroll }}>
+          <DialogBody className="block pt-0 pb-5 sm:pb-6" data-manual-operator-picker>
             {picker?.kind === "slot" ? (
-              <div className="grid gap-2">
-                <div>
-                  <div className="mb-1.5 text-xs font-medium text-muted-foreground">{skillFilters("room")}</div>
-                  <SkillRoomTagBar selected={pickerRoomFilter} onChange={changePickerRoomFilter} />
+              <div className="grid gap-1">
+                <div className="flex min-w-0 items-center gap-2">
+                  <div className="min-w-0 flex-1">
+                    <SkillFilterRow label={skillFilters("room")}>
+                      <SkillRoomTagBar selected={pickerRoomFilter} onChange={changePickerRoomFilter} />
+                    </SkillFilterRow>
+                  </div>
+                  <Button type="button" variant="destructive" size="sm" className="px-2 text-xs max-sm:min-h-8" onClick={() => chooseOperator(null)}><Trash2 />{intl("components_pages_ManualSchedulePage.clearSlot")}</Button>
                 </div>
-                <div>
-                  <div className="mb-1.5 text-xs font-medium text-muted-foreground">{skillFilters("tag")}</div>
+                <SkillFilterRow label={skillFilters("tag")}>
                   {availableSkillTags.length > 0
                     ? <SkillTagBar tags={availableSkillTags} selected={pickerSkillTag} onChange={changePickerSkillTag} />
                     : <div className="flex min-h-7 items-center text-xs text-muted-foreground max-sm:min-h-11" data-empty-skill-tags>{intl("components_pages_ManualSchedulePage.noSkillTagsAvailable")}</div>}
-                </div>
+                </SkillFilterRow>
               </div>
             ) : null}
 
-            <div className={picker?.kind === "slot" ? "mt-3" : ""} role="group" aria-label={skillFilters("rarity")}>
-              <div className="mb-1.5 text-xs font-medium text-muted-foreground">{skillFilters("rarity")}</div>
-              <OperatorRarityFilter
-                value={pickerRarity === null ? "all" : String(pickerRarity)}
-                onChange={(value) => {
-                  setPickerRarity(value === "all" ? null : Number(value));
-                  setPickerPage(1);
-                }}
-              />
+            <div className={picker?.kind === "slot" ? "mt-1" : ""} role="group" aria-label={skillFilters("rarity")}>
+              <SkillFilterRow label={skillFilters("rarity")}>
+                <OperatorRarityFilter
+                  value={pickerRarity === null ? "all" : String(pickerRarity)}
+                  onChange={(value) => {
+                    setPickerRarity(value === "all" ? null : Number(value));
+                    setPickerPage(1);
+                  }}
+                />
+              </SkillFilterRow>
             </div>
 
             <div className="mt-3">
@@ -722,17 +731,12 @@ export function ManualSchedulePage({
               />
             </div>
 
-            <div className="mt-3 flex items-center justify-between gap-3">
-              {picker?.kind === "slot" ? (
-                <div className="flex min-w-0 gap-2">
-                  <Button type="button" variant="outline" className="min-w-0 justify-center" onClick={() => chooseOperator(null)}><X />{intl("components_pages_ManualSchedulePage.leaveEmpty")}</Button>
-                </div>
-              ) : <span />}
+            <div className="mt-2 flex justify-end">
               <span className="font-number text-xs text-muted-foreground">{intl("components_pages_ManualSchedulePage.operatorCount", { count: filteredOperators.length })}</span>
             </div>
 
             <TooltipProvider delay={0} timeout={0}>
-              <div ref={pickerResultsRef} className="relative mt-3 grid scroll-mt-2 grid-cols-3 gap-3 min-[430px]:grid-cols-4 sm:grid-cols-6 sm:gap-4">
+              <div ref={pickerResultsRef} className="relative mt-1 grid scroll-mt-2 grid-cols-[repeat(4,var(--manual-picker-portrait-size))] justify-between gap-x-2 gap-y-1 [--manual-picker-portrait-size:56px] min-[430px]:[--manual-picker-portrait-size:64px] sm:grid-cols-[repeat(8,var(--manual-picker-portrait-size))] min-[900px]:[--manual-picker-portrait-size:80px]">
                 {visibleOperators.map((operator) => (
                   <ManualOperatorChoice
                     key={operator.id}
@@ -747,7 +751,7 @@ export function ManualSchedulePage({
                 {Array.from({ length: emptyOperatorChoiceCount }, (_, index) => (
                   <div
                     key={`empty-${index}`}
-                    className="invisible min-h-[calc(clamp(70px,7.3vw,80px)+2.5rem)] max-sm:min-h-[calc(clamp(56px,16vw,76px)+2.5rem)]"
+                    className="invisible min-h-[calc(var(--manual-picker-portrait-size)+2.5rem)]"
                     aria-hidden="true"
                     data-manual-operator-placeholder
                   />
@@ -759,7 +763,9 @@ export function ManualSchedulePage({
             <div className="mt-4 border-t border-border/60 pt-3">
               <Pagination page={pickerPage} pageCount={pickerPageCount} onPageChange={changePickerPage} alwaysVisible />
             </div>
-          </div>
+          </DialogBody>
+          </ScrollArea>
+          </Suspense>
         </DialogContent>
       </Dialog>
 

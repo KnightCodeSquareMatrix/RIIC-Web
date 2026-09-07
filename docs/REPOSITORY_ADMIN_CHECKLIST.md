@@ -51,7 +51,7 @@ Enter these non-sensitive variables separately in each Environment:
 - `DEPLOY_INTERNAL_PORT`
 - `DEPLOY_DEBUG_TOOLS_ENABLED`
 - `DEPLOY_RATE_LIMIT_ENABLED`
-- `DEPLOY_APPROVED_SOLVER_SHA256`
+- `DEPLOY_APPROVED_SOLVER_SHA256` (development only)
 
 Do not copy values out of old GitHub secrets; re-enter them from the owner-controlled secure store. In particular, the development health URL is an Environment secret, never a repository variable or committed value.
 
@@ -64,7 +64,9 @@ Restrict `development` to `develop`. Restrict `production` to `main` and require
 - [ ] Run `Deployment preflight` in `baseline` mode for a read-only report of the installed deploy helper contract and available disk space; root-only solver details remain hidden in this mode.
 - [ ] After private server maintenance, rerun preflight in `cutover-ready` mode.
 
-Set `DEPLOY_APPROVED_SOLVER_SHA256` to the independently verified digest of the approved shared solver for each Environment. The cutover-ready preflight requires a root-owned `shared/bin` solver and independent SHA-256 sidecar, verifies the Environment-approved digest, and compares both with the solver's Worker `ping` fingerprint. Prepare those private server assets from the owner-controlled release record; never derive and trust a digest solely from a runtime-user-writable file.
+Production retains the server's current solver. Its deployment and cutover-ready preflight read `shared/bin/infra-cli.sha256` from the server; no GitHub production solver approval variable is required. The root-owned deployment helper must verify the solver and sidecar ownership, their matching SHA-256, the current release and runtime configuration, and the Worker's `ping` fingerprint before deployment proceeds. The resolved digest is pinned for that deployment, so a concurrent solver change fails validation instead of silently changing the release.
+
+Development still requires `DEPLOY_APPROVED_SOLVER_SHA256` to match its independently approved shared solver. Prepare private server assets from the owner-controlled release record; never derive and trust a digest solely from a runtime-user-writable file. Neither workflow installs a new solver or weakens the server's integrity checks.
 - [ ] Disable automatic deployment in the old private repository before setting the public repository variable to `1`.
 - [ ] Change `deploy/PUBLIC_DEPLOYMENT_SOURCE` in a PR to `public-automation-v1` and merge it to `develop`. This path is intentionally classified as deploy-required.
 - [ ] Complete development acceptance, then create a same-repository `release/develop-to-main-YYYYMMDD` PR.
