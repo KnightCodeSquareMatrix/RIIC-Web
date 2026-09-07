@@ -1,5 +1,6 @@
 import type {
   DebugBundle,
+  BaseBlueprint,
   MaaJson,
   PlanApiResponse,
   PublicPlanData,
@@ -13,6 +14,7 @@ import { isDebugToolsEnabled, PublicApiError } from "./api-contract.ts";
 import { normalizeRotationResult, rotationFallbackProfile } from "../rotation-result.ts";
 import { parseTrainingAdviceReport } from "../training-advice-contract.ts";
 import { parseTrainingRoomSchedule } from "../training-room-contract.ts";
+import { applyDroneAllocationsToMaa, droneProductionForRotation } from "./drone-production.ts";
 
 const PATH_SEPARATOR = /[/\\]+/g;
 const SOLVER_DIAGNOSTIC_FIELDS = new Set([
@@ -89,7 +91,7 @@ function sanitizePublicDebugBundle(
 
 export function toPublicPlanData(
   result: PlanApiResponse,
-  input: { layoutLabel: string; sourceName: string },
+  input: { layoutLabel: string; sourceName: string; layout?: BaseBlueprint },
   requestId: string,
   options: PublicPlanOptions = {}
 ): PublicPlanData {
@@ -122,16 +124,27 @@ export function toPublicPlanData(
     }
   }
 
+  const normalizedRotation = normalizeRotationResult({
+    source: result.rotationJson as RotationJson,
+    profile: result.profileJson,
+    fallbackProfile: rotationFallbackProfile(result.profileJson, DEFAULT_ROTATION_PROFILE),
+  });
+  if (input.layout && normalizedRotation.daily.production) {
+    normalizedRotation.daily.drone_production = droneProductionForRotation({
+      layout: input.layout,
+      maa: result.maaJson,
+      rotation: normalizedRotation,
+    });
+  }
+  const maaWithDrones = input.layout
+    ? applyDroneAllocationsToMaa({ layout: input.layout, maa: result.maaJson, rotation: normalizedRotation })
+    : result.maaJson;
   const data: PublicPlanData = {
     profile: sanitizeProfile(result.profileJson, input.layoutLabel, input.sourceName),
-    maa: sanitizeMaa(result.maaJson, input.layoutLabel),
+    maa: sanitizeMaa(maaWithDrones, input.layoutLabel),
     ...(trainingRoom ? { trainingRoom } : {}),
     ...(trainingAdvice ? { trainingAdvice } : {}),
-    rotation: normalizeRotationResult({
-      source: result.rotationJson as RotationJson,
-      profile: result.profileJson,
-      fallbackProfile: rotationFallbackProfile(result.profileJson, DEFAULT_ROTATION_PROFILE),
-    }),
+    rotation: normalizedRotation,
     durationMs: safeDuration(result.durationMs),
     diagnosticId: result.runId ?? requestId,
   };

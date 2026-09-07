@@ -277,7 +277,7 @@ export async function POST(request: Request) {
     runResult = await runPlan({ layout: body.layout, operbox, sourceName, rotation, fiammettaEnable, dataOwnerTag });
     const publicResult = toPublicPlanData(
       runResult,
-      { layoutLabel: body.layout.template, sourceName },
+      { layoutLabel: body.layout.template, sourceName, layout: body.layout },
       requestId,
       { includeDebug }
     );

@@ -421,9 +421,9 @@ export function WebsiteAccountPanel({
   ];
 
   return (
-    <Card className="surface-shadow overflow-hidden rounded-none ring-0" data-website-account-panel data-auth-wizard>
-      <div className="grid lg:grid-cols-[minmax(16rem,0.75fr)_minmax(0,1.25fr)]">
-        <div className="border-b border-border/70 px-6 py-7 lg:border-b-0 lg:border-r lg:px-8 lg:py-9">
+    <Card className="surface-shadow w-full min-w-0 max-w-full overflow-hidden rounded-none ring-0" data-website-account-panel data-auth-wizard>
+      <div className="grid min-w-0 lg:grid-cols-[minmax(16rem,0.75fr)_minmax(0,1.25fr)]">
+        <div className="min-w-0 border-b border-border/70 px-5 py-6 lg:border-b-0 lg:border-r lg:px-8 lg:py-9">
           <div className="mb-6 grid size-10 place-items-center rounded-lg bg-primary text-primary-foreground">
             <UserRound className="size-5" aria-hidden="true" />
           </div>
@@ -432,7 +432,7 @@ export function WebsiteAccountPanel({
           <p className="mt-3 max-w-sm text-sm leading-6 text-muted-foreground">{modeCopy[mode].description}</p>
         </div>
 
-        <CardContent className={mode === "forgot" ? "grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] p-0" : "p-0"}>
+        <CardContent className={mode === "forgot" ? "grid h-full min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] p-0" : "min-w-0 p-0"}>
           {mode === "forgot" ? (
             <div className="border-b border-border/70 px-5 pb-4 pt-5 sm:px-8 sm:pb-5 sm:pt-7">
               <WizardSteps

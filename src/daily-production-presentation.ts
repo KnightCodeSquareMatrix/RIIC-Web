@@ -53,19 +53,35 @@ function originiumBottleneck(production: DailyProductionEstimate): string {
   return "产出数据不足";
 }
 
-function solverGroups(production: SolverDailyProduction): DailyProductionGroup[] {
-  const goldUnits = production.pure_gold / 500;
+function solverGroups(production: SolverDailyProduction, drone: NonNullable<RotationJson["daily"]["drone_production"]> = { lmd: 0, pure_gold: 0, battle_records: 0 }): DailyProductionGroup[] {
+  const goldUnits = Math.floor(production.pure_gold / 500);
+  const droneGoldUnits = Math.floor(drone.pure_gold / 500);
+  const totalGoldUnits = Math.floor((production.pure_gold + drone.pure_gold) / 500);
+  const totalLmd = production.lmd + drone.lmd;
+  const totalExperience = production.battle_records + drone.battle_records;
   return [
     {
       id: "experience",
       source: "solver",
-      primary: solverProduct("experience", "经验", "经验", PRODUCT_ICON_URLS.experience, production.battle_records),
+      primary: {
+        ...solverProduct("experience", "经验", "经验", PRODUCT_ICON_URLS.experience, totalExperience),
+        amount: { value: totalExperience, natural: production.battle_records, drones: drone.battle_records },
+        rows: [["估算自然制造", production.battle_records, "经验"], ["估算无人机", drone.battle_records, "经验"], ["总产出", totalExperience, "经验"]],
+      },
     },
     {
       id: "lmd",
       source: "solver",
-      primary: solverProduct("lmd-orders", "龙门币", "龙门币", PRODUCT_ICON_URLS.lmdOrders, production.lmd),
-      supporting: solverProduct("gold", "赤金", "枚", PRODUCT_ICON_URLS.gold, goldUnits, "订单原料"),
+      primary: {
+        ...solverProduct("lmd-orders", "龙门币", "龙门币", PRODUCT_ICON_URLS.lmdOrders, totalLmd),
+        amount: { value: totalLmd, natural: production.lmd, drones: drone.lmd },
+        rows: [["估算自然订单", production.lmd, "龙门币"], ["估算无人机订单", drone.lmd, "龙门币"], ["总产出", totalLmd, "龙门币"]],
+      },
+      supporting: {
+        ...solverProduct("gold", "赤金", "枚", PRODUCT_ICON_URLS.gold, totalGoldUnits, "订单原料"),
+        amount: { value: totalGoldUnits, natural: goldUnits, drones: droneGoldUnits },
+        rows: [["估算自然制造", goldUnits, "枚"], ["估算无人机制造", droneGoldUnits, "枚"], ["总产出", totalGoldUnits, "枚"]],
+      },
     },
     {
       id: "orundum",
@@ -136,42 +152,16 @@ function estimateGroups(production: DailyProductionEstimate): DailyProductionGro
   ];
 }
 
-function withSolverTotal(product: ProductionDetailProduct, value: number): ProductionDetailProduct {
-  return {
-    ...product,
-    amount: { ...product.amount, value },
-    rows: product.rows.map(([label, rowValue, unit]) => [`估算${label}`, rowValue, unit]),
-  };
-}
-
-function solverGroupsWithEstimate(
-  production: SolverDailyProduction,
-  estimate: DailyProductionEstimate,
-): DailyProductionGroup[] {
-  const solverValue = (productId: string): number => {
-    if (productId === "experience") return production.battle_records;
-    if (productId === "lmd-orders") return production.lmd;
-    if (productId === "gold") return production.pure_gold / 500;
-    if (productId === "orundum") return production.orundum;
-    if (productId === "shards") return production.originium_shards;
-    throw new Error(`Unsupported production product: ${productId}`);
-  };
-
-  return estimateGroups(estimate).map((group) => ({
-    ...group,
-    source: "solver" as const,
-    primary: withSolverTotal(group.primary, solverValue(group.primary.id)),
-    ...(group.supporting
-      ? { supporting: withSolverTotal(group.supporting, solverValue(group.supporting.id)) }
-      : {}),
-  }));
+function solverGroupsWithEstimate(production: SolverDailyProduction, drone?: NonNullable<RotationJson["daily"]["drone_production"]>): DailyProductionGroup[] {
+  return solverGroups(production, drone);
 }
 
 export function dailyProductionGroups(
   estimate: DailyProductionEstimate | null,
   solverProduction: SolverDailyProduction | null,
+  droneProduction?: NonNullable<RotationJson["daily"]["drone_production"]>,
 ): DailyProductionGroup[] {
-  if (solverProduction && estimate) return solverGroupsWithEstimate(solverProduction, estimate);
-  if (solverProduction) return solverGroups(solverProduction);
+  if (solverProduction && estimate) return solverGroupsWithEstimate(solverProduction, droneProduction);
+  if (solverProduction) return solverGroups(solverProduction, droneProduction);
   return estimate ? estimateGroups(estimate) : [];
 }

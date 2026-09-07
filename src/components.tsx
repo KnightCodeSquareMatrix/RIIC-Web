@@ -1,7 +1,6 @@
 import { localize as rotationText } from "./i18n/helpers/RotationLabels.ts";
 import { localize as localize_components } from "./i18n/helpers/components.ts";
 import { useTranslations, useLocale } from "next-intl";
-import { messageRecord } from "@/i18n/translate";
 import {
   AlertTriangle,
   Check,
@@ -14,10 +13,9 @@ import {
   RotateCcw,
   Save,
   Smile,
-  Upload,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { CSSProperties, ChangeEvent, DragEvent, lazy, ReactElement, ReactNode, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { CSSProperties, lazy, ReactElement, ReactNode, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { AnimatedNumber, AnimatedText } from "@/components/AnimatedText";
 import { Accordion, AccordionItem, AccordionPanel, AccordionTrigger } from "@/components/ui/accordion";
@@ -31,7 +29,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
 import {
   Combobox,
   ComboboxContent,
@@ -322,78 +319,6 @@ export function Panel({
       </header>
       <div>{children}</div>
     </section>
-  );
-}
-
-export function FileDrop({
-  fileName,
-  onFile,
-}: {
-  fileName: string | null;
-  onFile: (file: File) => void;
-}) {
-  const intl = useTranslations();
-  const locale = useLocale();
-  const en = locale === "en";
-  const [dragActive, setDragActive] = useState(false);
-
-  function importFirstFile(files: FileList | null) {
-    const file = files?.[0];
-    if (file) onFile(file);
-  }
-
-  function handleChange(event: ChangeEvent<HTMLInputElement>) {
-    importFirstFile(event.target.files);
-    event.currentTarget.value = "";
-  }
-
-  function handleDragEnter(event: DragEvent<HTMLLabelElement>) {
-    event.preventDefault();
-    if (event.dataTransfer.types.includes("Files")) setDragActive(true);
-  }
-
-  function handleDragLeave(event: DragEvent<HTMLLabelElement>) {
-    if (event.currentTarget.contains(event.relatedTarget as Node)) return;
-    setDragActive(false);
-  }
-
-  function handleDrop(event: DragEvent<HTMLLabelElement>) {
-    event.preventDefault();
-    setDragActive(false);
-    importFirstFile(event.dataTransfer.files);
-  }
-
-  return (
-    <Label
-      pressable
-      className={cn(
-        "flex min-h-32 cursor-pointer flex-col items-center justify-center gap-2 rounded-[4px] border border-dashed bg-background px-4 py-5 text-center transition-[color,background-color,border-color] duration-[var(--motion-duration-state)] ease-[var(--motion-ease-out)] hover:border-primary/40 hover:bg-muted/40",
-        dragActive && "border-primary bg-primary/10 text-primary ring-2 ring-primary/25 ring-offset-2",
-      )}
-      aria-label={intl("components.dropOrSelectAnOperatorDataFile")}
-      data-slot="file-drop"
-      data-dragging={dragActive || undefined}
-      onDragEnter={handleDragEnter}
-      onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; }}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-    >
-      <Upload className="size-5 text-primary" />
-      <span className="font-medium text-foreground">
-        {dragActive ? (intl("components.dropToImport")) : fileName ?? (intl("components.uploadRosterJsonXlsx"))}
-      </span>
-      <span className="flex flex-wrap items-center justify-center gap-1.5 text-xs" role="list" aria-label={intl("components.supportedMaaJsonLanguages")}>
-        {(messageRecord(en, "components_labels")).map((language) => (
-          <span key={language} role="listitem" className="rounded-full border border-border bg-muted/70 px-2 py-0.5 font-medium text-foreground">
-            {language}
-          </span>
-        ))}
-      </span>
-      <span className="text-xs leading-relaxed text-muted-foreground">
-        {intl("components.dropAFileOrChooseOneNamesAreConverted")}
-      </span>
-      <input className="sr-only" type="file" accept=".json,.xlsx,.xls" onChange={handleChange} />
-    </Label>
   );
 }
 
@@ -1226,6 +1151,7 @@ function OperatorSlotShell({
   centerFrameInList,
   compactFactory,
   compactView,
+  editableAppearance = true,
   editableHint,
   frameClassName,
   frameContent,
@@ -1241,6 +1167,7 @@ function OperatorSlotShell({
   centerFrameInList: boolean;
   compactFactory: boolean;
   compactView: boolean;
+  editableAppearance?: boolean;
   editableHint?: string;
   frameClassName: string;
   frameContent?: ReactNode;
@@ -1259,7 +1186,7 @@ function OperatorSlotShell({
         "relative aspect-square h-[var(--operator-slot-size)] min-w-0 shrink-0 overflow-hidden border-2 max-sm:border",
         frameClassName,
         frameFocusable && "cursor-help outline-none transition-[border-color,box-shadow] hover:border-white/90 focus-visible:border-[#FFD501] focus-visible:ring-2 focus-visible:ring-[#FFD501]/70",
-        onActivate && "border-[#FFD800] shadow-[0_0_0_1px_rgba(255,216,0,0.42),0_0_12px_rgba(255,216,0,0.2)]",
+        onActivate && editableAppearance && "border-[#FFD800] shadow-[0_0_0_1px_rgba(255,216,0,0.42),0_0_12px_rgba(255,216,0,0.2)]",
         centerFrameInList && "max-sm:h-auto max-sm:w-full sm:absolute sm:left-0 sm:top-1/2 sm:-translate-y-1/2",
       )}
       aria-label={ariaLabel}
@@ -1284,7 +1211,8 @@ function OperatorSlotShell({
           : "[--operator-slot-size:clamp(70px,7.3vw,80px)] max-sm:[--operator-slot-size:clamp(56px,16vw,76px)]",
         compactFactory && "min-[1800px]:[--operator-slot-size:70px]",
         centerFrameInList && "max-sm:w-full sm:relative sm:h-full sm:w-[var(--operator-slot-size)]",
-        onActivate && "cursor-pointer rounded-[4px] outline-none focus-visible:ring-2 focus-visible:ring-[#FFD800] focus-visible:ring-offset-2 focus-visible:ring-offset-[#313131]",
+        onActivate && "cursor-pointer rounded-[4px] outline-none focus-visible:ring-2 focus-visible:ring-[#FFD800]",
+        onActivate && editableAppearance && "focus-visible:ring-offset-2 focus-visible:ring-offset-[#313131]",
       )}
       data-position={positionLabel || undefined}
       title={title}
@@ -1387,6 +1315,7 @@ export function OperatorSlot({
   autofill = false,
   compactFactory = false,
   compactView = false,
+  selectionMode = false,
   centerFrameInList = false,
   shiftDirection = 0,
   transitionDelay = 0,
@@ -1394,6 +1323,7 @@ export function OperatorSlot({
   positionLabel,
   showSkillTooltip = false,
   skillTooltipFocusable = false,
+  tooltipDisabled = false,
   skillTooltipHighlightIds = [],
   skillTooltipContextLabel,
   searchQuery = "",
@@ -1408,6 +1338,8 @@ export function OperatorSlot({
   autofill?: boolean;
   compactFactory?: boolean;
   compactView?: boolean;
+  /** 选择器样式：保留点击与技能提示，但不显示排班卡片的“可编辑”标记和常驻黄框。 */
+  selectionMode?: boolean;
   centerFrameInList?: boolean;
   shiftDirection?: ShiftDirection;
   transitionDelay?: number;
@@ -1417,6 +1349,8 @@ export function OperatorSlot({
   showSkillTooltip?: boolean;
   /** 让头像进入键盘焦点顺序；仅用于需要主动查看技能的界面，避免排班图产生过多 Tab 停靠点。 */
   skillTooltipFocusable?: boolean;
+  /** 滚动等临时交互期间关闭技能提示，避免 tooltip 跟随已移动的头像。 */
+  tooltipDisabled?: boolean;
   /** 练卡建议等场景中，需要在技能 tooltip 内强调的技能。 */
   skillTooltipHighlightIds?: readonly string[];
   skillTooltipContextLabel?: string;
@@ -1455,7 +1389,8 @@ export function OperatorSlot({
       centerFrameInList={centerFrameInList}
       compactFactory={compactFactory}
       compactView={compactView}
-      editableHint={onActivate ? (intl("components.edit")) : undefined}
+      editableAppearance={!selectionMode}
+      editableHint={onActivate && !selectionMode ? (intl("components.edit")) : undefined}
       frameClassName={frameClassName}
       frameContent={
         <AnimatePresence initial={false} mode="sync">
@@ -1565,12 +1500,13 @@ export function OperatorSlot({
             contextLabel={skillTooltipContextLabel}
             currentElite={elite}
             currentLevel={operatorLevel}
+            disabled={tooltipDisabled || undefined}
           />
         </Suspense>
       ) : undefined}
       label={slot ? <AnimatedText value={displayName ?? slot.name} trend={shiftDirection} /> : autofill ? (intl("components.autoFill")) : (intl("components.slot"))}
       labelClassName={slot
-        ? (searchMatched ? "bg-[#FFD501] px-1 text-[#202020]" : "text-white")
+        ? (searchMatched ? "bg-[#FFD501] px-1 text-[#202020]" : selectionMode ? "text-popover-foreground" : "text-white")
         : autofill
           ? "text-white/55"
           : "text-transparent select-none"}
@@ -1590,6 +1526,7 @@ export function ScheduleBoard({
   eliteByOperator,
   levelByOperator,
   viewControlsSlot,
+  viewModeActionSlot,
   mobileActionsSlot,
   shiftInfoSlot,
   activeShift,
@@ -1603,6 +1540,11 @@ export function ScheduleBoard({
   onTradeOrderChange,
   onViewModeChange,
   onSlotClick,
+  onClearRoom,
+  onDormAutofillChange,
+  droneTargetRoomId,
+  onDroneTargetChange,
+  renderListRoomActions,
 }: {
   rows: RoomRow[];
   layout: BaseBlueprint;
@@ -1612,6 +1554,7 @@ export function ScheduleBoard({
   /** 按干员名查当前等级，用于技能解锁状态。 */
   levelByOperator?: ReadonlyMap<string, number>;
   viewControlsSlot?: ReactNode;
+  viewModeActionSlot?: ReactNode;
   mobileActionsSlot?: ReactNode;
   shiftInfoSlot?: ReactNode;
   activeShift: number;
@@ -1625,6 +1568,11 @@ export function ScheduleBoard({
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
   onViewModeChange?: (viewMode: "list" | "compact") => void;
   onSlotClick?: (row: RoomRow, slotIndex: number) => void;
+  onClearRoom?: (row: RoomRow) => void;
+  onDormAutofillChange?: (row: RoomRow, enabled: boolean) => void;
+  droneTargetRoomId?: string | null;
+  onDroneTargetChange?: (row: RoomRow) => void;
+  renderListRoomActions?: (row: RoomRow, position: "header" | "clear") => ReactNode;
 }) {
   const intl = useTranslations();
   const locale = useLocale();
@@ -1637,9 +1585,31 @@ export function ScheduleBoard({
   const [CompactScheduleView, setCompactScheduleView] = useState<CompactScheduleComponent | null>(null);
   const [compactScheduleLoadFailed, setCompactScheduleLoadFailed] = useState(false);
   const preferredViewMode = useRef<ScheduleViewMode | null>(null);
+  const scheduleBoardRef = useRef<HTMLDivElement | null>(null);
   const shouldReduceMotion = useReducedMotion();
+  const editableSchedule = Boolean(onSlotClick || onClearRoom || onDormAutofillChange || onDroneTargetChange);
 
   useLayoutEffect(() => {
+    const board = scheduleBoardRef.current;
+    if (editableSchedule && board) {
+      const syncEditableViewMode = (width: number) => {
+        const canUseCompactLayout = width >= 1_040;
+        setSupportsCompactLayout(canUseCompactLayout);
+        const nextViewMode = canUseCompactLayout
+          ? (preferredViewMode.current ?? "compact")
+          : "list";
+        setViewMode(nextViewMode);
+        onViewModeChange?.(nextViewMode);
+      };
+      syncEditableViewMode(board.getBoundingClientRect().width);
+      const observer = new ResizeObserver((entries) => {
+        const width = entries[0]?.contentRect.width;
+        if (typeof width === "number") syncEditableViewMode(width);
+      });
+      observer.observe(board);
+      return () => observer.disconnect();
+    }
+
     const mq = window.matchMedia("(min-width: 1024px)");
     const syncViewMode = (canUseCompactLayout: boolean) => {
       setSupportsCompactLayout(canUseCompactLayout);
@@ -1654,7 +1624,7 @@ export function ScheduleBoard({
     const handler = (event: MediaQueryListEvent) => syncViewMode(event.matches);
     mq.addEventListener("change", handler);
     return () => mq.removeEventListener("change", handler);
-  }, [onViewModeChange]);
+  }, [editableSchedule, onViewModeChange]);
 
   useEffect(() => {
     if (viewMode !== "compact" || CompactScheduleView || compactScheduleLoadFailed) return;
@@ -1731,7 +1701,7 @@ export function ScheduleBoard({
   }
 
   return (
-    <div className="flex flex-col gap-7">
+    <div ref={scheduleBoardRef} className="flex flex-col gap-7">
       <div className="flex flex-wrap items-center justify-between gap-3 max-sm:flex-col max-sm:items-stretch" data-schedule-toolbar>
         <div className="flex flex-wrap items-center gap-2 max-sm:w-full" data-schedule-view-controls>
           {supportsCompactLayout && viewMode ? (
@@ -1752,6 +1722,7 @@ export function ScheduleBoard({
             </Tabs>
           ) : null}
           {viewControlsSlot}
+          {viewMode === "compact" ? viewModeActionSlot : null}
           {viewMode === "list" && hiddenAuxiliaryCount ? (
             <Button type="button" variant="ghost" size="sm" onClick={restoreHiddenAuxiliaryGroups}>
               {intl("components.restoreHidden")}{intl("components.label3")}<span className="font-number">{hiddenAuxiliaryCount}</span>{intl("components.label4")}
@@ -1770,9 +1741,15 @@ export function ScheduleBoard({
                 </motion.span>
                 {allAuxiliaryCollapsed ? (intl("components.expandAuxiliaryFacilities")) : (intl("components.collapseAuxiliaryFacilities"))}
               </Button>
+              {viewModeActionSlot}
               {mobileActionsSlot ? <div className="min-w-0 flex-1 md:hidden">{mobileActionsSlot}</div> : null}
             </div>
-          ) : mobileActionsSlot ? <div className="w-full md:hidden">{mobileActionsSlot}</div> : null}
+          ) : (
+            <>
+              {viewMode === "list" ? viewModeActionSlot : null}
+              {mobileActionsSlot ? <div className="w-full md:hidden">{mobileActionsSlot}</div> : null}
+            </>
+          )}
         </div>
         {shiftInfoSlot ? <div className="min-w-0 max-sm:w-full">{shiftInfoSlot}</div> : null}
       </div>
@@ -1924,6 +1901,7 @@ export function ScheduleBoard({
                                 {localizedRoomTitle(row.title, row.group, locale, gameCatalog)}
                               </div>
                               <LevelDiamonds level={row.level} maxLevel={layoutRoom ? maxRoomLevel(layoutRoom.kind) : row.level} />
+                              {renderListRoomActions?.(row, "header")}
                             </div>
                           </div>
                           {efficiency ? (
@@ -1938,6 +1916,11 @@ export function ScheduleBoard({
                           onFactoryRecipeChange={onFactoryRecipeChange}
                           onTradeOrderChange={onTradeOrderChange}
                         />
+                        {onClearRoom && row.group === "power" && !efficiency ? (
+                          <div className="font-technical text-xs tracking-[0.01em] text-white/38">
+                            {intl("components_CompactScheduleView.awaitingSchedule")}
+                          </div>
+                        ) : null}
                       </div>
                     </div>
 
@@ -1988,10 +1971,12 @@ export function ScheduleBoard({
                       )}
                     </div>
 
+                    {renderListRoomActions?.(row, "clear")}
+
                     {onIssue ? <Tooltip>
                       <TooltipTrigger
                         render={
-                          <span className="absolute right-2 top-2 z-10">
+                          <span className={cn("absolute top-2 z-10", onClearRoom ? "right-24" : "right-2")}>
                           <Button
                             id={scheduleIssueTriggerId(row)}
                             type="button"
@@ -2034,6 +2019,10 @@ export function ScheduleBoard({
               onIssue={onIssue}
               feedbackDisabled={feedbackDisabled}
               onSlotClick={onSlotClick}
+              onClearRoom={onClearRoom}
+              onDormAutofillChange={onDormAutofillChange}
+              droneTargetRoomId={droneTargetRoomId}
+              onDroneTargetChange={onDroneTargetChange}
             />
           ) : compactScheduleLoadFailed ? (
             <div className="grid min-h-[420px] place-items-center border-y border-destructive/35 text-sm text-destructive" role="alert">

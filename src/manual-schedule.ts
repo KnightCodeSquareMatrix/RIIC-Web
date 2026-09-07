@@ -35,6 +35,7 @@ export interface ManualShift {
   durationHours: number;
   rooms: Record<string, ManualRoomAssignment>;
   fiammettaTarget: string | null;
+  droneTargetRoomId: string | null;
 }
 
 export interface ManualScheduleSource {
@@ -211,7 +212,7 @@ export function manualRoomCapacity(room: BlueprintRoom): number {
 }
 
 function emptyShift(durationHours: number): ManualShift {
-  return { durationHours, rooms: {}, fiammettaTarget: null };
+  return { durationHours, rooms: {}, fiammettaTarget: null, droneTargetRoomId: null };
 }
 
 export function createManualScheduleDraft(
@@ -471,6 +472,12 @@ export function createManualScheduleDraftFromCalculator(input: {
     shift.fiammettaTarget = plan.Fiammetta?.enable
       ? (Array.isArray(target) ? target.find(Boolean) : target) ?? null
       : null;
+    const drones = plan.drones;
+    if (drones && drones.enable !== false && (drones.room === "trading" || drones.room === "manufacture")) {
+      shift.droneTargetRoomId = input.layout.rooms.filter(
+        (room) => MAA_GROUP_BY_ROOM_KIND[room.kind] === drones.room,
+      )[drones.index - 1]?.id ?? null;
+    }
   });
 
   if (input.preserveExternalOperators) {
@@ -514,6 +521,7 @@ export function loadManualScheduleDraft(storage: StorageLike): ManualScheduleDra
         durationHours: finitePositive(candidate.durationHours, 12),
         rooms,
         fiammettaTarget: typeof candidate.fiammettaTarget === "string" ? candidate.fiammettaTarget : null,
+        droneTargetRoomId: typeof candidate.droneTargetRoomId === "string" ? candidate.droneTargetRoomId : null,
       };
     });
     const normalizedDurations = normalizeManualShiftDurations(parsedShifts.map((shift) => shift.durationHours));
@@ -603,6 +611,9 @@ export function reconcileManualScheduleDraft(
         fiammettaTarget: shift.fiammettaTarget && (!owned || owned.has(shift.fiammettaTarget))
           ? shift.fiammettaTarget
           : null,
+        droneTargetRoomId: layout.rooms.some((room) => (
+          room.id === shift.droneTargetRoomId && (room.kind === "trade_post" || room.kind === "factory")
+        )) ? shift.droneTargetRoomId : null,
         rooms: Object.fromEntries(layout.rooms.map((room) => {
           const assignment = shift.rooms[room.id];
           const operators = Array.from(
@@ -723,6 +734,51 @@ export function setManualDormAutofill(
   return next;
 }
 
+export function setManualDroneTarget(
+  draft: ManualScheduleDraft,
+  layout: BaseBlueprint,
+  shiftIndex: number,
+  roomId: string | null,
+): ManualScheduleDraft {
+  const room = roomId ? layout.rooms.find((candidate) => candidate.id === roomId) : null;
+  if (!draft.shifts[shiftIndex] || (room && room.kind !== "trade_post" && room.kind !== "factory")) return draft;
+  const next = structuredClone(draft);
+  next.shifts[shiftIndex]!.droneTargetRoomId = room?.id ?? null;
+  return next;
+}
+
+export function clearManualRoom(
+  draft: ManualScheduleDraft,
+  layout: BaseBlueprint,
+  shiftIndex: number,
+  roomId: string,
+): ManualScheduleDraft {
+  const room = layout.rooms.find((candidate) => candidate.id === roomId);
+  if (!room || !draft.shifts[shiftIndex]) return draft;
+  const next = structuredClone(draft);
+  next.shifts[shiftIndex]!.rooms[roomId] = {
+    operators: Array.from({ length: manualRoomCapacity(room) }, () => null),
+    ...(room.kind === "dormitory" ? { autofill: false } : {}),
+  };
+  return next;
+}
+
+export function clearManualShift(
+  draft: ManualScheduleDraft,
+  layout: BaseBlueprint,
+  shiftIndex: number,
+): ManualScheduleDraft {
+  if (!draft.shifts[shiftIndex]) return draft;
+  const next = structuredClone(draft);
+  const shift = next.shifts[shiftIndex]!;
+  shift.droneTargetRoomId = null;
+  shift.rooms = Object.fromEntries(layout.rooms.map((room) => [room.id, {
+    operators: Array.from({ length: manualRoomCapacity(room) }, () => null),
+    ...(room.kind === "dormitory" ? { autofill: false } : {}),
+  } satisfies ManualRoomAssignment]));
+  return next;
+}
+
 function maaProduct(room: BlueprintRoom): string | undefined {
   if (room.kind === "trade_post") {
     const order = room.product && "trade" in room.product ? room.product.trade.order : "gold";
@@ -768,6 +824,11 @@ export function manualScheduleToMaa(
         : start + range.durationMinutes <= MINUTES_PER_DAY
           ? [[range.startTime, range.endTime]]
           : [[range.startTime, "23:59"], ["00:00", range.endTime]];
+      const droneRoom = layout.rooms.find((room) => room.id === shift.droneTargetRoomId);
+      const droneGroup = droneRoom ? MAA_GROUP_BY_ROOM_KIND[droneRoom.kind] : undefined;
+      const droneIndex = droneGroup === "trading" || droneGroup === "manufacture"
+        ? layout.rooms.filter((room) => MAA_GROUP_BY_ROOM_KIND[room.kind] === droneGroup).findIndex((room) => room.id === droneRoom?.id) + 1
+        : 0;
       const rooms: MaaRooms = {};
       for (const room of layout.rooms) {
         const group = MAA_GROUP_BY_ROOM_KIND[room.kind];
@@ -784,6 +845,9 @@ export function manualScheduleToMaa(
         Fiammetta: fiammettaEnabled && shift.fiammettaTarget
           ? { enable: true, target: shift.fiammettaTarget, order: "pre" as const }
           : { enable: false, target: "", order: "pre" as const },
+        ...(droneIndex > 0 && (droneGroup === "trading" || droneGroup === "manufacture") ? {
+          drones: { enable: true, room: droneGroup, index: droneIndex, rule: "all", order: "pre" as const },
+        } : {}),
       };
     }),
   };

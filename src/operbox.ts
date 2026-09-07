@@ -61,16 +61,17 @@ export function assertOperbox(value: unknown): OperBoxEntry[] {
       ? operatorRarities[canonicalId as keyof typeof operatorRarities] : undefined;
     if (canonicalRarity !== undefined && rarity !== canonicalRarity)
       throw new Error(`${name} 的 rarity 必须与干员数据一致（${canonicalRarity} 星）。`);
+    const validatedRarity = rarity;
     if (owned) {
-      const maxElite = maxEliteForRarity(rarity);
+      const maxElite = maxEliteForRarity(validatedRarity);
       if (elite > maxElite)
         throw new Error(`${name}（${rarity} 星）的 elite 不能超过 ${maxElite}。`);
-      const maxLevel = manualLevelFor(rarity, elite);
+      const maxLevel = manualLevelFor(validatedRarity, elite);
       if (level > maxLevel)
         throw new Error(`${name}（${rarity} 星、精英 ${elite}）的 level 不能超过 ${maxLevel}。`);
     }
     seen.add(id);
-    return { id, name, elite, level, own: row.own, potential, rarity };
+    return { id, name, elite, level, own: row.own, potential, rarity: validatedRarity };
   });
   return normalizeOperboxEntries(entries);
 }
@@ -88,6 +89,25 @@ export async function readOperboxText(text: string): Promise<OperBoxEntry[]> {
     throw new Error(
       "MAA JSON 无法解析，请确认粘贴了完整的 Arknights_OperBox_Export.json 内容。",
     );
+  }
+  const { normalizeMaaRarities } = await import("./maa-review.ts");
+  parsed = normalizeMaaRarities(parsed);
+  if (Array.isArray(parsed)) {
+    parsed = parsed.map((row) => {
+      if (!row || typeof row !== "object" || Array.isArray(row)) return row;
+      const value = row as Record<string, unknown>;
+      const normalizedRarity = Number(value.rarity);
+      const elite = Number(value.elite);
+      if (value.own !== true || !Number.isInteger(normalizedRarity) || normalizedRarity < 1 || normalizedRarity > 6) return row;
+      if (Number.isInteger(elite) && elite > maxEliteForRarity(normalizedRarity)) {
+        const safeElite = maxEliteForRarity(normalizedRarity);
+        return { ...value, rarity: normalizedRarity, elite: safeElite, level: manualLevelFor(normalizedRarity, safeElite) };
+      }
+      if (Number.isInteger(elite) && Number.isFinite(Number(value.level))) {
+        return { ...value, rarity: normalizedRarity, level: Math.min(Number(value.level), manualLevelFor(normalizedRarity, elite)) };
+      }
+      return row;
+    });
   }
   return normalizeImportedEntries(assertOperbox(parsed));
 }

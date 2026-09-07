@@ -59,5 +59,16 @@
   "unitExperience": "EXP",
   "unitLmd": "LMD",
   "unitOrundum": "Orundum",
-  "unitPieces": "pcs"
+  "unitPieces": "pcs",
+  "estimatedNaturalManufacturing": "Estimated natural manufacturing",
+  "estimatedDroneManufacturing": "Estimated drone manufacturing",
+  "estimatedNaturalOrders": "Estimated natural orders",
+  "estimatedDroneOrders": "Estimated drone orders",
+  "estimatedDrones": "Estimated drones",
+  "totalOutput": "Total output",
+  "totalValue": "Total value",
+  "surplus": "Surplus",
+  "loss": "Loss",
+  "moneyBookRatio": "LMD / EXP",
+  "noExperienceManufactured": "No EXP manufactured"
 }

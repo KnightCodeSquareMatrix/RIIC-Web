@@ -2,6 +2,26 @@
 
 All notable changes to RIIC-Web are documented in this file.
 
+## [0.7.1] - 2026-09-07
+
+### Added
+
+- Training Advice shares the operator picker's owned-only, rarity and profession filters and supports a persistent local recommendation blacklist.
+- Help pages include tutorial videos for the main setup and scheduling workflows.
+- Manual Scheduling adds facility actions and drone targets, and production details include authoritative solver totals and drone contributions.
+
+### Changed
+
+- Manual operator selection uses shared search, filter rows and scroll controls, with a compact aligned portrait grid and a small red Clear button beside the facility filter.
+- Operator skill tooltips distinguish locked skills, and account dialogs fit narrow mobile screens.
+- MAA imports validate progression limits and provide a review step before applying imported operators.
+- Manual picker scroll controls and training combination cards load on demand to keep every route within its existing JavaScript budget.
+
+### Fixed
+
+- Integration preserves current translations, skill unlock hints and pagination when merging older feature branches.
+- Production detail browser checks verify solver-provided totals and drone increments using the displayed product units.
+
 ## [0.7.0] - 2026-09-06
 
 ### Added

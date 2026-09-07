@@ -48,6 +48,9 @@
   "loadingTrainingRecommendations": "正在加载培养建议…",
   "noRecommendationsForThisSchedule": "本次排班暂无培养建议",
   "noTrainingRecommendationsYet": "尚无培养建议",
+  "noMatchingRecommendations": "当前筛选下暂无培养建议，可调整筛选条件或清除拉黑名单。",
+  "clearBlocked": "清除拉黑（{count}）",
+  "noOwnedRecommendations": "已拥有的干员暂无培养建议，关闭筛选可查看全部建议。",
   "viewCurrentSchedule": "查看当前排班",
   "generateASchedule": "前往生成排班"
 }

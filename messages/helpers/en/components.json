@@ -15,6 +15,7 @@
   "tradingPosts": "Trading Posts",
   "factories": "Factories",
   "powerPlants": "Power Plants",
+  "droneTarget": "Drones: {room}",
   "controlFunctional": "Control & Functional",
   "dormitories": "Dormitories",
   "facilitySettings": "Facility settings",
