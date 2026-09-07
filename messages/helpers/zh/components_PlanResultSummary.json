@@ -62,6 +62,8 @@
   "unitPieces": "枚",
   "estimatedNaturalManufacturing": "估算自然制造",
   "estimatedDroneManufacturing": "估算无人机制造",
+  "estimatedEquivalentGold": "估算等效赤金",
+  "dailyAcquisition": "日常获取",
   "estimatedNaturalOrders": "估算自然订单",
   "estimatedDroneOrders": "估算无人机订单",
   "estimatedDrones": "估算无人机",
@@ -70,5 +72,14 @@
   "surplus": "盈余",
   "loss": "亏损",
   "moneyBookRatio": "钱书比",
-  "noExperienceManufactured": "未制造经验"
+  "noExperienceManufactured": "未制造经验",
+  "estimatedShardStageCapacity": "估算碎片阶段可供",
+  "estimatedOrderStageCapacity": "估算订单阶段可交付",
+  "orundumBottleneckManufacture": "限制环节：源石碎片制造",
+  "orundumBottleneckTrade": "限制环节：合成玉订单",
+  "orundumBottleneckBalanced": "限制环节：两段持平",
+  "orundumBottleneckNone": "限制环节：暂无搓玉产线",
+  "orundumBottleneckUnavailable": "限制环节：产出数据不足",
+  "orderMaterial": "订单原料",
+  "manufactureStage": "制造环节"
 }
