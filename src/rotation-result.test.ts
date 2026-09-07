@@ -132,6 +132,25 @@ test("legacy room totals migrate to final_efficiency at the protocol boundary", 
   );
 });
 
+test("worker gold-equivalent efficiency is retained in the public room-line allowlist", () => {
+  const rotation = normalizeRotationResult({
+    source: {
+      shifts: [{
+        scores: {
+          room_lines: [{
+            room_id: "trade_1",
+            total_efficiency: 1.9,
+            order_multiplier: 1.5,
+            gold_equivalent_efficiency: 0.368,
+          }],
+        },
+      }],
+    },
+    fallbackProfile: "abc_12_6_6",
+  });
+  assert.equal(rotation.shifts[0]?.scores.room_lines[0]?.gold_equivalent_efficiency, 0.368);
+});
+
 test("missing summaries use the profile snapshot and requested profile", () => {
   const rotation = normalizeRotationResult({
     source: {},

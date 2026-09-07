@@ -14,7 +14,7 @@ import { isDebugToolsEnabled, PublicApiError } from "./api-contract.ts";
 import { normalizeRotationResult, rotationFallbackProfile } from "../rotation-result.ts";
 import { parseTrainingAdviceReport } from "../training-advice-contract.ts";
 import { parseTrainingRoomSchedule } from "../training-room-contract.ts";
-import { applyDroneAllocationsToMaa, droneProductionForRotation } from "./drone-production.ts";
+import { applyDroneAllocationsToMaa, droneProductionForRotation, equivalentGoldForRotation } from "./drone-production.ts";
 
 const PATH_SEPARATOR = /[/\\]+/g;
 const SOLVER_DIAGNOSTIC_FIELDS = new Set([
@@ -130,6 +130,7 @@ export function toPublicPlanData(
     fallbackProfile: rotationFallbackProfile(result.profileJson, DEFAULT_ROTATION_PROFILE),
   });
   if (input.layout && normalizedRotation.daily.production) {
+    normalizedRotation.daily.production.equivalent_gold = equivalentGoldForRotation(normalizedRotation);
     normalizedRotation.daily.drone_production = droneProductionForRotation({
       layout: input.layout,
       maa: result.maaJson,
