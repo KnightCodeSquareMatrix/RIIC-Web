@@ -65,6 +65,7 @@ test("reviewer sees only overview and issues, and direct admin routes remain pro
     // exercise the role controls here with a bootstrap user's response.
     await pool.query('UPDATE "user" SET role=$1 WHERE id=$2', ["admin", id]);
     let isReviewer = false;
+    let verifiedUsers = 45549;
     await page.route("**/api/admin/users**", async route => {
       if (route.request().method() === "PATCH") {
         const body = route.request().postDataJSON();
@@ -74,6 +75,7 @@ test("reviewer sees only overview and issues, and direct admin routes remain pro
       } else {
         await route.fulfill({ json: { success: true, data: {
           permissions: { canManageAdminRoles: true },
+          summary: { verifiedUsers },
           users: [{ id: "role-control-test", name: "Role control test", email: "reviewer@example.test",
             emailVerified: true, banned: false, banReason: null, createdAt: new Date().toISOString(),
             isAdmin: false, isReviewer, isBootstrapAdmin: false,
@@ -83,6 +85,7 @@ test("reviewer sees only overview and issues, and direct admin routes remain pro
     });
     await context.addCookies([{ name: "riic-locale", value: "zh", domain: new URL(baseURL!).hostname, path: "/" }]);
     await page.goto("/admin/users");
+    await expect(page.locator("[data-admin-verified-users]")).toContainText("45,549");
     await page.getByRole("button", { name: /设为审阅人|Grant reviewer/, exact: true }).click();
     await page.getByRole("dialog").getByRole("button", { name: /确认设为审阅人|Confirm reviewer/, exact: true }).click();
     await expect(page.getByRole("button", { name: /撤销审阅人|Revoke reviewer/, exact: true })).toBeVisible();
@@ -91,6 +94,9 @@ test("reviewer sees only overview and issues, and direct admin routes remain pro
     await page.getByRole("dialog").getByRole("button", { name: /确认取消|Confirm revocation/, exact: true }).click();
     await expect(page.getByRole("button", { name: /设为审阅人|Grant reviewer/, exact: true })).toBeVisible();
     expect(isReviewer).toBe(false);
+    verifiedUsers = 0;
+    await page.getByRole("button", { name: /搜索|Search/, exact: true }).click();
+    await expect(page.locator("[data-admin-verified-users] dd").first()).toHaveText("0");
     await pool.query('UPDATE "user" SET role=$1 WHERE id=$2', ["user", id]);
     expect((await context.request.get("/api/admin/solver-metrics", { headers: apiHeaders })).status()).toBe(403);
     await page.goto("/admin");

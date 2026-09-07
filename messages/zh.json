@@ -521,6 +521,8 @@
     "actionCompleted": "操作已完成。",
     "couldNotLoadSessions": "无法读取 Session",
     "userManagement": "用户管理",
+    "verifiedUsers": "已验证邮箱用户",
+    "verifiedUsersScope": "全站总数 · 不受搜索影响",
     "searchSuspendInspectOrRevokeSessions": "搜索、封禁、查看或撤销 Session。",
     "theBootstrapAdministratorCanAlsoChangeAdministratorRoles": " 管理员可以设置管理员和审阅人角色，初始管理员权限不能在此调整。",
     "administratorRolesCanBeChangedOnlyByTheBootstrap": " 当前账号没有分配后台角色的权限。",

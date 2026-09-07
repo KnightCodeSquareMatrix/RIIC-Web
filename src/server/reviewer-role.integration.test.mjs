@@ -66,6 +66,11 @@ test("reviewer roles enforce real-session API boundaries and take effect without
     await status(await handleUpdateAdminUser(request(targetCookie, { isAdmin: true }), targetId), 403);
     const adminUsers = await status(await handleListAdminUsers(request(adminCookie)));
     assert.equal(adminUsers.data.permissions.canManageAdminRoles, true);
+    assert.ok(Number.isInteger(adminUsers.data.summary.verifiedUsers));
+    assert.ok(adminUsers.data.summary.verifiedUsers >= 3);
+    const emptySearch = await status(await handleListAdminUsers(request(adminCookie, undefined, `/api/admin/users?q=missing-${randomUUID()}`)));
+    assert.equal(emptySearch.data.users.length, 0);
+    assert.ok(emptySearch.data.summary.verifiedUsers >= 3, "verified total is global even when no users match the search");
     await status(await handleUpdateAdminUser(request(adminCookie, { isAdmin: false }), bootstrapId), 403);
     await status(await handleUpdateAdminUser(request(adminCookie, { isReviewer: true }), bootstrapId), 403);
     await status(await handleUpdateAdminUser(request(adminCookie, { isAdmin: true }), targetId));
