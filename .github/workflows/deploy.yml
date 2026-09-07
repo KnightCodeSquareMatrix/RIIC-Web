@@ -43,7 +43,7 @@ jobs:
       DEPLOY_INTERNAL_PORT: ${{ vars.DEPLOY_INTERNAL_PORT }}
       DEPLOY_DEBUG_TOOLS_ENABLED: ${{ vars.DEPLOY_DEBUG_TOOLS_ENABLED || '0' }}
       DEPLOY_RATE_LIMIT_ENABLED: ${{ vars.DEPLOY_RATE_LIMIT_ENABLED || '1' }}
-      DEPLOY_APPROVED_SOLVER_SHA256: ${{ vars.DEPLOY_APPROVED_SOLVER_SHA256 }}
+      DEPLOY_APPROVED_SOLVER_SHA256: ${{ github.ref_name == 'develop' && vars.DEPLOY_APPROVED_SOLVER_SHA256 || '' }}
       DEPLOY_EXPECTED_REPOSITORY: KnightCodeSquareMatrix/RIIC-Web
       DEPLOY_RELEASE_HELPER_CONTRACT: "6"
 
@@ -101,7 +101,9 @@ jobs:
           [[ "$DEPLOY_INTERNAL_PORT" =~ ^[0-9]{2,5}$ ]]
           [[ "$DEPLOY_DEBUG_TOOLS_ENABLED" =~ ^[01]$ ]]
           [[ "$DEPLOY_RATE_LIMIT_ENABLED" =~ ^[01]$ ]]
-          [[ "$DEPLOY_APPROVED_SOLVER_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          if [[ "$DEPLOYMENT_ENV" != "production" ]]; then
+            [[ "$DEPLOY_APPROVED_SOLVER_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          fi
           test "$DEPLOY_EXPECTED_REPOSITORY" = "KnightCodeSquareMatrix/RIIC-Web"
           [[ "$DEPLOY_RELEASE_HELPER_CONTRACT" =~ ^[1-9][0-9]*$ ]]
           if [[ "$DEPLOYMENT_ENV" == "production" ]]; then
@@ -254,6 +256,34 @@ jobs:
           verify_helper deploy /usr/local/sbin/arknights-infra-deploy \
             "$DEPLOY_RELEASE_HELPER_CONTRACT"
 
+      - name: Resolve solver for deployment
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
+        run: |
+          set -euo pipefail
+          solver_sha256="$DEPLOY_APPROVED_SOLVER_SHA256"
+          if [[ "$DEPLOYMENT_ENV" == "production" ]]; then
+            test "$DEPLOY_APP_ROOT" = "/opt/arknights-infra"
+            solver_sha256="$(timeout --kill-after=5s 30s ssh -o BatchMode=yes -o ConnectTimeout=15 \
+              "${DEPLOY_SSH_USER}@${DEPLOY_HOST}" \
+              "set -eu
+               test -f '$DEPLOY_APP_ROOT/shared/bin/infra-cli.sha256'
+               test ! -L '$DEPLOY_APP_ROOT/shared/bin/infra-cli.sha256'
+               cat '$DEPLOY_APP_ROOT/shared/bin/infra-cli.sha256'")"
+            [[ "$solver_sha256" =~ ^[0-9a-f]{64}$ ]]
+            # The root-owned helper validates ownership, the sidecar, the current
+            # release/configuration, and the Worker's fingerprint before trusting it.
+            timeout --kill-after=10s 60s ssh -o BatchMode=yes -o ConnectTimeout=15 \
+              "${DEPLOY_SSH_USER}@${DEPLOY_HOST}" \
+              "sudo -n /usr/local/sbin/arknights-infra-deploy --preflight \
+               production '$DEPLOY_APP_ROOT' '$DEPLOY_EXPECTED_REPOSITORY' '$solver_sha256'"
+          fi
+          [[ "$solver_sha256" =~ ^[0-9a-f]{64}$ ]]
+          printf 'DEPLOY_SOLVER_SHA256=%s\n' "$solver_sha256" >> "$GITHUB_ENV"
+          printf 'Deployment solver SHA-256: %s\n' "$solver_sha256" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Sync standalone release tree and assemble verified archive
         shell: bash
         env:
@@ -402,7 +432,7 @@ jobs:
             '$DEPLOY_DEBUG_TOOLS_ENABLED' \
             '$DEPLOY_RATE_LIMIT_ENABLED' \
             '$DEPLOY_EXPECTED_REPOSITORY' \
-            '$DEPLOY_APPROVED_SOLVER_SHA256' \
+            '$DEPLOY_SOLVER_SHA256' \
             '$DEPLOY_TREE_SHA'"
 
       - name: Remove staged release artifacts from the runner
