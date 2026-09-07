@@ -1,8 +1,26 @@
 import { manualLevelFor, maxEliteForRarity } from './manual-operbox.ts';
+import operatorRarities from './generated/arkntools/operator-rarities.json' with { type: 'json' };
+import operatorCatalog from './generated/arkntools/operator-catalog.json' with { type: 'json' };
+
+const RARITY_BY_NAME = new Map(operatorCatalog.map((operator) => [operator.name, operator.rarity]));
+
+export function normalizeMaaRarities(value: unknown): unknown {
+  if (!Array.isArray(value)) return value;
+  return value.map((row) => {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) return row;
+    const id = typeof row.id === 'string' ? row.id.trim() : '';
+    const canonicalId = id.startsWith('char_') ? id : `char_${id}`;
+    const rarity = Object.hasOwn(operatorRarities, canonicalId)
+      ? operatorRarities[canonicalId as keyof typeof operatorRarities]
+      : RARITY_BY_NAME.get(String(row.name));
+    return rarity === undefined ? row : { ...row, rarity };
+  });
+}
 
 export type MaaChoice = { label: string; elite: number; level: number; own: boolean };
 export type MaaIssue = { index: number; name: string; rarity: number; elite: number; level: number; choices: MaaChoice[] };
 export function inspectMaaProgress(value: unknown): MaaIssue[] {
+  value = normalizeMaaRarities(value);
   if (!Array.isArray(value)) return [];
   return value.flatMap((row, index) => {
     if (!row || typeof row !== 'object' || row.own !== true) return [];

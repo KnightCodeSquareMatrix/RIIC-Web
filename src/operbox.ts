@@ -2,8 +2,7 @@ import type { OperBoxEntry } from "./types.ts";
 import { normalizeOperboxEntries } from "./operbox-normalization.ts";
 import { manualLevelFor, maxEliteForRarity } from "./manual-operbox.ts";
 import operatorRarities from "./generated/arkntools/operator-rarities.json" with { type: "json" };
-import operatorCatalog from "./generated/arkntools/operator-catalog.json" with { type: "json" };
-const RARITY_BY_NAME = new Map((operatorCatalog as Array<{ id: string; name?: string; rarity?: number }>).filter((item) => item.name && item.rarity).map((item) => [item.name!, item.rarity!]));
+import { normalizeMaaRarities } from "./maa-review.ts";
 
 function pickValue(row: Record<string, unknown>, keys: string[]): unknown {
   for (const key of keys) {
@@ -61,7 +60,9 @@ export function assertOperbox(value: unknown): OperBoxEntry[] {
     const canonicalId = id.startsWith("char_") ? id : `char_${id}`;
     const canonicalRarity = Object.hasOwn(operatorRarities, canonicalId)
       ? operatorRarities[canonicalId as keyof typeof operatorRarities] : undefined;
-    const validatedRarity = canonicalRarity ?? rarity;
+    if (canonicalRarity !== undefined && rarity !== canonicalRarity)
+      throw new Error(`${name} 的 rarity 必须与干员数据一致（${canonicalRarity} 星）。`);
+    const validatedRarity = rarity;
     if (owned) {
       const maxElite = maxEliteForRarity(validatedRarity);
       if (elite > maxElite)
@@ -90,15 +91,12 @@ export async function readOperboxText(text: string): Promise<OperBoxEntry[]> {
       "MAA JSON 无法解析，请确认粘贴了完整的 Arknights_OperBox_Export.json 内容。",
     );
   }
+  parsed = normalizeMaaRarities(parsed);
   if (Array.isArray(parsed)) {
     parsed = parsed.map((row) => {
       if (!row || typeof row !== "object" || Array.isArray(row)) return row;
       const value = row as Record<string, unknown>;
-      const rarity = Number(value.rarity);
-      const id = typeof value.id === "string" ? value.id.trim() : "";
-      const canonicalId = id.startsWith("char_") ? id : `char_${id}`;
-      const canonicalRarity = Object.hasOwn(operatorRarities, canonicalId) ? operatorRarities[canonicalId as keyof typeof operatorRarities] : undefined;
-      const normalizedRarity = canonicalRarity ?? RARITY_BY_NAME.get(String(value.name)) ?? (String(value.name) === "Castle-3" ? 1 : rarity);
+      const normalizedRarity = Number(value.rarity);
       const elite = Number(value.elite);
       if (value.own !== true || !Number.isInteger(normalizedRarity) || normalizedRarity < 1 || normalizedRarity > 6) return row;
       if (Number.isInteger(elite) && elite > maxEliteForRarity(normalizedRarity)) {

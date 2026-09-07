@@ -4,6 +4,7 @@ import test from "node:test";
 import * as XLSX from "xlsx";
 
 import { assertOperbox, readOperboxFile, readOperboxText } from "./operbox.ts";
+import { inspectMaaProgress, normalizeMaaRarities } from "./maa-review.ts";
 import { computePlan, putCloudWorkspace, submitPlanTask } from "./api.ts";
 
 const entry = {
@@ -36,6 +37,26 @@ test("MAA imports preserve valid levels and unowned placeholders", async () => {
   const placeholder = { ...entry, own: false, rarity: 1, elite: -1, level: 0, potential: 0 };
   assert.deepEqual(await readOperboxText(JSON.stringify([valid])), [valid]);
   assert.deepEqual(await readOperboxText(JSON.stringify([placeholder])), [placeholder]);
+});
+
+test("MAA review and import use canonical rarity while submission remains strict", async () => {
+  const incorrect = { ...entry, id: "char_285_medic2", name: "Lancet-2", rarity: 6 };
+  const [issue] = inspectMaaProgress([incorrect]);
+  assert.equal(issue.rarity, 1);
+  assert.equal(issue.choices.some((choice) => choice.elite > 0), false);
+  const [imported] = await readOperboxText(JSON.stringify([incorrect]));
+  assert.equal(imported.rarity, 1);
+  assert.equal(imported.elite, 0);
+  assert.equal(imported.level, 30);
+  assert.throws(() => assertOperbox([incorrect]), /rarity/);
+  assert.deepEqual(normalizeMaaRarities(null), null);
+});
+
+test("MAA review preserves valid progression and offers an inferred elite stage", () => {
+  assert.deepEqual(inspectMaaProgress([{ ...entry, level: 80 }]), []);
+  const [issue] = inspectMaaProgress([{ ...entry, elite: 0, level: 80 }]);
+  assert.ok(issue.choices.some((choice) => choice.own && choice.elite === 1 && choice.level === 80));
+  assert.deepEqual(inspectMaaProgress([{ ...entry, own: false, elite: -1, level: 0 }]), []);
 });
 
 test("JSON imports do not load the XLSX parser", async () => {

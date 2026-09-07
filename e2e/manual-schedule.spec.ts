@@ -364,6 +364,7 @@ test("manual scheduling configures independent shifts, moves conflicts and enabl
   await page.getByRole("tab", { name: /班次 2.*20:00至08:14.*12小时15分钟/ }).click();
   await expect(factory.locator('[data-operator-identity="阿米娅"]')).toHaveCount(0);
   await factory.getByRole("button", { name: "空置" }).first().click();
+  await page.getByRole("dialog").getByRole("tablist", { name: "工作房间" }).getByRole("tab", { name: "全部", exact: true }).click();
   await page.getByRole("dialog").getByRole("button", { name: /阿米娅/ }).click();
   await expect(factory.locator('[data-operator-identity="阿米娅"]')).toBeVisible();
   await page.getByRole("button", { name: "清空当前班次所有设施" }).click();
@@ -371,7 +372,7 @@ test("manual scheduling configures independent shifts, moves conflicts and enabl
   await expect(clearShiftDialog).toContainText("其他班次不会改变");
   await clearShiftDialog.getByRole("button", { name: "清空当前班次" }).click();
   await expect(factory.locator('[data-operator-identity="阿米娅"]')).toHaveCount(0);
-  await page.getByRole("tab", { name: /第 1 班.*10.5h/ }).click();
+  await page.getByRole("tab", { name: /班次 1.*08:15至19:59.*11小时45分钟/ }).click();
   await expect(trade.locator('[data-operator-identity="锡兰"]')).toBeVisible();
   expect(planRequests).toBe(0);
 

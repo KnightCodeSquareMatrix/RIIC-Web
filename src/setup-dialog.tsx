@@ -35,7 +35,7 @@ import { countOwned } from "./operbox";
 import type { SetupStep } from "./onboarding";
 import type { BaseBlueprint, BoxSource, DisplayError, OperBoxEntry, PresetDef, RotationProfile, SklandScheduleSnapshot } from "./types";
 
-import { inspectMaaProgress, type MaaIssue } from "./maa-review";
+import { inspectMaaProgress, normalizeMaaRarities, type MaaIssue } from "./maa-review";
 
 const CLIENT_SKLAND_ENABLED = process.env.APP_CLIENT_SKLAND_ENABLED === "1";
 const ManualOperboxPicker = lazy(() => import("@/components/setup/ManualOperboxPicker").then((module) => ({ default: module.ManualOperboxPicker })));
@@ -171,7 +171,8 @@ export function SetupDialog({
     setMaaChoices({});
     setReviewError(null);
     try {
-      const rows = JSON.parse(text);
+      const rows = normalizeMaaRarities(JSON.parse(text));
+      if (!Array.isArray(rows)) return false;
       const issues = inspectMaaProgress(rows);
       if (!issues.length) return false;
       setMaaReview({ rows, issues, name });
@@ -186,7 +187,7 @@ export function SetupDialog({
         const issue = maaReview.issues.find(item => item.index === index);
         if (!issue) return row;
         const { own, elite, level } = issue.choices[maaChoices[index]];
-        return { ...row, own, elite, level };
+        return { ...row, rarity: issue.rarity, own, elite, level };
       });
       if (await onMaaFile(new File([JSON.stringify(rows)], maaReview.name, { type: "application/json" }))) {
         setMaaReview(null);
@@ -201,7 +202,7 @@ export function SetupDialog({
     if (!maaReview) return;
     setMaaChoices(Object.fromEntries(maaReview.issues.map((issue) => {
       const inferred = issue.choices.findIndex((choice) => choice.label.includes("可能漏识别"));
-      const fallback = issue.choices.reduce((best, choice, index) => choice.own && choice.elite > issue.choices[best].elite ? index : best, 0);
+      const fallback = issue.choices.reduce((best, choice, index) => choice.own && (!issue.choices[best].own || choice.elite > issue.choices[best].elite || (choice.elite === issue.choices[best].elite && choice.level > issue.choices[best].level)) ? index : best, 0);
       return [issue.index, inferred >= 0 ? inferred : fallback];
     })));
   }
@@ -561,7 +562,7 @@ export function SetupDialog({
                         )}
                       </TabsContent>
                     </Tabs>
-                    {maaReview ? (
+                    {inputMode === "maa" && maaReview ? (
                       <section className="mt-3 grid gap-2.5 rounded-lg border border-amber-500/35 bg-amber-50/60 p-3 dark:bg-amber-950/15" aria-label="导入异常确认">
                         <div className="flex items-baseline justify-between gap-3"><h3 className="font-semibold">发现 {maaReview.issues.length} 项异常练度</h3><span className="text-xs text-muted-foreground">请选择修正方案</span></div>
                         <p className="text-sm text-muted-foreground">确认后才会导入；取消会保留原来的 Box。</p>
