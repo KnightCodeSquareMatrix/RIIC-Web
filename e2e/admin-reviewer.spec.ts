@@ -17,16 +17,23 @@ test("reviewer sees only overview and issues, and direct admin routes remain pro
       data: { email: `${id}@example.test`, password },
     });
     expect(login.status(), await login.text()).toBe(200);
+    const sessionCookies: string[] = [];
     for (const header of login.headersArray().filter(header => header.name.toLowerCase() === "set-cookie")) {
       const pair = header.value.split(";", 1)[0];
       const separator = pair.indexOf("=");
       if (!pair.slice(0, separator).endsWith("session_token")) continue;
+      sessionCookies.push(pair);
       await context.addCookies([{
         name: pair.slice(0, separator), value: pair.slice(separator + 1),
         domain: new URL(baseURL!).hostname, path: "/", httpOnly: true,
         secure: header.value.toLowerCase().includes("; secure"), sameSite: "Lax",
       }]);
     }
+    // APIRequestContext does not send Secure cookies over CI's HTTP loopback URL,
+    // while Chromium treats loopback as trustworthy. Use the same real session
+    // explicitly for API assertions so they test authorization, not missing login.
+    expect(sessionCookies).toHaveLength(1);
+    const apiHeaders = { cookie: sessionCookies.join("; ") };
     await page.goto("/admin");
     const nav = page.locator("nav").filter({ has: page.locator('a[href="/admin/issues"]') });
     await expect(nav.locator('a[href="/admin"]')).toBeVisible();
@@ -45,15 +52,15 @@ test("reviewer sees only overview and issues, and direct admin routes remain pro
       await expect(page.locator("[data-admin-user-management]")).toHaveCount(0);
     }
     for (const path of ["/api/admin/users", "/api/admin/users/test/sessions", "/api/admin/skill-annotations", "/api/admin/releases"]) {
-      expect((await context.request.get(path)).status()).toBe(403);
+      expect((await context.request.get(path, { headers: apiHeaders })).status()).toBe(403);
     }
-    expect((await context.request.patch(`/api/admin/users/${id}`, { data: { isAdmin: true } })).status()).toBe(403);
+    expect((await context.request.patch(`/api/admin/users/${id}`, { headers: apiHeaders, data: { isAdmin: true } })).status()).toBe(403);
     for (const path of ["/api/admin/solver-metrics", "/api/admin/feedback", "/api/admin/plan-runs"]) {
-      const response = await context.request.get(path);
+      const response = await context.request.get(path, { headers: apiHeaders });
       expect([200, 503]).toContain(response.status());
       if (response.status() === 503) expect((await response.json()).error.code).toBe("AIC-DATA-8002");
     }
-    expect((await context.request.get("/api/admin/diagnostics")).status()).toBe(200);
+    expect((await context.request.get("/api/admin/diagnostics", { headers: apiHeaders })).status()).toBe(200);
     // The real API assignment lifecycle is covered by reviewer-role.integration;
     // exercise the role controls here with a bootstrap user's response.
     await pool.query('UPDATE "user" SET role=$1 WHERE id=$2', ["admin", id]);
@@ -85,7 +92,7 @@ test("reviewer sees only overview and issues, and direct admin routes remain pro
     await expect(page.getByRole("button", { name: /设为审阅人|Grant reviewer/, exact: true })).toBeVisible();
     expect(isReviewer).toBe(false);
     await pool.query('UPDATE "user" SET role=$1 WHERE id=$2', ["user", id]);
-    expect((await context.request.get("/api/admin/solver-metrics")).status()).toBe(403);
+    expect((await context.request.get("/api/admin/solver-metrics", { headers: apiHeaders })).status()).toBe(403);
     await page.goto("/admin");
     await expect(page.locator('meta[name="robots"][content="noindex"]')).toHaveCount(1);
   } finally {
