@@ -39,7 +39,7 @@ jobs:
       DEPLOY_INTERNAL_PORT: ${{ vars.DEPLOY_INTERNAL_PORT }}
       DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
       PREFLIGHT_MODE: ${{ inputs.mode }}
-      DEPLOY_APPROVED_SOLVER_SHA256: ${{ vars.DEPLOY_APPROVED_SOLVER_SHA256 }}
+      DEPLOY_APPROVED_SOLVER_SHA256: ${{ inputs.environment == 'development' && vars.DEPLOY_APPROVED_SOLVER_SHA256 || '' }}
       DEPLOY_EXPECTED_REPOSITORY: KnightCodeSquareMatrix/RIIC-Web
       DEPLOY_RELEASE_HELPER_CONTRACT: "6"
 
@@ -67,7 +67,7 @@ jobs:
           [[ "$DEPLOY_INTERNAL_PORT" =~ ^[0-9]{2,5}$ ]]
           [[ "$PREFLIGHT_MODE" == "baseline" || "$PREFLIGHT_MODE" == "cutover-ready" ]]
           test "$DEPLOY_EXPECTED_REPOSITORY" = "KnightCodeSquareMatrix/RIIC-Web"
-          if [[ "$PREFLIGHT_MODE" == "cutover-ready" ]]; then
+          if [[ "$PREFLIGHT_MODE" == "cutover-ready" && "$DEPLOY_ENVIRONMENT" == "development" ]]; then
             [[ "$DEPLOY_APPROVED_SOLVER_SHA256" =~ ^[0-9a-f]{64}$ ]]
           fi
 
@@ -125,6 +125,17 @@ jobs:
 
           verify_helper deploy /usr/local/sbin/arknights-infra-deploy \
             "$DEPLOY_RELEASE_HELPER_CONTRACT"
+
+          if [[ "$PREFLIGHT_MODE" == "cutover-ready" && "$DEPLOY_ENVIRONMENT" == "production" ]]; then
+            test "$DEPLOY_APP_ROOT" = "/opt/arknights-infra"
+            DEPLOY_APPROVED_SOLVER_SHA256="$(timeout --kill-after=5s 30s ssh "${ssh_options[@]}" \
+              "${DEPLOY_SSH_USER}@${DEPLOY_HOST}" \
+              "set -eu
+               test -f '$DEPLOY_APP_ROOT/shared/bin/infra-cli.sha256'
+               test ! -L '$DEPLOY_APP_ROOT/shared/bin/infra-cli.sha256'
+               cat '$DEPLOY_APP_ROOT/shared/bin/infra-cli.sha256'")"
+            [[ "$DEPLOY_APPROVED_SOLVER_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          fi
 
           timeout --kill-after=10s 60s ssh "${ssh_options[@]}" \
             "${DEPLOY_SSH_USER}@${DEPLOY_HOST}" \
