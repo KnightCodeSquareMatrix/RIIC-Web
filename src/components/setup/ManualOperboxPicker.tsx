@@ -30,6 +30,7 @@ import {
   type ManualOperboxStage,
 } from "@/manual-operbox";
 import { OperatorIdentity, OperatorSearch, OperatorRarityFilter, OperatorProfessionFilter, OperatorRosterGrid, OPERATOR_PAGE_SIZE } from "@/components/operators/OperatorPickerParts";
+import { OwnedOperatorFilter } from "@/components/operators/OwnedOperatorFilter";
 import type { OperBoxEntry } from "@/types";
 
 const PAGE_SIZE = OPERATOR_PAGE_SIZE;
@@ -60,11 +61,12 @@ const MANUAL_ROSTER: ManualRosterOperator[] = (fullOperboxJson as OperBoxEntry[]
   }))
   .sort((left, right) => right.rarity - left.rarity || right.order - left.order || left.name.localeCompare(right.name, "zh-CN"));
 
-const STAGES: ManualOperboxStage[] = ["none", "e0", "e1", "e2"];
+const STAGES: ManualOperboxStage[] = ["none", "e0-low", "e0", "e1", "e2"];
 
 const STAGE_COLOR: Record<ManualOperboxStage, string> = {
   none: "#71717A",
   e0: "#22BBFF",
+  "e0-low": "#A3A3A3",
   e1: "#B8F03A",
   e2: "#FFD800",
 };
@@ -89,10 +91,11 @@ function initialStages(operbox: OperBoxEntry[] | null): Record<string, ManualOpe
   );
 }
 
-function stageLabel(stage: ManualOperboxStage, locale: AppLocale): string {
+function stageLabel(stage: ManualOperboxStage, locale: AppLocale, rarity?: number): string {
   const en = locale === "en";
   if (stage === "none") return localize_components_setup_ManualOperboxPicker.text(en, "unowned");
-  if (stage === "e0") return localize_components_setup_ManualOperboxPicker.text(en, "e0");
+  if (stage === "e0") return rarity !== undefined && rarity <= 2 ? (locale === "en" ? "E0 level 30" : "精0 30级") : localize_components_setup_ManualOperboxPicker.text(en, "e0");
+  if (stage === "e0-low") return locale === "en" ? "E0 below max" : "精0非30";
   if (stage === "e1") return localize_components_setup_ManualOperboxPicker.text(en, "e1");
   return localize_components_setup_ManualOperboxPicker.text(en, "e2");
 }
@@ -179,9 +182,13 @@ const ManualOperatorCard = memo(function ManualOperatorCard({
         aria-label={localize_components_setup_ManualOperboxPicker.text(en, "ownershipAndEliteStage", { displayName: displayName })}
         className={cn("grid grid-cols-4", compact ? "col-span-2 gap-1 sm:col-span-1" : "gap-1.5")}
       >
-        {STAGES.map((option) => {
+        {STAGES.filter((option) => {
+          if (operator.rarity <= 2) return option === "none" || option === "e0-low" || option === "e0";
+          if (operator.rarity === 3) return option !== "e0-low" && option !== "e2";
+          return option !== "e0-low";
+        }).map((option) => {
           const requestedElite = option === "e2" ? 2 : option === "e1" ? 1 : 0;
-          const disabled = option !== "none" && requestedElite > maxElite;
+          const disabled = (option === "e0-low" && operator.rarity > 2) || (option !== "none" && option !== "e0-low" && requestedElite > maxElite);
           const selected = stage === option;
           return (
             <Button
@@ -193,7 +200,7 @@ const ManualOperatorCard = memo(function ManualOperatorCard({
               aria-checked={selected}
               aria-label={disabled
                 ? (localize_components_setup_ManualOperboxPicker.text(en, "isUnavailableForStarOperators", { value1: stageLabel(option, locale), rarity: operator.rarity }))
-                : stageLabel(option, locale)}
+                : stageLabel(option, locale, operator.rarity)}
               title={disabled ? (localize_components_setup_ManualOperboxPicker.text(en, "unavailableForStarOperators", { rarity: operator.rarity })) : undefined}
               disabled={disabled}
               onClick={() => onStageChange(operator.id, option)}
@@ -206,7 +213,7 @@ const ManualOperatorCard = memo(function ManualOperatorCard({
               )}
             >
               <span className="inline-flex items-center justify-center">
-                {stageLabel(option, locale)}
+                {stageLabel(option, locale, operator.rarity)}
               </span>
             </Button>
           );
@@ -276,7 +283,10 @@ export function ManualOperboxPicker({
 
   const summary = useMemo(() => {
     const result = { none: 0, e0: 0, e1: 0, e2: 0 };
-    for (const operator of MANUAL_ROSTER) result[stages[operator.id] ?? "none"] += 1;
+    for (const operator of MANUAL_ROSTER) {
+      const stage = stages[operator.id] ?? "none";
+      result[stage === "e0-low" ? "e0" : stage] += 1;
+    }
     return result;
   }, [stages]);
   const ownedCount = summary.e0 + summary.e1 + summary.e2;
@@ -418,18 +428,13 @@ export function ManualOperboxPicker({
       <div className={cn("grid gap-2", compact ? "lg:grid-cols-[minmax(14rem,1fr)_auto]" : "sm:grid-cols-[minmax(0,1fr)_auto]")}>
         <OperatorSearch value={query} compact={compact} onChange={(value) => { setQuery(value); resetListView(); }} />
         <div className={cn("flex flex-nowrap items-center", compact ? "gap-1.5" : "gap-2")} data-manual-operbox-actions>
-          <SetupActionButton
-            type="button"
-            variant={onlyOwned ? "default" : "outline"}
-            className="min-w-[92px] px-2 text-[11px] font-normal max-sm:min-w-[92px] sm:min-w-[104px] sm:px-2 sm:text-xs"
-            aria-pressed={onlyOwned}
-            onClick={() => {
-              setOnlyOwned((current) => !current);
+          <OwnedOperatorFilter
+            value={onlyOwned}
+            onChange={(value) => {
+              setOnlyOwned(value);
               resetListView();
             }}
-          >
-            {intl("components_setup_ManualOperboxPicker.ownedOnly")}
-          </SetupActionButton>
+          />
           <SetupActionButton
             type="button"
             variant={allMaximumStages ? "default" : "outline"}

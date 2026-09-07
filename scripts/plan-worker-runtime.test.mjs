@@ -144,6 +144,22 @@ test("a solver lease is cached and the artifact is queued only after task public
   ]);
 });
 
+test("a recovered fallback releases the primary cache lease without publishing into it", async () => {
+  const lease = { kind: "lease", keyHmac: "cache-key", leaseOwner: "lease-owner" };
+  const { calls, dependencies } = executionHarness({
+    getCacheSolverIdentity: async () => ({protocol_version:1,plan_schema_version:3,
+      solver_executable_sha256:"c".repeat(64),observed_at:"2026-09-02T00:00:00.000Z"}),
+    resolveCache: async () => lease,
+  });
+  const primaryRun=dependencies.runPlan;
+  dependencies.runPlan=async (...args)=>({...await primaryRun(...args),fallbackUsed:true});
+  assert.equal(await executePlanTask(claimedTask(),2,dependencies),25);
+  await waitForPlanExecutionUpdates(1_000);
+  assert.ok(calls.includes("record:success"));assert.ok(calls.includes("task:done"));
+  assert.ok(calls.includes("lease-release"));assert.ok(!calls.includes("cache-complete"));
+  assert.ok(!calls.includes("cache-reference"));
+});
+
 test("a failed solver releases its cache lease before recording the terminal task", async () => {
   const lease = { kind: "lease", keyHmac: "cache-key", leaseOwner: "lease-owner" };
   const task = claimedTask();

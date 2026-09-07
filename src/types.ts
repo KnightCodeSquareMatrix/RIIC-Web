@@ -199,6 +199,11 @@ export interface RotationJson {
       originium_shards: number;
       orundum: number;
     };
+    drone_production?: {
+      lmd: number;
+      pure_gold: number;
+      battle_records: number;
+    };
   };
 }
 
@@ -979,6 +984,9 @@ export type RotationProfile =
 
 export interface PlanApiResponse {
   success: boolean;
+  /** Internal execution metadata; fallback output must not populate a primary-solver cache lease. */
+  fallbackUsed?: boolean;
+  solverAttempts?: Array<{ engine: "primary" | "fallback"; status: "success" | "failed"; durationMs: number; solver?: SolverObservation; error?: string }>;
   startedAt?: string;
   durationMs?: number;
   /** Time reported by the solver process itself, excluding transport and artifact I/O. */

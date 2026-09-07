@@ -8,6 +8,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } 
 
 import { ScheduleBoard, ShiftTabs } from "@/components";
 import { FiammettaTargetChip } from "@/components/FiammettaTargetChip";
+import { DroneTargetChip } from "@/components/DroneTargetChip";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -674,6 +675,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                   {fiammettaTarget ? (
                     <FiammettaTargetChip target={fiammettaTarget} portrait={fiammettaPortrait} />
                   ) : null}
+                  <DroneTargetChip drones={activePlan?.drones} />
                   <ShiftTabs
                     maaJson={scheduleResult?.maa}
                     rotation={scheduleResult?.rotation}

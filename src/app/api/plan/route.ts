@@ -277,14 +277,14 @@ export async function POST(request: Request) {
     runResult = await runPlan({ layout: body.layout, operbox, sourceName, rotation, fiammettaEnable, dataOwnerTag });
     const publicResult = toPublicPlanData(
       runResult,
-      { layoutLabel: body.layout.template, sourceName },
+      { layoutLabel: body.layout.template, sourceName, layout: body.layout },
       requestId,
       { includeDebug }
     );
     const runStored = await recordRun("success", null, publicResult);
     if (cacheLease) {
       const activeLease = cacheLease;
-      if (!runStored) {
+      if (!runStored || runResult.fallbackUsed) {
         await releasePlanCacheLease(activeLease);
         cacheLease = undefined;
       } else {

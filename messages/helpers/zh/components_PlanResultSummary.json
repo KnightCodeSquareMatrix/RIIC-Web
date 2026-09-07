@@ -59,5 +59,16 @@
   "unitExperience": "经验",
   "unitLmd": "龙门币",
   "unitOrundum": "合成玉",
-  "unitPieces": "枚"
+  "unitPieces": "枚",
+  "estimatedNaturalManufacturing": "估算自然制造",
+  "estimatedDroneManufacturing": "估算无人机制造",
+  "estimatedNaturalOrders": "估算自然订单",
+  "estimatedDroneOrders": "估算无人机订单",
+  "estimatedDrones": "估算无人机",
+  "totalOutput": "总产出",
+  "totalValue": "总价值",
+  "surplus": "盈余",
+  "loss": "亏损",
+  "moneyBookRatio": "钱书比",
+  "noExperienceManufactured": "未制造经验"
 }

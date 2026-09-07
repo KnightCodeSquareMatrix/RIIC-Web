@@ -39,6 +39,7 @@ export type InfraCliServeClientOptions = {
   timeoutMs: number;
   serveArgs?: readonly string[] | ((cliPath: string) => readonly string[]);
   cwd?: (cliPath: string) => string;
+  childEnv?: Record<string,string>;
 };
 
 function utf8Suffix(value: string, maxBytes: number): string {
@@ -194,6 +195,7 @@ export class ServeRequestCapture {
 export class InfraCliServeClient {
   private readonly options: InfraCliServeClientOptions;
   private child: ReturnType<typeof spawn> | null = null;
+  private liveChildren = new Set<ReturnType<typeof spawn>>();
   private cliPath: string | null = null;
   private starting: Promise<void> | null = null;
   private stdoutLines = new NdjsonLineBuffer();
@@ -225,7 +227,7 @@ export class InfraCliServeClient {
       }
 
       const dataDir = this.options.resolveRuntimeDataDir(cliPath);
-      const env = { ...process.env };
+      const env = { ...process.env, ...this.options.childEnv };
       if (dataDir) {
         env.ARKNIGHTS_INFRA_DATA_DIR = dataDir;
       } else {
@@ -243,6 +245,9 @@ export class InfraCliServeClient {
         shell: false,
       });
       let settled = false;
+
+      this.liveChildren.add(child);
+      child.once("close",()=>this.liveChildren.delete(child));
 
       this.child = child;
       this.cliPath = cliPath;
@@ -350,6 +355,21 @@ export class InfraCliServeClient {
       busy: Boolean(this.activeKey),
       restartCount: this.restartCount,
     };
+  }
+
+  /** Keep replaced children tracked until close; fallback must not overlap a timed-out search. */
+  async stopAndWait(reason: string) {
+    const children=[...this.liveChildren];
+    this.stop(reason);
+    await Promise.all(children.map(child=>new Promise<void>((resolve,reject)=>{
+      if(!this.liveChildren.has(child)) {resolve();return;}
+      const force=setTimeout(()=>child.kill("SIGKILL"),250);
+      const deadline=setTimeout(()=>{cleanup();reject(new Error("Solver process did not close after termination."));},2_000);
+      const onClose=()=>{cleanup();resolve();};
+      const cleanup=()=>{clearTimeout(force);clearTimeout(deadline);child.off("close",onClose);};
+      child.once("close",onClose);
+      if(!child.killed) child.kill();
+    })));
   }
 
   private activePending() {
