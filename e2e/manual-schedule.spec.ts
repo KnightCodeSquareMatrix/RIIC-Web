@@ -254,8 +254,14 @@ test("manual scheduling configures independent shifts, moves conflicts and enabl
     .toBeCloseTo((configuredShiftTabsBox?.y ?? 0) + (configuredShiftTabsBox?.height ?? 0) / 2, 0);
   await moraleTarget.click();
   const fiammettaPicker = page.getByRole("dialog");
-  await expect(fiammettaPicker.locator("[data-manual-operator-choice]").first().locator("img")).toBeVisible();
-  await expect(fiammettaPicker.getByText(/精2 Lv\.60/).first()).toBeVisible();
+  await expect(fiammettaPicker.locator("[data-manual-operator-choice]").first().locator('img[width="180"]')).toBeVisible();
+  await expect(fiammettaPicker.locator("[data-elite-badge]").first()).toBeVisible();
+  await expect(fiammettaPicker.getByRole("group", { name: "星级" })).toBeVisible();
+  await expect(fiammettaPicker.getByRole("button", { name: "上一页" })).toBeDisabled();
+  await expect(fiammettaPicker.getByRole("button", { name: "下一页" })).toBeDisabled();
+  await expect(fiammettaPicker.locator("[data-manual-operator-placeholder]")).toHaveCount(15);
+  const pickerSearch = fiammettaPicker.getByLabel("搜索可选干员或基建技能");
+  await pickerSearch.fill("锡兰");
   await fiammettaPicker.getByRole("button", { name: /锡兰/ }).hover();
   await expect(page.locator('[data-slot="tooltip-content"][data-open]')).toBeVisible({ timeout: 1_000 });
   await fiammettaPicker.locator("[data-manual-operator-picker]").evaluate((element) => {
@@ -263,8 +269,10 @@ test("manual scheduling configures independent shifts, moves conflicts and enabl
   });
   await expect(page.locator('[data-slot="tooltip-content"][data-open]')).toHaveCount(0);
   await page.waitForTimeout(200);
+  await pickerSearch.fill("阿米娅");
   await fiammettaPicker.getByRole("button", { name: /阿米娅/ }).hover();
   await expect(page.locator('[data-slot="tooltip-content"][data-open]')).toBeVisible({ timeout: 1_000 });
+  await pickerSearch.fill("锡兰");
   await fiammettaPicker.getByRole("button", { name: /锡兰/ }).click();
   await expect(manualShiftActions.getByRole("button", { name: "换心情 锡兰" })).toBeVisible();
   await expect(manualShiftActions.locator("[data-fiammetta-target-chip] img")).toBeVisible();
@@ -287,19 +295,38 @@ test("manual scheduling configures independent shifts, moves conflicts and enabl
   await expect(page.locator('[data-schedule-view="compact"]')).toBeVisible();
   await expect(trade.getByRole("button", { name: "空置" }).first()).toContainText("可编辑");
   await trade.getByRole("button", { name: "空置" }).first().click();
-  await page.getByRole("dialog").getByRole("button", { name: /阿米娅/ }).click();
+  let operatorPicker = page.getByRole("dialog");
+  await expect(operatorPicker.getByRole("tab", { name: "贸易站", exact: true })).toHaveAttribute("aria-selected", "true");
+  await operatorPicker.getByRole("tab", { name: "贸易站", exact: true }).click();
+  await expect(operatorPicker.getByRole("tab", { name: "贸易站", exact: true })).toHaveAttribute("aria-selected", "true");
+  await operatorPicker.getByRole("tablist", { name: "工作房间" }).getByRole("tab", { name: "全部", exact: true }).click();
+  await expect(operatorPicker.getByRole("tablist", { name: "工作房间" }).getByRole("tab", { name: "全部", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(operatorPicker.getByText("技能标签", { exact: true })).toBeVisible();
+  await expect(operatorPicker.getByText("暂无可选标签", { exact: true })).toBeVisible();
+  await operatorPicker.getByLabel("搜索可选干员或基建技能").fill("阿米娅");
+  await operatorPicker.getByRole("button", { name: /阿米娅/ }).click();
   const editableAmiyaSlot = trade.getByRole("button", { name: /阿米娅/ });
   await expect(editableAmiyaSlot).toBeVisible();
   await expect(editableAmiyaSlot.locator("button")).toHaveCount(0);
 
   await trade.getByRole("button", { name: "空置" }).first().click();
-  await page.getByRole("dialog").getByRole("button", { name: /锡兰/ }).click();
+  operatorPicker = page.getByRole("dialog");
+  await operatorPicker.getByRole("tablist", { name: "工作房间" }).getByRole("tab", { name: "全部", exact: true }).click();
+  await operatorPicker.getByLabel("搜索可选干员或基建技能").fill("锡兰");
+  await operatorPicker.getByRole("button", { name: /锡兰/ }).click();
   await trade.getByRole("button", { name: /阿米娅/ }).click();
-  await page.getByRole("dialog").getByRole("button", { name: /阿米娅/ }).click();
+  operatorPicker = page.getByRole("dialog");
+  await operatorPicker.getByRole("tablist", { name: "工作房间" }).getByRole("tab", { name: "全部", exact: true }).click();
+  await operatorPicker.getByLabel("搜索可选干员或基建技能").fill("阿米娅");
+  await expect(operatorPicker.locator('[data-current-selection=""]')).toContainText("贸易站 1");
+  await operatorPicker.getByRole("button", { name: /阿米娅/ }).click();
   await expect(trade.getByRole("button", { name: /阿米娅/ })).toBeVisible();
 
   await trade.getByRole("button", { name: /锡兰/ }).click();
-  await page.getByRole("dialog").getByRole("button", { name: /阿米娅/ }).click();
+  operatorPicker = page.getByRole("dialog");
+  await operatorPicker.getByRole("tablist", { name: "工作房间" }).getByRole("tab", { name: "全部", exact: true }).click();
+  await operatorPicker.getByLabel("搜索可选干员或基建技能").fill("阿米娅");
+  await operatorPicker.getByRole("button", { name: /阿米娅/ }).click();
   await expect(trade.locator('[data-operator-identity]')).toHaveCount(3);
   const orderedIdentities = await trade.locator('[data-operator-identity]').evaluateAll((elements) => (
     elements.map((element) => element.getAttribute("data-operator-identity"))
@@ -307,7 +334,11 @@ test("manual scheduling configures independent shifts, moves conflicts and enabl
   expect(orderedIdentities.slice(0, 3)).toEqual(["锡兰", "阿米娅", "empty"]);
 
   await factory.getByRole("button", { name: "空置" }).first().click();
-  await page.getByRole("dialog").getByRole("button", { name: /阿米娅/ }).click();
+  operatorPicker = page.getByRole("dialog");
+  await expect(operatorPicker.getByRole("tab", { name: "制造站", exact: true })).toHaveAttribute("aria-selected", "true");
+  await operatorPicker.getByRole("tablist", { name: "工作房间" }).getByRole("tab", { name: "全部", exact: true }).click();
+  await operatorPicker.getByLabel("搜索可选干员或基建技能").fill("阿米娅");
+  await operatorPicker.getByRole("button", { name: /阿米娅/ }).click();
   const moveDialog = page.getByRole("dialog", { name: "移动该干员？" });
   await expect(moveDialog).toContainText("已经在贸易站 1工作");
   await moveDialog.getByRole("button", { name: "移动干员" }).click();
