@@ -17,6 +17,7 @@ import {
   MAX_MANUAL_SHIFT_COUNT,
   MIN_MANUAL_SHIFT_COUNT,
 } from "./manual-schedule-config.ts";
+import { factoryRecipeFromMaaProduct, normalizeProductForLevel } from "./factory-recipes.ts";
 
 export {
   DEFAULT_MANUAL_SHIFT_DURATIONS,
@@ -92,6 +93,27 @@ const IMPORTED_LAYOUT_GROUPS: ReadonlyArray<{
   { group: "hire", kind: "office", idPrefix: "office", level: 3 },
   { group: "processing", kind: "workshop", idPrefix: "workshop", level: 3 },
 ];
+
+function importedRoomProduct(
+  maa: MaaJson,
+  group: keyof MaaRooms,
+  kind: RoomKind,
+  roomIndex: number,
+): BlueprintRoom["product"] | undefined {
+  for (const plan of maa.plans) {
+    const product = plan.rooms[group]?.[roomIndex]?.product;
+    if (typeof product !== "string") continue;
+    if (kind === "factory") {
+      const recipe = product === "all" ? "all" : factoryRecipeFromMaaProduct(product);
+      if (recipe) return { factory: { recipe } };
+    }
+    if (kind === "trade_post") {
+      if (["LMD", "Gold", "gold", "龙门商法"].includes(product)) return { trade: { order: "gold" } };
+      if (["Orundum", "Originium Shard", "originium", "开采协力"].includes(product)) return { trade: { order: "originium" } };
+    }
+  }
+  return undefined;
+}
 
 export interface ManualShiftTimeRange {
   startTime: string;
@@ -266,14 +288,14 @@ export function parseMaaScheduleText(text: string): MaaJson {
   try {
     parsed = JSON.parse(text);
   } catch {
-    throw new Error("排版 JSON 无法解析，请确认文件内容完整。");
+    throw new Error("排班 JSON 无法解析，请确认文件内容完整。");
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("排版文件顶层必须是 JSON 对象。");
+    throw new Error("排班文件顶层必须是 JSON 对象。");
   }
   const candidate = parsed as Partial<MaaJson>;
   if (!Array.isArray(candidate.plans) || candidate.plans.length === 0) {
-    throw new Error("排版文件缺少非空的 plans 数组。");
+    throw new Error("排班文件缺少非空的 plans 数组。");
   }
   candidate.plans.forEach((plan, index) => {
     if (!plan || typeof plan !== "object" || Array.isArray(plan) || !plan.rooms || typeof plan.rooms !== "object" || Array.isArray(plan.rooms)) {
@@ -310,7 +332,7 @@ export function normalizeMaaScheduleForManualImport(maa: MaaJson): MaaJson {
   const timedPlans = maa.plans.filter((plan) => Array.isArray(plan.period) && plan.period.length > 0);
   if (timedPlans.length === 0) return structuredClone(maa);
   if (timedPlans.length !== maa.plans.length) {
-    throw new Error("排版文件混合了有时间区间和无时间区间的班次，无法自动判断执行顺序。");
+    throw new Error("排班文件混合了有时间区间和无时间区间的班次，无法自动判断执行顺序。");
   }
 
   const coverage = new Int16Array(MINUTES_PER_DAY).fill(-1);
@@ -349,7 +371,7 @@ export function normalizeMaaScheduleForManualImport(maa: MaaJson): MaaJson {
     elapsed += duration;
   }
   if (segments.length > MAX_MANUAL_SHIFT_COUNT) {
-    throw new Error(`排版文件展开后共有 ${segments.length} 个时间班次，超过页面支持的 ${MAX_MANUAL_SHIFT_COUNT} 班。`);
+    throw new Error(`排班文件展开后共有 ${segments.length} 个时间班次，超过页面支持的 ${MAX_MANUAL_SHIFT_COUNT} 班。`);
   }
 
   return {
@@ -363,7 +385,7 @@ export function normalizeMaaScheduleForManualImport(maa: MaaJson): MaaJson {
   };
 }
 
-/** 用排版文件明确给出的房间数组覆盖对应设施；文件未涉及的设施沿用当前布局。 */
+/** 用排班文件明确给出的房间数组和产物覆盖对应设施；文件未涉及的设施沿用当前布局。 */
 export function layoutFromMaaSchedule(maa: MaaJson, current: BaseBlueprint): BaseBlueprint {
   const rooms: BlueprintRoom[] = [];
   for (const definition of IMPORTED_LAYOUT_GROUPS) {
@@ -386,7 +408,15 @@ export function layoutFromMaaSchedule(maa: MaaJson, current: BaseBlueprint): Bas
             ...(definition.kind === "trade_post" ? { product: { trade: { order: "gold" as const } } } : {}),
             ...(definition.kind === "factory" ? { product: { factory: { recipe: "gold" as const } } } : {}),
           };
-      rooms.push(room);
+      const importedProduct = importedRoomProduct(maa, definition.group, definition.kind, index);
+      rooms.push(importedProduct
+        ? {
+            ...room,
+            product: "trade" in importedProduct
+              ? { trade: { order: normalizeProductForLevel(room.level, importedProduct.trade.order) } }
+              : importedProduct,
+          }
+        : room);
     }
   }
   rooms.push(...current.rooms.filter((room) => room.kind === "training_room").map((room) => structuredClone(room)));

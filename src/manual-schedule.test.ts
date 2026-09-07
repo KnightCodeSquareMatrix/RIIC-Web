@@ -340,15 +340,44 @@ test("timed MAA imports reject gaps and overlaps", () => {
   }))), /重叠/);
 });
 
-test("MAA layout import overrides specified room counts and preserves omitted facilities", () => {
+test("MAA layout import overrides specified room counts and imports room products", () => {
   const imported = layoutFromMaaSchedule(parseMaaScheduleText(JSON.stringify({
-    plans: [{ rooms: { trading: [{ operators: [] }, { operators: [] }, { operators: [] }] } }],
+    plans: [{ rooms: {
+      trading: [
+        { product: "Originium Shard", operators: [] },
+        { product: "LMD", operators: [] },
+        { product: "Orundum", operators: [] },
+      ],
+      manufacture: [
+        { product: "Battle Record", operators: [] },
+        { product: "Gold", operators: [] },
+        { product: "originium", operators: [] },
+      ],
+    } }],
   })), layout);
   assert.equal(imported.rooms.filter((room) => room.kind === "trade_post").length, 3);
-  assert.equal(imported.rooms.filter((room) => room.kind === "factory").length, 1);
+  assert.equal(imported.rooms.filter((room) => room.kind === "factory").length, 3);
+  assert.deepEqual(imported.rooms.filter((room) => room.kind === "trade_post").map((room) => (
+    room.product && "trade" in room.product ? room.product.trade.order : null
+  )), ["originium", "gold", "originium"]);
+  assert.deepEqual(imported.rooms.filter((room) => room.kind === "factory").map((room) => (
+    room.product && "factory" in room.product ? room.product.factory.recipe : null
+  )), ["battle_record", "gold", "originium"]);
+});
+
+test("MAA layout import preserves current products when the file omits or does not recognize them", () => {
+  const imported = layoutFromMaaSchedule(parseMaaScheduleText(JSON.stringify({
+    plans: [{ rooms: {
+      trading: [{ operators: [] }],
+      manufacture: [{ product: "unknown product", operators: [] }],
+    } }],
+  })), layout);
   const importedTrade = imported.rooms.find((room) => room.id === "trade_1");
+  const importedFactory = imported.rooms.find((room) => room.id === "manu_1");
   assert.ok(importedTrade?.product && "trade" in importedTrade.product);
+  assert.ok(importedFactory?.product && "factory" in importedFactory.product);
   assert.equal(importedTrade.product.trade.order, "gold");
+  assert.equal(importedFactory.product.factory.recipe, "battle_record");
 });
 
 test("MAA schedule import rejects JSON without valid plans and rooms", () => {
