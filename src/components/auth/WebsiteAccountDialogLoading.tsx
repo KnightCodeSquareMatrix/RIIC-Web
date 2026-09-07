@@ -52,13 +52,13 @@ export function WebsiteAccountDialogLoading({
         data-website-account-dialog-loading
         aria-busy="true"
         finalFocus={false}
-        className="max-h-[calc(100dvh-1rem)] overflow-y-auto sm:max-w-[min(880px,calc(100vw-2rem))]"
+        className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] min-w-0 overflow-x-hidden overflow-y-auto max-md:inset-0 max-md:h-dvh max-md:max-h-none max-md:!w-screen max-md:!max-w-none max-md:translate-x-0 max-md:translate-y-0 max-md:!rounded-none sm:w-full sm:max-w-[min(880px,calc(100vw-2rem))]"
       >
         <DialogHeader className="sr-only">
           <DialogTitle>{intl("components_auth_WebsiteAccountDialogLoading.websiteAccountSignIn")}</DialogTitle>
           <DialogDescription>{intl("components_auth_WebsiteAccountDialogLoading.theSignInInterfaceIsLoading")}</DialogDescription>
         </DialogHeader>
-        <div className="relative z-[1]">
+        <div className="relative z-[1] min-w-0 max-w-full">
           <WebsiteAccountLoadingStatus />
         </div>
       </DialogContent>
