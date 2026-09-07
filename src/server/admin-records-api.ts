@@ -17,7 +17,7 @@ import {
   requestClientIp,
   successResponse,
 } from "./api-contract";
-import { requireWebsiteAdmin } from "./auth/authorization";
+import { requireWebsiteReviewer } from "./auth/authorization";
 import { isBusinessDatabaseReadEnabled } from "./business-config";
 import {
   deleteFeedbackRecords,
@@ -107,7 +107,7 @@ export async function handleListAdminRecords(
   const requestId = createRequestId();
   const startedAt = performance.now();
   try {
-    await requireWebsiteAdmin(request);
+    await requireWebsiteReviewer(request);
     requireRecordDatabase();
     const params = new URL(request.url).searchParams;
     const status = kind === "feedback"
@@ -146,7 +146,7 @@ async function updateAdminFeedback(
 ) {
   assertSameOrigin(request);
   enforceRateLimit("admin-record-update", requestClientIp(request), 60, 10 * 60_000);
-  const admin = await requireWebsiteAdmin(request);
+  const admin = await requireWebsiteReviewer(request);
   requireRecordDatabase();
   const status = allowLegacyStatus
     ? legacyAdminFeedbackStatus(body?.status)
@@ -185,7 +185,7 @@ export async function handleGetAdminFeedbackDetail(request: Request, feedbackId:
   const requestId = createRequestId();
   const startedAt = performance.now();
   try {
-    await requireWebsiteAdmin(request);
+    await requireWebsiteReviewer(request);
     requireRecordDatabase();
     const item = await findFeedbackRecord(recordId(feedbackId));
     if (!item) throw new PublicApiError("AIC-DATA-8004");
@@ -214,7 +214,7 @@ export async function handleGetAdminPlanRunDetail(request: Request, diagnosticId
   const requestId = createRequestId();
   const startedAt = performance.now();
   try {
-    await requireWebsiteAdmin(request);
+    await requireWebsiteReviewer(request);
     requireRecordDatabase();
     const item = await findPlanRunRecord(recordId(diagnosticId));
     if (!item || item.status !== "failed") throw new PublicApiError("AIC-DATA-8004");
@@ -241,7 +241,7 @@ export async function handleDeleteAdminFeedback(request: Request) {
   try {
     assertSameOrigin(request);
     enforceRateLimit("admin-feedback-delete", requestClientIp(request), 20, 10 * 60_000);
-    await requireWebsiteAdmin(request);
+    await requireWebsiteReviewer(request);
     requireRecordDatabase();
     const body = await readJsonBody(request, 24 * 1024) as { ids?: unknown } | null;
     if (!Array.isArray(body?.ids) || body.ids.length < 1 || body.ids.length > 100) {

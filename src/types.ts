@@ -1234,7 +1234,7 @@ export interface SavedPlanListData {
   plans: SavedPlanData[];
 }
 
-export type AdminUserAction = "ban" | "unban" | "revokeSessions" | "grantAdmin" | "revokeAdmin";
+export type AdminUserAction = "ban" | "unban" | "revokeSessions" | "grantAdmin" | "revokeAdmin" | "grantReviewer" | "revokeReviewer";
 
 export interface AdminUserData {
   id: string;
@@ -1245,6 +1245,7 @@ export interface AdminUserData {
   banReason: string | null;
   createdAt: string;
   isAdmin: boolean;
+  isReviewer: boolean;
   isBootstrapAdmin: boolean;
   sklandBindingCount: number;
   sklandActiveBindingCount: number;

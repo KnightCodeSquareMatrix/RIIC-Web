@@ -10,7 +10,7 @@ import type { AdminSessionData, AdminUserAction, AdminUserData } from "@/types";
 
 const CLIENT_SKLAND_ENABLED = process.env.APP_CLIENT_SKLAND_ENABLED === "1";
 
-type RoleChange = { userId: string; name: string; email: string; action: "grantAdmin" | "revokeAdmin" };
+type RoleChange = { userId: string; name: string; email: string; action: "grantAdmin" | "revokeAdmin" | "grantReviewer" | "revokeReviewer" };
 
 export function AdminUserManagement() {
   const intl = useTranslations();
@@ -56,7 +56,9 @@ export function AdminUserManagement() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(action === "ban" || action === "unban"
               ? { banned: action === "ban" }
-              : { isAdmin: action === "grantAdmin" }),
+              : action === "grantReviewer" || action === "revokeReviewer"
+                ? { isReviewer: action === "grantReviewer" }
+                : { isAdmin: action === "grantAdmin" }),
           });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error?.message ?? (intl("app_admin_users_users_client.actionFailed")));
@@ -136,6 +138,7 @@ export function AdminUserManagement() {
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="font-medium">{entry.name}</h3>
                       {entry.isAdmin ? <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">{entry.isBootstrapAdmin ? (intl("app_admin_users_users_client.bootstrapAdmin")) : (intl("app_admin_users_users_client.admin"))}</span> : null}
+                      {entry.isReviewer ? <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">{intl("adminReviewer.role")}</span> : null}
                       {CLIENT_SKLAND_ENABLED ? (
                         <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${entry.sklandActiveBindingCount > 0 ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300" : "bg-muted text-muted-foreground"}`}>
                           {entry.sklandActiveBindingCount > 0 ? (intl("app_admin_users_users_client.sklandActive", { sklandActiveBindingCount: entry.sklandActiveBindingCount })) : (intl("app_admin_users_users_client.noActiveSklandAuthorization"))}
@@ -162,6 +165,18 @@ export function AdminUserManagement() {
                       </Button>
                     ) : null}
                     <Button type="button" size="sm" variant="outline" disabled={actionBusy} onClick={() => void toggleSessions(entry.id)}>{sessions ? (intl("app_admin_users_users_client.hideSessions")) : (intl("app_admin_users_users_client.viewSessions"))}</Button>
+                    {canManageAdminRoles && !entry.isBootstrapAdmin ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={entry.isReviewer ? "destructive" : "secondary"}
+                        disabled={actionBusy || (!entry.isReviewer && (!entry.emailVerified || Boolean(entry.banned)))}
+                        title={!entry.isReviewer && (!entry.emailVerified || entry.banned) ? intl("adminReviewer.eligible") : undefined}
+                        onClick={() => setRoleChange({ userId: entry.id, name: entry.name, email: entry.email, action: entry.isReviewer ? "revokeReviewer" : "grantReviewer" })}
+                      >
+                        {intl(entry.isReviewer ? "adminReviewer.revoke" : "adminReviewer.grant")}
+                      </Button>
+                    ) : null}
                     <Button type="button" size="sm" variant="outline" disabled={actionBusy} onClick={() => void act(entry.id, "revokeSessions")}>{intl("app_admin_users_users_client.revokeSessions")}</Button>
                     <Button type="button" size="sm" variant={entry.banned ? "outline" : "destructive"} disabled={actionBusy} onClick={() => void act(entry.id, entry.banned ? "unban" : "ban")}>{entry.banned ? (intl("app_admin_users_users_client.unsuspend")) : (intl("app_admin_users_users_client.suspend"))}</Button>
                   </div>
@@ -190,9 +205,11 @@ export function AdminUserManagement() {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{roleChange?.action === "revokeAdmin" ? (intl("app_admin_users_users_client.revokeAdministratorRole")) : (intl("app_admin_users_users_client.grantAdministratorRole"))}</DialogTitle>
+            <DialogTitle>{roleChange?.action === "grantReviewer" || roleChange?.action === "revokeReviewer" ? intl(roleChange.action === "grantReviewer" ? "adminReviewer.grant" : "adminReviewer.revoke") : roleChange?.action === "revokeAdmin" ? (intl("app_admin_users_users_client.revokeAdministratorRole")) : (intl("app_admin_users_users_client.grantAdministratorRole"))}</DialogTitle>
             <DialogDescription className="break-words">
-              {roleChange?.action === "revokeAdmin"
+              {roleChange?.action === "grantReviewer" || roleChange?.action === "revokeReviewer"
+                ? intl(roleChange.action === "grantReviewer" ? "adminReviewer.grantDescription" : "adminReviewer.revokeDescription", { name: roleChange.name, email: roleChange.email })
+                : roleChange?.action === "revokeAdmin"
                 ? (intl("app_admin_users_users_client.willImmediatelyLoseAccessToUserManagement", { name: roleChange.name, email: roleChange.email }))
                 : (intl("app_admin_users_users_client.willBeAbleToSearchAndSuspendUsersAnd", { value1: (en) ? (roleChange?.name ?? "This user") : "", value2: roleChange?.email ?? "", value3: (en) ? "" : (roleChange?.name ?? "该用户") }))}
             </DialogDescription>
@@ -205,14 +222,14 @@ export function AdminUserManagement() {
             <Button
               type="button"
               size="dialog"
-              variant={roleChange?.action === "revokeAdmin" ? "destructive" : "default"}
+              variant={roleChange?.action === "revokeAdmin" || roleChange?.action === "revokeReviewer" ? "destructive" : "default"}
               disabled={!roleChange || Boolean(busyKey)}
               onClick={async () => {
                 if (!roleChange) return;
                 if (await act(roleChange.userId, roleChange.action)) setRoleChange(null);
               }}
             >
-              {roleChange?.action === "revokeAdmin" ? (intl("app_admin_users_users_client.confirmRevocation")) : (intl("app_admin_users_users_client.confirmAdministrator"))}
+              {roleChange?.action === "grantReviewer" ? intl("adminReviewer.confirm") : roleChange?.action === "revokeAdmin" || roleChange?.action === "revokeReviewer" ? (intl("app_admin_users_users_client.confirmRevocation")) : (intl("app_admin_users_users_client.confirmAdministrator"))}
             </Button>
           </DialogFooter>
         </DialogContent>

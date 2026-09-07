@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 
-import { requireWebsiteAdmin } from "@/server/auth/authorization";
+import { requireWebsiteReviewer } from "@/server/auth/authorization";
 import { AdminNav } from "./admin-nav";
 import { LocalizedText } from "@/components/LocalizedText";
 import { LanguageSwitch } from "@/i18n/client";
@@ -9,8 +9,9 @@ import { LanguageSwitch } from "@/i18n/client";
 export const dynamic = "force-dynamic";
 
 export default async function AdminLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  let access;
   try {
-    await requireWebsiteAdmin(await headers());
+    access = await requireWebsiteReviewer(await headers());
   } catch {
     notFound();
   }
@@ -23,7 +24,7 @@ export default async function AdminLayout({ children }: Readonly<{ children: Rea
       <header className="border-b border-border/70 bg-background">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
           <p className="min-w-28 text-sm font-semibold"><LocalizedText message="app_admin_layout_tsx2" /></p>
-          <div className="flex min-w-0 max-w-full items-center gap-3"><LanguageSwitch /><AdminNav /></div>
+          <div className="flex min-w-0 max-w-full items-center gap-3"><LanguageSwitch /><AdminNav isAdmin={access.isAdmin} /></div>
         </div>
       </header>
       {children}

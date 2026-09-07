@@ -140,7 +140,7 @@ test("admin solver metrics normalize invalid database values before exposing the
 
 test("admin solver metrics authenticate before querying and disable response caching", async () => {
   const source = await readFile(new URL("./server/admin-solver-metrics-api.ts", import.meta.url), "utf8");
-  const authorization = source.indexOf("await requireWebsiteAdmin(request)");
+  const authorization = source.indexOf("await requireWebsiteReviewer(request)");
   const query = source.indexOf("await queryAdminSolverMetrics()");
 
   assert.equal(authorization > 0, true);
