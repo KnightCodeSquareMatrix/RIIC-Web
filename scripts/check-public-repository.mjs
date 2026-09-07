@@ -78,6 +78,7 @@ function isForbiddenPath(filePath) {
     baseName === "AGENTS.md" ||
     baseName === "AGENTS.override.md" ||
     /^bin\/infra-cli(?:\.exe)?$/iu.test(normalized) ||
+    /^public\/videos\/help\/.*\.(?:mp4|webm|mov)$/iu.test(normalized) ||
     PRIVATE_HELPER_PATHS.has(normalized) ||
     PRIVATE_DOCUMENT_PATHS.has(normalized) ||
     /(^|\/)docs\/(?:internal|superpowers)(?:\/|$)/iu.test(normalized) ||
@@ -149,7 +150,7 @@ function report(label, items) {
   process.stderr.write(`${label}:\n${items.map((item) => `- ${item}`).join("\n")}\n`);
 }
 
-report("Public repository contains private paths", forbiddenPaths);
+report("Public repository contains forbidden paths", forbiddenPaths);
 report("Public repository contains oversized tracked files", largeFiles);
 report("Public repository contains sensitive strings", sensitiveStrings);
 report("GitHub Actions policy violations", actionPolicyErrors);

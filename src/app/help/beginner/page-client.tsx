@@ -5,11 +5,12 @@ import { ArrowLeft, ArrowRight, ExternalLink } from "lucide-react";
 import { TutorialVideo } from "@/components/help/TutorialVideo";
 import { MaaBoxVideo } from "@/components/help/MaaBoxVideo";
 import { useLocale } from "next-intl";
+import { tutorialVideoUrl } from "@/tutorial-videos";
 
 const bilibiliTutorials = [
   {
     bvid: "BV1hi4y1e7eD",
-    src: "/videos/help/manual-schedule-audio.mp4",
+    src: tutorialVideoUrl("manual-schedule-audio.mp4"),
     duration: "04:56",
     title: "手动抄作业教程",
     titleEn: "Follow a schedule manually",
@@ -23,7 +24,7 @@ const bilibiliTutorials = [
 
   {
     bvid: "BV1HwuH69ENX",
-    src: "/videos/help/shifts-orundum-audio.mp4",
+    src: tutorialVideoUrl("shifts-orundum-audio.mp4"),
     duration: "05:10",
     title: "手把手教学换班和搓玉",
     titleEn: "Shift changes and Orundum production",
