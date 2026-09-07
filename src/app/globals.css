@@ -369,7 +369,7 @@
   }
 }
 
-@media (max-width: 639px) {
+@media (max-width: 767px) {
   .dialog-acrylic {
     -webkit-backdrop-filter: blur(28px) saturate(1.06);
     backdrop-filter: blur(28px) saturate(1.06);
@@ -377,6 +377,12 @@
 
   .dialog-acrylic::before {
     opacity: 0.24;
+  }
+
+  .dialog-acrylic[data-website-account-dialog] {
+    background-color: var(--background);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
 }
 
