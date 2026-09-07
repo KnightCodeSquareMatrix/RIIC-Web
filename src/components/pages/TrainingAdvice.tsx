@@ -2,7 +2,7 @@ import { localize as localize_components_pages_TrainingAdvice } from "../../i18n
 import { useTranslations, useLocale } from "next-intl";
 import { messageRecord } from "@/i18n/translate";
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
-import { CircleAlert, ClipboardCheck, ChevronDown, GraduationCap } from "lucide-react";
+import { CircleAlert, ChevronDown, GraduationCap } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 
 import { InfraTechnicalCard, InfraTechnicalHeading } from "@/components/InfraTechnicalCard";
@@ -305,14 +305,7 @@ export function TrainingAdvice({
             </div>
           </div>
         </InfraTechnicalCard>
-      ) : (
-        <InfraTechnicalCard group="power" dataSlot="training-data-check" showEmblem={false}>
-          <div className="flex gap-3 text-sm" aria-label={intl("components_pages_TrainingAdvice.dataValidation")}>
-            <ClipboardCheck className="mt-0.5 size-5 shrink-0 text-[var(--room-accent)]" aria-hidden="true" />
-            <p className="text-white/76">{intl("components_pages_TrainingAdvice.infrastructureAndOperatorDataPassedTheBasicChecks")}</p>
-          </div>
-        </InfraTechnicalCard>
-      )}
+      ) : null}
 
       <div className="grid min-w-0 gap-1" data-training-filters>
         <SkillFilterRow label={intl("SkillFilters.rarity")}>

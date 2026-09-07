@@ -4,6 +4,7 @@ import Image from "next/image";
 import { Play } from "lucide-react";
 import { useState } from "react";
 import { useLocale } from "next-intl";
+import { tutorialVideoUrl } from "@/tutorial-videos";
 
 export function MaaBoxVideo() {
   const locale = useLocale();
@@ -11,13 +12,14 @@ export function MaaBoxVideo() {
   const [started, setStarted] = useState(false);
   const [failed, setFailed] = useState(false);
   const title = en ? "How to get box.json with MAA" : "如何用 MAA 获取 box.json";
+  const src = tutorialVideoUrl("maa-box.mp4");
 
   return (
     <div className="overflow-hidden rounded-[4px] border border-border bg-black" data-maa-box-video>
       {started ? (
         <video
           className="aspect-video w-full"
-          src="/videos/help/maa-box.mp4"
+          src={src}
           poster="/images/help/maa-box-cover.webp"
           aria-label={title}
           controls
@@ -55,4 +57,3 @@ export function MaaBoxVideo() {
     </div>
   );
 }
-
