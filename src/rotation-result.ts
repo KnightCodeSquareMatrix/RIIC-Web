@@ -64,6 +64,15 @@ function normalizedDailyProduction(value: unknown): RotationJson["daily"]["produ
   };
 }
 
+function normalizedDroneProduction(value: unknown): RotationJson["daily"]["drone_production"] | undefined {
+  if (!isObject(value)) return undefined;
+  const lmd = finiteNumber(value.lmd);
+  const pureGold = finiteNumber(value.pure_gold);
+  const battleRecords = finiteNumber(value.battle_records);
+  if (lmd === undefined || lmd < 0 || pureGold === undefined || pureGold < 0 || battleRecords === undefined || battleRecords < 0) return undefined;
+  return { lmd, pure_gold: pureGold, battle_records: battleRecords };
+}
+
 function normalizedRoomLine(value: unknown): RotationRoomLine {
   if (!isObject(value)) return { room_id: "" };
 
@@ -182,6 +191,7 @@ export function normalizeRotationResult({
   const rawShifts = shifts ?? (Array.isArray(rotation.shifts) ? rotation.shifts : []);
   const fallbackDurations = rotationOption(rotationProfile).durations;
   const production = normalizedDailyProduction(daily.production);
+  const droneProduction = normalizedDroneProduction(daily.drone_production);
 
   return {
     profile: rotationProfile,
@@ -211,6 +221,7 @@ export function normalizeRotationResult({
         ?? profileDaily.daily_power
       ),
       ...(production ? { production } : {}),
+      ...(droneProduction ? { drone_production: droneProduction } : {}),
     },
   };
 }

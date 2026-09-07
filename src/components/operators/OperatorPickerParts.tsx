@@ -34,13 +34,20 @@ export function OperatorIdentity({ name, portrait, compact = false, children }: 
   </>;
 }
 
-export function OperatorSearch({ value, onChange, compact = false }: { value: string; onChange: (value: string) => void; compact?: boolean }) {
+export function OperatorSearch({ value, onChange, compact = false, autoFocus = false, label, placeholder }: {
+  value: string;
+  onChange: (value: string) => void;
+  compact?: boolean;
+  autoFocus?: boolean;
+  label?: string;
+  placeholder?: string;
+}) {
   const intl = useTranslations();
 
-  const label = intl("components_operators_OperatorPickerParts.searchOperator");
+  const defaultLabel = intl("components_operators_OperatorPickerParts.searchOperator");
   return <label className="relative min-w-0">
     <Search className={cn("pointer-events-none absolute left-3 size-4 text-muted-foreground", compact ? "top-2.5 max-sm:top-3.5" : "top-3.5")} aria-hidden="true" />
-    <Input value={value} onChange={(event) => onChange(event.target.value)} className={cn("pl-9", compact ? "h-9 max-sm:h-11" : "h-11")} placeholder={label} aria-label={label} />
+    <Input autoFocus={autoFocus} value={value} onChange={(event) => onChange(event.target.value)} className={cn("pl-9", compact ? "h-9 max-sm:h-11" : "h-11")} placeholder={placeholder ?? label ?? defaultLabel} aria-label={label ?? defaultLabel} />
   </label>;
 }
 

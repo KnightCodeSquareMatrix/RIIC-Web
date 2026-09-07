@@ -43,6 +43,28 @@ function unavailableReason(reason: DailyProductionUnavailableReason | undefined,
   return localize_components_PlanResultSummary.text(en, "insufficientRoomData");
 }
 
+const DETAIL_LABEL_KEYS = {
+  "自然制造": "estimatedNaturalManufacturing",
+  "估算自然制造": "estimatedNaturalManufacturing",
+  "无人机制造": "estimatedDroneManufacturing",
+  "估算无人机制造": "estimatedDroneManufacturing",
+  "自然订单": "estimatedNaturalOrders",
+  "估算自然订单": "estimatedNaturalOrders",
+  "无人机订单": "estimatedDroneOrders",
+  "估算无人机订单": "estimatedDroneOrders",
+  "无人机": "estimatedDrones",
+  "估算无人机": "estimatedDrones",
+  "总产出": "totalOutput",
+  "总价值": "totalValue",
+  "盈余": "surplus",
+  "亏损": "loss",
+} as const;
+
+function detailLabel(label: string, en: boolean): string {
+  const key = DETAIL_LABEL_KEYS[label as keyof typeof DETAIL_LABEL_KEYS];
+  return en && key ? localize_components_PlanResultSummary.text(en, key) : label;
+}
+
 export function PlanResultSummary({
   profile,
   rotation,
@@ -87,7 +109,7 @@ export function PlanResultSummary({
 
   const solverDaily = rotation?.daily?.production ?? null;
   const production = rotation ? estimateDailyProduction({ layout, maa, rotation }) : null;
-  const productGroups = dailyProductionGroups(production, solverDaily);
+  const productGroups = dailyProductionGroups(production, solverDaily, rotation?.daily?.drone_production);
   const adjustmentCount = countShiftPlacementAdjustments(comparison);
   const activeDetailSection = detailSection === "comparison" && comparison ? "comparison" : "efficiency";
   const openDetails = (section: DetailSection) => {
@@ -212,7 +234,7 @@ export function PlanResultSummary({
             <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 pb-6" data-plan-details-section={activeDetailSection}>
               <TabsContent value="efficiency" className="m-0">
                 <motion.div initial={{ opacity: 0, x: shouldReduceMotion ? 0 : -12 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: shouldReduceMotion ? 0 : MOTION_DURATION.state, ease: MOTION_EASE_OUT }}>
-                  <EfficiencyDetails productGroups={productGroups} en={en} />
+                  <EfficiencyDetails productGroups={productGroups} en={en} solverProduction={solverDaily} droneProduction={rotation?.daily?.drone_production} />
                 </motion.div>
               </TabsContent>
               {comparison ? (
@@ -268,12 +290,12 @@ function ProductionDetailItem({ product, supporting = false, en }: { product: Pr
           {product.amount.value === null ? <span className="mt-1 block text-[10px] font-semibold text-amber-800">{unavailableReason(product.amount.unavailableReason, en)}</span> : null}
         </div>
       </div>
-      <div className="min-w-0 text-[11px]">
+      <div className="min-w-0 text-xs">
         <dl className="grid grid-cols-2 gap-x-3 gap-y-1">
           {product.rows.map(([label, value, unit]) => (
             <div key={label} className="flex min-w-0 justify-between gap-2">
-              <dt className="truncate text-muted-foreground">{label}</dt>
-              <dd className="font-number shrink-0 font-semibold">{dailyNumber(value)}{value === null ? "" : ` ${unit}`}</dd>
+              <dt className="truncate text-muted-foreground">{detailLabel(label, en)}</dt>
+              <dd className="font-number shrink-0 font-semibold">{dailyNumber(value)}{value === null || !unit ? "" : ` ${productUnit(unit, en)}`}</dd>
             </div>
           ))}
         </dl>
@@ -283,27 +305,49 @@ function ProductionDetailItem({ product, supporting = false, en }: { product: Pr
   );
 }
 
-function ProductionDetails({ productGroups, en }: { productGroups: DailyProductionGroup[]; en: boolean }) {
+function ProductionDetails({ productGroups, en, solverProduction, droneProduction }: { productGroups: DailyProductionGroup[]; en: boolean; solverProduction?: NonNullable<RotationJson["daily"]["production"]> | null; droneProduction?: NonNullable<RotationJson["daily"]["drone_production"]> }) {
   if (!productGroups.length) return null;
+  const drone = droneProduction;
+  const totalLmd = solverProduction ? solverProduction.lmd + (drone?.lmd ?? 0) : null;
+  const totalGoldValue = solverProduction ? solverProduction.pure_gold + (drone?.pure_gold ?? 0) : null;
+  const totalExperience = solverProduction ? solverProduction.battle_records + (drone?.battle_records ?? 0) : null;
+  const balance = totalLmd !== null && totalGoldValue !== null ? totalGoldValue + 5_000 - totalLmd : null;
+  const displayGroups = productGroups.map((productGroup) => {
+    if (productGroup.id !== "lmd" || !productGroup.supporting || !solverProduction) return productGroup;
+    const valueRows: Array<[string, number | null, string]> = [
+      ["总价值", totalGoldValue, ""],
+      [balance !== null && balance >= 0 ? "盈余" : "亏损", balance === null ? null : Math.abs(balance), ""],
+    ];
+    return {
+      ...productGroup,
+      supporting: { ...productGroup.supporting, rows: [...productGroup.supporting.rows, ...valueRows] },
+    };
+  });
   return (
     <section aria-label={localize_components_PlanResultSummary.text(en, "estimatedDailyProductionDetails")} data-production-details data-production-source={productGroups[0].source}>
       <h3 className="text-sm font-semibold">{localize_components_PlanResultSummary.text(en, "estimatedDailyProduction")}</h3>
       <div className="mt-2 divide-y divide-border/70 border-y border-border/70">
-        {productGroups.map((productGroup) => (
+        {displayGroups.map((productGroup) => (
           <section key={productGroup.id} className="space-y-2 py-3" data-production-group={productGroup.id}>
             <ProductionDetailItem product={productGroup.primary} en={en} />
             {productGroup.supporting ? <ProductionDetailItem product={productGroup.supporting} supporting en={en} /> : null}
           </section>
         ))}
       </div>
+      {solverProduction ? (
+        <div className="mt-3 flex items-center justify-between border-b border-border/70 pb-3 text-sm" data-money-book-ratio>
+          <span className="text-muted-foreground">{localize_components_PlanResultSummary.text(en, "moneyBookRatio")}</span>
+          <strong className="font-number text-base">{totalExperience === 0 ? localize_components_PlanResultSummary.text(en, "noExperienceManufactured") : `${(totalLmd! / totalExperience!).toFixed(2)}`}</strong>
+        </div>
+      ) : null}
     </section>
   );
 }
 
-function EfficiencyDetails({ productGroups, en }: { productGroups: DailyProductionGroup[]; en: boolean }) {
+function EfficiencyDetails({ productGroups, en, solverProduction, droneProduction }: { productGroups: DailyProductionGroup[]; en: boolean; solverProduction?: NonNullable<RotationJson["daily"]["production"]> | null; droneProduction?: NonNullable<RotationJson["daily"]["drone_production"]> }) {
   return (
     <section className="pt-4" aria-label={localize_components_PlanResultSummary.text(en, "outputAndImprovementDetails")} data-efficiency-details>
-      <ProductionDetails productGroups={productGroups} en={en} />
+      <ProductionDetails productGroups={productGroups} en={en} solverProduction={solverProduction} droneProduction={droneProduction} />
     </section>
   );
 }

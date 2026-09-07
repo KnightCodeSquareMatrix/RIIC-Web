@@ -1,6 +1,6 @@
 import type { OperBoxEntry } from "./types.ts";
 
-export type ManualOperboxStage = "none" | "e0" | "e1" | "e2";
+export type ManualOperboxStage = "none" | "e0" | "e0-low" | "e1" | "e2";
 
 const MAX_LEVEL_BY_RARITY: Record<number, readonly [number, number?, number?]> = {
   1: [30],
@@ -19,6 +19,7 @@ export function maxEliteForRarity(rarity: number): 0 | 1 | 2 {
 
 export function manualStageForEntry(entry: OperBoxEntry | undefined): ManualOperboxStage {
   if (!entry?.own) return "none";
+  if (entry.rarity <= 2 && entry.elite === 0 && entry.level < 30) return "e0-low";
   if (entry.elite >= 2) return "e2";
   if (entry.elite >= 1) return "e1";
   return "e0";
@@ -44,7 +45,7 @@ export function buildManualOperbox(
       name: operator.name,
       own,
       elite,
-      level: own ? manualLevelFor(operator.rarity, elite) : 1,
+      level: own ? (stage === "e0-low" ? 1 : manualLevelFor(operator.rarity, elite)) : 1,
       potential: 1,
       rarity: operator.rarity,
     };
