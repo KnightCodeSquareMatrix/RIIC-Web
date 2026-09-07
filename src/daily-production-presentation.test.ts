@@ -34,7 +34,25 @@ test("pure gold keeps full precision until the shared display rounding step", ()
     orundum: 0,
   });
   assert.equal(groups[1].supporting?.amount.value, 1);
-  assert.deepEqual(groups[1].supporting?.rows, [["估算自然制造", 1, "枚"], ["估算无人机制造", 0, "枚"], ["总产出", 1, "枚"]]);
+  assert.deepEqual(groups[1].supporting?.rows, [["估算自然制造", 1, "枚"], ["估算等效赤金", 0, "枚"], ["估算无人机制造", 0, "枚"], ["总产出", 1, "枚"]]);
+});
+
+test("equivalent gold is included in the total gold amount and remains a separate detail row", () => {
+  const groups = dailyProductionGroups(null, {
+    lmd: 0,
+    pure_gold: 500,
+    equivalent_gold: 999,
+    battle_records: 0,
+    originium_shards: 0,
+    orundum: 0,
+  });
+  assert.equal(groups[1].supporting?.amount.value, 2);
+  assert.deepEqual(groups[1].supporting?.rows, [
+    ["估算自然制造", 1, "枚"],
+    ["估算等效赤金", 1, "枚"],
+    ["估算无人机制造", 0, "枚"],
+    ["总产出", 2, "枚"],
+  ]);
 });
 
 test("solver totals stay authoritative while estimate rows split natural and drone production", () => {

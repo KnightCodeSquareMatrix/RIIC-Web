@@ -13,6 +13,7 @@ type JsonRecord = Record<string, unknown>;
 
 const ROOM_EFFICIENCY_FIELDS = [
   "final_efficiency",
+  "gold_equivalent_efficiency",
   "trade_score",
   "trade_pct",
   "trade_skill_pct",
@@ -48,6 +49,7 @@ function normalizedDailyProduction(value: unknown): RotationJson["daily"]["produ
   const battleRecords = finiteNumber(value.battle_records);
   const originiumShards = finiteNumber(value.originium_shards);
   const orundum = finiteNumber(value.orundum);
+  const equivalentGold = finiteNumber(value.equivalent_gold);
   if (
     lmd === undefined || lmd < 0
     || pureGold === undefined || pureGold < 0
@@ -61,6 +63,7 @@ function normalizedDailyProduction(value: unknown): RotationJson["daily"]["produ
     battle_records: battleRecords,
     originium_shards: originiumShards,
     orundum,
+    ...(equivalentGold !== undefined && equivalentGold >= 0 ? { equivalent_gold: equivalentGold } : {}),
   };
 }
 
@@ -81,6 +84,7 @@ function normalizedRoomLine(value: unknown): RotationRoomLine {
     "order_multiplier",
     "base_efficiency",
     "equivalent_efficiency",
+    "gold_equivalent_efficiency",
     "global_efficiency",
     "trade_equivalent_efficiency",
     "trade_efficiency",
