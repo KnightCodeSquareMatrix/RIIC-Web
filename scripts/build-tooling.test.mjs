@@ -385,7 +385,7 @@ test("public deployment automation is repository-bound, opt-in, and secret-safe"
   assert.doesNotMatch(deployWorkflow, /allow_workflow_dispatch|github\.event_name/);
   assert.match(deployWorkflow, /deployment_authorized:[\s\S]+type: boolean[\s\S]+deploy_required:[\s\S]+type: boolean/);
   assert.match(deployWorkflow, /inputs\.deployment_authorized &&[\s\S]+inputs\.deploy_required &&[\s\S]+github\.ref_name == 'main'[\s\S]+vars\.DEPLOY_AUTOMATION_ENABLED == '1'[\s\S]+github\.repository == 'KnightCodeSquareMatrix\/RIIC-Web'/);
-  assert.match(deployWorkflow, /DEPLOY_APPROVED_SOLVER_SHA256: \$\{\{ vars\.DEPLOY_APPROVED_SOLVER_SHA256 \}\}[\s\S]+DEPLOY_EXPECTED_REPOSITORY: KnightCodeSquareMatrix\/RIIC-Web[\s\S]+DEPLOY_RELEASE_HELPER_CONTRACT: "6"/);
+  assert.match(deployWorkflow, /DEPLOY_APPROVED_SOLVER_SHA256: \$\{\{ github\.ref_name == 'develop' && vars\.DEPLOY_APPROVED_SOLVER_SHA256 \|\| '' \}\}[\s\S]+DEPLOY_EXPECTED_REPOSITORY: KnightCodeSquareMatrix\/RIIC-Web[\s\S]+DEPLOY_RELEASE_HELPER_CONTRACT: "6"/);
   assert.doesNotMatch(deployWorkflow, /DEPLOY_PREPARE_HELPER_CONTRACT|arknights-infra-prepare-release/);
   assert.match(deployWorkflow, /DEPLOY_PUBLIC_HEALTH_URL: \$\{\{ secrets\.DEPLOY_PUBLIC_HEALTH_URL \}\}/);
   assert.doesNotMatch(deployWorkflow, /DEPLOY_PUBLIC_HEALTH_URL: \$\{\{ vars\./);
@@ -396,7 +396,8 @@ test("public deployment automation is repository-bound, opt-in, and secret-safe"
   assert.match(preflightWorkflow, /PREFLIGHT_MODE: \$\{\{ inputs\.mode \}\}/);
   assert.match(preflightWorkflow, /DEPLOY_ENVIRONMENT: \$\{\{ inputs\.environment \}\}/);
   assert.match(preflightWorkflow, /if \[\[ "\$PREFLIGHT_MODE" == "cutover-ready" \]\][\s\S]+test "\$actual_contract" = "\$expected_contract"/);
-  assert.match(preflightWorkflow, /DEPLOY_APPROVED_SOLVER_SHA256: \$\{\{ vars\.DEPLOY_APPROVED_SOLVER_SHA256 \}\}[\s\S]+DEPLOY_RELEASE_HELPER_CONTRACT: "6"/);
+  assert.match(preflightWorkflow, /DEPLOY_APPROVED_SOLVER_SHA256: \$\{\{ inputs\.environment == 'development' && vars\.DEPLOY_APPROVED_SOLVER_SHA256 \|\| '' \}\}[\s\S]+DEPLOY_RELEASE_HELPER_CONTRACT: "6"/);
+  assert.match(preflightWorkflow, /"\$PREFLIGHT_MODE" == "cutover-ready" && "\$DEPLOY_ENVIRONMENT" == "production"[\s\S]+cat '\$DEPLOY_APP_ROOT\/shared\/bin\/infra-cli\.sha256'[\s\S]+sudo -n \/usr\/local\/sbin\/arknights-infra-deploy/);
   assert.match(preflightWorkflow, /Inspect deploy helper, solver, and disk[\s\S]+verify_helper deploy \/usr\/local\/sbin\/arknights-infra-deploy/);
   assert.match(preflightWorkflow, /sudo -n \/usr\/local\/sbin\/arknights-infra-deploy[\s\S]+--preflight "\$deployment_environment" "\$app_root"[\s\S]+"\$expected_repository" "\$approved_solver_sha256"/);
   assert.match(preflightWorkflow, /solver_source=not-inspected-root-only/);
@@ -413,7 +414,7 @@ test("public deployment automation is repository-bound, opt-in, and secret-safe"
   );
   assert.match(preflightWorkflow, /Remove SSH credentials from the runner[\s\S]+rm -f -- "\$HOME\/\.ssh\/id_ed25519" "\$HOME\/\.ssh\/known_hosts"/);
   assert.match(deployWorkflow, /printf '%s\\n' "\$DEPLOY_PUBLIC_HEALTH_URL" \| ssh[\s\S]+'\$public_health_argument'/);
-  assert.match(deployWorkflow, /'\$DEPLOY_EXPECTED_REPOSITORY'[\s\S]+'\$DEPLOY_APPROVED_SOLVER_SHA256'[\s\S]+'\$DEPLOY_TREE_SHA'/);
+  assert.match(deployWorkflow, /'\$DEPLOY_EXPECTED_REPOSITORY'[\s\S]+'\$DEPLOY_SOLVER_SHA256'[\s\S]+'\$DEPLOY_TREE_SHA'/);
   assert.doesNotMatch(deployWorkflow, /'\$DEPLOY_PUBLIC_HEALTH_URL'/);
   assert.match(deployWorkflow, /Remove SSH credentials from the runner[\s\S]+rm -f -- "\$HOME\/\.ssh\/id_ed25519" "\$HOME\/\.ssh\/known_hosts"/);
   assert.match(deployWorkflow, /Verify public response compression[\s\S]+DEPLOY_PUBLIC_HEALTH_URL: \$\{\{ secrets\.DEPLOY_PUBLIC_HEALTH_URL \}\}[\s\S]+node scripts\/verify-public-compression\.mjs/);
@@ -458,9 +459,77 @@ test("CI builds once and deploy transfers the verified solver-free standalone ar
   assert.doesNotMatch(deployWorkflow, /archive_cache=|remote_prefix_sha256|upload_chunk_bytes/);
   assert.doesNotMatch(deployWorkflow, /\bscp\b/);
   assert.match(deployWorkflow, /DEPLOY_RELEASE_HELPER_CONTRACT: "6"/);
-  assert.match(deployWorkflow, /'\$DEPLOY_APPROVED_SOLVER_SHA256' \\\n\s+'\$DEPLOY_TREE_SHA'/);
+  assert.match(deployWorkflow, /'\$DEPLOY_SOLVER_SHA256' \\\n\s+'\$DEPLOY_TREE_SHA'/);
   assert.match(deployWorkflow, /Remove staged release artifacts from the runner[\s\S]+if: always\(\)[\s\S]+"\$RUNNER_TEMP"\/riic-web-release-\[0-9\]\*-\[0-9\]\*/);
-  assert.doesNotMatch(deployWorkflow, /git (?:archive|bundle)|repository\.git|DEPLOY_PREVIOUS_SHA|remote_bundle|bin\/infra-cli/);
+  assert.doesNotMatch(deployWorkflow, /git (?:archive|bundle)|repository\.git|DEPLOY_PREVIOUS_SHA|remote_bundle/);
+  const transfer = deployWorkflow.slice(deployWorkflow.indexOf("      - name: Sync standalone release tree"));
+  assert.doesNotMatch(transfer, /bin\/infra-cli/);
+});
+
+test("production pins the server solver only after preflight and development retains its approved digest", async () => {
+  const workflow = (await readRepoFile(".github/workflows/deploy.yml")).replaceAll("\r\n", "\n");
+  const section = workflow.split("      - name: Resolve solver for deployment\n")[1]?.split("\n      - name:")[0];
+  const body = section?.split("        run: |\n")[1]?.replace(/^ {10}/gm, "");
+  assert.ok(body);
+  const gitExecPath = process.platform === "win32"
+    ? spawnSync("git", ["--exec-path"], { encoding: "utf8" }).stdout?.trim()
+    : null;
+  const gitBash = gitExecPath ? resolve(gitExecPath, "../../../bin/bash.exe") : null;
+  const bash = process.env.TEST_BASH_PATH ?? (gitBash && existsSync(gitBash) ? gitBash : "bash");
+  const script = [
+    "set -euo pipefail",
+    'GITHUB_ENV="$(mktemp)"',
+    'trap \'cat "$GITHUB_ENV"; rm -f -- "$GITHUB_ENV"\' EXIT',
+    'timeout() { shift 2; "$@"; }',
+    "ssh() {",
+    "  printf 'SSH_CALL\\n' >&2",
+    "  local remote_command; for remote_command; do :; done",
+    '  if [[ "$remote_command" == *"--preflight"* ]]; then',
+    "    printf 'PREFLIGHT_CALL\\n' >&2",
+    '    return "$PREFLIGHT_EXIT"',
+    "  fi",
+    '  printf "%s" "$SERVER_DIGEST"',
+    '  return "$SSH_EXIT"',
+    "}",
+    body,
+  ].join("\n");
+  const serverDigest = "a".repeat(64);
+  const approvedDigest = "b".repeat(64);
+  const run = (overrides = {}) => spawnSync(bash, ["--noprofile", "--norc", "-c", script], {
+    encoding: "utf8", timeout: 10_000,
+    env: {
+      ...process.env, DEPLOYMENT_ENV: "production", DEPLOY_APP_ROOT: "/opt/arknights-infra",
+      DEPLOY_EXPECTED_REPOSITORY: "KnightCodeSquareMatrix/RIIC-Web",
+      DEPLOY_APPROVED_SOLVER_SHA256: "", DEPLOY_HOST: "example.invalid", DEPLOY_SSH_USER: "fixture",
+      SERVER_DIGEST: serverDigest, SSH_EXIT: "0", PREFLIGHT_EXIT: "0",
+      GITHUB_STEP_SUMMARY: "/dev/null", ...overrides,
+    },
+  });
+  for (const configured of ["", approvedDigest]) {
+    const result = run({ DEPLOY_APPROVED_SOLVER_SHA256: configured });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout.trim(), "DEPLOY_SOLVER_SHA256=" + serverDigest);
+    assert.match(result.stderr, /PREFLIGHT_CALL/);
+  }
+  for (const overrides of [
+    { SERVER_DIGEST: "" }, { SERVER_DIGEST: "invalid" },
+    { SERVER_DIGEST: serverDigest + "\n" + approvedDigest }, { SSH_EXIT: "1" },
+    { DEPLOY_APP_ROOT: "/opt/arknights-infra-dev" },
+  ]) {
+    const result = run(overrides);
+    assert.notEqual(result.status, 0);
+    assert.doesNotMatch(result.stdout, /DEPLOY_SOLVER_SHA256=/);
+    assert.doesNotMatch(result.stderr, /PREFLIGHT_CALL/);
+  }
+  const rejected = run({ PREFLIGHT_EXIT: "1" });
+  assert.notEqual(rejected.status, 0);
+  assert.match(rejected.stderr, /PREFLIGHT_CALL/);
+  assert.doesNotMatch(rejected.stdout, /DEPLOY_SOLVER_SHA256=/);
+  const development = run({ DEPLOYMENT_ENV: "development", DEPLOY_APPROVED_SOLVER_SHA256: approvedDigest });
+  assert.equal(development.status, 0, development.stderr);
+  assert.equal(development.stdout.trim(), "DEPLOY_SOLVER_SHA256=" + approvedDigest);
+  assert.doesNotMatch(development.stderr, /SSH_CALL/);
+  assert.notEqual(run({ DEPLOYMENT_ENV: "development" }).status, 0);
 });
 
 test("asset synchronization isolates untrusted generation from repository write credentials", async () => {
