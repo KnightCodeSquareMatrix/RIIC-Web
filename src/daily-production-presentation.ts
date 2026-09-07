@@ -3,6 +3,8 @@ import { PRODUCT_ICON_URLS } from "./product-assets.ts";
 import type { RotationJson } from "./types.ts";
 
 type SolverDailyProduction = NonNullable<RotationJson["daily"]["production"]>;
+const DAILY_GOLD_VALUE = 5_000;
+const DAILY_GOLD_UNITS = DAILY_GOLD_VALUE / 500;
 
 export type ProductionDetailProduct = {
   id: string;
@@ -57,7 +59,7 @@ function solverGroups(production: SolverDailyProduction, drone: NonNullable<Rota
   const goldUnits = Math.floor(production.pure_gold / 500);
   const droneGoldUnits = Math.floor(drone.pure_gold / 500);
   const equivalentGoldUnits = Math.floor((production.equivalent_gold ?? 0) / 500);
-  const totalGoldUnits = Math.floor((production.pure_gold + drone.pure_gold + (production.equivalent_gold ?? 0)) / 500);
+  const totalGoldUnits = Math.floor((production.pure_gold + drone.pure_gold + (production.equivalent_gold ?? 0) + DAILY_GOLD_VALUE) / 500);
   const totalLmd = production.lmd + drone.lmd;
   const totalExperience = production.battle_records + drone.battle_records;
   return [
@@ -81,7 +83,7 @@ function solverGroups(production: SolverDailyProduction, drone: NonNullable<Rota
       supporting: {
         ...solverProduct("gold", "赤金", "枚", PRODUCT_ICON_URLS.gold, totalGoldUnits, "订单原料"),
         amount: { value: totalGoldUnits, natural: goldUnits, drones: droneGoldUnits },
-        rows: [["估算自然制造", goldUnits, "枚"], ["估算等效赤金", equivalentGoldUnits, "枚"], ["估算无人机制造", droneGoldUnits, "枚"], ["总产出", totalGoldUnits, "枚"]],
+        rows: [["估算自然制造", goldUnits, "枚"], ["估算等效赤金", equivalentGoldUnits, "枚"], ["估算无人机制造", droneGoldUnits, "枚"], ["日常获取", DAILY_GOLD_UNITS, "枚"], ["总产出", totalGoldUnits, "枚"]],
       },
     },
     {

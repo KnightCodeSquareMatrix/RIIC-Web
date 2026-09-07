@@ -49,6 +49,7 @@ const DETAIL_LABEL_KEYS = {
   "无人机制造": "estimatedDroneManufacturing",
   "估算无人机制造": "estimatedDroneManufacturing",
   "估算等效赤金": "estimatedEquivalentGold",
+  "日常获取": "dailyAcquisition",
   "自然订单": "estimatedNaturalOrders",
   "估算自然订单": "estimatedNaturalOrders",
   "无人机订单": "estimatedDroneOrders",
@@ -337,9 +338,9 @@ function ProductionDetails({ productGroups, en, solverProduction, droneProductio
   if (!productGroups.length) return null;
   const drone = droneProduction;
   const totalLmd = solverProduction ? solverProduction.lmd + (drone?.lmd ?? 0) : null;
-  const totalGoldValue = solverProduction ? solverProduction.pure_gold + (solverProduction.equivalent_gold ?? 0) + (drone?.pure_gold ?? 0) : null;
+  const totalGoldValue = solverProduction ? solverProduction.pure_gold + (solverProduction.equivalent_gold ?? 0) + (drone?.pure_gold ?? 0) + 5_000 : null;
   const totalExperience = solverProduction ? solverProduction.battle_records + (drone?.battle_records ?? 0) : null;
-  const balance = totalLmd !== null && totalGoldValue !== null ? totalGoldValue + 5_000 - totalLmd : null;
+  const balance = totalLmd !== null && totalGoldValue !== null ? totalGoldValue - totalLmd : null;
   const displayGroups = productGroups.map((productGroup) => {
     if (productGroup.id !== "lmd" || !productGroup.supporting || !solverProduction) return productGroup;
     const valueRows: Array<[string, number | null, string]> = [

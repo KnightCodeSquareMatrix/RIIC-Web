@@ -33,8 +33,8 @@ test("pure gold keeps full precision until the shared display rounding step", ()
     originium_shards: 0,
     orundum: 0,
   });
-  assert.equal(groups[1].supporting?.amount.value, 1);
-  assert.deepEqual(groups[1].supporting?.rows, [["估算自然制造", 1, "枚"], ["估算等效赤金", 0, "枚"], ["估算无人机制造", 0, "枚"], ["总产出", 1, "枚"]]);
+  assert.equal(groups[1].supporting?.amount.value, 11);
+  assert.deepEqual(groups[1].supporting?.rows, [["估算自然制造", 1, "枚"], ["估算等效赤金", 0, "枚"], ["估算无人机制造", 0, "枚"], ["日常获取", 10, "枚"], ["总产出", 11, "枚"]]);
 });
 
 test("equivalent gold is included in the total gold amount and remains a separate detail row", () => {
@@ -46,12 +46,13 @@ test("equivalent gold is included in the total gold amount and remains a separat
     originium_shards: 0,
     orundum: 0,
   });
-  assert.equal(groups[1].supporting?.amount.value, 2);
+  assert.equal(groups[1].supporting?.amount.value, 12);
   assert.deepEqual(groups[1].supporting?.rows, [
     ["估算自然制造", 1, "枚"],
     ["估算等效赤金", 1, "枚"],
     ["估算无人机制造", 0, "枚"],
-    ["总产出", 2, "枚"],
+    ["日常获取", 10, "枚"],
+    ["总产出", 12, "枚"],
   ]);
 });
 
@@ -84,7 +85,7 @@ test("solver totals stay authoritative while estimate rows split natural and dro
   assert.deepEqual(groups[0].primary.rows, [["估算自然制造", 22_400, "经验"], ["估算无人机", 6_000, "经验"], ["总产出", 28_400, "经验"]]);
   assert.equal(groups[0].primary.note, undefined);
   assert.equal(groups[1].primary.amount.value, 45_254);
-  assert.equal(groups[1].supporting?.amount.value, Math.floor((52_999 + 22_000) / 500));
+  assert.equal(groups[1].supporting?.amount.value, Math.floor((52_999 + 22_000 + 5_000) / 500));
   assert.equal(groups[2].primary.amount.value, 360);
   assert.equal(groups[2].primary.note, "限制环节：合成玉订单");
   assert.equal(groups[2].supporting?.amount.value, 48);
