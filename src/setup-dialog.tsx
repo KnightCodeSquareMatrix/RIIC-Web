@@ -35,7 +35,7 @@ import { countOwned } from "./operbox";
 import type { SetupStep } from "./onboarding";
 import type { BaseBlueprint, BoxSource, DisplayError, OperBoxEntry, PresetDef, RotationProfile, SklandScheduleSnapshot } from "./types";
 
-import { inspectMaaProgress, normalizeMaaRarities, type MaaIssue } from "./maa-review";
+import type { MaaIssue } from "./maa-review";
 
 const CLIENT_SKLAND_ENABLED = process.env.APP_CLIENT_SKLAND_ENABLED === "1";
 const ManualOperboxPicker = lazy(() => import("@/components/setup/ManualOperboxPicker").then((module) => ({ default: module.ManualOperboxPicker })));
@@ -166,11 +166,12 @@ export function SetupDialog({
   const [reviewBusy, setReviewBusy] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
   const importedOwnedCount = operbox?.filter((entry) => entry.own).length ?? 0;
-  function stageMaaReview(text: string, name: string) {
+  async function stageMaaReview(text: string, name: string) {
     setMaaReview(null);
     setMaaChoices({});
     setReviewError(null);
     try {
+      const { inspectMaaProgress, normalizeMaaRarities } = await import("./maa-review");
       const rows = normalizeMaaRarities(JSON.parse(text));
       if (!Array.isArray(rows)) return false;
       const issues = inspectMaaProgress(rows);
@@ -292,7 +293,7 @@ export function SetupDialog({
       onRequireWebsiteAccount();
       return;
     }
-    if (!/\.xlsx?$/i.test(file.name) && stageMaaReview(await file.text(), file.name)) return;
+    if (!/\.xlsx?$/i.test(file.name) && await stageMaaReview(await file.text(), file.name)) return;
     if (await onMaaFile(file)) {
       setNeedsFacilityReview(true);
       setShowImportOptions(false);
@@ -305,7 +306,7 @@ export function SetupDialog({
       onRequireWebsiteAccount();
       return;
     }
-    if (stageMaaReview(maaPaste, "MAA-reviewed-box.json")) return;
+    if (await stageMaaReview(maaPaste, "MAA-reviewed-box.json")) return;
     if (await onMaaPaste()) {
       setNeedsFacilityReview(true);
       setShowImportOptions(false);

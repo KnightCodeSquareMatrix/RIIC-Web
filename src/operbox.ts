@@ -2,7 +2,6 @@ import type { OperBoxEntry } from "./types.ts";
 import { normalizeOperboxEntries } from "./operbox-normalization.ts";
 import { manualLevelFor, maxEliteForRarity } from "./manual-operbox.ts";
 import operatorRarities from "./generated/arkntools/operator-rarities.json" with { type: "json" };
-import { normalizeMaaRarities } from "./maa-review.ts";
 
 function pickValue(row: Record<string, unknown>, keys: string[]): unknown {
   for (const key of keys) {
@@ -91,6 +90,7 @@ export async function readOperboxText(text: string): Promise<OperBoxEntry[]> {
       "MAA JSON 无法解析，请确认粘贴了完整的 Arknights_OperBox_Export.json 内容。",
     );
   }
+  const { normalizeMaaRarities } = await import("./maa-review.ts");
   parsed = normalizeMaaRarities(parsed);
   if (Array.isArray(parsed)) {
     parsed = parsed.map((row) => {
