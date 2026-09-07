@@ -115,13 +115,14 @@ function feedbackRoom(value: unknown): FeedbackRoom | null {
 }
 
 export function normalizeAdminFeedbackStatus(value: unknown): AdminFeedbackStatus {
+  if (value === "reviewed" || value === "ignored") return value;
   if (value === "reproduced" || value === "working") return "reproduced";
   if (value === "fixed" || value === "resolved") return "fixed";
   return "unreviewed";
 }
 
 export function isAdminFeedbackStatus(value: unknown): value is AdminFeedbackStatus {
-  return value === "unreviewed" || value === "reproduced" || value === "fixed";
+  return value === "unreviewed" || value === "reproduced" || value === "fixed" || value === "reviewed" || value === "ignored";
 }
 
 export function legacyAdminFeedbackStatus(value: unknown): AdminFeedbackStatus | null {

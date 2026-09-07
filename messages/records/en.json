@@ -322,6 +322,8 @@
     "incomplete": "The private artifact remains available, but its layout, Operator Box, rotation, or Fiammetta state is missing or unreadable."
   },
   "app_admin_issues_issues_client_labels2": {
+    "reviewed": "Reviewed",
+    "ignored": "Ignored",
     "unreviewed": "Unreviewed",
     "reproduced": "Reproduced",
     "fixed": "Fixed"
@@ -340,6 +342,8 @@
     "unknown": "Other facility"
   },
   "app_admin_issues_issues_client_labels4": {
+    "reviewed": "Reviewed",
+    "ignored": "Ignored",
     "unreviewed": "Unreviewed",
     "reproduced": "Reproduced",
     "fixed": "Fixed"

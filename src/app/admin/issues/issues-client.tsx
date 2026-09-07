@@ -4,6 +4,7 @@ import { useTranslations, useLocale } from "next-intl";
 import { messageRecord } from "@/i18n/translate";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
   Bug,
@@ -46,11 +47,14 @@ import type {
 } from "@/types";
 import { localizedOperatorName } from "@/i18n/game-data";
 import { useGameCatalog } from "@/i18n/game-data-client";
+import { RelatedFeedback } from "./related-feedback";
 
 const PAGE_SIZE = 50;
 
 const STATUS_LABELS: Record<AdminFeedbackStatus, string> = {
   unreviewed: "未审阅",
+  reviewed: "已阅",
+  ignored: "忽略",
   reproduced: "已复现",
   fixed: "已修复",
 };
@@ -72,6 +76,8 @@ const FACILITY_LABELS: Record<AdminFeedbackFacility, string> = {
 const FACILITY_FILTERS = Object.keys(FACILITY_LABELS) as AdminFeedbackFacility[];
 
 type DetailState = {
+  history?: AdminFeedbackDetailData["history"];
+  solverExecutableSha256?: string | null;
   loading: boolean;
   error: string | null;
   reproduction: AdminReproductionData | null;
@@ -102,9 +108,11 @@ function statusClass(status: AdminFeedbackStatus): string {
   return "bg-muted text-muted-foreground";
 }
 
-function downloadReproduction(reproduction: AdminReproductionData): void {
-  if (!reproduction.available || !reproduction.layout || !reproduction.operbox || !reproduction.rotation) return;
-  const payload = {
+function downloadReproduction(reproduction: AdminReproductionData, boxOnly = false): void {
+  if (!reproduction.operbox || (!boxOnly && !reproduction.available)) return;
+  const payload = boxOnly ? reproduction.operbox : {
+    format: "riic-reproduction",
+    version: 1,
     diagnosticId: reproduction.diagnosticId,
     layout: reproduction.layout,
     operbox: reproduction.operbox,
@@ -114,7 +122,7 @@ function downloadReproduction(reproduction: AdminReproductionData): void {
   const href = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }));
   const anchor = document.createElement("a");
   anchor.href = href;
-  anchor.download = `solver-reproduction-${reproduction.diagnosticId}.json`;
+  anchor.download = `${boxOnly ? "box" : "solver-reproduction"}-${reproduction.diagnosticId}.json`;
   anchor.click();
   URL.revokeObjectURL(href);
 }
@@ -150,6 +158,9 @@ function ReproductionPanel({ state }: { state: DetailState }) {
       {reproduction.rotation ? <p className="text-xs text-muted-foreground">{intl("app_admin_issues_issues_client.rotation")}{rotationDescription(reproduction.rotation, en)}</p> : null}
 
       <div className="flex flex-wrap gap-2">
+        <Button type="button" variant="outline" disabled={!reproduction.operbox} onClick={() => downloadReproduction(reproduction, true)}>
+          <Download aria-hidden="true" />{en ? "Export box" : "导出 box"}
+        </Button>
         <Button type="button" variant="outline" disabled={!reproduction.available} onClick={() => downloadReproduction(reproduction)}>
           <Download aria-hidden="true" />{intl("app_admin_issues_issues_client.downloadReproductionJson")}
         </Button>
@@ -166,6 +177,14 @@ function ReproductionPanel({ state }: { state: DetailState }) {
           {copied ? (intl("app_admin_issues_issues_client.copied")) : (intl("app_admin_issues_issues_client.copyDiagnosticId"))}
         </Button>
       </div>
+
+      {state.solverExecutableSha256 ? <p className="break-all text-xs text-muted-foreground">SHA256: {state.solverExecutableSha256}</p> : null}
+      {state.history?.length ? <ol className="grid gap-2 text-sm" aria-label={en ? "Review history" : "处理历史"}>
+        {state.history.map((event) => <li key={event.id} className="rounded-lg bg-muted p-3">
+          <p>{formatDate(event.createdAt, en)} · {event.actorUserId ?? "—"} · {messageRecord(en, "app_admin_issues_issues_client_labels2")[event.status]}</p>
+          <p className="whitespace-pre-wrap">{event.note}</p>
+        </li>)}
+      </ol> : null}
 
       {operatorNames.length ? (
         <details className="rounded-lg bg-muted/55 px-3 py-2.5 text-sm">
@@ -235,6 +254,8 @@ function FeedbackRow({
           <p className="mt-2 break-words whitespace-pre-wrap text-sm leading-6">{item.note}</p>
           {item.room?.operators.length ? <p className="mt-2 break-words text-xs leading-5 text-muted-foreground">{intl("app_admin_issues_issues_client.currentOperators")}{item.room.operators.map((name) => localizedOperatorName(name, locale, gameCatalog)).join(intl("app_admin_issues_issues_client.label"))}</p> : null}
           <p className="font-number mt-2 break-all text-[11px] text-muted-foreground">{item.diagnosticId}</p>
+          <p className="font-number mt-1 break-all text-[11px] text-muted-foreground">{item.id}</p>
+          {item.adminNote ? <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">{item.adminNote}</p> : null}
         </div>
       </div>
 
@@ -305,7 +326,7 @@ function RunRow({
   );
 }
 
-export function AdminIssues() {
+export function AdminIssues({ isAdmin = false }: { isAdmin?: boolean }) {
   const intl = useTranslations();
   const locale = useLocale();
   const en = locale === "en";
@@ -313,10 +334,28 @@ export function AdminIssues() {
   const facilityLabels = messageRecord(en, "app_admin_issues_issues_client_labels5");
   const [feedback, setFeedback] = useState<AdminFeedbackListData>({ items: [], total: 0, limit: PAGE_SIZE, offset: 0 });
   const [runs, setRuns] = useState<AdminPlanRunListData>({ items: [], total: 0, limit: PAGE_SIZE, offset: 0 });
-  const [feedbackOffset, setFeedbackOffset] = useState(0);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const feedbackOffset = Math.max(0, Number(searchParams.get("offset")) || 0);
   const [runOffset, setRunOffset] = useState(0);
-  const [statusFilter, setStatusFilter] = useState<AdminFeedbackStatus | "all">("all");
-  const [facilityFilter, setFacilityFilter] = useState<AdminFeedbackFacility | "all">("all");
+  const statusFilter = (searchParams.get("status") || "all") as AdminFeedbackStatus | "all";
+  const facilityFilter = (searchParams.get("facility") || "all") as AdminFeedbackFacility | "all";
+  const search = searchParams.get("q") ?? "";
+  const from = searchParams.get("from") ?? "";
+  const to = searchParams.get("to") ?? "";
+  const errorCode = searchParams.get("errorCode") ?? "";
+  const solver = searchParams.get("solver") ?? "";
+  function setFilter(key: string, value: string) {
+    const next = new URLSearchParams(searchParams);
+    if (value && value !== "all") next.set(key, value); else next.delete(key);
+    if (key !== "offset") next.delete("offset");
+    router.replace(`/admin/issues?${next}`, { scroll: false });
+  }
+  const setFeedbackOffset = (value: number) => setFilter("offset", String(value));
+  const setStatusFilter = (value: string) => setFilter("status", value);
+  const setFacilityFilter = (value: string) => setFilter("facility", value);
+  const [review, setReview] = useState<{ items: AdminFeedbackRecordData[]; status: AdminFeedbackStatus } | null>(null);
+  const [reviewNote, setReviewNote] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [details, setDetails] = useState<Record<string, DetailState>>({});
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -341,6 +380,11 @@ export function AdminIssues() {
       const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(feedbackOffset) });
       if (statusFilter !== "all") params.set("status", statusFilter);
       if (facilityFilter !== "all") params.set("facility", facilityFilter);
+      if (search.trim()) params.set("q", search.trim());
+      if (from) params.set("from", new Date(from).toISOString());
+      if (to) params.set("to", new Date(to).toISOString());
+      if (errorCode) params.set("errorCode", errorCode);
+      if (solver) params.set("solver", solver);
       setFeedback(await requestData<AdminFeedbackListData>(`/api/admin/feedback?${params}`, { signal: controller.signal }, en));
     } catch (loadError) {
       if (controller.signal.aborted) return;
@@ -348,7 +392,7 @@ export function AdminIssues() {
     } finally {
       if (feedbackRequestRef.current === controller) setLoadingFeedback(false);
     }
-  }, [intl, en, facilityFilter, feedbackOffset, statusFilter]);
+  }, [intl, en, facilityFilter, feedbackOffset, statusFilter, search, from, to, errorCode, solver]);
 
   const loadRuns = useCallback(async () => {
     runRequestRef.current?.abort();
@@ -387,7 +431,7 @@ export function AdminIssues() {
   const statusCounts = useMemo(() => feedback.items.reduce<Record<AdminFeedbackStatus, number>>((counts, item) => {
     counts[item.status] += 1;
     return counts;
-  }, { unreviewed: 0, reproduced: 0, fixed: 0 }), [feedback.items]);
+  }, { unreviewed: 0, reviewed: 0, ignored: 0, reproduced: 0, fixed: 0 }), [feedback.items]);
 
   async function toggleDetail(key: string, url: string) {
     if (expanded === key) {
@@ -395,36 +439,55 @@ export function AdminIssues() {
       return;
     }
     setExpanded(key);
-    if (details[key]?.loading || details[key]?.reproduction?.available) return;
     setDetails((current) => ({ ...current, [key]: { loading: true, error: null, reproduction: null } }));
     try {
       const data = key.startsWith("feedback:")
         ? await requestData<AdminFeedbackDetailData>(url, undefined, en)
         : await requestData<AdminPlanRunDetailData>(url, undefined, en);
-      setDetails((current) => ({ ...current, [key]: { loading: false, error: null, reproduction: data.reproduction } }));
+      setDetails((current) => ({ ...current, [key]: { loading: false, error: null, reproduction: data.reproduction, ...("history" in data ? { history: data.history, solverExecutableSha256: data.solverExecutableSha256 } : {}) } }));
     } catch (detailError) {
       setDetails((current) => ({ ...current, [key]: { loading: false, error: detailError instanceof Error ? detailError.message : (intl("app_admin_issues_issues_client.couldNotLoadReproductionData")), reproduction: null } }));
     }
   }
 
-  async function updateStatus(item: AdminFeedbackRecordData, status: AdminFeedbackStatus) {
-    if (item.status === status) return;
-    setBusyStatusId(item.id);
+  function updateStatus(item: AdminFeedbackRecordData, status: AdminFeedbackStatus) {
+    setReview({ items: [item], status });
+    setReviewNote(item.adminNote ?? "");
+  }
+
+  async function saveReview() {
+    if (!review) return;
+    setBusyStatusId(review.items[0].id);
     setMessage(null);
     setError(null);
     try {
-      await requestData(`/api/admin/feedback/${encodeURIComponent(item.id)}`, {
+      await requestData("/api/admin/feedback", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status, note: item.adminNote ?? "" }),
+        body: JSON.stringify({ status: review.status, note: reviewNote, items: review.items.map((item) => ({ id: item.id, expectedUpdatedAt: item.updatedAt })) }),
       }, en);
-      setMessage(intl("app_admin_issues_issues_client.feedbackMarked", { value1: statusLabels[status] }));
+      setMessage(intl("app_admin_issues_issues_client.feedbackMarked", { value1: statusLabels[review.status] }));
+      setReview(null);
+      setDetails({});
+      setExpanded(null);
       await loadFeedback();
     } catch (updateError) {
+      setReview(null);
+      await loadFeedback();
       setError(updateError instanceof Error ? updateError.message : (intl("app_admin_issues_issues_client.couldNotUpdateFeedbackStatus")));
     } finally {
       setBusyStatusId(null);
     }
+  }
+
+  async function reproduce(ids: string[]) {
+    setBusyStatusId(ids[0]); setError(null);
+    try {
+      const created = await requestData<{ id: string }[]>("/api/admin/quality", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "feedback", ids }) }, en);
+      const drafts = created.map((draft) => draft.id);
+      router.push(`/admin/quality?${drafts.length === 1 ? `draft=${drafts[0]}` : `drafts=${drafts.join(",")}`}`);
+    } catch (error) { setError(error instanceof Error ? error.message : "Reproduction failed"); }
+    finally { setBusyStatusId(null); }
   }
 
   async function deleteSelected() {
@@ -484,12 +547,23 @@ export function AdminIssues() {
 
         <TabsContent value="feedback" className="grid gap-5">
           <section aria-labelledby="feedback-filters" className="grid gap-3">
+            <form className="flex items-end gap-2" onSubmit={(event) => { event.preventDefault(); setFilter("q", String(new FormData(event.currentTarget).get("q") ?? "")); }}>
+              <label className="grid flex-1 gap-2 text-sm">{en ? "Search feedback" : "搜索反馈"}
+                <input key={search} name="q" type="search" maxLength={200} defaultValue={search} placeholder={en ? "ID, description, review note, operator" : "反馈编号、诊断编号、描述、处理备注、干员"} className="min-h-11 min-w-0 rounded-lg border border-border bg-background px-3" />
+              </label>
+              <Button type="submit" variant="outline">{en ? "Search" : "搜索"}</Button>
+            </form>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {([ ["from", en ? "From" : "开始时间", from, "datetime-local"], ["to", en ? "Until" : "结束时间", to, "datetime-local"], ["errorCode", en ? "Error code" : "错误码", errorCode, "text"], ["solver", en ? "Solver SHA256" : "求解器 SHA256", solver, "text"] ] as const).map(([key, label, value, type]) => <label key={key} className="grid gap-2 text-sm">{label}<input type={type} value={value} maxLength={100} className="min-h-11 min-w-0 rounded-lg border bg-background px-3" onChange={(event) => setFilter(key, event.target.value)} /></label>)}
+            </div>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 id="feedback-filters" className="font-semibold">{intl("app_admin_issues_issues_client.facilityFeedbackQueue")}</h2>
                 <p className="mt-1 text-xs text-muted-foreground">{intl("app_admin_issues_issues_client.statusAndFacilityCountsApplyToTheCurrentPage")}</p>
               </div>
               <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" disabled={!selected.size || !!busyStatusId} onClick={() => void reproduce([...selected])}>{en ? "Add to test batch" : "加入测试批次"}</Button>
+                <Button type="button" variant="outline" disabled={!selected.size || !!busyStatusId} onClick={() => { setReview({ items: visibleFeedback.filter((item) => selected.has(item.id)), status: "reviewed" }); setReviewNote(""); }}>{en ? "Review selected" : "批量审阅"} ({selected.size})</Button>
                 <Button
                   type="button"
                   variant="outline"
@@ -498,25 +572,25 @@ export function AdminIssues() {
                 >
                   {allVisibleSelected ? (intl("app_admin_issues_issues_client.clearSelection")) : (intl("app_admin_issues_issues_client.selectCurrentFacility"))}
                 </Button>
-                <Button type="button" variant="destructive" disabled={!selected.size} onClick={() => setConfirmDelete(true)}>
+                {isAdmin && <Button type="button" variant="destructive" disabled={!selected.size} onClick={() => setConfirmDelete(true)}>
                   <Trash2 aria-hidden="true" />{intl("app_admin_issues_issues_client.deleteSelected")} {selected.size ? `(${selected.size})` : ""}
-                </Button>
+                </Button>}
               </div>
             </div>
 
             <div role="group" className="flex flex-wrap gap-1" aria-label={intl("app_admin_issues_issues_client.filterByReviewStatus")}>
-              <Button type="button" size="sm" variant={statusFilter === "all" ? "secondary" : "ghost"} aria-pressed={statusFilter === "all"} onClick={() => { setFeedbackOffset(0); setStatusFilter("all"); }}>{intl("app_admin_issues_issues_client.all")}</Button>
+              <Button type="button" size="sm" variant={statusFilter === "all" ? "secondary" : "ghost"} aria-pressed={statusFilter === "all"} onClick={() => setStatusFilter("all")}>{intl("app_admin_issues_issues_client.all")}</Button>
               {(Object.keys(STATUS_LABELS) as AdminFeedbackStatus[]).map((status) => (
-                <Button key={status} type="button" size="sm" variant={statusFilter === status ? "secondary" : "ghost"} aria-pressed={statusFilter === status} onClick={() => { setFeedbackOffset(0); setStatusFilter(status); }}>
+                <Button key={status} type="button" size="sm" variant={statusFilter === status ? "secondary" : "ghost"} aria-pressed={statusFilter === status} onClick={() => setStatusFilter(status)}>
                   {statusLabels[status]}
                 </Button>
               ))}
             </div>
 
             <div role="group" className="flex gap-1 overflow-x-auto pb-1" aria-label={intl("app_admin_issues_issues_client.filterByFacility")}>
-              <Button type="button" size="sm" variant={facilityFilter === "all" ? "secondary" : "ghost"} className="shrink-0" aria-pressed={facilityFilter === "all"} onClick={() => { setFeedbackOffset(0); setFacilityFilter("all"); }}>{intl("app_admin_issues_issues_client.allFacilities")}</Button>
+              <Button type="button" size="sm" variant={facilityFilter === "all" ? "secondary" : "ghost"} className="shrink-0" aria-pressed={facilityFilter === "all"} onClick={() => setFacilityFilter("all")}>{intl("app_admin_issues_issues_client.allFacilities")}</Button>
               {FACILITY_FILTERS.map((facility) => (
-                <Button key={facility} type="button" size="sm" variant={facilityFilter === facility ? "secondary" : "ghost"} className="shrink-0" aria-pressed={facilityFilter === facility} onClick={() => { setFeedbackOffset(0); setFacilityFilter(facility); }}>
+                <Button key={facility} type="button" size="sm" variant={facilityFilter === facility ? "secondary" : "ghost"} className="shrink-0" aria-pressed={facilityFilter === facility} onClick={() => setFacilityFilter(facility)}>
                   {facilityLabels[facility]}
                 </Button>
               ))}
@@ -529,6 +603,7 @@ export function AdminIssues() {
               <div><Inbox className="mx-auto size-8 text-muted-foreground" aria-hidden="true" /><p className="mt-3 font-medium">{intl("app_admin_issues_issues_client.noMatchingFeedback")}</p><p className="mt-1 text-sm text-muted-foreground">{intl("app_admin_issues_issues_client.tryAnotherStatusOrFacilityFilter")}</p></div>
             </div>
           ) : null}
+          <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"><div className="grid gap-4">
           {groupedFeedback.map(([facility, items]) => (
             <section key={facility} aria-labelledby={`facility-${facility}`} className="grid gap-3">
               <div className="flex items-center gap-2">
@@ -543,7 +618,7 @@ export function AdminIssues() {
                     item={item}
                     selected={selected.has(item.id)}
                     busy={busyStatusId === item.id}
-                    detail={details[key]}
+                    detail={undefined}
                     expanded={expanded === key}
                     onSelect={(checked) => setSelected((current) => {
                       const next = new Set(current);
@@ -557,6 +632,20 @@ export function AdminIssues() {
               })}
             </section>
           ))}
+          </div><aside className="grid gap-4 rounded-xl border bg-background p-4 lg:sticky lg:top-4" aria-label={en ? "Feedback detail" : "反馈详情"}>
+            {expanded?.startsWith("feedback:") && details[expanded] ? <>
+              <div className="flex flex-wrap gap-2">{([-1, 1] as const).map((direction) => {
+                const index = visibleFeedback.findIndex((item) => `feedback:${item.id}` === expanded);
+                const adjacent = visibleFeedback[index + direction];
+                return <Button key={direction} variant="outline" disabled={!adjacent} onClick={() => adjacent && void toggleDetail(`feedback:${adjacent.id}`, `/api/admin/feedback/${encodeURIComponent(adjacent.id)}`)}>{direction < 0 ? (en ? "Previous issue" : "上一条") : (en ? "Next issue" : "下一条")}</Button>;
+              })}</div>
+              <h2 className="break-all font-medium">{expanded.slice(9)}</h2>
+              <p className="whitespace-pre-wrap text-sm">{visibleFeedback.find((item) => `feedback:${item.id}` === expanded)?.note}</p>
+              <Button disabled={!details[expanded].reproduction?.available || !!busyStatusId} onClick={() => void reproduce([expanded.slice(9)])}>{en ? "Reproduce" : "一键复现"}</Button>
+              <ReproductionPanel state={details[expanded]} />
+              {visibleFeedback.find((item) => `feedback:${item.id}` === expanded) && <RelatedFeedback key={expanded} item={visibleFeedback.find((item) => `feedback:${item.id}` === expanded)!} onChanged={() => { setExpanded(null); void loadFeedback(); }} />}
+            </> : <p className="text-sm text-muted-foreground">{en ? "Select feedback to inspect its reproduction and review history." : "选择一条反馈，查看复现条件与处理历史。"}</p>}
+          </aside></div>
           <div className="flex items-center justify-between gap-3 border-t border-border/70 pt-4">
             <p className="font-number text-xs text-muted-foreground">{feedback.total ? `${feedback.offset + 1}–${Math.min(feedback.offset + feedback.items.length, feedback.total)} / ${feedback.total}` : (intl("app_admin_issues_issues_client.0Records"))}</p>
             <div className="flex gap-2">
@@ -599,6 +688,19 @@ export function AdminIssues() {
         </TabsContent>
       </Tabs>
 
+      <Dialog open={!!review} onOpenChange={(open) => { if (!open && !busyStatusId) setReview(null); }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>{en ? "Record review" : "记录审阅结论"}</DialogTitle><DialogDescription>{en ? "Opening feedback does not change its status. Ignoring requires a note." : "打开反馈不会更改状态。忽略必须填写备注。"}</DialogDescription></DialogHeader>
+          <DialogBody className="grid gap-4">
+            <label className="grid gap-2 text-sm">{en ? "Status" : "状态"}<select className="min-h-11 rounded-lg border bg-background px-3" value={review?.status ?? "reviewed"} disabled={!!busyStatusId} onChange={(event) => setReview((current) => current && ({ ...current, status: event.target.value as AdminFeedbackStatus }))}>
+              {(Object.keys(STATUS_LABELS) as AdminFeedbackStatus[]).map((status) => <option key={status} value={status}>{statusLabels[status]}</option>)}
+            </select></label>
+            {review?.status === "ignored" ? <div className="flex flex-wrap gap-2">{(en ? ["Not reproduced", "Configuration issue", "Expected behavior", "Other"] : ["未复现", "配置问题", "预期行为", "其他"]).map((note) => <Button key={note} variant="outline" size="sm" disabled={!!busyStatusId} onClick={() => setReviewNote(note)}>{note}</Button>)}</div> : null}
+            <label className="grid gap-2 text-sm">{en ? "Review note" : "处理备注"}<textarea maxLength={2000} rows={4} className="rounded-lg border bg-background p-3" value={reviewNote} disabled={!!busyStatusId} onChange={(event) => setReviewNote(event.target.value)} /></label>
+          </DialogBody>
+          <DialogFooter><Button variant="ghost" disabled={!!busyStatusId} onClick={() => setReview(null)}>{en ? "Cancel" : "取消"}</Button><Button disabled={!!busyStatusId || (review?.status === "ignored" && !reviewNote.trim())} onClick={() => void saveReview()}>{en ? "Save review" : "保存结论"}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Dialog open={confirmDelete} onOpenChange={(open) => { if (!deleting) setConfirmDelete(open); }}>
         <DialogContent role="alertdialog" showCloseButton={!deleting}>
           <DialogHeader>
