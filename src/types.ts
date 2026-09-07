@@ -199,6 +199,11 @@ export interface RotationJson {
       originium_shards: number;
       orundum: number;
     };
+    drone_production?: {
+      lmd: number;
+      pure_gold: number;
+      battle_records: number;
+    };
   };
 }
 

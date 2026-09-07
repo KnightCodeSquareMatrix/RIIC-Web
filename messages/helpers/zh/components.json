@@ -15,6 +15,7 @@
   "tradingPosts": "贸易站",
   "factories": "制造站",
   "powerPlants": "发电站",
+  "droneTarget": "无人机：{room}",
   "controlFunctional": "控制与功能区",
   "dormitories": "宿舍",
   "facilitySettings": "设施设置",
