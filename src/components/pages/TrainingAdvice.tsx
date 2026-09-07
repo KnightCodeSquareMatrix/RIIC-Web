@@ -1,10 +1,12 @@
-import { lazy, Suspense, useState, type ReactNode } from "react";
-import { CircleAlert, ClipboardCheck, ChevronDown, GraduationCap } from "lucide-react";
+import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
+import { CircleAlert, ClipboardCheck, ChevronDown, GraduationCap, SlidersHorizontal } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 
 import { InfraTechnicalCard, InfraTechnicalHeading } from "@/components/InfraTechnicalCard";
 import { loadClientFeature } from "@/client-lazy-loader";
 import { cn } from "@/lib/utils";
+import { operatorProfessionFor } from "@/operatorPortraits";
+import { PROFESSION_LABELS, PROFESSION_LABELS_ENGLISH } from "@/operator-presentation";
 import { MOTION_DURATION, MOTION_EASE_IN_OUT } from "@/motion";
 import { TrainingAdviceActionCard } from "@/components/training-advice/TrainingAdviceActionCard";
 import { TrainingCombinationCard } from "@/components/training-advice/TrainingCombinationCard";
@@ -21,6 +23,8 @@ import type {
   UserProfile,
   UserProfileAction,
 } from "@/types";
+
+const TRAINING_BLACKLIST_KEY = "arknights-infra-training-blacklist-v1";
 
 const RecommendationCard = lazy(() => loadClientFeature("recommendationCard").then((module) => ({
   default: module.RecommendationCard,
@@ -155,6 +159,34 @@ export function TrainingAdvice({
   const combinations = advice ? sortTrainingCombinations(advice.combinations) : [];
   const context = advice?.context;
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+  const [onlyOwned, setOnlyOwned] = useState(false);
+  const [rarityFilter, setRarityFilter] = useState<number | null>(null);
+  const [professionFilter, setProfessionFilter] = useState<number | null>(null);
+  const [blacklist, setBlacklist] = useState<string[]>([]);
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(window.localStorage.getItem(TRAINING_BLACKLIST_KEY) ?? "[]");
+      if (Array.isArray(stored)) setBlacklist(stored.filter((value): value is string => typeof value === "string"));
+    } catch { /* ignore malformed local preferences */ }
+  }, []);
+  const blacklisted = useMemo(() => new Set(blacklist), [blacklist]);
+  const setOperatorBlacklisted = (operator: string) => {
+    setBlacklist((current) => {
+      const next = current.includes(operator) ? current.filter((name) => name !== operator) : [...current, operator];
+      try { window.localStorage.setItem(TRAINING_BLACKLIST_KEY, JSON.stringify(next)); } catch { /* current session still works */ }
+      return next;
+    });
+  };
+  const matchesTrainingFilters = (operator: string, owned: boolean) => {
+    const entry = ownedByName.get(operator);
+    if (rarityFilter !== null && entry?.rarity !== rarityFilter) return false;
+    if (professionFilter !== null && operatorProfessionFor(operator) !== professionFilter) return false;
+    if (onlyOwned && !owned) return false;
+    return !blacklisted.has(operator);
+  };
+  const filteredRecommendations = recommendations.filter((item) => matchesTrainingFilters(item.operator, Boolean(ownedByName.get(item.operator)?.own)));
+  const filteredNewbie = advice?.incomplete_newbie.filter((item) => matchesTrainingFilters(item.operator, Boolean(ownedByName.get(item.operator)?.own))) ?? [];
+  const filteredLegacyActions = actions.filter((item) => matchesTrainingFilters(item.operator, Boolean(ownedByName.get(item.operator)?.own)));
   const toggleSection = (id: string) =>
     setCollapsedSections((current) => ({ ...current, [id]: !current[id] }));
 
@@ -276,16 +308,18 @@ export function TrainingAdvice({
             <CollapsibleSection
               accent="bg-[#B8F03A]"
               title={en ? "Beginner Goals" : "新手目标"}
-              count={advice.incomplete_newbie.length}
+              count={filteredNewbie.length}
               collapsed={Boolean(collapsedSections.newbie)}
               onToggle={() => toggleSection("newbie")}
             >
               <div className="grid min-w-0 gap-3" data-training-newbie-list>
-                {advice.incomplete_newbie.map((item, index) => (
+                {filteredNewbie.map((item, index) => (
                   <TrainingAdviceActionCard
                     key={`${item.action}-${item.operator}`}
                     action={item}
                     index={index}
+                    blacklisted={blacklisted.has(item.operator)}
+                    onToggleBlacklist={() => setOperatorBlacklisted(item.operator)}
                   />
                 ))}
               </div>
@@ -307,22 +341,36 @@ export function TrainingAdvice({
           <CollapsibleSection
             accent="bg-[#29BDF5]"
             title={en ? "Training Recommendations" : "练卡建议"}
-            count={recommendations.length}
+            count={filteredRecommendations.length}
             collapsed={Boolean(collapsedSections.actions)}
             onToggle={() => toggleSection("actions")}
           >
-            {recommendations.length ? (
+            <>
+              <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-border/80 bg-background/56 p-3" data-training-filters>
+                <span className="mr-1 inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground"><SlidersHorizontal className="size-3.5" />{en ? "Filters" : "筛选"}</span>
+                <button type="button" aria-pressed={onlyOwned} onClick={() => setOnlyOwned((value) => !value)} className={`min-h-9 rounded-lg border px-3 text-xs font-medium transition-colors ${onlyOwned ? "border-[#FFD800] bg-[#FFD800] text-[#313131]" : "border-border/80 bg-background text-foreground hover:border-foreground/45 hover:bg-muted/45"}`}>{en ? "Owned only" : "只看已拥有"}</button>
+                <select aria-label={en ? "Filter by rarity" : "按星级筛选"} value={rarityFilter ?? ""} onChange={(event) => setRarityFilter(event.target.value ? Number(event.target.value) : null)} className="h-9 rounded-lg border border-border/80 bg-background px-2.5 text-xs font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-[#FFD800]">
+                  <option value="">{en ? "All rarities" : "全部星级"}</option>{[6, 5, 4, 3].map((value) => <option key={value} value={value}>{value}★</option>)}
+                </select>
+                <select aria-label={en ? "Filter by profession" : "按职业筛选"} value={professionFilter ?? ""} onChange={(event) => setProfessionFilter(event.target.value ? Number(event.target.value) : null)} className="h-9 rounded-lg border border-border/80 bg-background px-2.5 text-xs font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-[#FFD800]">
+                  <option value="">{en ? "All professions" : "全部职业"}</option>{Object.entries(PROFESSION_LABELS).map(([value, label]) => <option key={value} value={value}>{en ? PROFESSION_LABELS_ENGLISH[Number(value)] : label}</option>)}
+                </select>
+                {blacklist.length ? <button type="button" onClick={() => { setBlacklist([]); try { window.localStorage.removeItem(TRAINING_BLACKLIST_KEY); } catch { /* ignore storage errors */ } }} className="min-h-9 rounded-[4px] border border-white/18 px-3 text-xs text-white/72 hover:bg-white/10">{en ? `Clear blocked (${blacklist.length})` : `清除拉黑（${blacklist.length}）`}</button> : null}
+              </div>
+              {filteredRecommendations.length ? (
               <div className="grid min-w-0 gap-3" data-training-advice-list>
-                {recommendations.map((recommendation, index) => (
+                {filteredRecommendations.map((recommendation, index) => (
                   <TrainingAdviceActionCard
                     key={`${recommendation.combination_id}-${recommendation.operator}`}
                     action={recommendation}
                     entry={ownedByName.get(recommendation.operator)}
                     index={index}
+                    blacklisted={blacklisted.has(recommendation.operator)}
+                    onToggleBlacklist={() => setOperatorBlacklisted(recommendation.operator)}
                   />
                 ))}
               </div>
-            ) : (
+              ) : (
               <InfraTechnicalCard group="training" className="min-h-[248px]" dataSlot="training-empty" showEmblem={false}>
                 <div className="grid min-h-[216px] place-content-center text-center">
                   <h3 className="text-xl font-semibold">{en ? "No priority training targets" : "暂无优先培养目标"}</h3>
@@ -331,7 +379,8 @@ export function TrainingAdvice({
                   </p>
                 </div>
               </InfraTechnicalCard>
-            )}
+              )}
+            </>
           </CollapsibleSection>
 
           <CollapsibleSection
@@ -352,14 +401,21 @@ export function TrainingAdvice({
         <CollapsibleSection
           accent="bg-[#29BDF5]"
           title={en ? "Training Recommendations" : "培养建议"}
-          count={actions.length}
+          count={filteredLegacyActions.length}
           collapsed={Boolean(collapsedSections["legacy-actions"])}
           onToggle={() => toggleSection("legacy-actions")}
         >
-          {actions.length ? (
+          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-border/80 bg-background/56 p-3" data-training-filters>
+            <span className="mr-1 inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground"><SlidersHorizontal className="size-3.5" />{en ? "Filters" : "筛选"}</span>
+            <button type="button" aria-pressed={onlyOwned} onClick={() => setOnlyOwned((value) => !value)} className={`min-h-9 rounded-lg border px-3 text-xs font-medium transition-colors ${onlyOwned ? "border-[#FFD800] bg-[#FFD800] text-[#313131]" : "border-border/80 bg-background text-foreground hover:border-foreground/45 hover:bg-muted/45"}`}>{en ? "Owned only" : "只看已拥有"}</button>
+            <select aria-label={en ? "Filter by rarity" : "按星级筛选"} value={rarityFilter ?? ""} onChange={(event) => setRarityFilter(event.target.value ? Number(event.target.value) : null)} className="h-9 rounded-lg border border-border/80 bg-background px-2.5 text-xs font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-[#FFD800]"><option value="">{en ? "All rarities" : "全部星级"}</option>{[6, 5, 4, 3].map((value) => <option key={value} value={value}>{value}★</option>)}</select>
+            <select aria-label={en ? "Filter by profession" : "按职业筛选"} value={professionFilter ?? ""} onChange={(event) => setProfessionFilter(event.target.value ? Number(event.target.value) : null)} className="h-9 rounded-lg border border-border/80 bg-background px-2.5 text-xs font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-[#FFD800]"><option value="">{en ? "All professions" : "全部职业"}</option>{Object.entries(PROFESSION_LABELS).map(([value, label]) => <option key={value} value={value}>{en ? PROFESSION_LABELS_ENGLISH[Number(value)] : label}</option>)}</select>
+            {blacklist.length ? <button type="button" onClick={() => { setBlacklist([]); try { window.localStorage.removeItem(TRAINING_BLACKLIST_KEY); } catch { /* ignore */ } }} className="min-h-9 rounded-[4px] border border-white/18 px-3 text-xs text-white/72 hover:bg-white/10">{en ? `Clear blocked (${blacklist.length})` : `清除拉黑（${blacklist.length}）`}</button> : null}
+          </div>
+          {filteredLegacyActions.length ? (
             <div className="grid min-w-0 gap-3" data-training-advice-list>
               <Suspense fallback={<p className="py-4 text-sm text-white/62" role="status">{en ? "Loading training recommendations…" : "正在加载培养建议…"}</p>}>
-                {actions.map((action, index) => (
+                {filteredLegacyActions.map((action, index) => (
                   <RecommendationCard key={actionKey(action, index)} action={action} entry={ownedByName.get(action.operator)} index={index} />
                 ))}
               </Suspense>
