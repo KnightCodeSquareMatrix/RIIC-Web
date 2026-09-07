@@ -53,6 +53,11 @@ docs/LOGIN_USER_FLOW_PHASES_2_3_PLAN.md
 docs/PRODUCTION_RELEASE_RUNBOOK.md
 docs/UPDATE_SOLVER.md
 
+# Tutorial videos are hosted outside GitHub and the application release.
+/public/videos/help/*.mp4
+/public/videos/help/*.webm
+/public/videos/help/*.mov
+
 # Temporary files and generated local artifacts
 .tmp/
 output/
