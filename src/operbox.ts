@@ -2,6 +2,8 @@ import type { OperBoxEntry } from "./types.ts";
 import { normalizeOperboxEntries } from "./operbox-normalization.ts";
 import { manualLevelFor, maxEliteForRarity } from "./manual-operbox.ts";
 import operatorRarities from "./generated/arkntools/operator-rarities.json" with { type: "json" };
+import operatorCatalog from "./generated/arkntools/operator-catalog.json" with { type: "json" };
+const RARITY_BY_NAME = new Map((operatorCatalog as Array<{ id: string; name?: string; rarity?: number }>).filter((item) => item.name && item.rarity).map((item) => [item.name!, item.rarity!]));
 
 function pickValue(row: Record<string, unknown>, keys: string[]): unknown {
   for (const key of keys) {
@@ -59,18 +61,17 @@ export function assertOperbox(value: unknown): OperBoxEntry[] {
     const canonicalId = id.startsWith("char_") ? id : `char_${id}`;
     const canonicalRarity = Object.hasOwn(operatorRarities, canonicalId)
       ? operatorRarities[canonicalId as keyof typeof operatorRarities] : undefined;
-    if (canonicalRarity !== undefined && rarity !== canonicalRarity)
-      throw new Error(`${name} 的 rarity 必须与干员数据一致（${canonicalRarity} 星）。`);
+    const validatedRarity = canonicalRarity ?? rarity;
     if (owned) {
-      const maxElite = maxEliteForRarity(rarity);
+      const maxElite = maxEliteForRarity(validatedRarity);
       if (elite > maxElite)
         throw new Error(`${name}（${rarity} 星）的 elite 不能超过 ${maxElite}。`);
-      const maxLevel = manualLevelFor(rarity, elite);
+      const maxLevel = manualLevelFor(validatedRarity, elite);
       if (level > maxLevel)
         throw new Error(`${name}（${rarity} 星、精英 ${elite}）的 level 不能超过 ${maxLevel}。`);
     }
     seen.add(id);
-    return { id, name, elite, level, own: row.own, potential, rarity };
+    return { id, name, elite, level, own: row.own, potential, rarity: validatedRarity };
   });
   return normalizeOperboxEntries(entries);
 }
@@ -94,14 +95,18 @@ export async function readOperboxText(text: string): Promise<OperBoxEntry[]> {
       if (!row || typeof row !== "object" || Array.isArray(row)) return row;
       const value = row as Record<string, unknown>;
       const rarity = Number(value.rarity);
+      const id = typeof value.id === "string" ? value.id.trim() : "";
+      const canonicalId = id.startsWith("char_") ? id : `char_${id}`;
+      const canonicalRarity = Object.hasOwn(operatorRarities, canonicalId) ? operatorRarities[canonicalId as keyof typeof operatorRarities] : undefined;
+      const normalizedRarity = canonicalRarity ?? RARITY_BY_NAME.get(String(value.name)) ?? (String(value.name) === "Castle-3" ? 1 : rarity);
       const elite = Number(value.elite);
-      if (value.own !== true || !Number.isInteger(rarity) || rarity < 1 || rarity > 6) return row;
-      if (Number.isInteger(rarity) && Number.isInteger(elite) && elite > maxEliteForRarity(rarity)) {
-        const safeElite = maxEliteForRarity(rarity);
-        return { ...value, elite: safeElite, level: manualLevelFor(rarity, safeElite) };
+      if (value.own !== true || !Number.isInteger(normalizedRarity) || normalizedRarity < 1 || normalizedRarity > 6) return row;
+      if (Number.isInteger(elite) && elite > maxEliteForRarity(normalizedRarity)) {
+        const safeElite = maxEliteForRarity(normalizedRarity);
+        return { ...value, rarity: normalizedRarity, elite: safeElite, level: manualLevelFor(normalizedRarity, safeElite) };
       }
-      if (Number.isInteger(rarity) && Number.isInteger(elite) && Number.isFinite(Number(value.level))) {
-        return { ...value, level: Math.min(Number(value.level), manualLevelFor(rarity, elite)) };
+      if (Number.isInteger(elite) && Number.isFinite(Number(value.level))) {
+        return { ...value, rarity: normalizedRarity, level: Math.min(Number(value.level), manualLevelFor(normalizedRarity, elite)) };
       }
       return row;
     });

@@ -19,6 +19,7 @@ import { FiammettaSettings } from "@/components/FiammettaSettings";
 import { WizardSteps } from "@/components/interior/wizard-steps";
 import { hasSetupConfigurationChanged } from "@/setup-configuration";
 import { useWebsiteSession } from "@/website-session";
+
 import {
   formatManualShiftDuration,
   manualShiftTimeRanges,
@@ -33,6 +34,8 @@ import { FileDrop, LayoutEditor, PresetSelector } from "./components";
 import { countOwned } from "./operbox";
 import type { SetupStep } from "./onboarding";
 import type { BaseBlueprint, BoxSource, DisplayError, OperBoxEntry, PresetDef, RotationProfile, SklandScheduleSnapshot } from "./types";
+
+import { inspectMaaProgress, type MaaIssue } from "./maa-review";
 
 const CLIENT_SKLAND_ENABLED = process.env.APP_CLIENT_SKLAND_ENABLED === "1";
 const ManualOperboxPicker = lazy(() => import("@/components/setup/ManualOperboxPicker").then((module) => ({ default: module.ManualOperboxPicker })));
@@ -158,6 +161,50 @@ export function SetupDialog({
   const locale = useLocale();
   const en = locale === "en";
   const { data: websiteSession } = useWebsiteSession();
+  const [maaReview, setMaaReview] = useState<{ rows: Record<string, unknown>[]; issues: MaaIssue[]; name: string } | null>(null);
+  const [maaChoices, setMaaChoices] = useState<Record<number, number>>({});
+  const [reviewBusy, setReviewBusy] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const importedOwnedCount = operbox?.filter((entry) => entry.own).length ?? 0;
+  function stageMaaReview(text: string, name: string) {
+    setMaaReview(null);
+    setMaaChoices({});
+    setReviewError(null);
+    try {
+      const rows = JSON.parse(text);
+      const issues = inspectMaaProgress(rows);
+      if (!issues.length) return false;
+      setMaaReview({ rows, issues, name });
+      return true;
+    } catch { return false; }
+  }
+  async function confirmMaaReview() {
+    if (!maaReview || maaReview.issues.some(issue => maaChoices[issue.index] === undefined)) return;
+    setReviewBusy(true);
+    try {
+      const rows = maaReview.rows.map((row, index) => {
+        const issue = maaReview.issues.find(item => item.index === index);
+        if (!issue) return row;
+        const { own, elite, level } = issue.choices[maaChoices[index]];
+        return { ...row, own, elite, level };
+      });
+      if (await onMaaFile(new File([JSON.stringify(rows)], maaReview.name, { type: "application/json" }))) {
+        setMaaReview(null);
+        setNeedsFacilityReview(true);
+        setShowImportOptions(false);
+        goToBasics();
+      }
+    } catch (error) { setReviewError(error instanceof Error ? error.message : String(error)); }
+    finally { setReviewBusy(false); }
+  }
+  function applyRecommendedMaaChoices() {
+    if (!maaReview) return;
+    setMaaChoices(Object.fromEntries(maaReview.issues.map((issue) => {
+      const inferred = issue.choices.findIndex((choice) => choice.label.includes("可能漏识别"));
+      const fallback = issue.choices.reduce((best, choice, index) => choice.own && choice.elite > issue.choices[best].elite ? index : best, 0);
+      return [issue.index, inferred >= 0 ? inferred : fallback];
+    })));
+  }
   const [step, setStep] = useState<SetupStep>("box");
   const [stepDirection, setStepDirection] = useState(0);
   const [needsFacilityReview, setNeedsFacilityReview] = useState(false);
@@ -181,6 +228,7 @@ export function SetupDialog({
       ? "243 full E2 sample"
       : persistedDataLabel;
   const reducedMotion = useReducedMotion();
+
   const manualShiftRanges = manualShiftTimeRanges(manualShiftStartTime, manualShiftDurations);
 
   function updateManualShiftCount(count: number) {
@@ -243,6 +291,7 @@ export function SetupDialog({
       onRequireWebsiteAccount();
       return;
     }
+    if (!/\.xlsx?$/i.test(file.name) && stageMaaReview(await file.text(), file.name)) return;
     if (await onMaaFile(file)) {
       setNeedsFacilityReview(true);
       setShowImportOptions(false);
@@ -255,6 +304,7 @@ export function SetupDialog({
       onRequireWebsiteAccount();
       return;
     }
+    if (stageMaaReview(maaPaste, "MAA-reviewed-box.json")) return;
     if (await onMaaPaste()) {
       setNeedsFacilityReview(true);
       setShowImportOptions(false);
@@ -511,7 +561,54 @@ export function SetupDialog({
                         )}
                       </TabsContent>
                     </Tabs>
+                    {maaReview ? (
+                      <section className="mt-3 grid gap-2.5 rounded-lg border border-amber-500/35 bg-amber-50/60 p-3 dark:bg-amber-950/15" aria-label="导入异常确认">
+                        <div className="flex items-baseline justify-between gap-3"><h3 className="font-semibold">发现 {maaReview.issues.length} 项异常练度</h3><span className="text-xs text-muted-foreground">请选择修正方案</span></div>
+                        <p className="text-sm text-muted-foreground">确认后才会导入；取消会保留原来的 Box。</p>
+                        <p className="text-xs text-muted-foreground">星级会根据干员数据自动匹配，原 JSON 中填写的星级不一致时将自动修正。</p>
+                        {maaReview.issues.map(issue => (
+                          <fieldset key={issue.index} className="grid gap-2 rounded-md border bg-background p-2.5">
+                            <legend className="px-1 text-sm font-semibold tracking-normal">{issue.name}（{issue.rarity}星）</legend>
+                            <p className="text-xs font-medium text-muted-foreground">原始数据：精{String(issue.elite)} · {String(issue.level)}级，超出合法范围</p>
+                            <div className="flex flex-wrap gap-1.5" role="group" aria-label={`${issue.name}的修正方案`}>
+                              {issue.choices.map((choice, index) => {
+                                const selected = maaChoices[issue.index] === index;
+                                const color = !choice.own || (choice.elite === 0 && choice.level === 1) ? "#71717A" : choice.elite === 2 ? "#FFD800" : choice.elite === 1 ? "#B8F03A" : "#22BBFF";
+                                return (
+                                  <Button
+                                    key={index}
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    aria-pressed={selected}
+                                    disabled={reviewBusy}
+                                    onClick={() => setMaaChoices(current => ({ ...current, [issue.index]: index }))}
+                                    style={selected ? { backgroundColor: color, borderColor: color } : undefined}
+                                    className={`relative h-auto min-h-8 min-w-16 whitespace-normal rounded-[4px] px-2 py-1.5 focus-visible:ring-[#FFD501] focus-visible:ring-offset-2 ${selected ? (!choice.own ? "text-white" : "text-[#202020]") : "border-border bg-background text-muted-foreground hover:border-foreground/45 hover:bg-muted/60 hover:text-foreground"}`}
+                                  >
+                                    {choice.label}
+                                  </Button>
+                                );
+                              })}
+                            </div>
+                          </fieldset>
+                        ))}
+                        {reviewError ? <p role="alert" className="text-sm text-destructive">{reviewError}</p> : null}
+                        <div className="flex flex-wrap justify-between gap-2">
+                          <SetupActionButton type="button" variant="outline" disabled={reviewBusy} onClick={applyRecommendedMaaChoices}>一键采用推荐方案</SetupActionButton>
+                          <div className="flex gap-2">
+                          <SetupActionButton type="button" variant="outline" disabled={reviewBusy} onClick={() => setMaaReview(null)}>取消本次导入</SetupActionButton>
+                          <SetupActionButton type="button" disabled={reviewBusy || maaReview.issues.some(issue => maaChoices[issue.index] === undefined)} onClick={() => void confirmMaaReview()}>{reviewBusy ? "正在导入…" : "确认选择并导入"}</SetupActionButton>
+                          </div>
+                        </div>
+                      </section>
+                    ) : null}
                     {inputError ? <p id="setup-box-error" className="mt-3 text-sm text-destructive" role="alert">{inputError}</p> : null}
+                    {inputMode === "maa" && boxSource === "maa" && hasBox && !maaReview && !inputError ? (
+                      <p className="mt-3 rounded-md border border-emerald-500/25 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300" role="status">
+                        MAA Box 已导入 {operbox?.length ?? 0} 名干员，其中已拥有 {importedOwnedCount} 名。
+                      </p>
+                    ) : null}
                   </section>
                 ) : null}
 
