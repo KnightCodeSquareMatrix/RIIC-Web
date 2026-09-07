@@ -10,7 +10,6 @@ import { loadClientFeature } from "@/client-lazy-loader";
 import { cn } from "@/lib/utils";
 import { MOTION_DURATION, MOTION_EASE_IN_OUT } from "@/motion";
 import { TrainingAdviceActionCard } from "@/components/training-advice/TrainingAdviceActionCard";
-import { TrainingCombinationCard } from "@/components/training-advice/TrainingCombinationCard";
 import {
   sortTrainingCombinations,
   sortTrainingRecommendations,
@@ -29,6 +28,9 @@ import type {
 } from "@/types";
 
 const TRAINING_BLACKLIST_KEY = "arknights-infra-training-blacklist-v1";
+const TrainingCombinationCard = lazy(() => import("@/components/training-advice/TrainingCombinationCard").then((module) => ({
+  default: module.TrainingCombinationCard,
+})));
 
 const RecommendationCard = lazy(() => loadClientFeature("recommendationCard").then((module) => ({
   default: module.RecommendationCard,
@@ -397,9 +399,11 @@ export function TrainingAdvice({
             onToggle={() => toggleSection("combinations")}
           >
             <div className="grid min-w-0 gap-3" data-training-combination-list>
+              <Suspense fallback={<p className="py-4 text-sm text-white/62" role="status">{intl("components_pages_TrainingAdvice.loadingTrainingRecommendations")}</p>}>
               {combinations.map((combination) => (
                 <TrainingCombinationCard key={combination.id} combination={combination} />
               ))}
+              </Suspense>
             </div>
           </CollapsibleSection>
         </>
