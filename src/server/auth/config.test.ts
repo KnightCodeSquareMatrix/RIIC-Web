@@ -31,6 +31,8 @@ test("bootstrap administrators can delegate without creating an administrator ch
   assert.deepEqual(bootstrap, {
     userId: "bootstrap",
     isAdmin: true,
+    isReviewer: false,
+    canAccessReview: true,
     isBootstrapAdmin: true,
     canManageAdminRoles: true,
   });
@@ -57,4 +59,22 @@ test("only verified and unbanned accounts are eligible for delegated administrat
   assert.equal(isEligibleForWebsiteAdmin(true, null), true);
   assert.equal(isEligibleForWebsiteAdmin(false, false), false);
   assert.equal(isEligibleForWebsiteAdmin(true, true), false);
+});
+
+test("reviewers can review without administrator or role-management privileges", () => {
+  const bootstrapIds = new Set(["bootstrap"]);
+  const reviewer = websiteAdminAccess("reviewer", "reviewer", bootstrapIds);
+  const regular = websiteAdminAccess("user", "user", bootstrapIds);
+  assert.equal(reviewer.canAccessReview, true);
+  assert.equal(reviewer.isReviewer, true);
+  assert.equal(reviewer.isAdmin, false);
+  assert.equal(reviewer.canManageAdminRoles, false);
+  assert.equal(canChangeWebsiteAdminRole(reviewer, regular), false);
+  assert.equal(canModerateWebsiteUser(reviewer, regular), false);
+  assert.equal(canChangeWebsiteAdminRole(websiteAdminAccess("bootstrap", "user", bootstrapIds), reviewer), true);
+  for (const role of ["user", "REVIEWER", "admin,reviewer", "", null, undefined]) {
+    assert.equal(websiteAdminAccess("user", role, bootstrapIds).canAccessReview, false);
+  }
+  assert.equal(websiteAdminAccess("bootstrap", "reviewer", bootstrapIds).isReviewer, false);
+  assert.equal(websiteAdminAccess("reviewer", "user", bootstrapIds).canAccessReview, false);
 });

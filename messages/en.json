@@ -1,4 +1,13 @@
 {
+  "adminReviewer": {
+    "role": "Reviewer",
+    "grant": "Grant reviewer",
+    "revoke": "Revoke reviewer",
+    "eligible": "Only verified, active accounts can become reviewers.",
+    "grantDescription": "{name} ({email}) will only have access to Overview and Solver issues. Any existing administrator access to other sections will be removed.",
+    "revokeDescription": "{name} ({email}) will immediately lose access to the administration area.",
+    "confirm": "Confirm reviewer"
+  },
   "diagnostics": {
     "title": "Diagnostic logs",
     "description": "Events are grouped by cause without deleting the original logs. Event counts are not solver failure rates or affected-user counts. Consult records and archives for historical events.",
@@ -513,8 +522,8 @@
     "couldNotLoadSessions": "Could not load sessions",
     "userManagement": "User management",
     "searchSuspendInspectOrRevokeSessions": "Search, suspend, inspect, or revoke sessions.",
-    "theBootstrapAdministratorCanAlsoChangeAdministratorRoles": " The bootstrap administrator can also change administrator roles.",
-    "administratorRolesCanBeChangedOnlyByTheBootstrap": " Administrator roles can be changed only by the bootstrap administrator.",
+    "theBootstrapAdministratorCanAlsoChangeAdministratorRoles": " The bootstrap administrator can also assign administrator and reviewer roles.",
+    "administratorRolesCanBeChangedOnlyByTheBootstrap": " Administrator and reviewer roles can be changed only by the bootstrap administrator.",
     "searchByEmailOrName": "Search by email or name",
     "search": "Search",
     "loadingUsers": "Loading users…",

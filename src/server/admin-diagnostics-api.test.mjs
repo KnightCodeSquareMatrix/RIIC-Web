@@ -17,7 +17,7 @@ test("diagnostic endpoint authorizes before reading, bounds time ranges and disa
   let authenticated=false;
   const reads=[];
   await context.mock.module(new URL("./auth/authorization.ts",import.meta.url),{namedExports:{
-    requireWebsiteAdmin:async()=>{if(!authenticated)throw new PublicApiError("AIC-AUTH-2008");return {session:{user:{id:"test-admin"}}};},
+    requireWebsiteReviewer:async()=>{if(!authenticated)throw new PublicApiError("AIC-AUTH-2008");return {session:{user:{id:"test-admin"}}};},
   }});
   const diagnostics=await import("./request-diagnostics.ts");
   await context.mock.module(new URL("./request-diagnostics.ts",import.meta.url),{namedExports:{

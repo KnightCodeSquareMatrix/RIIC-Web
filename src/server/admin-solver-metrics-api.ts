@@ -7,7 +7,7 @@ import {
   PublicApiError,
   successResponse,
 } from "./api-contract";
-import { requireWebsiteAdmin } from "./auth/authorization";
+import { requireWebsiteReviewer } from "./auth/authorization";
 import { isBusinessDatabaseReadEnabled } from "./business-config";
 import { queryAdminSolverMetrics } from "./business-records";
 
@@ -22,7 +22,7 @@ export async function handleGetAdminSolverMetrics(request: Request) {
   const requestId = createRequestId();
   const startedAt = performance.now();
   try {
-    await requireWebsiteAdmin(request);
+    await requireWebsiteReviewer(request);
     if (!isBusinessDatabaseReadEnabled()) throw new PublicApiError("AIC-DATA-8002");
     return noStore(successResponse<AdminSolverMetricsData>(await queryAdminSolverMetrics(), requestId));
   } catch (error) {

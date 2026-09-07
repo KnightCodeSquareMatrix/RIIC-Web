@@ -24,6 +24,7 @@ import {
   canModerateWebsiteUser,
   isEligibleForWebsiteAdmin,
   WEBSITE_ADMIN_ROLE,
+  WEBSITE_REVIEWER_ROLE,
   WEBSITE_USER_ROLE,
   websiteAdminAccess,
 } from "./auth/admin-access";
@@ -41,6 +42,7 @@ type AdminUserRoute =
 
 type AdminUserMutation =
   | { kind: "admin"; enabled: boolean }
+  | { kind: "reviewer"; enabled: boolean }
   | { kind: "banned"; enabled: boolean; reason?: string }
   | { kind: "revokeSessions" };
 
@@ -69,19 +71,22 @@ async function applyAdminUserMutation(request: Request, userId: string, mutation
   if (!targetRecord) throw new PublicApiError("AIC-REQ-1001", { message: "目标用户不存在。" });
   const targetAccess = websiteAdminAccess(targetRecord.id, targetRecord.role);
 
-  if (mutation.kind === "admin") {
+  if (mutation.kind === "admin" || mutation.kind === "reviewer") {
     if (!canChangeWebsiteAdminRole(actor, targetAccess)) {
       throw new PublicApiError("AIC-AUTH-2009", {
         message: targetAccess.isBootstrapAdmin
           ? "初始管理员权限只能通过服务器环境变量调整。"
-          : "只有初始管理员可以调整管理员权限。",
+          : "只有初始管理员可以调整后台角色。",
       });
     }
     if (mutation.enabled && !isEligibleForWebsiteAdmin(targetRecord.emailVerified, targetRecord.banned)) {
-      throw new PublicApiError("AIC-REQ-1001", { message: "只能将已验证且未封禁的账号设为管理员。" });
+      throw new PublicApiError("AIC-REQ-1001", { message: "只能将已验证且未封禁的账号设为管理员或审阅人。" });
     }
+    const role = mutation.kind === "admin" ? WEBSITE_ADMIN_ROLE : WEBSITE_REVIEWER_ROLE;
+    // Revoking one role must not silently revoke a different role assigned meanwhile.
+    if (!mutation.enabled && targetRecord.role !== role) return;
     await getDatabase().update(user).set({
-      role: mutation.enabled ? WEBSITE_ADMIN_ROLE : WEBSITE_USER_ROLE,
+      role: mutation.enabled ? role : WEBSITE_USER_ROLE,
       updatedAt: new Date(),
     }).where(eq(user.id, userId));
     return;
@@ -191,16 +196,23 @@ export async function handleUpdateAdminUser(
     const body = await readJsonBody(request, 16 * 1024) as {
       banned?: unknown;
       isAdmin?: unknown;
+      isReviewer?: unknown;
       reason?: unknown;
     } | null;
     const changesBanned = typeof body?.banned === "boolean";
     const changesAdmin = typeof body?.isAdmin === "boolean";
-    if (changesBanned === changesAdmin) throw new PublicApiError("AIC-REQ-1001");
+    const changesReviewer = typeof body?.isReviewer === "boolean";
+    if ([changesBanned, changesAdmin, changesReviewer].filter(Boolean).length !== 1) throw new PublicApiError("AIC-REQ-1001");
+    if (body?.isAdmin !== undefined && !changesAdmin) throw new PublicApiError("AIC-REQ-1001");
+    if (body?.isReviewer !== undefined && !changesReviewer) throw new PublicApiError("AIC-REQ-1001");
+    if (body?.banned !== undefined && !changesBanned) throw new PublicApiError("AIC-REQ-1001");
     if (body?.reason !== undefined && typeof body.reason !== "string") throw new PublicApiError("AIC-REQ-1001");
     if (typeof body?.reason === "string" && body.reason.length > 300) throw new PublicApiError("AIC-REQ-1001");
     await applyAdminUserMutation(request, userId, changesAdmin
       ? { kind: "admin", enabled: body?.isAdmin as boolean }
-      : { kind: "banned", enabled: body?.banned as boolean, reason: body?.reason as string | undefined });
+      : changesReviewer
+        ? { kind: "reviewer", enabled: body?.isReviewer as boolean }
+        : { kind: "banned", enabled: body?.banned as boolean, reason: body?.reason as string | undefined });
     return successResponse<AdminUserUpdateData>({ updated: true }, requestId);
   } catch (error) {
     return failureResponse(error, requestId, route, startedAt);
