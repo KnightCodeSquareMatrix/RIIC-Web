@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
+import { URL } from "node:url";
 import process from "node:process";
 import test from "node:test";
 import { mkdtemp, rm, access } from "node:fs/promises";
