@@ -98,6 +98,21 @@ for (const format of ["report", "legacy"] as const) {
     await expect(filter).toBeVisible();
     await filter.click();
     await expect(cards).toHaveCount(1);
+    await filter.click();
+    const rarity = page.locator('[data-training-filters] [data-slot="tabs-list"]').first();
+    await rarity.getByRole("tab").filter({ hasText: "6★" }).click();
+    await expect(cards).toHaveCount(1);
+    await expect(cards).toContainText("凯尔希");
+    await rarity.getByRole("tab", { name: "全部", exact: true }).click();
+    await expect(cards).toHaveCount(3);
+    if (format === "report") {
+      await cards.filter({ hasText: "阿米娅" }).getByRole("button", { name: "拉黑阿米娅", exact: true }).click();
+      await expect(cards).toHaveCount(2);
+      await page.reload();
+      await expect(cards).toHaveCount(2);
+      await page.getByRole("button", { name: "清除拉黑（1）", exact: true }).click();
+      await expect(cards).toHaveCount(3);
+    }
   });
 }
 

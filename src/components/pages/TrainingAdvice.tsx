@@ -1,7 +1,7 @@
 import { localize as localize_components_pages_TrainingAdvice } from "../../i18n/helpers/components_pages_TrainingAdvice.ts";
 import { useTranslations, useLocale } from "next-intl";
 import { messageRecord } from "@/i18n/translate";
-import { lazy, Suspense, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { CircleAlert, ClipboardCheck, ChevronDown, GraduationCap } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 
@@ -17,6 +17,9 @@ import {
 } from "@/components/training-advice/presentation";
 import { Button } from "@/components/ui/button";
 import { OwnedOperatorFilter } from "@/components/operators/OwnedOperatorFilter";
+import { OperatorRarityFilter, OperatorProfessionFilter } from "@/components/operators/OperatorPickerParts";
+import { SkillFilterRow } from "@/components/skill-query/SkillFilterRow";
+import { operatorPresentationFor } from "@/operatorPortraits";
 import type {
   BaseBlueprint,
   OperBoxEntry,
@@ -24,6 +27,8 @@ import type {
   UserProfile,
   UserProfileAction,
 } from "@/types";
+
+const TRAINING_BLACKLIST_KEY = "arknights-infra-training-blacklist-v1";
 
 const RecommendationCard = lazy(() => loadClientFeature("recommendationCard").then((module) => ({
   default: module.RecommendationCard,
@@ -151,15 +156,38 @@ export function TrainingAdvice({
   const en = locale === "en";
   const shouldReduceMotion = useReducedMotion();
   const [onlyOwned, setOnlyOwned] = useState(false);
+  const [rarityFilter, setRarityFilter] = useState("all");
+  const [professionFilter, setProfessionFilter] = useState("all");
+  const [blacklist, setBlacklist] = useState<string[]>([]);
+  useEffect(() => {
+    try {
+      const stored: unknown = JSON.parse(window.localStorage.getItem(TRAINING_BLACKLIST_KEY) ?? "[]");
+      if (Array.isArray(stored)) setBlacklist(stored.filter((value): value is string => typeof value === "string"));
+    } catch { /* Unavailable storage leaves this session's filters usable. */ }
+  }, []);
+  function updateBlacklist(next: string[]) {
+    setBlacklist(next);
+    try { window.localStorage.setItem(TRAINING_BLACKLIST_KEY, JSON.stringify(next)); } catch { /* Keep the session preference. */ }
+  }
   const entries = operbox ?? [];
   const ownedByName = new Map(entries.map((entry) => [entry.name, entry]));
   const roomCounts = countRooms(layout);
   const issues = contractIssues(layout, operbox, en);
-  const actions = (profile?.actions ?? []).filter((action) => !onlyOwned || ownedByName.get(action.operator)?.own === true);
+  function matchesFilters(name: string) {
+    const entry = ownedByName.get(name);
+    const operator = operatorPresentationFor({ name }).operator;
+    return (!onlyOwned || entry?.own === true)
+      && (rarityFilter === "all" || (operator?.rarity ?? entry?.rarity) === Number(rarityFilter))
+      && (professionFilter === "all" || operator?.profession === Number(professionFilter))
+      && !blacklist.includes(name);
+  }
+  const actions = (profile?.actions ?? []).filter((action) => matchesFilters(action.operator));
   const ownedTotal = entries.filter((entry) => entry.own).length;
   const eliteTotal = entries.filter((entry) => entry.own && entry.elite >= 2).length;
   const advice = trainingAdvice ?? null;
-  const recommendations = advice ? sortTrainingRecommendations(advice.recommendations).filter((recommendation) => !onlyOwned || ownedByName.get(recommendation.operator)?.own === true) : [];
+  const recommendations = advice ? sortTrainingRecommendations(advice.recommendations).filter((recommendation) => matchesFilters(recommendation.operator)) : [];
+  const newbie = (advice?.incomplete_newbie ?? []).filter((item) => matchesFilters(item.operator));
+  const hasFilters = onlyOwned || rarityFilter !== "all" || professionFilter !== "all" || blacklist.length > 0;
   const combinations = advice ? sortTrainingCombinations(advice.combinations) : [];
   const context = advice?.context;
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
@@ -168,7 +196,7 @@ export function TrainingAdvice({
   const ownedFilter = <OwnedOperatorFilter value={onlyOwned} onChange={setOnlyOwned} />;
   const ownedEmpty = (
     <InfraTechnicalCard group="training" dataSlot="training-owned-empty" showEmblem={false}>
-      <p className="py-6 text-center text-sm text-white/76">{localize_components_pages_TrainingAdvice.text(en, "noOwnedRecommendations")}</p>
+      <p className="py-6 text-center text-sm text-white/76">{localize_components_pages_TrainingAdvice.text(en, onlyOwned && rarityFilter === "all" && professionFilter === "all" && blacklist.length === 0 ? "noOwnedRecommendations" : "noMatchingRecommendations")}</p>
     </InfraTechnicalCard>
   );
 
@@ -284,22 +312,33 @@ export function TrainingAdvice({
         </InfraTechnicalCard>
       )}
 
+      <div className="grid min-w-0 gap-1" data-training-filters>
+        <SkillFilterRow label={intl("SkillFilters.rarity")}>
+          <OperatorRarityFilter value={rarityFilter} onChange={setRarityFilter} />
+        </SkillFilterRow>
+        <SkillFilterRow label={intl("components_setup_ManualOperboxPicker.profession")}>
+          <OperatorProfessionFilter value={professionFilter} onChange={setProfessionFilter} />
+        </SkillFilterRow>
+        {blacklist.length > 0 ? <Button type="button" variant="outline" className="justify-self-end" onClick={() => updateBlacklist([])}>{localize_components_pages_TrainingAdvice.text(en, "clearBlocked", { count: blacklist.length })}</Button> : null}
+      </div>
+
       {advice ? (
         <>
           {advice.newbie_section_status === "shown" && advice.incomplete_newbie.length ? (
             <CollapsibleSection
               accent="bg-[#B8F03A]"
               title={intl("components_pages_TrainingAdvice.beginnerGoals")}
-              count={advice.incomplete_newbie.length}
+              count={newbie.length}
               collapsed={Boolean(collapsedSections.newbie)}
               onToggle={() => toggleSection("newbie")}
             >
               <div className="grid min-w-0 gap-3" data-training-newbie-list>
-                {advice.incomplete_newbie.map((item, index) => (
+                {newbie.map((item, index) => (
                   <TrainingAdviceActionCard
                     key={`${item.action}-${item.operator}`}
                     action={item}
                     index={index}
+                    onToggleBlacklist={() => updateBlacklist([...blacklist, item.operator])}
                   />
                 ))}
               </div>
@@ -334,10 +373,11 @@ export function TrainingAdvice({
                     action={recommendation}
                     entry={ownedByName.get(recommendation.operator)}
                     index={index}
+                    onToggleBlacklist={() => updateBlacklist([...blacklist, recommendation.operator])}
                   />
                 ))}
               </div>
-            ) : onlyOwned ? ownedEmpty : (
+            ) : hasFilters ? ownedEmpty : (
               <InfraTechnicalCard group="training" className="min-h-[248px]" dataSlot="training-empty" showEmblem={false}>
                 <div className="grid min-h-[216px] place-content-center text-center">
                   <h3 className="text-xl font-semibold">{intl("components_pages_TrainingAdvice.noPriorityTrainingTargets")}</h3>
@@ -380,7 +420,7 @@ export function TrainingAdvice({
                 ))}
               </Suspense>
             </div>
-          ) : onlyOwned ? ownedEmpty : (
+          ) : hasFilters ? ownedEmpty : (
             <InfraTechnicalCard
               group="training"
               className="min-h-[248px]"

@@ -2,9 +2,11 @@
 import { useTranslations, useLocale } from "next-intl";
 
 import { motion, useReducedMotion } from "motion/react";
+import { Ban } from "lucide-react";
 
 import { OperatorSlot } from "@/components";
 import { InfraTechnicalCard } from "@/components/InfraTechnicalCard";
+import { Button } from "@/components/ui/button";
 import { MOTION_DURATION, MOTION_EASE_OUT } from "@/motion";
 import { operatorPortraitFor, operatorProfessionFor } from "@/operatorPortraits";
 import type {
@@ -32,10 +34,14 @@ export function TrainingAdviceActionCard({
   action,
   entry,
   index,
+  blacklisted = false,
+  onToggleBlacklist,
 }: {
   action: ActionCardItem;
   entry?: OperBoxEntry;
   index: number;
+  blacklisted?: boolean;
+  onToggleBlacklist?: () => void;
 }) {
   const intl = useTranslations();
   const reduceMotion = useReducedMotion();
@@ -63,7 +69,8 @@ export function TrainingAdviceActionCard({
         dataSlot="training-advice-card"
         showEmblem={false}
       >
-        <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-4">
+        {onToggleBlacklist ? <Button type="button" size="icon" variant="ghost" onClick={onToggleBlacklist} aria-label={en ? `${blacklisted ? "Unblock" : "Block"} ${operatorName}` : `${blacklisted ? "取消拉黑" : "拉黑"}${operatorName}`} title={en ? (blacklisted ? "Unblock operator" : "Hide this operator") : (blacklisted ? "取消拉黑" : "拉黑此干员")} className="absolute right-3 top-3 z-20 border-white/15 bg-black/20 text-white/60 hover:bg-white/10 hover:text-white"><Ban className="size-4" /></Button> : null}
+        <div className={`grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-4 ${onToggleBlacklist ? "pr-10 max-sm:pr-12" : ""}`}>
           <OperatorSlot
             slot={{
               name: action.operator,

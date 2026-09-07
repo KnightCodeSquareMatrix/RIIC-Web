@@ -48,6 +48,8 @@
   "loadingTrainingRecommendations": "Loading training recommendations…",
   "noRecommendationsForThisSchedule": "No recommendations for this schedule",
   "noTrainingRecommendationsYet": "No training recommendations yet",
+  "noMatchingRecommendations": "No recommendations match these filters. Adjust the filters or clear the blocked list.",
+  "clearBlocked": "Clear blocked ({count})",
   "noOwnedRecommendations": "No training recommendations for owned operators. Turn off the filter to see all recommendations.",
   "viewCurrentSchedule": "View current schedule",
   "generateASchedule": "Generate a schedule"
