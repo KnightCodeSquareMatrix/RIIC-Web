@@ -336,6 +336,10 @@ jobs:
              else
                install -d -m 700 -- \"\$remote_cache_path\"
              fi
+             test \"\$(stat -c '%U' -- \"\$remote_cache_path\")\" = \"\$(id -un)\"
+             # An interrupted rsync --perms may leave the source directory mode.
+             # Restore privacy only after validating the owned, non-symlink cache.
+             chmod 700 -- \"\$remote_cache_path\"
              test \"\$(stat -c '%U:%a' -- \"\$remote_cache_path\")\" = \"\$(id -un):700\"
              test -z \"\$(find \"\$remote_cache_path\" -mindepth 1 ! -type f ! -type d -print -quit)\""
 
