@@ -43,6 +43,7 @@ const requiredBuildFiles = [
   ".next/standalone/drizzle",
   ".next/standalone/node_modules/drizzle-orm",
   "dist/plan-worker.cjs",
+  "dist/quality-worker.cjs",
 ];
 for (const relativePath of requiredBuildFiles) {
   await lstat(path.join(repoRoot, relativePath));
@@ -83,6 +84,8 @@ await copyFile(
   path.join(repoRoot, "dist", "plan-worker.cjs"),
   path.join(outputRoot, "worker", "plan-worker.cjs"),
 );
+
+await copyFile(path.join(repoRoot, "dist", "quality-worker.cjs"), path.join(outputRoot, "worker", "quality-worker.cjs"));
 await writeFile(path.join(outputRoot, ".release-artifact.json"), `${JSON.stringify({
   formatVersion: 1,
   kind: "riic-web-standalone",

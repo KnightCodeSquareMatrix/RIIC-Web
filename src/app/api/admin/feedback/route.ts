@@ -1,4 +1,4 @@
-import { handleDeleteAdminFeedback, handleListAdminRecords } from "@/server/admin-records-api";
+import { handleBatchReviewFeedback, handleDeleteAdminFeedback, handleListAdminRecords } from "@/server/admin-records-api";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -9,4 +9,8 @@ export async function GET(request: Request) {
 
 export async function DELETE(request: Request) {
   return handleDeleteAdminFeedback(request);
+}
+
+export async function PATCH(request: Request) {
+  return handleBatchReviewFeedback(request);
 }

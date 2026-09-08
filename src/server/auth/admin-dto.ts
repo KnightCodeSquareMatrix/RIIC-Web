@@ -35,6 +35,7 @@ export function toAdminUserData(record: AdminUserRecord, bootstrapAdminIds: Set<
     banReason: record.banReason,
     createdAt: record.createdAt.toISOString(),
     isAdmin: access.isAdmin,
+    isReviewer: access.isReviewer,
     isBootstrapAdmin: access.isBootstrapAdmin,
     sklandBindingCount: record.sklandBindingCount,
     sklandActiveBindingCount: record.sklandActiveBindingCount,

@@ -2168,7 +2168,7 @@ async function getOpsStorageStats() {
   return { feedbackBytes, runBytes, releaseBytes, totalBytes: feedbackBytes + runBytes + releaseBytes };
 }
 
-export async function updateFeedbackOps(id: string, status: string, note: string) {
+export async function updateFeedbackOps(id: string, status: string, note: string, expectedUpdatedAt?: string) {
   if (!/^[\w.-]+$/.test(id)) throw new Error("记录 ID 非法。");
   const normalizedStatus = legacyAdminFeedbackStatus(status);
   if (!normalizedStatus) throw new Error("状态非法。");
@@ -2177,6 +2177,7 @@ export async function updateFeedbackOps(id: string, status: string, note: string
       feedbackId: id,
       status: normalizedStatus,
       note,
+      expectedUpdatedAt,
     });
     if (updated || !isBusinessFileFallbackEnabled()) {
       if (!updated) throw new Error("记录不存在。");

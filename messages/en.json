@@ -1,4 +1,13 @@
 {
+  "adminReviewer": {
+    "role": "Reviewer",
+    "grant": "Grant reviewer",
+    "revoke": "Revoke reviewer",
+    "eligible": "Only verified, active accounts can become reviewers.",
+    "grantDescription": "{name} ({email}) will only have access to Overview and Solver issues. Any existing administrator access to other sections will be removed.",
+    "revokeDescription": "{name} ({email}) will immediately lose access to the administration area.",
+    "confirm": "Confirm reviewer"
+  },
   "diagnostics": {
     "title": "Diagnostic logs",
     "description": "Events are grouped by cause without deleting the original logs. Event counts are not solver failure rates or affected-user counts. Consult records and archives for historical events.",
@@ -512,9 +521,11 @@
     "actionCompleted": "Action completed.",
     "couldNotLoadSessions": "Could not load sessions",
     "userManagement": "User management",
+    "verifiedUsers": "Email-verified users",
+    "verifiedUsersScope": "Site-wide total · Unaffected by search",
     "searchSuspendInspectOrRevokeSessions": "Search, suspend, inspect, or revoke sessions.",
-    "theBootstrapAdministratorCanAlsoChangeAdministratorRoles": " The bootstrap administrator can also change administrator roles.",
-    "administratorRolesCanBeChangedOnlyByTheBootstrap": " Administrator roles can be changed only by the bootstrap administrator.",
+    "theBootstrapAdministratorCanAlsoChangeAdministratorRoles": " Administrators can assign administrator and reviewer roles. Bootstrap administrator access cannot be changed here.",
+    "administratorRolesCanBeChangedOnlyByTheBootstrap": " Your account does not have permission to assign administrative roles.",
     "searchByEmailOrName": "Search by email or name",
     "search": "Search",
     "loadingUsers": "Loading users…",

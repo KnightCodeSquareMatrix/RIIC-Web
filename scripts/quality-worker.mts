@@ -1,0 +1,12 @@
+import nextEnv from "@next/env";
+async function main() {
+  nextEnv.loadEnvConfig(process.cwd());
+  const { runQualityWorker, stopQualityWorker } = await import("../src/server/quality/worker.ts");
+  process.on("SIGTERM", stopQualityWorker);
+  process.on("SIGINT", stopQualityWorker);
+  try { await runQualityWorker(); }
+  catch (error) { console.error(error instanceof Error ? error.message : "Quality worker failed"); process.exitCode = 1; }
+  const { getDatabasePool } = await import("../src/server/db/index.ts");
+  await getDatabasePool().end();
+}
+void main();

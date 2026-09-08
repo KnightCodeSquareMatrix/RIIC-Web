@@ -466,6 +466,40 @@ test("CI builds once and deploy transfers the verified solver-free standalone ar
   assert.doesNotMatch(transfer, /bin\/infra-cli/);
 });
 
+test("deployment resumes an interrupted cache without accepting symlinks or non-directories", { skip: process.platform === "win32" }, async () => {
+  const workflow = (await readRepoFile(".github/workflows/deploy.yml")).replaceAll("\r\n", "\n");
+  const section = workflow.split("      - name: Sync standalone release tree")[1].split("\n      - name:")[0];
+  const body = section.split("        run: |\n")[1].replace(/^ {10}/gm, "");
+  const setup = body.slice(body.indexOf("timeout --kill-after=5s 30s ssh"), body.indexOf("timeout --kill-after=10s 5400s rsync"));
+  assert.ok(setup);
+  const script = [
+    "set -euo pipefail",
+    'export REVIEWER_CACHE_HOME="$(mktemp -d)"',
+    'trap \'rm -rf -- "$REVIEWER_CACHE_HOME"\' EXIT',
+    'release_tree_cache=".cache/riic-web/production-standalone-tree"',
+    'cache="$REVIEWER_CACHE_HOME/$release_tree_cache"',
+    'mkdir -p "$cache"',
+    'chmod 700 "$(dirname "$cache")"',
+    // rsync --perms can copy the source root's 755 mode before cancellation.
+    'chmod 755 "$cache"',
+    'printf partial > "$cache/retained-file"',
+    'rsync() { :; }; export -f rsync',
+    'timeout() { shift 2; "$@"; }',
+    'ssh_options=(); ssh_target=fixture',
+    'ssh() { local remote; for remote; do :; done; printf "%s" "$remote" | sed \'s/\\$HOME/\\$REVIEWER_CACHE_HOME/g\' | bash; }',
+    setup,
+    'test "$(stat -c %a "$cache")" = 700',
+    'test "$(cat "$cache/retained-file")" = partial',
+    'mv "$cache" "${cache}-saved"',
+    'ln -s "${cache}-saved" "$cache"',
+    'if ( set -e; ' + setup + ' ); then echo "Accepted symlink" >&2; exit 1; fi',
+    'rm "$cache"; touch "$cache"',
+    'if ( set -e; ' + setup + ' ); then echo "Accepted regular file" >&2; exit 1; fi',
+  ].join("\n");
+  const result = spawnSync("bash", ["--noprofile", "--norc", "-c", script], { encoding: "utf8", timeout: 10_000 });
+  assert.equal(result.status, 0, result.stderr);
+});
+
 test("production pins the server solver only after preflight and development retains its approved digest", async () => {
   const workflow = (await readRepoFile(".github/workflows/deploy.yml")).replaceAll("\r\n", "\n");
   const section = workflow.split("      - name: Resolve solver for deployment\n")[1]?.split("\n      - name:")[0];

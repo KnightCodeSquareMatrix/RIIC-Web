@@ -26,6 +26,7 @@ test("admin user DTO exposes role decisions without returning the raw database r
     banReason: null,
     createdAt: "2026-08-17T00:00:00.000Z",
     isAdmin: true,
+    isReviewer: false,
     isBootstrapAdmin: false,
     sklandBindingCount: 2,
     sklandActiveBindingCount: 1,

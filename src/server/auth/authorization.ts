@@ -18,7 +18,7 @@ export async function requireWebsiteSession(request: Request | Headers) {
   return session;
 }
 
-export async function requireWebsiteAdmin(request: Request | Headers) {
+async function requireWebsiteAccess(request: Request | Headers, permission: "isAdmin" | "canAccessReview") {
   const session = await requireWebsiteSession(request);
   const [record] = await getDatabase()
     .select({ role: user.role })
@@ -26,6 +26,14 @@ export async function requireWebsiteAdmin(request: Request | Headers) {
     .where(eq(user.id, session.user.id))
     .limit(1);
   const access = websiteAdminAccess(session.user.id, record?.role);
-  if (!access.isAdmin) throw new PublicApiError("AIC-AUTH-2009");
+  if (!record || !access[permission]) throw new PublicApiError("AIC-AUTH-2009");
   return { session, ...access };
+}
+
+export function requireWebsiteAdmin(request: Request | Headers) {
+  return requireWebsiteAccess(request, "isAdmin");
+}
+
+export function requireWebsiteReviewer(request: Request | Headers) {
+  return requireWebsiteAccess(request, "canAccessReview");
 }
