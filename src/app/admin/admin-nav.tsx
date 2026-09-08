@@ -3,7 +3,7 @@ import { useTranslations, useLocale } from "next-intl";
 import { messageRecord } from "@/i18n/translate";
 
 import Link from "next/link";
-import { BookOpen, Bug, Gauge, House, MessageSquareText, UsersRound } from "lucide-react";
+import { BookOpen, Bug, FlaskConical, Gauge, House, MessageSquareText, UsersRound } from "lucide-react";
 import { usePathname } from "next/navigation";
 
 import { buttonVariants } from "@/components/ui/button";
@@ -14,6 +14,7 @@ const ITEMS = [
   { href: "/admin/skills", zh: messageRecord("zh", "app_admin_admin_nav_content2").value, en: messageRecord("en", "app_admin_admin_nav_content2").value, icon: MessageSquareText },
   { href: "/admin/changelog", zh: messageRecord("zh", "app_admin_admin_nav_content5").value, en: messageRecord("en", "app_admin_admin_nav_content5").value, icon: BookOpen },
   { href: "/admin/issues", zh: messageRecord("zh", "app_admin_admin_nav_content3").value, en: messageRecord("en", "app_admin_admin_nav_content3").value, icon: Bug },
+  { href: "/admin/quality", zh: "复现测试", en: "Reproduction tests", icon: FlaskConical },
   { href: "/admin/users", zh: messageRecord("zh", "app_admin_admin_nav_content4").value, en: messageRecord("en", "app_admin_admin_nav_content4").value, icon: UsersRound },
 ] as const;
 
@@ -24,7 +25,7 @@ export function AdminNav({ isAdmin }: { isAdmin: boolean }) {
   const en = locale === "en";
   return (
     <nav aria-label={intl("app_admin_admin_nav.administrationNavigation")} className="flex min-w-0 items-center gap-1 overflow-x-auto">
-      {ITEMS.filter((item) => isAdmin || item.href === "/admin" || item.href === "/admin/issues").map((item) => {
+      {ITEMS.filter((item) => isAdmin || item.href === "/admin" || item.href === "/admin/issues" || item.href === "/admin/quality").map((item) => {
         const active = item.href === "/admin"
           ? pathname === item.href
           : pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -42,7 +43,6 @@ export function AdminNav({ isAdmin }: { isAdmin: boolean }) {
           </Link>
         );
       })}
-      <Link href="/admin/quality" className={cn(buttonVariants({ variant: pathname === "/admin/quality" ? "secondary" : "ghost", size: "lg" }), "shrink-0")}>{en ? "Quality" : "测试工作台"}</Link>
       <Link
         href="/"
         data-motion-pressable=""

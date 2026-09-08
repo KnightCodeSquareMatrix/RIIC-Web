@@ -10,7 +10,9 @@ WorkingDirectory=/opt/arknights-infra/current/.next/standalone
 Environment=NODE_ENV=production
 EnvironmentFile=/etc/arknights-infra-quality-private.env
 ExecStart=/usr/local/bin/node /opt/arknights-infra/current/worker/quality-worker.cjs
-Restart=on-failure
+# This is a persistent queue consumer; a clean process exit must also recover.
+# An explicit systemctl stop still keeps the service stopped.
+Restart=always
 RestartSec=5
 TimeoutStopSec=20
 KillMode=control-group
