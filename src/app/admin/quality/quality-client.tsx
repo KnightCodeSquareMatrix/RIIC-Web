@@ -1,17 +1,22 @@
 "use client";
+
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useSearchParams } from "next/navigation";
-import { useLocale } from "next-intl";
 import Link from "next/link";
+import { AlertCircle, CheckCircle2, FlaskConical, Loader2, Play, RefreshCw, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ManualOperboxPicker } from "@/components/setup/ManualOperboxPicker";
-import { RotationSettings } from "@/components/RotationSettings";
-import { CompactScheduleView } from "@/components/CompactScheduleView";
-import { PRESETS, maxRoomLevel, updateRoomLevel, updateFactoryRecipe, updateTradeOrder, factoryRecipeFor, tradeOrderFor } from "@/blueprint";
-import { planToRows } from "@/schedule";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { PRESETS } from "@/blueprint";
+import { ROTATION_OPTIONS, rotationDescription } from "@/rotation-settings";
 import { parseReproductionPackage, reproductionInputKey, type ReproductionPackage } from "@/reproduction-package";
 import type { QualityDraftData, QualityBatchData, QualityVersion } from "@/quality";
-import type { ApiResponse, MaaJson, RotationJson } from "@/types";
+import type { ApiResponse } from "@/types";
+import { DraftEditor } from "./draft-editor";
+import { BatchDetails, ResultPanel } from "./quality-results";
+import { Check, Choice, dateText, Panel, Status, useWorkbenchText, versionText } from "./workbench-ui";
 
 async function api<T>(query = "", body?: unknown): Promise<T> {
   const response = await fetch(`/api/admin/quality${query}`, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : { cache: "no-store" });
@@ -21,19 +26,15 @@ async function api<T>(query = "", body?: unknown): Promise<T> {
 }
 type PreviewEntry = { id: string; name: string; error: string | null };
 type Overview = { versions: QualityVersion[]; batches: Omit<QualityBatchData, "cases">[]; drafts: Omit<QualityDraftData, "input" | "original">[]; isAdmin: boolean; worker: { at: string; syncError?: string } | null };
-function download(name: string, value: unknown) {
-  const href = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2)], { type: "application/json" }));
-  const link = document.createElement("a"); link.href = href; link.download = name; link.click(); URL.revokeObjectURL(href);
-}
 
 export function QualityWorkbench() {
-  const en = useLocale() === "en";
-  const t = (zh: string, english: string) => en ? english : zh;
+  const { en, t } = useWorkbenchText();
   const params = useSearchParams();
   const [overview, setOverview] = useState<Overview | null>(null);
   const [draft, setDraft] = useState<QualityDraftData | null>(null);
   const [input, setInput] = useState<ReproductionPackage | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
+  const [files, setFiles] = useState<File[]>([]);
   const [preview, setPreview] = useState<PreviewEntry[]>([]);
   const [previewToken, setPreviewToken] = useState("");
   const [excluded, setExcluded] = useState<string[]>([]);
@@ -42,93 +43,131 @@ export function QualityWorkbench() {
   const [uploadFiammetta, setUploadFiammetta] = useState(false);
   const [candidate, setCandidate] = useState("");
   const [baseline, setBaseline] = useState("");
+  const [label, setLabel] = useState("");
   const [batch, setBatch] = useState<QualityBatchData | null>(null);
-  const [result, setResult] = useState<unknown>(null);
+  const [result, setResult] = useState<{ data: unknown; name: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [checkedAt, setCheckedAt] = useState(0);
   const versionsInitialized = useRef(false);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const dirty = !!draft && !!input && reproductionInputKey(input) !== reproductionInputKey(draft.input);
   const refresh = useCallback(async () => {
-    const data = await api<Overview>(); setOverview(data);
-    setCheckedAt(Date.now());
+    const data = await api<Overview>();
+    setOverview(data); setCheckedAt(Date.now());
     if (!versionsInitialized.current && data.versions.length) {
       setCandidate(data.versions[0].id); setBaseline(data.versions[1]?.id ?? ""); versionsInitialized.current = true;
     } else if (versionsInitialized.current) {
-      setCandidate((current) => data.versions.some((version) => version.id === current) ? current : data.versions[0]?.id ?? "");
-      setBaseline((current) => data.versions.some((version) => version.id === current) ? current : "");
+      setCandidate(current => data.versions.some(version => version.id === current) ? current : data.versions[0]?.id ?? "");
+      setBaseline(current => data.versions.some(version => version.id === current) ? current : "");
     }
   }, []);
   useEffect(() => { void refresh().catch((error: Error) => setError(error.message)); const timer = setInterval(() => { void refresh().catch((error: Error) => setError(error.message)); }, 5000); return () => clearInterval(timer); }, [refresh]);
   const draftId = params.get("draft");
   const draftIds = params.get("drafts");
   useEffect(() => { if (draftIds) setSelected(draftIds.split(",").filter(Boolean)); }, [draftIds]);
-  useEffect(() => { if (draftId) { let active = true; void api<QualityDraftData>(`?kind=draft&id=${encodeURIComponent(draftId)}`).then((data) => { if (active) { setDraft(data); setInput(data.input); setSelected([data.id]); } }).catch((error: Error) => { if (active) setError(error.message); }); return () => { active = false; }; } }, [draftId]);
+  useEffect(() => {
+    if (!draftId) return;
+    let active = true;
+    void api<QualityDraftData>(`?kind=draft&id=${encodeURIComponent(draftId)}`).then(data => { if (active) { setDraft(data); setInput(data.input); setSelected([data.id]); } }).catch((error: Error) => { if (active) setError(error.message); });
+    return () => { active = false; };
+  }, [draftId]);
   const batchId = batch?.id;
-  useEffect(() => { if (batchId) { const timer = setInterval(() => { void api<QualityBatchData>(`?kind=batch&id=${batchId}`).then(setBatch).catch((error: Error) => setError(error.message)); }, 2000); return () => clearInterval(timer); } }, [batchId]);
-  async function perform(action: () => Promise<void>) { setBusy(true); setError(""); setNotice(""); try { await action(); } catch (error) { setError(error instanceof Error ? error.message : "Request failed"); } finally { setBusy(false); } }
-  async function importFiles(files: FileList | null) {
-    if (!files?.length) return;
-    const form = new FormData(); Array.from(files).forEach((file) => form.append("files", file));
-    if (preset && uploadRotation) form.set("settings", JSON.stringify({ layout: PRESETS.find((entry) => entry.label === preset)!.layout, rotation: uploadRotation, fiammetta_enable: uploadFiammetta }));
+  const batchStatus = batch?.status;
+  useEffect(() => {
+    if (!batchId || !["queued", "running"].includes(batchStatus ?? "")) return;
+    let active = true;
+    const timer = setInterval(() => { void api<QualityBatchData>(`?kind=batch&id=${batchId}`).then(data => { if (active) setBatch(data); }).catch((error: Error) => { if (active) setError(error.message); }); }, 2000);
+    return () => { active = false; clearInterval(timer); };
+  }, [batchId, batchStatus]);
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
+  async function perform(action: () => Promise<void>) {
+    setBusy(true); setError(""); setNotice("");
+    try { await action(); } catch (error) { setError(error instanceof Error ? error.message : t("请求未完成，请重试。", "The request could not be completed. Try again.")); }
+    finally { setBusy(false); }
+  }
+  function clearPreview() { setPreview([]); setPreviewToken(""); setExcluded([]); }
+  async function previewFiles() {
+    clearPreview();
+    const form = new FormData(); files.forEach(file => form.append("files", file));
+    if (preset && uploadRotation) form.set("settings", JSON.stringify({ layout: PRESETS.find(entry => entry.label === preset)!.layout, rotation: uploadRotation, fiammetta_enable: uploadFiammetta }));
     const response = await fetch("/api/admin/quality/import", { method: "POST", body: form });
     const body = await response.json() as ApiResponse<{ entries: PreviewEntry[]; token: string }>;
     if (!body.success) throw new Error(body.error.message);
-    setPreview(body.data.entries); setPreviewToken(body.data.token); setExcluded([]); setSelected([]);
+    setPreview(body.data.entries); setPreviewToken(body.data.token);
   }
   async function acceptPreview() {
-    const included = preview.filter((entry) => !excluded.includes(entry.id));
-    if (!included.length || included.some((entry) => entry.error)) throw new Error(t("请明确排除所有无效项", "Explicitly exclude all invalid entries"));
-    const ids = (await api<{ id: string }[]>("", { action: "acceptImport", token: previewToken, excluded })).map((draft) => draft.id);
-    await refresh();
-    setSelected(ids); setPreview([]); setNotice(t(`已准备 ${ids.length} 个用例`, `${ids.length} cases ready`));
+    const ids = (await api<{ id: string }[]>("", { action: "acceptImport", token: previewToken, excluded })).map(draft => draft.id);
+    await refresh(); setSelected(ids); clearPreview(); setFiles([]);
+    if (fileInput.current) fileInput.current.value = "";
+    setNotice(t(`已导入并选中 ${ids.length} 份草稿。选择测试版本后即可开始。`, `Imported and selected ${ids.length} drafts. Choose a test version to run them.`));
   }
-  const changed = draft && input && reproductionInputKey(draft.original) !== reproductionInputKey(input);
-  return <main id="admin-content" className="mx-auto grid min-w-0 max-w-7xl gap-6 px-4 py-6 [overflow-wrap:anywhere] [&>section]:min-w-0 [&>section]:max-w-full [&>section]:grid-cols-1 [&>section>*]:min-w-0 sm:px-6">
-    <header><h1 className="text-2xl font-semibold">{t("测试工作台", "Quality workbench")}</h1><p className="mt-2 text-sm text-muted-foreground">{t("独立草稿与后台测试。测试结果不会自动修改反馈结论。", "Independent drafts and background runs. Results never change feedback status automatically.")}</p></header>
-    {error && <p role="alert" className="rounded-lg bg-destructive/10 p-3 text-destructive">{error}</p>}{notice && <p role="status">{notice}</p>}
-    <section className="grid gap-4 rounded-xl border bg-background p-4">
-      <h2 className="font-semibold">{t("导入复现", "Import reproductions")}</h2>
-      <p className="text-sm text-muted-foreground">{t("每批最多 500 个 JSON，单文件 2 MiB，ZIP 解压后总量 100 MiB。以下设置仅用于纯 box 文件。", "Up to 500 JSON cases, 2 MiB per file, 100 MiB expanded. Settings below apply only to box arrays.")}</p>
-      <div className="flex flex-wrap gap-3">
-        <label>{t("布局", "Layout")}<select value={preset} onChange={(e) => setPreset(e.target.value)} className="ml-2 rounded border p-2"><option value="">{t("请选择", "Choose")}</option>{PRESETS.map((p) => <option key={p.label}>{p.label}</option>)}</select></label>
-        <label>{t("轮换", "Rotation")}<select className="ml-2 rounded border p-2" value={uploadRotation} onChange={(e) => setUploadRotation(e.target.value)}><option value="">{t("请选择", "Choose")}</option>{["abc_12_6_6", "main_backup_12_12", "abc_12_12_12"].map((value) => <option key={value}>{value}</option>)}</select></label>
-        <label className="flex items-center gap-2"><input type="checkbox" checked={uploadFiammetta} onChange={(e) => setUploadFiammetta(e.target.checked)} />Fiammetta</label>
+  const included = preview.filter(entry => !excluded.includes(entry.id));
+  const invalid = included.filter(entry => entry.error).length;
+  const missingDrafts = !!overview && selected.some(id => !overview.drafts.some(draft => draft.id === id));
+  const runReason = !overview ? t("正在加载可用版本与草稿…", "Loading versions and drafts…") : !selected.length ? t("请先从团队草稿中选择至少一项。", "Select at least one team draft first.") : missingDrafts ? t("部分已选草稿已到期，请重新选择。", "Some selected drafts have expired. Select them again.") : dirty ? t("当前草稿有未保存的修改，请先保存或放弃修改。", "Save or discard the current draft's changes before running.") : !candidate ? t("暂无可用求解器版本，请联系管理员同步生产版本。", "No solver version is available. Ask an administrator to sync production.") : baseline === candidate ? t("对比版本需要与测试版本不同，或选择单版本测试。", "Choose a different comparison version, or run a single-version test.") : "";
+  const workerReady = !!overview?.worker && checkedAt - Date.parse(overview.worker.at) < 15000;
+  const versionOptions = overview?.versions.map((version, index) => ({ value: version.id, label: versionText(version, index, en) })) ?? [];
+  return <main id="admin-content" className="mx-auto grid min-w-0 max-w-7xl gap-6 px-4 py-6 sm:px-6">
+    <header className="flex flex-wrap items-start justify-between gap-4"><div><h1 className="flex items-center gap-2 text-2xl font-semibold"><FlaskConical aria-hidden="true" className="size-6" />{t("复现测试工作台", "Reproduction workbench")}</h1><p className="mt-2 max-w-2xl text-sm text-muted-foreground">{t("导入或选择复现草稿，运行测试，再回到反馈记录处理结论。", "Import or select reproduction drafts, run tests, then record your findings on the source feedback.")}</p></div><Link className="text-sm underline underline-offset-4" href="/admin/issues">{t("返回反馈审阅", "Back to feedback review")}</Link></header>
+    {error && <Alert variant="destructive"><AlertCircle aria-hidden="true" /><AlertTitle>{t("操作未完成", "Action not completed")}</AlertTitle><AlertDescription className="break-words">{error}</AlertDescription></Alert>}
+    {notice && <Alert role="status"><CheckCircle2 aria-hidden="true" /><AlertDescription>{notice}</AlertDescription></Alert>}
+    {!overview && !error && <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 aria-hidden="true" className="size-4 motion-safe:animate-spin" />{t("正在加载团队草稿和测试记录…", "Loading team drafts and test history…")}</p>}
+    <div className="grid min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+      <div className="grid min-w-0 gap-6">
+        <Panel title={t("1. 准备复现用例", "1. Prepare reproductions")} description={t("支持完整复现包、box JSON 和 ZIP。完整复现包会保留文件中的设置。", "Upload reproduction packages, box JSON files or ZIP archives. Complete packages retain their own settings.")}>
+          <fieldset disabled={busy} className="grid min-w-0 gap-3">
+            <Label htmlFor="reproduction-files">{t("选择 JSON 或 ZIP 文件", "Choose JSON or ZIP files")}</Label>
+            <Input ref={fileInput} id="reproduction-files" className="hidden" tabIndex={-1} type="file" accept=".json,.zip" multiple onChange={e => { setFiles(Array.from(e.target.files ?? [])); clearPreview(); }} aria-describedby="import-limits" />
+            <div className="flex min-w-0 flex-wrap items-center gap-3 rounded-lg border border-dashed p-4"><Button variant="outline" onClick={() => fileInput.current?.click()}><Upload aria-hidden="true" />{t("选择文件", "Choose files")}</Button><span className="min-w-0 flex-1 break-words text-sm text-muted-foreground">{files.length ? t(`已选择 ${files.length} 个文件：${files.map(file => file.name).join("、")}`, `${files.length} files selected: ${files.map(file => file.name).join(", ")}`) : t("可一次选择多个 JSON 或 ZIP 文件", "Select one or more JSON or ZIP files")}</span></div>
+            <p id="import-limits" className="text-xs text-muted-foreground">{t("每批最多 500 个用例；每个 JSON 不超过 2 MiB，解压后合计不超过 100 MiB。", "Up to 500 cases per batch; each JSON up to 2 MiB, with 100 MiB total after extraction.")}</p>
+            <details className="rounded-lg border p-3"><summary className="cursor-pointer text-sm font-medium">{t("只有 box？先补充复现设置", "Box-only file? Set up the reproduction first")}</summary><p className="mt-2 text-xs text-muted-foreground">{t("以下设置仅用于纯 box 文件。修改后请重新预览文件。", "These settings apply only to box arrays. Preview again after changing them.")}</p>
+              <div className="mt-4 grid gap-4 sm:grid-cols-2"><Choice label={t("布局", "Layout")} value={preset} options={[{ value: "", label: t("请选择布局", "Choose a layout") }, ...PRESETS.map(p => ({ value: p.label, label: p.label }))]} onChange={value => { setPreset(value); clearPreview(); }} />
+                <Choice label={t("轮换方案", "Rotation")} value={uploadRotation} options={[{ value: "", label: t("请选择轮换方案", "Choose a rotation") }, ...ROTATION_OPTIONS.map(option => ({ value: option.profile, label: rotationDescription(option.profile, en) }))]} onChange={value => { setUploadRotation(value); clearPreview(); }} /></div>
+              <Check label={t("启用菲亚梅塔回满心情", "Enable Fiammetta morale recovery")} checked={uploadFiammetta} onChange={value => { setUploadFiammetta(value); clearPreview(); }} />
+            </details>
+            <Button className="justify-self-start" variant="outline" disabled={busy || !files.length} onClick={() => void perform(previewFiles)}><Upload aria-hidden="true" />{t("预览导入内容", "Preview import")}{!!files.length && ` (${files.length})`}</Button>
+          </fieldset>
+          {!!preview.length && <div className="grid gap-3 border-t pt-4"><div className="flex flex-wrap items-center justify-between gap-2"><h3 className="text-sm font-medium">{t(`导入预览 · ${included.length - invalid} 项可导入`, `Import preview · ${included.length - invalid} ready`)}</h3><span className="text-xs text-muted-foreground">{t(`已排除 ${excluded.length} 项`, `${excluded.length} excluded`)}</span></div>
+            <ul className="max-h-72 divide-y overflow-y-auto">{preview.map(entry => <li key={entry.id} className="flex items-start gap-3 py-3"><Check label={t("排除", "Exclude")} disabled={busy} checked={excluded.includes(entry.id)} onChange={checked => setExcluded(current => checked ? [...current, entry.id] : current.filter(id => id !== entry.id))} /><div className="min-w-0 flex-1 text-sm"><p className="break-all font-medium">{entry.name}</p><p className={entry.error ? "mt-1 break-words text-destructive" : "mt-1 text-muted-foreground"}>{entry.error ?? t("设置完整，可导入", "Ready to import")}</p></div></li>)}</ul>
+            {!!invalid && <p className="text-sm text-destructive">{t(`还有 ${invalid} 项无法导入。修正文件后重新预览，或勾选“排除”。`, `${invalid} entries need attention. Fix and preview again, or check Exclude.`)}</p>}
+            <Button className="justify-self-start" disabled={busy || !included.length || !!invalid} onClick={() => void perform(acceptPreview)}>{t(`导入 ${included.length} 项并选中`, `Import and select ${included.length} entries`)}</Button>
+          </div>}
+        </Panel>
+        <Panel title={t("团队草稿", "Team drafts")} description={t("勾选要运行的草稿；点击名称可查看或调整复现条件。", "Select drafts to run. Open a name to review or edit its inputs.")}>
+          {overview && !overview.drafts.length ? <div className="rounded-lg border border-dashed p-5 text-sm text-muted-foreground">{t("还没有复现草稿。上传文件，或在反馈详情中选择“一键复现”。", "No drafts yet. Upload a file or reproduce an issue from feedback details.")}</div> : <>
+            <div className="flex flex-wrap items-center justify-between gap-2"><span className="text-sm">{t(`已选 ${selected.length} 项`, `${selected.length} selected`)}</span><div className="flex gap-1"><Button size="sm" variant="ghost" disabled={busy || !overview?.drafts.length} onClick={() => setSelected(overview!.drafts.map(draft => draft.id))}>{t("全选", "Select all")}</Button><Button size="sm" variant="ghost" disabled={busy || !selected.length} onClick={() => setSelected([])}>{t("清空选择", "Clear selection")}</Button></div></div>
+            {dirty && <p className="text-xs text-muted-foreground">{t("请保存或放弃当前修改后再打开其他草稿。", "Save or discard your changes before opening another draft.")}</p>}
+            <ul className="max-h-80 divide-y overflow-y-auto">{overview?.drafts.map(entry => <li key={entry.id} className="flex items-center gap-3 py-3"><Check label={t("选择", "Select")} checked={selected.includes(entry.id)} disabled={busy} onChange={checked => setSelected(current => checked ? [...new Set([...current, entry.id])] : current.filter(id => id !== entry.id))} /><div className="min-w-0 flex-1"><button className="w-full break-words text-left text-sm font-medium underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-50" disabled={busy || dirty} onClick={() => void perform(async () => { const next = await api<QualityDraftData>(`?kind=draft&id=${entry.id}`); setDraft(next); setInput(next.input); })}>{entry.sources.map(source => source.name).join(" · ") || t("复现草稿", "Reproduction draft")}</button><p className="mt-1 text-xs text-muted-foreground">{t(`第 ${entry.revision} 版 · 到期时间 `, `Revision ${entry.revision} · Expires `)}{dateText(entry.expiresAt, en)}</p></div>{entry.id === draft?.id && <Badge variant="secondary">{t("编辑中", "Editing")}</Badge>}</li>)}</ul>
+          </>}
+        </Panel>
+        {draft && input && <DraftEditor draft={draft} input={input} setInput={setInput} busy={busy} onSave={() => void perform(async () => { const next = await api<QualityDraftData>("", { action: "edit", id: draft.id, revision: draft.revision, input: parseReproductionPackage(input) }); setDraft(next); setInput(next.input); setSelected(current => [...new Set([...current, next.id])]); await refresh(); setNotice(t("草稿已保存并选中。可在“运行测试”中开始测试。", "Draft saved and selected. Start it from Run tests.")); })} />}
       </div>
-      <input aria-label={t("JSON 或 ZIP 文件", "JSON or ZIP files")} type="file" accept=".json,.zip" multiple disabled={busy} onChange={(e) => void perform(() => importFiles(e.target.files))} />
-      {preview.length > 0 && <><ul className="max-h-72 overflow-auto">{preview.map((entry) => <li key={entry.id} className="flex items-start gap-3 border-b py-3"><label className="flex gap-2"><input type="checkbox" checked={excluded.includes(entry.id)} onChange={(e) => setExcluded((current) => e.target.checked ? [...current, entry.id] : current.filter((id) => id !== entry.id))} />{t("排除", "Exclude")}</label><span className="min-w-0 break-all">{entry.name}<span className={entry.error ? "block text-destructive" : "block text-muted-foreground"}>{entry.error ?? t("可导入", "Ready")}</span></span></li>)}</ul><Button disabled={busy || preview.some((entry) => entry.error && !excluded.includes(entry.id))} onClick={() => void perform(acceptPreview)}>{t("确认导入有效项", "Import included entries")}</Button></>}
-    </section>
-    {!!overview?.drafts.length && <section className="rounded-xl border bg-background p-4"><h2 className="font-semibold">{t("团队草稿", "Team drafts")}</h2><ul className="mt-3 max-h-60 overflow-auto">{overview.drafts.map((entry) => <li key={entry.id} className="flex items-center gap-3 border-b py-2"><input type="checkbox" aria-label={`${t("选择草稿", "Select draft")} ${entry.id}`} checked={selected.includes(entry.id)} onChange={(event) => setSelected((current) => event.target.checked ? [...new Set([...current, entry.id])] : current.filter((id) => id !== entry.id))} /><Link className="min-w-0 break-all underline" href={`/admin/quality?draft=${entry.id}`}>{entry.sources.map((source) => source.name).join(", ")}</Link><span className="ml-auto shrink-0 text-xs text-muted-foreground">{t("修订", "Revision")} {entry.revision}</span></li>)}</ul></section>}
-    {draft && input && <section className="grid gap-4 rounded-xl border bg-background p-4">
-      <h2 className="font-semibold">{t("复现草稿", "Reproduction draft")} · {changed ? t("已修改", "Modified") : t("原始输入", "Original input")}</h2>
-      <div className="flex flex-wrap gap-3">{draft.sources.filter((source) => source.feedbackId).map((source) => <Link key={source.feedbackId} href={`/admin/issues?q=${source.feedbackId}`}>{t("返回反馈", "Back to feedback")} {source.name}</Link>)}<Button variant="outline" onClick={() => download("reproduction.json", input)}>{t("导出完整复现包", "Export reproduction")}</Button><Button variant="outline" onClick={() => setInput(structuredClone(draft.original))}>{t("恢复原始输入", "Restore original")}</Button></div>
-      <label>{t("替换布局", "Replace layout")}<select className="ml-2 rounded border p-2" value="" onChange={(e) => { const selected = PRESETS.find((p) => p.label === e.target.value); if (selected) setInput({ ...input, layout: structuredClone(selected.layout) }); }}><option value="">{input.layout.template}</option>{PRESETS.map((p) => <option key={p.label}>{p.label}</option>)}</select></label>
-      <div className="grid gap-2 sm:grid-cols-2">{input.layout.rooms.map((room) => <div key={room.id} className="flex flex-wrap items-center gap-2"><label>{room.id}<input aria-label={`${room.id} level`} className="ml-2 w-16 rounded border p-2" type="number" min={1} max={maxRoomLevel(room.kind)} value={room.level} onChange={(e) => setInput({ ...input, layout: updateRoomLevel(input.layout, room.id, Number(e.target.value)) })} /></label>{room.kind === "factory" && <select aria-label={`${room.id} recipe`} value={factoryRecipeFor(room)} onChange={(e) => setInput({ ...input, layout: updateFactoryRecipe(input.layout, room.id, e.target.value as "gold" | "battle_record" | "originium") })}>{["gold", "battle_record", "originium"].map((v) => <option key={v}>{v}</option>)}</select>}{room.kind === "trade_post" && <select aria-label={`${room.id} order`} value={tradeOrderFor(room)} onChange={(e) => setInput({ ...input, layout: updateTradeOrder(input.layout, room.id, e.target.value as "gold" | "originium") })}><option>gold</option><option>originium</option></select>}</div>)}</div>
-      <RotationSettings value={input.rotation} onChange={(rotation) => setInput({ ...input, rotation })} /><p className="text-xs">{input.rotation}</p>
-      <label className="flex items-center gap-2"><input type="checkbox" checked={input.fiammetta_enable} onChange={(e) => setInput({ ...input, fiammetta_enable: e.target.checked })} />Fiammetta</label>
-      <details><summary className="cursor-pointer py-3">{t("编辑干员练度", "Edit operators")}</summary><ManualOperboxPicker operbox={input.operbox} onApply={(operbox) => setInput({ ...input, operbox })} compact /></details>
-      {changed && <details><summary>{t("查看输入差异", "View input changes")}</summary><pre className="max-h-72 overflow-auto text-xs">{JSON.stringify({ original: draft.original, modified: input }, null, 2)}</pre></details>}
-      <Button disabled={busy} onClick={() => void perform(async () => { const next = await api<QualityDraftData>("", { action: "edit", id: draft.id, revision: draft.revision, input: parseReproductionPackage(input) }); setDraft(next); setInput(next.input); setSelected((current) => [...new Set([...current, next.id])]); setNotice(t("草稿已保存", "Draft saved")); })}>{t("保存草稿并加入批次", "Save draft and include")}</Button>
-    </section>}
-    <section className="grid gap-4 rounded-xl border bg-background p-4">
-      <h2 className="font-semibold">{t("运行测试批次", "Run batch")} ({selected.length})</h2>
-      <p className="text-sm">{overview?.worker && checkedAt - Date.parse(overview.worker.at) < 15_000 ? t("Worker 就绪", "Worker ready") : t("Worker 未就绪，任务将等待后台服务", "Worker unavailable; jobs will remain queued")}</p>
-      {overview?.worker?.syncError && <p role="alert">{overview.worker.syncError}</p>}
-      <div className="flex flex-wrap gap-3"><label>{t("基线", "Baseline")}<select className="ml-2 max-w-60 rounded border p-2" value={baseline} onChange={(e) => setBaseline(e.target.value)}><option value="">{t("单版本执行", "Single version")}</option>{overview?.versions.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}</select></label><label>{t("测试版本", "Test version")}<select className="ml-2 max-w-60 rounded border p-2" value={candidate} onChange={(e) => setCandidate(e.target.value)}><option value="">{t("暂无已验证版本", "No verified versions")}</option>{overview?.versions.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}</select></label></div>
-      <div className="flex flex-wrap gap-3"><Button disabled={busy || !selected.length || !candidate || baseline === candidate || (!!draft && !!input && reproductionInputKey(input) !== reproductionInputKey(draft.input))} onClick={() => void perform(async () => { setBatch(await api<QualityBatchData>("", { action: "batch", ids: selected, bundleIds: baseline ? [baseline, candidate] : [candidate], label: t("反馈复现批次", "Feedback reproduction batch") })); await refresh(); })}>{t("提交后台运行", "Queue batch")}</Button>{overview?.isAdmin && <Button variant="outline" disabled={busy} onClick={() => void perform(async () => { await api("", { action: "sync" }); setNotice(t("已请求从生产产物同步，后台校验通过后可选", "Production sync requested; available after verification")); })}>{t("同步生产求解器", "Sync production solver")}</Button>}</div>
-    </section>
-    <section className="grid gap-3"><h2 className="font-semibold">{t("团队批次", "Team batches")}</h2>{overview?.batches.map((item) => <Button key={item.id} variant="outline" className="justify-between" onClick={() => void perform(async () => { setBatch(await api(`?kind=batch&id=${item.id}`)); setResult(null); })}>{item.label} · {item.createdAt.slice(0, 16)} · {item.status}</Button>)}</section>
-    {batch && <section className="grid gap-3 rounded-xl border bg-background p-4"><h2 className="font-semibold">{batch.label} · {batch.status}</h2><p>{batch.cases.filter((item) => ["completed", "failed", "cancelled"].includes(item.status)).length} / {batch.cases.length}</p><div className="flex gap-3"><Button variant="outline" disabled={busy || !["queued", "running"].includes(batch.status)} onClick={() => void perform(async () => { await api("", { action: "cancel", id: batch.id }); setBatch(await api(`?kind=batch&id=${batch.id}`)); })}>{t("取消", "Cancel")}</Button><Button variant="outline" disabled={busy || batch.status !== "failed"} onClick={() => void perform(async () => { await api("", { action: "retry", id: batch.id }); setBatch(await api(`?kind=batch&id=${batch.id}`)); })}>{t("仅重跑失败项", "Retry failed cases")}</Button></div>{batch.cases.map((item) => <article key={item.id} className="grid gap-2 border-t py-3"><p>{item.sources.map((source) => source.name).join(" · ")} · {item.status}</p><div className="flex flex-wrap gap-2">{item.sources.filter((s) => s.feedbackId).map((s) => <Link key={s.feedbackId} href={`/admin/issues?q=${s.feedbackId}`}>{t("回填结论", "Record conclusion")}</Link>)}{item.attempts.map((attempt, i) => <Button key={attempt.id} variant="ghost" disabled={attempt.status === "running"} onClick={() => void perform(async () => setResult(await api(`?kind=result&id=${batch.id}&attempt=${attempt.id}`)))}>{i + 1}: {attempt.status}</Button>)}</div></article>)}</section>}
-    {result != null && <section className="grid gap-3 rounded-xl border bg-background p-4"><h2 className="font-semibold">{t("执行结果", "Execution result")}</h2><p className="text-sm text-muted-foreground">{t("耗时差异仅供参考，不自动判断回归。", "Timing differences are informational and do not automatically indicate regressions.")}</p><Button variant="outline" onClick={() => download("quality-result.json", result)}>{t("下载结果", "Download result")}</Button><ResultView result={result} /><details><summary>{t("完整结果", "Full result")}</summary><pre className="max-h-96 overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(result, null, 2)}</pre></details></section>}
+      <div className="min-w-0 lg:sticky lg:top-6"><Panel title={t("2. 运行测试", "2. Run tests")} description={t("已保存的草稿会加入后台队列，关闭页面后仍会继续运行。", "Saved drafts run in the background, even after you close this page.")}>
+        <div className="flex flex-wrap items-center justify-between gap-2"><Badge variant="secondary">{t(`已选 ${selected.length} 项`, `${selected.length} selected`)}</Badge><span className="text-xs text-muted-foreground">{!overview ? t("正在检查服务…", "Checking service…") : workerReady ? t("测试服务就绪", "Test service ready") : t("等待测试服务", "Waiting for test service")}</span></div>
+        {overview && !workerReady && <p className="text-xs text-muted-foreground">{t("可以提交，任务将在测试服务恢复后运行。", "You can queue tests now. They will run when the service is available.")}</p>}
+        {overview?.worker?.syncError && <Alert variant="destructive"><AlertTitle>{t("生产版本同步失败", "Production sync failed")}</AlertTitle><AlertDescription>{t("已有版本仍可运行。管理员可重试同步。", "Existing versions remain available. An administrator can retry the sync.")}<details className="mt-2"><summary>{t("查看原因", "Show reason")}</summary><p className="break-all">{overview.worker.syncError}</p></details></AlertDescription></Alert>}
+        <div className="grid gap-2"><Label htmlFor="batch-name">{t("批次名称（选填）", "Batch name (optional)")}</Label><Input id="batch-name" value={label} maxLength={120} disabled={busy} placeholder={t("例如：贸易站反馈复查", "e.g. Trading Post feedback check")} onChange={e => setLabel(e.target.value)} /></div>
+        <Choice label={t("测试版本", "Test version")} value={candidate} options={versionOptions.length ? versionOptions : [{ value: "", label: t("暂无可用版本", "No versions available") }]} onChange={setCandidate} disabled={busy || !versionOptions.length} />
+        <Choice label={t("对比方式", "Compare against")} value={baseline} options={[{ value: "", label: t("不对比，仅测试所选版本", "None — test selected version only") }, ...versionOptions]} onChange={setBaseline} disabled={busy || !versionOptions.length} />
+        {overview?.versions.length === 1 && <p className="text-xs text-muted-foreground">{t("目前只有一个生产版本，可以先运行单版本测试。", "Only one production version is available. You can run a single-version test.")}</p>}
+        {runReason && <p id="run-reason" className="text-sm text-muted-foreground">{runReason}</p>}
+        <Button disabled={busy || !!runReason} aria-describedby={runReason ? "run-reason" : undefined} onClick={() => void perform(async () => { const next = await api<QualityBatchData>("", { action: "batch", ids: selected, bundleIds: baseline ? [baseline, candidate] : [candidate], label: label.trim() || t("反馈复现测试", "Feedback reproduction test") }); setBatch(next); setResult(null); await refresh(); setNotice(t("测试已加入后台队列，可在下方查看进度。", "Tests are queued. Follow their progress below.")); })}>{busy ? <Loader2 aria-hidden="true" className="motion-safe:animate-spin" /> : <Play aria-hidden="true" />}{t(`开始测试${selected.length ? `（${selected.length} 项）` : ""}`, `Run tests${selected.length ? ` (${selected.length})` : ""}`)}</Button>
+        <p className="text-xs text-muted-foreground">{t("按顺序运行，每个用例最多 10 分钟。测试结果不会自动修改反馈状态。", "Cases run one at a time, up to 10 minutes each. Results do not change feedback status automatically.")}</p>
+        {overview?.isAdmin && <details className="border-t pt-3"><summary className="cursor-pointer text-sm text-muted-foreground">{t("管理求解器版本", "Manage solver versions")}</summary><p className="my-3 text-xs text-muted-foreground">{t("从已发布的生产版本同步，校验完成后可用于新批次。运行中的批次不受影响。", "Sync a published production version. It becomes available after verification; existing batches keep their selected versions.")}</p><Button variant="outline" disabled={busy} onClick={() => void perform(async () => { await api("", { action: "sync" }); setNotice(t("已请求同步生产版本。校验完成后，版本列表会自动更新。", "Production sync requested. The version list will update after verification.")); })}><RefreshCw aria-hidden="true" />{t("同步生产版本", "Sync production version")}</Button></details>}
+      </Panel></div>
+    </div>
+    <Panel title={t("3. 查看测试记录", "3. Review test history")} description={t("团队成员共享批次和执行结果，可从用例返回反馈填写处理结论。", "Batches and results are shared with the team. Open a case's source feedback to record your findings.")}>
+      {overview && !overview.batches.length && <p className="rounded-lg border border-dashed p-5 text-sm text-muted-foreground">{t("还没有测试记录。选择草稿和版本后，点击“开始测试”。", "No test runs yet. Select drafts and a version, then choose Run tests.")}</p>}
+      <div className="grid max-h-80 gap-2 overflow-y-auto">{overview?.batches.map(item => <button key={item.id} disabled={busy} aria-pressed={batch?.id === item.id} className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-lg border p-3 text-left transition-colors hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-ring aria-pressed:border-primary aria-pressed:bg-muted/50 disabled:opacity-50" onClick={() => void perform(async () => { setBatch(await api(`?kind=batch&id=${item.id}`)); setResult(null); })}><span className="min-w-0 flex-1"><span className="block break-words text-sm font-medium">{item.label}</span><span className="mt-1 block text-xs text-muted-foreground">{dateText(item.createdAt, en)} · {item.bundleIds.length === 2 ? t("双版本对比", "Two-version comparison") : t("单版本测试", "Single-version test")}</span></span><Status status={item.status} /></button>)}</div>
+    </Panel>
+    {batch && <BatchDetails batch={batch} busy={busy} onAction={action => void perform(async () => { await api("", { action, id: batch.id }); setBatch(await api(`?kind=batch&id=${batch.id}`)); await refresh(); })} onResult={(attempt, name) => void perform(async () => setResult({ data: await api(`?kind=result&id=${batch.id}&attempt=${attempt}`), name }))} />}
+    {result && <ResultPanel result={result.data} name={result.name} versions={overview?.versions ?? []} />}
   </main>;
-}
-function ResultView({ result }: { result: unknown }) {
-  const [shift, setShift] = useState(0);
-  const en = useLocale() === "en";
-  const data = result as { results?: { bundleId: string; ok: boolean; valid: boolean; elapsedMs: number; error?: string; summary?: { daily: { trade: number | null; manu: number | null; power: number | null } } | null; response?: { result?: { maa: MaaJson; rotation: RotationJson } } }[]; input?: ReproductionPackage; comparison?: { scheduleChanged: boolean; dailyDelta: { trade: number | null; manu: number | null; power: number | null }; elapsedDeltaMs: number } | null };
-  return <>
-    <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr>{(en ? ["Version", "Execution", "Valid", "Trade / Manufacture / Power", "Elapsed (ms)"] : ["版本", "执行", "有效性", "贸易 / 制造 / 发电收益", "耗时 (ms)"]).map((label) => <th className="p-2" key={label}>{label}</th>)}</tr></thead><tbody>{data.results?.map((item) => <tr key={item.bundleId}><td className="p-2" title={item.bundleId}>{item.bundleId.slice(0, 12)}</td><td className="p-2">{item.ok ? (en ? "Success" : "成功") : (en ? "Failed" : "失败")}{item.error && <p role="alert">{item.error}</p>}</td><td className="p-2">{item.valid ? (en ? "Valid" : "有效") : (en ? "Invalid" : "无效")}</td><td className="p-2">{[item.summary?.daily.trade, item.summary?.daily.manu, item.summary?.daily.power].map((value) => value ?? "—").join(" / ")}</td><td className="p-2">{Math.round(item.elapsedMs)}</td></tr>)}</tbody></table></div>
-    {data.comparison && <p>{en ? "Schedule changed" : "排班变化"}：{data.comparison.scheduleChanged ? (en ? "Yes" : "有") : (en ? "No" : "无")} · {en ? "Daily deltas (trade / manufacture / power)" : "日收益变化（贸易 / 制造 / 发电）"}：{[data.comparison.dailyDelta.trade, data.comparison.dailyDelta.manu, data.comparison.dailyDelta.power].map((value) => value ?? "—").join(" / ")}</p>}
-    {data.results?.map((item) => { const payload = item.response?.result; if (!payload?.maa?.plans?.length || !data.input) return null; const active = Math.min(shift, payload.maa.plans.length - 1); const plan = payload.maa.plans[active]; return <div key={item.bundleId}><h3 className="mb-2 font-medium">{item.bundleId.slice(0, 12)}</h3><select value={active} onChange={(e) => setShift(Number(e.target.value))} aria-label={en ? "Shift" : "班次"}>{payload.maa.plans.map((_, i) => <option key={i} value={i}>{i + 1}</option>)}</select><CompactScheduleView layout={data.input.layout} rows={planToRows(plan, payload.rotation?.shifts?.[active], data.input.layout)} activeShift={active} activePlan={plan} shiftDirection={0} feedbackDisabled /></div>; })}
-  </>;
 }
