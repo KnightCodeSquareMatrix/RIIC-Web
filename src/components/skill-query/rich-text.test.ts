@@ -44,7 +44,9 @@ test("parses standalone term ref with following styled text", () => {
 });
 
 test("preserves unknown and malformed tags as plain text", () => {
-  assert.equal(parseRichText("值<<$cc.bd_b1>内容</>")[0].type, "text");
+  const malformed = parseRichText("值<<$cc.bd_b1>内容</>");
+  assert.equal(malformed[0].type, "text");
+  assert.equal(malformed[1].type === "term" && malformed[1].id, "cc_bd_b1");
   const nodes = parseRichText("未知<@cc.unknown>x</>标签");
   assert.equal(nodes[1].type === "style" && nodes[1].className, "cc-unknown");
 });

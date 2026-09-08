@@ -32,7 +32,9 @@ export function richTextPlainText(value: string): string {
  * 返回节点树；未知/脏标签按原文保留为文本。
  */
 export function parseRichText(text: string): RichTextNode[] {
-  const normalized = text.replace(/(<@[^<>]+>)(<\$[^<>]+>)/g, "$2$1");
+  const normalized = text
+    .replace(/<<\$/g, "<$")
+    .replace(/(<@[^<>]+>)(<\$[^<>]+>)/g, "$2$1");
   const root: RichTextNode[] = [];
   const stack: RichTextNode[] = [];
   let buffer = "";
@@ -71,7 +73,7 @@ export function parseRichText(text: string): RichTextNode[] {
       (parent && "children" in parent ? parent.children : root).push(node);
       stack.push(node);
     } else {
-      // 未知标签（含数据脏标签如 `<<$cc.bd_b1>`）：按原文文本保留。
+      // 未知标签按原文文本保留。
       buffer += normalized.slice(index, close + 1);
     }
     index = close + 1;
