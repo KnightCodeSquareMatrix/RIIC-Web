@@ -73,7 +73,7 @@ export function parseRichText(text: string): RichTextNode[] {
       (parent && "children" in parent ? parent.children : root).push(node);
       stack.push(node);
     } else {
-      // 未知标签按原文文本保留。
+      // 兜底保留：把未知/异常标签当原文，避免桑葚等技能页露出脏文本。
       buffer += normalized.slice(index, close + 1);
     }
     index = close + 1;
