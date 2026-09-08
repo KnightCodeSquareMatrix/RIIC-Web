@@ -9,7 +9,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogBody } from "@/components/ui/dialog";
 import { PRESETS } from "@/blueprint";
 import { ROTATION_OPTIONS, rotationDescription } from "@/rotation-settings";
 import { parseReproductionPackage, reproductionInputKey, type ReproductionPackage } from "@/reproduction-package";
@@ -55,12 +54,14 @@ export function QualityWorkbench() {
   const fileInput = useRef<HTMLInputElement>(null);
   const historySection = useRef<HTMLDivElement>(null);
   const batchSection = useRef<HTMLDivElement>(null);
+  const resultSection = useRef<HTMLDivElement>(null);
   const [batchNavigation, setBatchNavigation] = useState(0);
   function reveal(element: HTMLElement | null) {
     element?.focus({ preventScroll: true });
     element?.scrollIntoView({ block: "start" });
   }
   useEffect(() => { if (batchNavigation) reveal(batchSection.current); }, [batchNavigation]);
+  useEffect(() => { if (result) reveal(resultSection.current); }, [result]);
   const dirty = !!draft && !!input && reproductionInputKey(input) !== reproductionInputKey(draft.input);
   const refresh = useCallback(async () => {
     const data = await api<Overview>();
@@ -178,6 +179,6 @@ export function QualityWorkbench() {
       <div className="grid max-h-80 gap-2 overflow-y-auto">{overview?.batches.map(item => <button key={item.id} disabled={busy} aria-pressed={batch?.id === item.id} className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-lg border p-3 text-left transition-colors hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-ring aria-pressed:border-primary aria-pressed:bg-muted/50 disabled:opacity-50" onClick={() => void perform(async () => { setBatch(await api(`?kind=batch&id=${item.id}`)); setResult(null); setBatchNavigation(current => current + 1); })}><span className="min-w-0 flex-1"><span className="block break-words text-sm font-medium">{item.label}</span><span className="mt-1 block text-xs text-muted-foreground">{dateText(item.createdAt, en)} · {item.bundleIds.length === 2 ? t("双版本对比", "Two-version comparison") : t("单版本测试", "Single-version test")}</span></span><Status status={item.status} /><span className="text-sm font-medium text-primary">{["queued", "running"].includes(item.status) ? t("查看进度 →", "View progress →") : t("查看结果 →", "View results →")}</span></button>)}</div>
     </Panel></div>
     {batch && <div ref={batchSection} tabIndex={-1} className="scroll-mt-6 rounded-lg focus-visible:outline-2 focus-visible:outline-ring"><BatchDetails batch={batch} busy={busy} onAction={action => void perform(async () => { await api("", { action, id: batch.id }); setBatch(await api(`?kind=batch&id=${batch.id}`)); await refresh(); })} onResult={(attempt, name) => void perform(async () => setResult({ data: await api(`?kind=result&id=${batch.id}&attempt=${attempt}`), name }))} /></div>}
-    <Dialog open={!!result} onOpenChange={open => { if (!open) setResult(null); }}><DialogContent className="max-h-[90dvh] grid-rows-[auto_minmax(0,1fr)] sm:max-w-5xl"><DialogHeader><DialogTitle>{t("测试结果", "Test result")}</DialogTitle><DialogDescription className="break-words">{batch?.label} · {result?.name}</DialogDescription></DialogHeader><DialogBody className="min-h-0 overflow-y-auto pb-6">{result && <ResultPanel result={result.data} name={result.name} versions={overview?.versions ?? []} />}</DialogBody></DialogContent></Dialog>
+    {result && <div ref={resultSection} tabIndex={-1} className="min-w-0 scroll-mt-6 rounded-lg focus-visible:outline-2 focus-visible:outline-ring"><div className="mb-3 flex flex-wrap items-center justify-between gap-3"><p className="min-w-0 break-words text-sm text-muted-foreground">{batch?.label} · {result.name}</p><Button variant="outline" onClick={() => reveal(batchSection.current)}>{t("返回批次用例", "Back to batch cases")}</Button></div><ResultPanel result={result.data} name={result.name} versions={overview?.versions ?? []} /></div>}
   </main>;
 }
