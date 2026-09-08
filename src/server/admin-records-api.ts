@@ -3,6 +3,7 @@ import "server-only";
 import type { AdminFeedbackFacility, AdminFeedbackStatus } from "@/types";
 import {
   isAdminFeedbackStatus,
+  normalizeAdminFeedbackStatus,
   legacyAdminFeedbackStatus,
   toAdminFeedbackRecordData,
   toAdminPlanRunRecordData,
@@ -17,14 +18,16 @@ import {
   requestClientIp,
   successResponse,
 } from "./api-contract";
-import { requireWebsiteAdmin } from "./auth/authorization";
+import { requireWebsiteReviewer } from "./auth/authorization";
 import { isBusinessDatabaseReadEnabled } from "./business-config";
 import {
   deleteFeedbackRecords,
   findFeedbackRecord,
+  feedbackHistory,
   findPlanRunRecord,
   queryBusinessRecords,
   updateFeedbackRecord,
+  updateFeedbackRecords,
 } from "./business-records";
 import { deleteFeedbackArtifacts, readFeedbackReproduction, readPlanReproduction } from "./infra";
 
@@ -107,7 +110,7 @@ export async function handleListAdminRecords(
   const requestId = createRequestId();
   const startedAt = performance.now();
   try {
-    await requireWebsiteAdmin(request);
+    await requireWebsiteReviewer(request);
     requireRecordDatabase();
     const params = new URL(request.url).searchParams;
     const status = kind === "feedback"
@@ -126,6 +129,7 @@ export async function handleListAdminRecords(
       facility: kind === "feedback" ? feedbackFacility(params.get("facility")) : undefined,
       errorCode: params.get("errorCode") ?? undefined,
       solverExecutableSha256: params.get("solver") ?? undefined,
+      search: params.get("q")?.slice(0, 200),
     });
     return noStore(successResponse({
       ...records,
@@ -141,12 +145,12 @@ export async function handleListAdminRecords(
 async function updateAdminFeedback(
   request: Request,
   feedbackId: string,
-  body: { status?: unknown; note?: unknown } | null,
+  body: { status?: unknown; note?: unknown; expectedUpdatedAt?: unknown } | null,
   allowLegacyStatus = false,
 ) {
   assertSameOrigin(request);
   enforceRateLimit("admin-record-update", requestClientIp(request), 60, 10 * 60_000);
-  const admin = await requireWebsiteAdmin(request);
+  const admin = await requireWebsiteReviewer(request);
   requireRecordDatabase();
   const status = allowLegacyStatus
     ? legacyAdminFeedbackStatus(body?.status)
@@ -155,12 +159,14 @@ async function updateAdminFeedback(
     !status
     || (body?.note !== undefined && typeof body.note !== "string")
     || (typeof body?.note === "string" && body.note.length > 2000)
+    || (status === "ignored" && (typeof body?.note !== "string" || !body.note.trim()))
   ) throw new PublicApiError("AIC-REQ-1001");
   const updated = await updateFeedbackRecord({
     feedbackId: recordId(feedbackId),
     status,
     note: typeof body?.note === "string" ? body.note : "",
     actorUserId: admin.session.user.id,
+    expectedUpdatedAt: typeof body?.expectedUpdatedAt === "string" ? body.expectedUpdatedAt : undefined,
   });
   if (!updated) throw new PublicApiError("AIC-DATA-8004");
   return updated;
@@ -174,7 +180,7 @@ export async function handleUpdateAdminFeedback(
   const requestId = createRequestId();
   const startedAt = performance.now();
   try {
-    const body = await readJsonBody(request, 16 * 1024) as { status?: unknown; note?: unknown } | null;
+    const body = await readJsonBody(request, 16 * 1024) as { status?: unknown; note?: unknown; expectedUpdatedAt?: unknown } | null;
     return noStore(successResponse(await updateAdminFeedback(request, feedbackId, body), requestId));
   } catch (error) {
     return noStore(failureResponse(error, requestId, route, startedAt));
@@ -185,7 +191,7 @@ export async function handleGetAdminFeedbackDetail(request: Request, feedbackId:
   const requestId = createRequestId();
   const startedAt = performance.now();
   try {
-    await requireWebsiteAdmin(request);
+    await requireWebsiteReviewer(request);
     requireRecordDatabase();
     const item = await findFeedbackRecord(recordId(feedbackId));
     if (!item) throw new PublicApiError("AIC-DATA-8004");
@@ -204,6 +210,8 @@ export async function handleGetAdminFeedbackDetail(request: Request, feedbackId:
     return noStore(successResponse({
       feedback: toAdminFeedbackRecordData(item as unknown as Record<string, unknown>),
       reproduction,
+      history: (await feedbackHistory(item.id)).map((event) => ({ ...event, status: normalizeAdminFeedbackStatus(event.status), createdAt: event.createdAt.toISOString() })),
+      solverExecutableSha256: run?.solverExecutableSha256 ?? null,
     }, requestId));
   } catch (error) {
     return noStore(failureResponse(error, requestId, "/api/admin/feedback/[id]", startedAt));
@@ -214,7 +222,7 @@ export async function handleGetAdminPlanRunDetail(request: Request, diagnosticId
   const requestId = createRequestId();
   const startedAt = performance.now();
   try {
-    await requireWebsiteAdmin(request);
+    await requireWebsiteReviewer(request);
     requireRecordDatabase();
     const item = await findPlanRunRecord(recordId(diagnosticId));
     if (!item || item.status !== "failed") throw new PublicApiError("AIC-DATA-8004");
@@ -241,7 +249,7 @@ export async function handleDeleteAdminFeedback(request: Request) {
   try {
     assertSameOrigin(request);
     enforceRateLimit("admin-feedback-delete", requestClientIp(request), 20, 10 * 60_000);
-    await requireWebsiteAdmin(request);
+    await requireWebsiteReviewer(request);
     requireRecordDatabase();
     const body = await readJsonBody(request, 24 * 1024) as { ids?: unknown } | null;
     if (!Array.isArray(body?.ids) || body.ids.length < 1 || body.ids.length > 100) {
@@ -257,6 +265,31 @@ export async function handleDeleteAdminFeedback(request: Request) {
       deletedCount: deletedIds.length,
       privateArtifactsDeleted,
     }, requestId));
+  } catch (error) {
+    return noStore(failureResponse(error, requestId, "/api/admin/feedback", startedAt));
+  }
+}
+
+export async function handleBatchReviewFeedback(request: Request) {
+  const requestId = createRequestId();
+  const startedAt = performance.now();
+  try {
+    assertSameOrigin(request);
+    const admin = await requireWebsiteReviewer(request);
+    requireRecordDatabase();
+    enforceRateLimit("admin-record-update", requestClientIp(request), 60, 10 * 60_000);
+    const body = await readJsonBody(request, 128 * 1024) as { items?: { id?: unknown; expectedUpdatedAt?: unknown }[]; status?: unknown; note?: unknown } | null;
+    if (!Array.isArray(body?.items) || !body.items.length || body.items.length > 100 || !isAdminFeedbackStatus(body.status)
+      || typeof body.note !== "string" || body.note.length > 2000 || (body.status === "ignored" && !body.note.trim())) throw new PublicApiError("AIC-REQ-1001");
+    const status = body.status;
+    const note = body.note;
+    const inputs = body.items.map((item) => ({
+      feedbackId: recordId(typeof item?.id === "string" ? item.id : ""),
+      expectedUpdatedAt: typeof item?.expectedUpdatedAt === "string" ? item.expectedUpdatedAt : undefined,
+      status, note, actorUserId: admin.session.user.id,
+    }));
+    if (new Set(inputs.map((item) => item.feedbackId)).size !== inputs.length) throw new PublicApiError("AIC-REQ-1001");
+    return noStore(successResponse({ items: await updateFeedbackRecords(inputs) }, requestId));
   } catch (error) {
     return noStore(failureResponse(error, requestId, "/api/admin/feedback", startedAt));
   }
@@ -283,6 +316,7 @@ export async function handleLegacyAdminRecordsPatch(request: Request) {
   try {
     const body = await readJsonBody(request, 16 * 1024) as {
       feedbackId?: unknown;
+      expectedUpdatedAt?: unknown;
       status?: unknown;
       note?: unknown;
     } | null;

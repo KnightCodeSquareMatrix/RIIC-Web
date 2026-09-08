@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { PublicApiError } from "./api-contract";
+import { feedbackOperators } from "../feedback-similarity.ts";
 
 import { and, desc, eq, gt, gte, inArray, lte, lt, notInArray, or, sql, type SQL } from "drizzle-orm";
 
@@ -249,6 +251,7 @@ export async function recordFeedbackIfEnabled(input: FeedbackSummaryInput): Prom
 }
 
 export type BusinessRecordQuery = {
+  search?: string;
   kind: "runs" | "feedback";
   limit?: number;
   offset?: number;
@@ -313,6 +316,16 @@ export async function queryBusinessRecords(query: BusinessRecordQuery) {
 
   const conditions: SQL[] = [];
   if (query.from) conditions.push(gte(feedback.createdAt, query.from));
+  if (query.search?.trim()) {
+    const terms = [query.search.trim(), ...feedbackOperators(null, query.search)];
+    conditions.push(or(...terms.map((term) => {
+      const search = `%${term.replace(/[\\%_]/g, "\\$&")}%`;
+      return sql`(concat_ws(' ', ${feedback.id}, ${feedback.diagnosticId}, ${feedback.note}, ${feedback.adminNote}, ${feedback.room} -> 'operators') ilike ${search}
+        or exists (select 1 from ${feedbackEvent} where ${feedbackEvent.feedbackId} = ${feedback.id} and ${feedbackEvent.note} ilike ${search}))`;
+    }))!);
+  }
+  if (query.errorCode) conditions.push(sql`exists (select 1 from ${planRun} where ${planRun.diagnosticId} = ${feedback.diagnosticId} and ${planRun.errorCode} = ${query.errorCode})`);
+  if (query.solverExecutableSha256) conditions.push(sql`exists (select 1 from ${planRun} where ${planRun.diagnosticId} = ${feedback.diagnosticId} and ${planRun.solverExecutableSha256} = ${query.solverExecutableSha256})`);
   if (query.to) conditions.push(lte(feedback.createdAt, query.to));
   if (query.status) conditions.push(eq(feedback.status, query.status));
   if (query.facility === "solver") {
@@ -344,7 +357,7 @@ export async function queryBusinessRecords(query: BusinessRecordQuery) {
       createdAt: feedback.createdAt,
       updatedAt: feedback.updatedAt,
       expiresAt: feedback.expiresAt,
-    }).from(feedback).where(where).orderBy(desc(feedback.createdAt)).limit(limit).offset(offset),
+    }).from(feedback).where(where).orderBy(desc(feedback.createdAt), desc(feedback.id)).limit(limit).offset(offset),
     getDatabase().select({ count: sql<number>`count(*)::int` }).from(feedback).where(where),
   ]);
   return { items, total: total[0]?.count ?? 0, limit, offset };
@@ -416,31 +429,59 @@ export async function queryAdminSolverMetrics(now = new Date()) {
   });
 }
 
-export async function updateFeedbackRecord(input: {
+type FeedbackReviewUpdate = {
   feedbackId: string;
   status: AdminFeedbackStatus;
   note: string;
   actorUserId?: string | null;
-}) {
-  const now = new Date();
-  const note = input.note.trim().slice(0, 2000);
+  expectedUpdatedAt?: string;
+};
+
+export async function updateFeedbackRecord(input: FeedbackReviewUpdate) {
+  return (await updateFeedbackRecords([input]))[0] ?? null;
+}
+
+export async function updateFeedbackRecords(inputs: FeedbackReviewUpdate[]) {
   return getDatabase().transaction(async (tx) => {
-    const updated = await tx.update(feedback).set({
-      status: input.status,
-      adminNote: note || null,
-      updatedAt: now,
-    }).where(eq(feedback.id, input.feedbackId)).returning({ id: feedback.id });
-    if (!updated.length) return null;
-    await tx.insert(feedbackEvent).values({
-      id: randomUUID(),
-      feedbackId: input.feedbackId,
-      actorUserId: input.actorUserId ?? null,
-      status: input.status,
-      note: note || null,
-      createdAt: now,
-    });
-    return { status: input.status, note, updatedAt: now.toISOString() };
+    const results = [];
+    // Stable lock ordering avoids deadlocks between overlapping batches.
+    for (const input of [...inputs].sort((a, b) => a.feedbackId.localeCompare(b.feedbackId))) {
+      const now = new Date();
+      const note = input.note.trim().slice(0, 2000);
+      const [current] = await tx.select({ updatedAt: feedback.updatedAt }).from(feedback)
+        .where(eq(feedback.id, input.feedbackId)).for("update");
+      if (!current) throw new PublicApiError("AIC-DATA-8004");
+      if (!input.expectedUpdatedAt || current.updatedAt.toISOString() !== input.expectedUpdatedAt) {
+        throw new PublicApiError("AIC-FEEDBACK-4003");
+      }
+      if (input.status === "ignored" && !note) throw new PublicApiError("AIC-FEEDBACK-4001");
+      now.setTime(Math.max(now.getTime(), current.updatedAt.getTime() + 1));
+      const updated = await tx.update(feedback).set({
+        status: input.status,
+        adminNote: note || null,
+        updatedAt: now,
+      }).where(eq(feedback.id, input.feedbackId)).returning({ id: feedback.id });
+      if (!updated.length) throw new PublicApiError("AIC-DATA-8004");
+      await tx.insert(feedbackEvent).values({
+        id: randomUUID(),
+        feedbackId: input.feedbackId,
+        actorUserId: input.actorUserId ?? null,
+        status: input.status,
+        note: note || null,
+        createdAt: now,
+      });
+      results.push({ id: input.feedbackId, status: input.status, note, updatedAt: now.toISOString() });
+    }
+    return results;
   });
+}
+
+export async function feedbackHistory(feedbackId: string) {
+  return getDatabase().select({
+    id: feedbackEvent.id, actorUserId: feedbackEvent.actorUserId,
+    status: feedbackEvent.status, note: feedbackEvent.note, createdAt: feedbackEvent.createdAt,
+  }).from(feedbackEvent).where(eq(feedbackEvent.feedbackId, feedbackId))
+    .orderBy(desc(feedbackEvent.createdAt), desc(feedbackEvent.id));
 }
 
 export async function findFeedbackRecord(feedbackId: string) {
