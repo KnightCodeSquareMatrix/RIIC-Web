@@ -3,7 +3,7 @@ import { test, expect } from "@playwright/test";
 import { hashPassword } from "better-auth/crypto";
 import { Pool } from "pg";
 
-test("reviewer previews imports, saves changes and follows a named batch without changing personal data", async ({ page, context, request, baseURL }, testInfo) => {
+test("reviewer previews imports, saves changes and follows a named batch without changing personal data", async ({ page, context, request, baseURL, browserName }, testInfo) => {
   test.skip(!process.env.AUTH_INTEGRATION_DATABASE_URL, "Requires an isolated authentication database.");
   test.setTimeout(180000);
   const pool = new Pool({ connectionString: process.env.AUTH_INTEGRATION_DATABASE_URL, max: 1 });
@@ -36,7 +36,9 @@ test("reviewer previews imports, saves changes and follows a named batch without
     expect(sessionCookies).toHaveLength(1);
     // CI serves the app on HTTP loopback while auth issues a Secure cookie.
     // Pass the real signed session on same-origin page requests for WebKit too.
-    await page.route(url => url.origin === new URL(baseURL!).origin && url.pathname.startsWith("/admin"), async route => {
+    // Chromium handles loopback Secure cookies natively. Proxying its document
+    // would change the address-space classification and block local resources.
+    if (browserName === "webkit") await page.route(url => url.origin === new URL(baseURL!).origin && url.pathname.startsWith("/admin"), async route => {
       const headers = await route.request().allHeaders();
       const locale = (await context.cookies()).find(cookie => cookie.name === "riic-locale")?.value ?? "zh";
       const response = await route.fetch({ headers: { ...headers, cookie: [...sessionCookies, `riic-locale=${locale}`].join("; ") } });
