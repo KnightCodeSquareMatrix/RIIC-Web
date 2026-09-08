@@ -71,7 +71,11 @@ test("reviewer previews imports, saves changes and follows a named batch without
     await expect(page.locator('nav a[href="/admin/quality"]')).toHaveAttribute("aria-current", "page");
     await expect(page.getByText("管理求解器版本", { exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "开始测试", exact: true })).toBeDisabled();
-    await page.getByLabel("选择 JSON 或 ZIP 文件").setInputFiles([{ name: "valid.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(input)) }, { name: "broken.json", mimeType: "application/json", buffer: Buffer.from("{") }]);
+    await expect(page.getByText("测试服务就绪", { exact: true })).toBeVisible();
+    const chooser = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "选择文件", exact: true }).click();
+    await (await chooser).setFiles([{ name: "valid.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(input)) }, { name: "broken.json", mimeType: "application/json", buffer: Buffer.from("{") }]);
+    await expect(page.getByRole("button", { name: /预览导入内容/ })).toBeEnabled();
     await page.getByRole("button", { name: /预览导入内容/ }).click();
     await expect(page.getByRole("button", { name: "导入 2 项并选中" })).toBeDisabled();
     await page.getByRole("listitem").filter({ hasText: "broken.json" }).getByRole("checkbox").check();

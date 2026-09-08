@@ -122,7 +122,7 @@ export function QualityWorkbench() {
     <div className="grid min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
       <div className="grid min-w-0 gap-6">
         <Panel title={t("1. 准备复现用例", "1. Prepare reproductions")} description={t("支持完整复现包、box JSON 和 ZIP。完整复现包会保留文件中的设置。", "Upload reproduction packages, box JSON files or ZIP archives. Complete packages retain their own settings.")}>
-          <fieldset disabled={busy} className="grid min-w-0 gap-3">
+          <fieldset disabled={busy || !overview} className="grid min-w-0 gap-3">
             <Label htmlFor="reproduction-files">{t("选择 JSON 或 ZIP 文件", "Choose JSON or ZIP files")}</Label>
             <Input ref={fileInput} id="reproduction-files" className="hidden" tabIndex={-1} type="file" accept=".json,.zip" multiple onChange={e => { setFiles(Array.from(e.target.files ?? [])); clearPreview(); }} aria-describedby="import-limits" />
             <div className="flex min-w-0 flex-wrap items-center gap-3 rounded-lg border border-dashed p-4"><Button variant="outline" onClick={() => fileInput.current?.click()}><Upload aria-hidden="true" />{t("选择文件", "Choose files")}</Button><span className="min-w-0 flex-1 break-words text-sm text-muted-foreground">{files.length ? t(`已选择 ${files.length} 个文件：${files.map(file => file.name).join("、")}`, `${files.length} files selected: ${files.map(file => file.name).join(", ")}`) : t("可一次选择多个 JSON 或 ZIP 文件", "Select one or more JSON or ZIP files")}</span></div>
