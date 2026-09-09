@@ -9,6 +9,7 @@ import {
   GraduationCap,
   Search,
   SquarePen,
+  GitCompareArrows,
   UserRound,
   type LucideIcon,
 } from "lucide-react";
@@ -92,6 +93,7 @@ export function AppSidebar({ page, onPageChange }: AppSidebarProps) {
           <SidebarMenu>
             <AppNavigationItem page={page} target="calculator" label={labels.calculator} icon={Calculator} onPageChange={onPageChange} />
             <AppNavigationItem page={page} target="manual" label={labels.manual} icon={SquarePen} onPageChange={onPageChange} />
+            <AppNavigationItem page={page} target="comparison" label={labels.comparison} icon={GitCompareArrows} onPageChange={onPageChange} />
             <AppNavigationItem page={page} target="training" label={labels.training} icon={GraduationCap} onPageChange={onPageChange} />
           </SidebarMenu>
         </SidebarGroup>
