@@ -731,7 +731,7 @@ test("plan completion reveals status, metrics, and schedule once without resetti
   const thirdShift = page.getByRole("tab", { name: /第 3 班 · 6h/ });
   await expect(page.getByText("最近记录", { exact: true })).toHaveCount(0);
   await expect(page.getByText(/较上次求解变更/)).toHaveCount(0);
-  await expect(page.locator("[data-shift-actions] [data-shift-tabs]")).toBeVisible();
+  await expect(page.locator("[data-schedule-toolbar] [data-shift-tabs]")).toBeVisible();
   await secondShift.click();
   await expect(secondShift).toHaveAttribute("aria-selected", "true");
   await expect(listTrainingRoom.locator('[data-position="训练位"]')).toContainText("Training-B");
