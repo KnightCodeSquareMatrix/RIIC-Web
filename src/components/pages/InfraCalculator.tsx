@@ -7,7 +7,6 @@ import { ArrowRight, Download, Ellipsis, FlaskConical, Keyboard, Loader2, Pencil
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { ScheduleBoard, ShiftTabs } from "@/components";
-import { PlanSupportSummary } from "@/components/PlanSupportSummary";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -37,6 +36,7 @@ import type {
 } from "@/types";
 
 const PlanResultSummary = lazy(() => loadClientFeature("planResultSummary").then((module) => ({ default: module.PlanResultSummary })));
+const PlanSupportSummary = lazy(() => import("@/components/PlanSupportSummary").then((module) => ({ default: module.PlanSupportSummary })));
 const ShortcutGuideDialog = lazy(() => loadClientFeature("sharedComponents").then((module) => ({ default: module.ShortcutGuideDialog })));
 const UpgradeSimulationDialog = lazy(() => import("@/components/UpgradeSimulationDialog").then((module) => ({ default: module.UpgradeSimulationDialog })));
 const DroneTargetPicker = lazy(() => import("@/components/DroneTargetPicker").then(module => ({ default: module.DroneTargetPicker })));
@@ -635,7 +635,9 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                     onPerformanceIssue={onPerformanceIssue}
                     feedbackDisabled={feedbackDisabledForSampleBox}
                     controlsSlot={(
+                      <Suspense fallback={null}>
                       <PlanSupportSummary drones={activePlan?.drones} target={fiammettaTarget} portrait={fiammettaPortrait} automatic={!manualDroneSelection} onAutomaticChange={onDroneTargetChange ? (checked) => { if (checked) onAutoDroneAllocation(); else onManualDroneAllocation(); } : undefined} onChooseFacility={() => setDronePickerOpen(true)} />
+                      </Suspense>
                     )}
                   />
                 </Suspense>
