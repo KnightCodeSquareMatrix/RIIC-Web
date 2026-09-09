@@ -17,8 +17,35 @@ import {
 } from "./presentation.ts";
 import type { TrainingCombination, TrainingRecommendation } from "@/types";
 import { legacyTrainingTarget, trainingAdviceSkillSummary } from "./skill-selection.ts";
+import { recommendationCurrentState, recommendationMessage } from "./recommendation-presentation.ts";
+import type { OperBoxEntry, UserProfileAction } from "../../types.ts";
 
 const target = { kind: "explicit" as const, elite: 1, level: 30 };
+
+const promotionAction: UserProfileAction = {
+  priority: "综合", kind: "promote_tier_up", operator: "乌有", domain_id: "general",
+  message: "将「乌有」升至 tier_up（需精2）——贸易订单/源石钱参考组合成员，现5★精0 1级",
+  current_elite: 0, tier_up_requirement: "精2",
+};
+
+test("promotion copy replaces the wire token and retains combination and level details", () => {
+  assert.equal(recommendationMessage(promotionAction), "将「乌有」升至精二——贸易订单/源石钱参考组合成员，目前精零 1级（5★）");
+  assert.equal(recommendationCurrentState(promotionAction), "目前精零 · 目标精二");
+  assert.equal(recommendationCurrentState({ ...promotionAction, current_elite: 1 }), "目前精一 · 目标精二");
+  assert.equal(recommendationMessage({ ...promotionAction, tier_up_requirement: "精1" }).includes("升至精一"), true);
+  assert.equal(recommendationMessage({ ...promotionAction, tier_up_requirement: undefined }), recommendationMessage(promotionAction));
+  assert.match(recommendationMessage(promotionAction, true), /Promote to Elite 2/);
+});
+
+test("promotion copy does not invent unknown elite stages or replace ordinary advice", () => {
+  const unknown = { ...promotionAction, current_elite: undefined, tier_up_requirement: undefined, message: "升至 tier_up" };
+  assert.equal(recommendationMessage(unknown), "升至 目标精英阶段");
+  assert.equal(recommendationCurrentState(unknown), "练度未知");
+  assert.equal(recommendationMessage({ ...promotionAction, message: "保留发电站轮换位。" }), "保留发电站轮换位。");
+  const entry: OperBoxEntry = { id: "test", name: "乌有", elite: 1, level: 50, own: true, potential: 1, rarity: 5 };
+  assert.equal(recommendationCurrentState({ ...promotionAction, current_elite: undefined }, entry), "目前精一 · 目标精二");
+  assert.equal(recommendationCurrentState(promotionAction, { ...entry, own: false }), "未拥有");
+});
 
 test("maps every schema v2 wire enum used by the presentation", () => {
   assert.equal(trainingProductLabel("trade"), "贸易");

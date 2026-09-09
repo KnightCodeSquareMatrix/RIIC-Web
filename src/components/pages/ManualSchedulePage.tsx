@@ -57,6 +57,7 @@ import { planToRows, type RoomRow } from "@/schedule";
 import type { BaseBlueprint, MaaJson, MaaOperatorSlot, MaaRoom, OperBoxEntry } from "@/types";
 
 const ScrollArea = lazy(() => import("@/components/ui/scroll-area").then((module) => ({ default: module.ScrollArea })));
+const MaaImportDialog = lazy(() => import("@/components/MaaImportDialog").then(module => ({ default: module.MaaImportDialog })));
 const MANUAL_PICKER_PAGE_SIZE = 24;
 const ROOM_GROUP_TO_SKILL_PREFIX: Readonly<Record<RoomRow["group"], BuildingRoomPrefix>> = {
   control: "control",
@@ -316,8 +317,14 @@ export function ManualSchedulePage({
   const selectedRoom = picker?.kind === "slot" ? rows.find((row) => row.roomId === picker.roomId) : undefined;
   const selectedAssignment = picker?.kind === "slot" ? draft.shifts[activeShift]?.rooms[picker.roomId] : undefined;
   const selectedOperator = picker?.kind === "slot" ? selectedAssignment?.operators[picker.slotIndex] ?? null : null;
+  const assignedOperatorNames = useMemo(() => new Set(
+    Object.values(draft.shifts[activeShift]?.rooms ?? {}).flatMap((room) => room.operators.filter(Boolean)),
+  ), [activeShift, draft.shifts]);
   const filteredOperators = useMemo(() => {
-    const filterableOwnedOperators = ownedOperators.map((operator) => {
+    const candidates = picker?.kind === "fiammetta"
+      ? ownedOperators.filter((operator) => assignedOperatorNames.has(operator.name))
+      : ownedOperators;
+    const filterableOwnedOperators = candidates.map((operator) => {
       const catalog = OPERATOR_CATALOG_BY_ID.get(operator.id) ?? OPERATOR_CATALOG_BY_NAME.get(operator.name);
       return {
         box: operator,
@@ -335,7 +342,7 @@ export function ManualSchedulePage({
     )
       .filter((operator) => pickerRarity === null || operator.box.rarity === pickerRarity)
       .map((operator) => operator.box);
-  }, [ownedOperators, pickerQuery, pickerRarity, pickerRoomFilter, pickerSkillTag]);
+  }, [assignedOperatorNames, ownedOperators, picker?.kind, pickerQuery, pickerRarity, pickerRoomFilter, pickerSkillTag]);
   const pickerPageCount = Math.max(1, Math.ceil(filteredOperators.length / MANUAL_PICKER_PAGE_SIZE));
   const visibleOperators = filteredOperators.slice(
     (pickerPage - 1) * MANUAL_PICKER_PAGE_SIZE,
@@ -405,6 +412,7 @@ export function ManualSchedulePage({
   function chooseOperator(operator: string | null) {
     if (!picker) return;
     if (picker.kind === "fiammetta") {
+      if (operator && !assignedOperatorNames.has(operator)) return;
       setDraft((current) => {
         const next = structuredClone(current);
         if (next.shifts[activeShift]) next.shifts[activeShift]!.fiammettaTarget = operator;
@@ -602,26 +610,26 @@ export function ManualSchedulePage({
         activePlan={activePlan}
         searchQuery={scheduleQuery}
         viewModeActionSlot={(
-          <Button type="button" variant="outline" size="sm" onClick={() => setClearShiftConfirmationOpen(true)}>
+          <Button type="button" variant="destructive" size="sm" onClick={() => setClearShiftConfirmationOpen(true)}>
             <Trash2 />{intl("components_pages_ManualSchedulePage.clearEveryFacilityInShift")}
           </Button>
         )}
-        shiftInfoSlot={(
-          <div className="flex flex-wrap items-center justify-end gap-2 max-sm:w-full max-sm:justify-between" data-shift-actions data-manual-shift-actions>
-            {fiammettaEnabled ? (
-              <FiammettaTargetChip
-                target={fiammettaTarget}
-                portrait={fiammettaPortrait}
-                onClick={() => {
-                  setPickerQuery("");
-                  setPickerRoomFilter(null);
-                  setPickerSkillTag(null);
-                  setPickerRarity(null);
-                  setPickerPage(1);
-                  setPicker({ kind: "fiammetta" });
-                }}
-              />
-            ) : null}
+        shiftInfoSlot={fiammettaEnabled ? (
+          <FiammettaTargetChip
+            target={fiammettaTarget}
+            portrait={fiammettaPortrait}
+            onClick={() => {
+              setPickerQuery("");
+              setPickerRoomFilter(null);
+              setPickerSkillTag(null);
+              setPickerRarity(null);
+              setPickerPage(1);
+              setPicker({ kind: "fiammetta" });
+            }}
+          />
+        ) : undefined}
+        shiftTabsSlot={(
+          <div className="min-w-0 max-w-full" data-manual-shift-actions>
             <ShiftTabs
               maaJson={maa}
               durations={draft.shifts.map((shift) => shift.durationHours)}
@@ -769,46 +777,7 @@ export function ManualSchedulePage({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={Boolean(maaImportPreview)} onOpenChange={(open) => { if (!open) setMaaImportPreview(null); }}>
-        <DialogContent className="max-w-[min(520px,calc(100vw-2rem))]">
-          <DialogHeader>
-            <DialogTitle>{intl("components_pages_ManualSchedulePage.importMaaScheduleQuestion")}</DialogTitle>
-            <DialogDescription>
-              {intl("components_pages_ManualSchedulePage.importMaaScheduleDescription")}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-2 px-5 py-2 text-sm sm:px-7">
-            <p className="truncate"><span className="text-muted-foreground">{intl("components_pages_ManualSchedulePage.fileLabel")}</span>{maaImportPreview?.fileName}</p>
-            <p>
-              <span className="text-muted-foreground">{intl("components_pages_ManualSchedulePage.shiftsLabel")}</span>
-              <span className="font-number">{maaImportPreview?.importedShiftCount}</span>
-              {maaImportPreview && maaImportPreview.sourceShiftCount !== maaImportPreview.importedShiftCount ? (
-                <span className="ml-2 text-muted-foreground">
-                  {intl("components_pages_ManualSchedulePage.expandedFromPlans", { count: maaImportPreview.sourceShiftCount })}
-                </span>
-              ) : null}
-            </p>
-            <p>
-              <span className="text-muted-foreground">{intl("components_pages_ManualSchedulePage.assignmentsLabel")}</span>
-              <span className="font-number">{maaImportPreview?.importedAssignmentCount}</span>
-              <span className="text-muted-foreground"> / </span>
-              <span className="font-number">{maaImportPreview?.sourceAssignmentCount}</span>
-              {maaImportPreview && maaImportPreview.sourceAssignmentCount > maaImportPreview.importedAssignmentCount ? (
-                <span className="ml-2 text-amber-700">
-                  {intl("components_pages_ManualSchedulePage.unmappedAssignments", { count: maaImportPreview.sourceAssignmentCount - maaImportPreview.importedAssignmentCount })}
-                </span>
-              ) : null}
-            </p>
-            <p className="text-xs leading-5 text-muted-foreground">
-              {intl("components_pages_ManualSchedulePage.importMaaScheduleDetails")}
-            </p>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => setMaaImportPreview(null)}>{intl("components_pages_ManualSchedulePage.cancel")}</Button>
-            <Button type="button" onClick={confirmMaaImport}><Upload />{intl("components_pages_ManualSchedulePage.replaceDraft")}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {maaImportPreview && <Suspense fallback={null}><MaaImportDialog maaImportPreview={maaImportPreview} confirmMaaImport={confirmMaaImport} onCancel={() => setMaaImportPreview(null)} /></Suspense>}
 
       <Dialog open={Boolean(pendingMove)} onOpenChange={(open) => { if (!open) setPendingMove(null); }}>
         <DialogContent className="max-w-[min(480px,calc(100vw-2rem))]">

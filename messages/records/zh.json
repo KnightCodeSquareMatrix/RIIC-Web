@@ -322,6 +322,8 @@
     "incomplete": "私有制品仍在，但缺少或无法读取布局、Box、轮换或菲亚梅塔状态。"
   },
   "app_admin_issues_issues_client_labels2": {
+    "reviewed": "已阅",
+    "ignored": "忽略",
     "unreviewed": "未审阅",
     "reproduced": "已复现",
     "fixed": "已修复"
@@ -340,6 +342,8 @@
     "unknown": "其他设施"
   },
   "app_admin_issues_issues_client_labels4": {
+    "reviewed": "已阅",
+    "ignored": "忽略",
     "unreviewed": "未审阅",
     "reproduced": "已复现",
     "fixed": "已修复"

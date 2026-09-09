@@ -215,7 +215,7 @@ export function TrainingAdvice({
               <CircleAlert className="mx-auto size-8 text-[var(--room-accent)]" aria-hidden="true" />
               <h2 className="mt-4 text-xl font-semibold">{intl("components_pages_TrainingAdvice.signInToViewTrainingAdvice")}</h2>
               <p className="mt-2 max-w-lg text-sm leading-6 text-white/62">{intl("components_pages_TrainingAdvice.dataComesFromYourUploadOrAThirdParty")}</p>
-              <Button type="button" className="mx-auto mt-4 h-9 bg-white text-[#272a2b] hover:bg-white/90 max-sm:h-11" onClick={onOpenCalculator}>{intl("components_pages_TrainingAdvice.backToCalculator")}</Button>
+              <Button type="button" size="dialog" className="mx-auto mt-5 bg-white text-[#272a2b] hover:bg-white/90" onClick={onOpenCalculator}>{intl("components_pages_TrainingAdvice.backToCalculator")}</Button>
             </div>
           </InfraTechnicalCard>
         </section>

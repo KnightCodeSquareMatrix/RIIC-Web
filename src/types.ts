@@ -1045,6 +1045,7 @@ export type AppErrorCode =
   | "AIC-PLAN-3008"
   | "AIC-FEEDBACK-4001"
   | "AIC-FEEDBACK-4002"
+  | "AIC-FEEDBACK-4003"
   | "AIC-SYS-5000"
   | "AIC-RATE-6001"
   | "AIC-LOCAL-7001"
@@ -1238,7 +1239,7 @@ export interface SavedPlanListData {
   plans: SavedPlanData[];
 }
 
-export type AdminUserAction = "ban" | "unban" | "revokeSessions" | "grantAdmin" | "revokeAdmin";
+export type AdminUserAction = "ban" | "unban" | "revokeSessions" | "grantAdmin" | "revokeAdmin" | "grantReviewer" | "revokeReviewer";
 
 export interface AdminUserData {
   id: string;
@@ -1249,6 +1250,7 @@ export interface AdminUserData {
   banReason: string | null;
   createdAt: string;
   isAdmin: boolean;
+  isReviewer: boolean;
   isBootstrapAdmin: boolean;
   sklandBindingCount: number;
   sklandActiveBindingCount: number;
@@ -1257,6 +1259,7 @@ export interface AdminUserData {
 
 export interface AdminUsersData {
   users: AdminUserData[];
+  summary: { verifiedUsers: number };
   permissions: {
     canManageAdminRoles: boolean;
   };
@@ -1307,7 +1310,7 @@ export interface AdminUserUpdateData {
   updated: true;
 }
 
-export type AdminFeedbackStatus = "unreviewed" | "reproduced" | "fixed";
+export type AdminFeedbackStatus = "unreviewed" | "reviewed" | "ignored" | "reproduced" | "fixed";
 
 export type AdminFeedbackFacility =
   | "trading"
@@ -1405,6 +1408,8 @@ export type AdminReproductionData = AdminReproductionDataBase & ({
 export interface AdminFeedbackDetailData {
   feedback: AdminFeedbackRecordData;
   reproduction: AdminReproductionData;
+  history: { id: string; actorUserId: string | null; status: AdminFeedbackStatus; note: string | null; createdAt: string }[];
+  solverExecutableSha256: string | null;
 }
 
 export interface AdminPlanRunDetailData {

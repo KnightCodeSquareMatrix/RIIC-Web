@@ -6,6 +6,8 @@
     "server/storage"
   ],
   "excludedFiles": [
-    "THIRD_PARTY_ASSETS.md"
+    "THIRD_PARTY_ASSETS.md",
+    "bin/infra-cli",
+    "bin/infra-cli.exe"
   ]
 }

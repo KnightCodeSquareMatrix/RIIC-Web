@@ -163,6 +163,9 @@ jobs:
       - name: API contract tests
         run: npm run test:api-contract
 
+      - name: Feedback workbench tests
+        run: npm run test:feedback-workbench
+
       - name: Shift comparison tests
         run: npm run test:shift-comparison
 
@@ -266,6 +269,9 @@ jobs:
 
       - name: PostgreSQL authentication integration
         run: npm run test:auth-integration
+
+      - name: Private quality queue integration
+        run: npm run test:quality-integration
 
   release_artifact:
     name: Build release once

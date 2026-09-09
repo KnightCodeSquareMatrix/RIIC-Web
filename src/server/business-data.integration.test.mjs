@@ -75,6 +75,8 @@ const {
   queryBusinessRecords,
   recordFeedbackStrict,
   updateFeedbackRecord,
+  updateFeedbackRecords,
+  findFeedbackRecord,
   updatePlanRunArtifactBestEffort,
 } = await import("./business-records.ts");
 const { getDatabase } = await import("./db/index.ts");
@@ -188,14 +190,26 @@ test("admin feedback workflow defaults, filters, transitions, and cascades witho
     );
     assert.deepEqual(initial.rows[0], { status: "unreviewed", event_status: "unreviewed" });
 
-    await updateFeedbackRecord({ feedbackId: roomFeedbackId, status: "reproduced", note: "本地已复现" });
-    await updateFeedbackRecord({ feedbackId: roomFeedbackId, status: "fixed", note: "已随新版本修复" });
+    const revision = (await findFeedbackRecord(roomFeedbackId)).updatedAt.toISOString();
+    const reproduced = await updateFeedbackRecord({ feedbackId: roomFeedbackId, status: "reproduced", note: "本地已复现", expectedUpdatedAt: revision });
+    await assert.rejects(updateFeedbackRecord({ feedbackId: roomFeedbackId, status: "ignored", note: "过期结论", expectedUpdatedAt: revision }), { code: "AIC-FEEDBACK-4003" });
+    await assert.rejects(updateFeedbackRecord({ feedbackId: roomFeedbackId, status: "ignored", note: "  ", expectedUpdatedAt: reproduced.updatedAt }), { code: "AIC-FEEDBACK-4001" });
+    const otherRevision = (await findFeedbackRecord(solverFeedbackId)).updatedAt.toISOString();
+    await assert.rejects(updateFeedbackRecords([
+      { feedbackId: solverFeedbackId, status: "reviewed", note: "批量", expectedUpdatedAt: otherRevision },
+      { feedbackId: roomFeedbackId, status: "reviewed", note: "批量", expectedUpdatedAt: revision },
+    ]), { code: "AIC-FEEDBACK-4003" });
+    assert.equal((await findFeedbackRecord(solverFeedbackId)).status, "unreviewed");
+    await updateFeedbackRecord({ feedbackId: roomFeedbackId, status: "fixed", note: "已随新版本修复", expectedUpdatedAt: reproduced.updatedAt });
     const events = await pool.query(
       "SELECT status,note FROM app.feedback_event WHERE feedback_id=$1 ORDER BY created_at,id",
       [roomFeedbackId],
     );
     assert.deepEqual(events.rows.map((row) => row.status), ["unreviewed", "reproduced", "fixed"]);
     assert.equal(events.rows.at(-1)?.note, "已随新版本修复");
+    const search = await queryBusinessRecords({ kind: "feedback", search: "阿米娅", limit: 100 });
+    assert.ok(search.items.some((item) => item.id === roomFeedbackId));
+    assert.ok(!search.items.some((item) => item.id === solverFeedbackId));
 
     const manufacture = await queryBusinessRecords({ kind: "feedback", status: "fixed", facility: "manufacture", limit: 100 });
     assert.equal(manufacture.items.some((item) => item.id === roomFeedbackId), true);

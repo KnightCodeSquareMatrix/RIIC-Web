@@ -22,7 +22,7 @@ test("administrator ids are explicit, trimmed Better Auth user ids", () => {
   assert.equal(configuredAdminIds("").size, 0);
 });
 
-test("bootstrap administrators can delegate without creating an administrator chain", () => {
+test("all administrators can assign roles while bootstrap administrators remain protected", () => {
   const bootstrapIds = new Set(["bootstrap"]);
   const bootstrap = websiteAdminAccess("bootstrap", "user", bootstrapIds);
   const delegated = websiteAdminAccess("delegated", "admin", bootstrapIds);
@@ -31,14 +31,20 @@ test("bootstrap administrators can delegate without creating an administrator ch
   assert.deepEqual(bootstrap, {
     userId: "bootstrap",
     isAdmin: true,
+    isReviewer: false,
+    canAccessReview: true,
     isBootstrapAdmin: true,
     canManageAdminRoles: true,
   });
   assert.equal(delegated.isAdmin, true);
-  assert.equal(delegated.canManageAdminRoles, false);
+  assert.equal(delegated.canManageAdminRoles, true);
   assert.equal(regular.isAdmin, false);
   assert.equal(canChangeWebsiteAdminRole(bootstrap, delegated), true);
-  assert.equal(canChangeWebsiteAdminRole(delegated, regular), false);
+  assert.equal(canChangeWebsiteAdminRole(delegated, regular), true);
+  assert.equal(canChangeWebsiteAdminRole(delegated, websiteAdminAccess("peer", "admin", bootstrapIds)), true);
+  assert.equal(canChangeWebsiteAdminRole(delegated, bootstrap), false);
+  assert.equal(regular.canManageAdminRoles, false);
+  assert.equal(canChangeWebsiteAdminRole(regular, delegated), false);
   assert.equal(canChangeWebsiteAdminRole(bootstrap, bootstrap), false);
   assert.equal(canModerateWebsiteUser(delegated, bootstrap), false);
   assert.equal(canModerateWebsiteUser(bootstrap, bootstrap), true);
@@ -57,4 +63,22 @@ test("only verified and unbanned accounts are eligible for delegated administrat
   assert.equal(isEligibleForWebsiteAdmin(true, null), true);
   assert.equal(isEligibleForWebsiteAdmin(false, false), false);
   assert.equal(isEligibleForWebsiteAdmin(true, true), false);
+});
+
+test("reviewers can review without administrator or role-management privileges", () => {
+  const bootstrapIds = new Set(["bootstrap"]);
+  const reviewer = websiteAdminAccess("reviewer", "reviewer", bootstrapIds);
+  const regular = websiteAdminAccess("user", "user", bootstrapIds);
+  assert.equal(reviewer.canAccessReview, true);
+  assert.equal(reviewer.isReviewer, true);
+  assert.equal(reviewer.isAdmin, false);
+  assert.equal(reviewer.canManageAdminRoles, false);
+  assert.equal(canChangeWebsiteAdminRole(reviewer, regular), false);
+  assert.equal(canModerateWebsiteUser(reviewer, regular), false);
+  assert.equal(canChangeWebsiteAdminRole(websiteAdminAccess("bootstrap", "user", bootstrapIds), reviewer), true);
+  for (const role of ["user", "REVIEWER", "admin,reviewer", "", null, undefined]) {
+    assert.equal(websiteAdminAccess("user", role, bootstrapIds).canAccessReview, false);
+  }
+  assert.equal(websiteAdminAccess("bootstrap", "reviewer", bootstrapIds).isReviewer, false);
+  assert.equal(websiteAdminAccess("reviewer", "user", bootstrapIds).canAccessReview, false);
 });

@@ -1,6 +1,6 @@
 import sourceManifestJson from "./generated/arkntools/source.json" with { type: "json" };
 
-type ProductAssetId = "lmd_orders" | "gold" | "experience" | "originium_shard" | "orundum";
+type ProductAssetId = "lmd_orders" | "gold" | "experience" | "originium_shard" | "orundum" | "drone";
 type ProductAssetSource = "arkntools" | "game-resource";
 
 interface ProductAssetManifest {
@@ -31,6 +31,7 @@ export const PRODUCT_ICON_URLS = {
   experience: productAssetUrl("experience"),
   shards: productAssetUrl("originium_shard"),
   orundum: productAssetUrl("orundum"),
+  drone: productAssetUrl("drone"),
 } as const;
 
 export const ALL_PRODUCT_ICON_URLS = Object.values(PRODUCT_ICON_URLS);

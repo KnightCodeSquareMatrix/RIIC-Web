@@ -2,7 +2,6 @@ import { localize as rotationText } from "./i18n/helpers/RotationLabels.ts";
 import { localize as localize_components } from "./i18n/helpers/components.ts";
 import { useTranslations, useLocale } from "next-intl";
 import {
-  AlertTriangle,
   Check,
   ChevronDown,
   ChevronLeft,
@@ -10,8 +9,6 @@ import {
   FileWarning,
   Loader2,
   Play,
-  RotateCcw,
-  Save,
   Smile,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
@@ -22,10 +19,8 @@ import { Accordion, AccordionItem, AccordionPanel, AccordionTrigger } from "@/co
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
-  DialogBody,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -40,7 +35,6 @@ import { Input } from "@/components/ui/input";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
@@ -109,7 +103,6 @@ import {
 } from "./schedule-list-layout";
 import {
   BaseBlueprint,
-  FeedbackKind,
   MaaJson,
   MaaPlan,
   PresetDef,
@@ -975,11 +968,10 @@ export function PlanTelemetry({
 const ROOM_SLOT_COUNT = 5;
 const AUXILIARY_ROOM_GROUPS = new Set(["dormitory", "hire", "meeting", "processing", "training"]);
 
-function scheduleIssueTriggerId(row: RoomRow) {
+export function scheduleIssueTriggerId(row: RoomRow) {
   return `schedule-issue-${row.key}`;
 }
 
-const PLAN_RESULT_PRIMARY_TRIGGER_SELECTOR = "[data-plan-primary-details-trigger]";
 
 function roomSlotCountFor(group: string) {
   if (group === "trading" || group === "manufacture") return 3;
@@ -1529,6 +1521,7 @@ export function ScheduleBoard({
   viewModeActionSlot,
   mobileActionsSlot,
   shiftInfoSlot,
+  shiftTabsSlot,
   activeShift,
   shiftDirection = 0,
   activePlan,
@@ -1557,6 +1550,7 @@ export function ScheduleBoard({
   viewModeActionSlot?: ReactNode;
   mobileActionsSlot?: ReactNode;
   shiftInfoSlot?: ReactNode;
+  shiftTabsSlot?: ReactNode;
   activeShift: number;
   shiftDirection?: ShiftDirection;
   activePlan?: MaaPlan;
@@ -1587,7 +1581,8 @@ export function ScheduleBoard({
   const preferredViewMode = useRef<ScheduleViewMode | null>(null);
   const scheduleBoardRef = useRef<HTMLDivElement | null>(null);
   const shouldReduceMotion = useReducedMotion();
-  const editableSchedule = Boolean(onSlotClick || onClearRoom || onDormAutofillChange || onDroneTargetChange);
+  // Drone allocation alone must not hide the calculator's schedule view switcher.
+  const editableSchedule = Boolean(onSlotClick || onClearRoom || onDormAutofillChange);
 
   useLayoutEffect(() => {
     const board = scheduleBoardRef.current;
@@ -1721,6 +1716,7 @@ export function ScheduleBoard({
               </TabsList>
             </Tabs>
           ) : null}
+          {shiftTabsSlot}
           {viewControlsSlot}
           {viewMode === "compact" ? viewModeActionSlot : null}
           {viewMode === "list" && hiddenAuxiliaryCount ? (
@@ -2071,164 +2067,6 @@ export function ShortcutGuideDialog({
             <KbdGroup className="shrink-0" aria-label={intl("components.controlPlusB")}><Kbd>Ctrl</Kbd><span aria-hidden="true">+</span><Kbd>B</Kbd></KbdGroup>
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-export function IssueNoteModal({
-  open,
-  kind,
-  row,
-  note,
-  saving,
-  onNoteChange,
-  onSave,
-  onCancel,
-}: {
-  open: boolean;
-  kind: FeedbackKind;
-  row: RoomRow | null;
-  note: string;
-  saving: boolean;
-  onNoteChange: (value: string) => void;
-  onSave: () => void;
-  onCancel: () => void;
-}) {
-  const intl = useTranslations();
-
-  const [consented, setConsented] = useState(false);
-  const returnFocusId = useRef<string | null>(null);
-  const returnToPlanSummary = useRef(false);
-  const isPerformance = kind === "performance_issue";
-
-  useEffect(() => {
-    if (open) setConsented(false);
-  }, [kind, open, row?.key]);
-
-  useEffect(() => {
-    if (row) {
-      returnFocusId.current = scheduleIssueTriggerId(row);
-      returnToPlanSummary.current = false;
-    } else if (open && isPerformance) {
-      returnFocusId.current = null;
-      returnToPlanSummary.current = true;
-    }
-  }, [isPerformance, open, row]);
-
-  return (
-    <Dialog
-      open={open && (isPerformance || Boolean(row))}
-      triggerId={row ? scheduleIssueTriggerId(row) : null}
-      onOpenChange={(nextOpen) => {
-        if (!nextOpen) onCancel();
-      }}
-    >
-      <DialogContent
-        className="max-w-[min(620px,calc(100vw-2rem))] sm:max-w-xl"
-        finalFocus={() => {
-          if (returnFocusId.current) return document.getElementById(returnFocusId.current);
-          if (returnToPlanSummary.current) return document.querySelector<HTMLElement>(PLAN_RESULT_PRIMARY_TRIGGER_SELECTOR) ?? true;
-          return true;
-        }}
-      >
-        <DialogHeader>
-          <DialogTitle>{isPerformance ? (intl("components.submitPerformanceFeedback")) : row?.title ?? (intl("components.reportScheduleIssue2"))}</DialogTitle>
-          <DialogDescription>{isPerformance ? (intl("components.shareFeedbackAboutThisSolve")) : (intl("components.reportAScheduleIssue"))}</DialogDescription>
-        </DialogHeader>
-        <DialogBody>
-          <p className="text-[13px] leading-5 text-muted-foreground">
-            {isPerformance
-              ? (intl("components.thisSubmitsYourNotePlusAPrivateReproductionSnapshot"))
-              : (intl("components.thisSubmitsTheRoomIssueAndAPrivateReproduction"))}
-          </p>
-          <Textarea
-            autoFocus
-            value={note}
-            onChange={(event) => onNoteChange(event.target.value)}
-            placeholder={isPerformance ? (intl("components.exampleThisSameBoxUsuallyCompletedFasterBefore")) : (intl("components.exampleThisTeamShouldUseClosureTheCurrentPlacement"))}
-            className="min-h-36 text-[13px]"
-            maxLength={1000}
-          />
-          <label className="flex min-h-11 cursor-pointer items-center gap-3 text-[13px]">
-            <input
-              type="checkbox"
-              checked={consented}
-              onChange={(event) => setConsented(event.target.checked)}
-              className="size-4"
-            />
-            <span>{intl("Common.consentFeedback", { kind: isPerformance ? "performance" : "issue" })}</span>
-          </label>
-        </DialogBody>
-        <DialogFooter>
-          <Button className="max-sm:min-w-16 sm:min-w-[88px]" size="dialog" variant="ghost" onClick={onCancel}>
-            {intl("components.cancel")}
-          </Button>
-          <Button size="dialog" onClick={onSave} disabled={!note.trim() || note.trim().length > 1000 || !consented || saving}>
-            {saving ? <Loader2 className="animate-spin" /> : <Save />}
-            {saving ? (intl("components.submitting")) : (intl("components.submitFeedback"))}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-export function ProductChangeConfirmModal({
-  open,
-  roomLabel,
-  changeKind,
-  nextValueLabel,
-  busy,
-  onConfirm,
-  onCancel,
-}: {
-  open: boolean;
-  roomLabel: string;
-  changeKind: "制造配方" | "贸易策略";
-  nextValueLabel: string;
-  busy: boolean;
-  onConfirm: () => void;
-  onCancel: () => void;
-}) {
-  const intl = useTranslations();
-  const locale = useLocale();
-  const en = locale === "en";
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(nextOpen) => {
-        if (!nextOpen && !busy) onCancel();
-      }}
-    >
-      <DialogContent
-        role="alertdialog"
-        aria-busy={busy}
-        showCloseButton={!busy}
-        className="max-w-[min(520px,calc(100vw-2rem))] sm:max-w-lg"
-        data-product-change-confirm
-      >
-        <DialogHeader>
-          <DialogTitle>{intl("components.changeSettingsAndRegenerate")}</DialogTitle>
-          <DialogDescription>
-            {intl("components.sWillChangeToTheCurrentResultWillBe", { roomLabel: roomLabel, value2: (en) ? (changeKind === "制造配方" ? "factory recipe" : "trade strategy") : "", nextValueLabel: nextValueLabel, changeKind: (en) ? "" : (changeKind) })}
-          </DialogDescription>
-        </DialogHeader>
-        <DialogBody className="py-2">
-          <p className="flex items-start gap-2 text-[13px] leading-5 text-muted-foreground">
-            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden="true" />
-            {intl("components.settingsRemainLockedUntilRegenerationCompletes")}
-          </p>
-        </DialogBody>
-        <DialogFooter>
-          <Button className="max-sm:min-w-16 sm:min-w-[88px]" type="button" size="dialog" variant="ghost" disabled={busy} autoFocus onClick={onCancel}>
-            {intl("components.cancel")}
-          </Button>
-          <Button type="button" size="dialog" variant="destructive" disabled={busy} onClick={onConfirm}>
-            {busy ? <Loader2 className="animate-spin" /> : <RotateCcw />}
-            {busy ? (intl("components.regenerating")) : (intl("components.confirmAndRegenerate"))}
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

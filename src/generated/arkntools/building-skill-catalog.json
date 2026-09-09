@@ -1671,7 +1671,7 @@
   "hire_spd_bd_n1_n1_200": {
     "id": "hire_spd_bd_n1_n1_200",
     "name": "救援队·灾后普查",
-    "descriptionRich": "进驻人力办公室时，每个招募位（不包含初始招募位）<@cc.vup>+10</>点<<$cc.bd_b1><@cc.rem>人间烟火</></>",
+    "descriptionRich": "进驻人力办公室时，每个招募位（不包含初始招募位）<@cc.vup>+10</>点<$cc.bd_b1><@cc.rem>人间烟火</></>",
     "tags": [
       "特殊加成"
     ],

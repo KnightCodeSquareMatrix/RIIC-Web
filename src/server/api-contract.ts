@@ -49,6 +49,7 @@ export const ERROR_DEFINITIONS: Record<AppErrorCode, ErrorDefinition> = {
   "AIC-PLAN-3008": { status: 503, message: "排班候选环已满，请稍后重试。", retryable: true },
   "AIC-FEEDBACK-4001": { status: 422, message: "反馈内容无效，请检查后重试。", retryable: false },
   "AIC-FEEDBACK-4002": { status: 500, message: "反馈保存失败，请稍后重试。", retryable: true },
+  "AIC-FEEDBACK-4003": { status: 409, message: "反馈已被其他审阅人修改，请刷新后重试。", retryable: false },
   "AIC-SYS-5000": { status: 500, message: "服务暂时出现问题，请稍后重试。", retryable: true },
   "AIC-RATE-6001": { status: 429, message: "操作过于频繁，请稍后重试。", retryable: true },
   "AIC-LOCAL-7001": { status: 0, message: "浏览器无法保存本地数据，但仍可继续生成排班。", retryable: false },

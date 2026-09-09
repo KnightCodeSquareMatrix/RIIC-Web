@@ -2,7 +2,10 @@
 import { useTranslations, useLocale } from "next-intl";
 
 import type { CSSProperties } from "react";
-import { FileWarning, Sparkles, Trash2, Zap } from "lucide-react";
+import { motion, useReducedMotion } from "motion/react";
+import { MOTION_DURATION, MOTION_EASE_OUT } from "@/motion";
+import { FileWarning, Trash2 } from "lucide-react";
+import { DroneIcon } from "@/components/DroneIcon";
 
 import {
   factoryRecipeFor,
@@ -139,10 +142,10 @@ function CompactRoomCard({
           size="sm"
           aria-pressed={row.autofill}
           aria-label={`${localizedRoomTitle(row.title, row.group, locale, gameCatalog)}${intl("components.label")}${intl("components.autoFill")}`}
-          className={`ml-1 h-7 border px-2 text-xs text-white hover:text-white ${row.autofill ? "border-[#FFD800]/70 bg-[#FFD800]/18" : "border-white/15 bg-[#3C3C3C]/55"}`}
+          className={`ml-1 h-7 border px-2 text-xs text-white hover:text-white ${row.autofill ? "border-[#FFD800]/70 bg-[#FFD800]/18 hover:bg-[#FFD800]/28" : "border-white/15 bg-[#3C3C3C]/55 hover:bg-[#4B4B4B]"}`}
           onClick={() => onDormAutofillChange(row, !row.autofill)}
         >
-          <Sparkles className="size-3.5" />{intl("components.autoFill")}
+          {intl("components.autoFill")}
         </Button>
       ) : null}
         {isTrade ? (() => {
@@ -247,7 +250,7 @@ function CompactRoomCard({
         style={{ ...rowStyle, ...style }}
       >
         {backgroundLayers}
-        {onDroneTargetChange && (isTrade || isFactory) ? <CompactDroneButton row={row} selected={droneTargetRoomId === row.roomId} onChange={onDroneTargetChange} /> : null}
+        {onDroneTargetChange && (isTrade || isFactory) ? <CompactDroneButton row={row} selected={droneTargetRoomId === row.roomId} besideClear={Boolean(onClearRoom)} onChange={onDroneTargetChange} /> : null}
         {onClearRoom ? <CompactClearButton row={row} onClear={onClearRoom} /> : null}
         {onIssue ? <CompactFeedbackButton row={row} disabled={feedbackDisabled} offset={Boolean(onClearRoom)} onIssue={onIssue} /> : null}
         {details}
@@ -264,7 +267,7 @@ function CompactRoomCard({
       style={{ ...rowStyle, ...style }}
     >
       {backgroundLayers}
-      {onDroneTargetChange && (isTrade || isFactory) ? <CompactDroneButton row={row} selected={droneTargetRoomId === row.roomId} onChange={onDroneTargetChange} /> : null}
+      {onDroneTargetChange && (isTrade || isFactory) ? <CompactDroneButton row={row} selected={droneTargetRoomId === row.roomId} besideClear={Boolean(onClearRoom)} onChange={onDroneTargetChange} /> : null}
       {onClearRoom ? <CompactClearButton row={row} onClear={onClearRoom} /> : null}
       {onIssue ? <CompactFeedbackButton row={row} disabled={feedbackDisabled} offset={Boolean(onClearRoom)} onIssue={onIssue} /> : null}
       {details}
@@ -279,30 +282,37 @@ function CompactRoomCard({
   );
 }
 
-function CompactDroneButton({ row, selected, onChange }: { row: RoomRow; selected: boolean; onChange: (row: RoomRow) => void }) {
+function CompactDroneButton({ row, selected, besideClear, onChange }: { row: RoomRow; selected: boolean; besideClear: boolean; onChange: (row: RoomRow) => void }) {
   const intl = useTranslations();
   const locale = useLocale();
   const gameCatalog = useGameCatalog();
+  const reducedMotion = useReducedMotion();
 
   const roomTitle = localizedRoomTitle(row.title, row.group, locale, gameCatalog);
   return (
     <Tooltip>
       <TooltipTrigger
         render={
-          <span className="absolute right-12 top-2 z-20">
+          <motion.span
+            className={`absolute top-2 z-20 origin-right ${besideClear ? "right-11" : "right-10"}`}
+            data-drone-control
+            initial={reducedMotion ? false : { opacity: 0, scale: 0.85, x: 6 }}
+            animate={{ opacity: 1, scale: 1, x: 0 }}
+            transition={{ duration: reducedMotion ? 0 : MOTION_DURATION.state, ease: MOTION_EASE_OUT }}
+          >
             <Button
               type="button"
               variant="ghost"
               size="sm"
               aria-pressed={selected}
               aria-label={intl("components_CompactScheduleView.droneAcceleration", { roomTitle })}
-              className={`h-7 border px-2 text-xs text-white hover:text-white ${selected ? "border-[#FFD800]/70 bg-[#FFD800]/18" : "border-white/10 bg-[#3C3C3C]/55 hover:bg-[#4B4B4B]"}`}
+              className={`h-7 border px-2 text-xs text-purple-200 hover:text-purple-100 focus-visible:border-purple-400 focus-visible:ring-purple-400/40 ${selected ? "border-purple-400/70 bg-purple-400/18 hover:bg-purple-400/28" : "border-white/10 bg-[#3C3C3C]/55 hover:bg-[#4B4B4B]"}`}
               onClick={() => onChange(row)}
             >
-              <Zap className="size-3.5" aria-hidden="true" />
+              <DroneIcon className="size-3.5 drop-shadow-[0_0_2px_#c084fc]" />
               <span className="sm:hidden">{intl("components_CompactScheduleView.drones")}</span>
             </Button>
-          </span>
+          </motion.span>
         }
       />
       <TooltipContent side="left">{selected ? intl("components_CompactScheduleView.disableDroneAcceleration") : intl("components_CompactScheduleView.useDronesForShift")}</TooltipContent>
@@ -322,9 +332,9 @@ function CompactClearButton({ row, onClear }: { row: RoomRow; onClear: (row: Roo
           <span className="absolute right-2 top-2 z-20">
             <Button
               type="button"
-              variant="ghost"
+              variant="destructive"
               size="sm"
-              className="h-7 border border-white/10 bg-[#3C3C3C]/55 px-2 text-xs text-white/70 hover:bg-[#4B4B4B] hover:text-white"
+              className="h-7 border border-red-400/30 bg-red-950/70 px-2 text-xs text-red-200 hover:bg-red-900/80 hover:text-red-100"
               aria-label={intl("components_CompactScheduleView.clearRoom", { roomTitle })}
               onClick={() => onClear(row)}
             >
