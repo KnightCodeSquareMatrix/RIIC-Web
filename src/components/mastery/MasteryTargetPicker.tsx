@@ -58,7 +58,7 @@ export function MasteryTargetPicker({ operbox, selectedId, onSelect, onClose }: 
             <OperatorIdentity name={o.name} portrait={byId.get(o.id)?.portrait}>
               <span className="font-number text-xs text-muted-foreground">{o.rarity}★ · {intl("components_mastery_MasteryTargetPicker.e2")} · {en ? PROFESSION_LABELS_ENGLISH[byId.get(o.id)!.profession] : PROFESSION_LABELS[byId.get(o.id)!.profession]}</span>
             </OperatorIdentity>
-            <span className="ml-auto shrink-0 text-xs text-muted-foreground">{en ? "Go to Integrated Strategies to complete the task and master this operator" : "前往集成战略完成任务进行专精"}</span>
+            <span className="ml-auto shrink-0 text-xs text-muted-foreground">{en ? "Train this Special Operations operator in the specified Integrated Strategies mode" : "需要在指定的集成战略模式中进行特勤干员培训"}</span>
           </button>)}
           {filtered.slice(0,limit).map((o) => <button key={o.id} type="button" aria-label={intl("components_mastery_MasteryTargetPicker.select", { value1: (en) ? (localizedOperatorName(o.name,locale,gameCatalog)) : "", name: (en) ? "" : (o.name) })} aria-pressed={selected === o.id}
             onClick={() => setSelected(o.id)} className={cn("flex min-w-0 items-center gap-3 rounded-[4px] border bg-background p-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring", selected === o.id ? "border-primary ring-1 ring-primary" : "border-border hover:bg-muted")}>
