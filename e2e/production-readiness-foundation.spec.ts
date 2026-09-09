@@ -1032,11 +1032,12 @@ test("planning preloads every versioned product icon and renders direct immutabl
 
   await page.goto("/");
   await page.getByRole("button", { name: "生成排班" }).click();
-  await expect.poll(() => productsRequestedBeforePlanResponse.size).toBe(5);
+  await expect.poll(() => productsRequestedBeforePlanResponse.size).toBe(6);
+  expect(productsRequestedBeforePlanResponse.has("/images/products/drone.webp")).toBe(true);
   releasePlan();
 
-  const productImages = page.locator("[data-daily-production-summary] img");
-  await expect(productImages).toHaveCount(5);
+  const productImages = page.locator('[data-daily-production-summary] img[src^="/images/products/"]');
+  await expect(productImages).toHaveCount(6);
   const imageAttributes = await productImages.evaluateAll((images) => images.map((image) => ({
     src: image.getAttribute("src"),
     width: image.getAttribute("width"),

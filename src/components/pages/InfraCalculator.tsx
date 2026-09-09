@@ -7,8 +7,6 @@ import { ArrowRight, Download, Ellipsis, FlaskConical, Keyboard, Loader2, Pencil
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { ScheduleBoard, ShiftTabs } from "@/components";
-import { FiammettaTargetChip } from "@/components/FiammettaTargetChip";
-import { DroneTargetChip } from "@/components/DroneTargetChip";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -38,6 +36,7 @@ import type {
 } from "@/types";
 
 const PlanResultSummary = lazy(() => loadClientFeature("planResultSummary").then((module) => ({ default: module.PlanResultSummary })));
+const PlanSupportSummary = lazy(() => import("@/components/PlanSupportSummary").then((module) => ({ default: module.PlanSupportSummary })));
 const ShortcutGuideDialog = lazy(() => loadClientFeature("sharedComponents").then((module) => ({ default: module.ShortcutGuideDialog })));
 const UpgradeSimulationDialog = lazy(() => import("@/components/UpgradeSimulationDialog").then((module) => ({ default: module.UpgradeSimulationDialog })));
 const DroneTargetPicker = lazy(() => import("@/components/DroneTargetPicker").then(module => ({ default: module.DroneTargetPicker })));
@@ -356,6 +355,7 @@ export interface InfraCalculatorProps {
   onUpgradeSimulationOpenChange: (open: boolean) => void;
   onRun: () => void;
   onAutoDroneAllocation: () => void;
+  onManualDroneAllocation: () => void;
   manualDroneSelection?: boolean;
   onSimulateUpgrades: (trialOperbox: OperBoxEntry[]) => Promise<PublicPlanData>;
   upgradeComparison: { trial: PublicPlanData } | null;
@@ -387,7 +387,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     feedbackResult,
     operbox,
     sampleLoading, loading, canRun, runCooldownSeconds, hasBox, hasPersonalBox, feedbackDisabledForSampleBox, plannerReady, websiteAuthenticated, showOnboarding, taskQueue, animatePlanEntrance, animateEmptyScheduleEntrance, onPlanEntranceConsumed, requiresAccount = false, accountControl,
-    onRunSampleTrial, onStartPersonalFlow, onDismissOnboarding, onOpenSetup, upgradeSimulationOpen, onOpenUpgradeSimulation, onUpgradeSimulationOpenChange, onRun, onAutoDroneAllocation, manualDroneSelection = false, onSimulateUpgrades, upgradeComparison, scheduleVariant, onScheduleVariantChange, onUpgradeTrialReady, onCancelRun,
+    onRunSampleTrial, onStartPersonalFlow, onDismissOnboarding, onOpenSetup, upgradeSimulationOpen, onOpenUpgradeSimulation, onUpgradeSimulationOpenChange, onRun, onAutoDroneAllocation, onManualDroneAllocation, manualDroneSelection = false, onSimulateUpgrades, upgradeComparison, scheduleVariant, onScheduleVariantChange, onUpgradeTrialReady, onCancelRun,
     onSetActiveShift, onMarkIssue, onPerformanceIssue,
     onFactoryRecipeChange, onTradeOrderChange, droneTargetRoomId, onDroneTargetChange,
     onEditManualSchedule, onDownloadMaa,
@@ -634,6 +634,11 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                     onEntranceConsumed={onPlanEntranceConsumed}
                     onPerformanceIssue={onPerformanceIssue}
                     feedbackDisabled={feedbackDisabledForSampleBox}
+                    controlsSlot={(
+                      <Suspense fallback={null}>
+                      <PlanSupportSummary drones={activePlan?.drones} target={fiammettaTarget} portrait={fiammettaPortrait} automatic={!manualDroneSelection} onAutomaticChange={onDroneTargetChange ? (checked) => { if (checked) onAutoDroneAllocation(); else onManualDroneAllocation(); } : undefined} onChooseFacility={() => setDronePickerOpen(true)} />
+                      </Suspense>
+                    )}
                   />
                 </Suspense>
               </>
@@ -677,38 +682,16 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                 </Tabs>
               ) : undefined}
               mobileActionsSlot={scheduleResult ? renderPlanActions("mobile") : undefined}
-              shiftInfoSlot={(
-                <div className="flex flex-wrap items-center justify-end gap-2 max-sm:w-full max-sm:justify-between" data-shift-actions>
-                  {fiammettaTarget ? (
-                    <FiammettaTargetChip target={fiammettaTarget} portrait={fiammettaPortrait} />
-                  ) : null}
-                  <DroneTargetChip drones={activePlan?.drones} />
-                  {scheduleResult && onDroneTargetChange ? (
-                    <div className="flex items-center gap-1.5">
-                      <Button type="button" size="sm" variant={manualDroneSelection ? "default" : "outline"} disabled>
-                        {manualDroneSelection ? "手动选择无人机" : "自动分配无人机"}
-                      </Button>
-                      <Button type="button" size="sm" variant="outline" onClick={() => { if (manualDroneSelection) onAutoDroneAllocation(); else setDronePickerOpen(true); }}>
-                        {manualDroneSelection ? "切换到自动" : "切换到手动"}
-                      </Button>
-                    </div>
-                  ) : null}
-                  <ShiftTabs
-                    maaJson={scheduleResult?.maa}
-                    rotation={scheduleResult?.rotation}
-                    active={activeShift}
-                    closest={closestComparison?.planIndex}
-                    onChange={handleSetActiveShift}
-                  />
-                  {scheduleResult ? renderPlanActions("desktop") : null}
-                </div>
+              shiftTabsSlot={(
+                <ShiftTabs maaJson={scheduleResult?.maa} rotation={scheduleResult?.rotation} active={activeShift} closest={closestComparison?.planIndex} onChange={handleSetActiveShift} />
               )}
+              shiftInfoSlot={scheduleResult ? renderPlanActions("desktop") : undefined}
               onIssue={onMarkIssue}
               feedbackDisabled={feedbackDisabledForSampleBox}
               onFactoryRecipeChange={onFactoryRecipeChange}
               onTradeOrderChange={onTradeOrderChange}
               droneTargetRoomId={droneTargetRoomId}
-              onDroneTargetChange={onDroneTargetChange}
+              onDroneTargetChange={manualDroneSelection ? onDroneTargetChange : undefined}
             /> : (
               <div className="flex min-h-[420px] items-center justify-center border-y border-dashed border-border/70 py-6 text-center text-sm text-muted-foreground">
                 {intl("components_pages_InfraCalculator.noLayoutRoomsToDisplay")}

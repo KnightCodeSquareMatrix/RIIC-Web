@@ -19,7 +19,7 @@
   "owned": "owned",
   "fiammettaMoraleTarget": "Fiammetta morale target",
   "assign": "Assign {value1}",
-  "thisTargetIsStoredOnlyForTheActiveShift": "This target is stored only for the active shift.",
+  "thisTargetIsStoredOnlyForTheActiveShift": "Only operators assigned to a facility in the active shift can be selected. Assign operators on this page first. This target applies only to the active shift.",
   "onlyOwnedOperatorsInTheCurrentBoxAreShown": "Only owned operators in the current Box are shown.",
   "searchOperators": "Search operators",
   "searchSelectableOperators": "Search selectable operators",

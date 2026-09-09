@@ -1,6 +1,7 @@
 "use client";
 import { useTranslations } from "next-intl";
-import { Sparkles, Trash2, Zap } from "lucide-react";
+import { Trash2 } from "lucide-react";
+import { DroneIcon } from "@/components/DroneIcon";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -27,11 +28,11 @@ export function ManualScheduleRoomActions({ row, position, roomTitle, onClearRoo
       aria-label={`${roomTitle}${intl("components.label")}${intl("components.autoFill")}`}
       className={cn(
       "ml-1 h-7 border px-2 text-xs text-white hover:text-white",
-      row.autofill ? "border-[#FFD800]/70 bg-[#FFD800]/18" : "border-white/15 bg-[#3C3C3C]/55",
+      row.autofill ? "border-[#FFD800]/70 bg-[#FFD800]/18 hover:bg-[#FFD800]/28" : "border-white/15 bg-[#3C3C3C]/55 hover:bg-[#4B4B4B]",
       )}
       onClick={() => onDormAutofillChange(row, !row.autofill)}
       >
-      <Sparkles className="size-3.5" />{intl("components.autoFill")}
+      {intl("components.autoFill")}
       </Button>
       ) : null}
       {(row.group === "trading" || row.group === "manufacture") && onDroneTargetChange ? (
@@ -45,12 +46,12 @@ export function ManualScheduleRoomActions({ row, position, roomTitle, onClearRoo
       aria-pressed={droneTargetRoomId === row.roomId}
       aria-label={intl("components_CompactScheduleView.droneAcceleration", { roomTitle: roomTitle })}
       className={cn(
-      "ml-auto h-7 border px-2 text-xs text-white hover:text-white",
-      droneTargetRoomId === row.roomId ? "border-[#FFD800]/70 bg-[#FFD800]/18" : "border-white/15 bg-[#3C3C3C]/55",
+      "ml-auto h-7 border px-2 text-xs text-purple-200 hover:text-purple-100 focus-visible:border-purple-400 focus-visible:ring-purple-400/40",
+      droneTargetRoomId === row.roomId ? "border-purple-400/70 bg-purple-400/18 hover:bg-purple-400/28" : "border-white/15 bg-[#3C3C3C]/55 hover:bg-[#4B4B4B]",
       )}
       onClick={() => onDroneTargetChange(row)}
       >
-      <Zap className="size-3.5" aria-hidden="true" />
+      <DroneIcon className="size-3.5 drop-shadow-[0_0_2px_#c084fc]" />
       <span className="sm:hidden">{intl("components_CompactScheduleView.drones")}</span>
       </Button>
       }
@@ -71,9 +72,9 @@ export function ManualScheduleRoomActions({ row, position, roomTitle, onClearRoo
       <span className="absolute right-2 top-2 z-20">
       <Button
       type="button"
-      variant="ghost"
+      variant="destructive"
       size="sm"
-      className="h-7 border border-white/10 bg-[#3C3C3C]/55 px-2 text-xs text-white/70 hover:bg-[#4B4B4B] hover:text-white max-sm:h-11"
+      className="h-7 border border-red-400/30 bg-red-950/70 px-2 text-xs text-red-200 hover:bg-red-900/80 hover:text-red-100 max-sm:h-11"
       aria-label={intl("components_CompactScheduleView.clearRoom", { roomTitle: roomTitle })}
       onClick={() => onClearRoom(row)}
       >

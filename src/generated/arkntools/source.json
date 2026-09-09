@@ -38,6 +38,12 @@
       "output": "/images/products/orundum.webp",
       "source": "game-resource",
       "path": "item/DIAMOND_SHD.png"
+    },
+    {
+      "id": "drone",
+      "output": "/images/products/drone.webp",
+      "source": "game-resource",
+      "path": "item/AP_BASE.png"
     }
   ],
   "counts": {
@@ -46,6 +52,6 @@
     "terms": 82,
     "portraits": 429,
     "buildingSkillIcons": 529,
-    "productIcons": 5
+    "productIcons": 6
   }
 }

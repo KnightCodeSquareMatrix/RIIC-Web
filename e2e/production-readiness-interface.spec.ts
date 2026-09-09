@@ -30,7 +30,7 @@ test("drone selection updates exports and restores automatic allocation without 
   await mockApis(page);
   await seedV4Session(page, twoShiftPlanData, { rotationProfile: "main_backup_12_12" });
   let solves = 0;
-  page.on("request", request => { if (request.method() === "POST" && /\/api\/plan(?:-tasks)?$/.test(new URL(request.url()).pathname)) solves++; });
+  page.on("request", request => { if (request.method() === "POST" && /\/api\/(?:plan|tasks)$/.test(new URL(request.url()).pathname)) solves++; });
   await page.goto("/");
   async function exportedDrones() {
     const pending = page.waitForEvent("download");
@@ -41,15 +41,40 @@ test("drone selection updates exports and restores automatic allocation without 
     return JSON.parse(Buffer.concat(chunks).toString("utf8")).plans[0].drones;
   }
   const automatic = await exportedDrones();
-  await page.getByRole("button", { name: "切换到手动", exact: true }).click();
+  const automaticSwitch = page.getByRole("switch", { name: "自动分配无人机", exact: true });
+  await expect(automaticSwitch).toBeChecked();
+  const controls = page.locator('[data-schedule-view-controls]');
+  await expect(controls.locator('[data-shift-tabs]')).toBeVisible();
+  const summaryControls = page.locator('[data-plan-summary] [data-plan-summary-controls]');
+  await expect(summaryControls.getByRole("switch", { name: "自动分配无人机" })).toBeVisible();
+  await expect(page.locator('[data-schedule-toolbar]').getByRole("switch")).toHaveCount(0);
+  const [orundumBox, droneBox, moraleBox] = await Promise.all([
+    page.locator('[data-daily-product-group="orundum"]').boundingBox(),
+    page.locator('[data-plan-support="drones"]').boundingBox(),
+    page.locator('[data-plan-support="morale"]').boundingBox(),
+  ]);
+  expect(droneBox?.y).toBeCloseTo(orundumBox?.y ?? 0, 0);
+  expect(moraleBox?.y).toBeCloseTo(orundumBox?.y ?? 0, 0);
+  expect(droneBox?.x).toBeGreaterThan(orundumBox?.x ?? 0);
+  expect(moraleBox?.x).toBeGreaterThan(droneBox?.x ?? 0);
+  await automaticSwitch.click();
+  await expect(automaticSwitch).not.toBeChecked();
+  await page.getByRole("button", { name: "选择设施", exact: true }).click();
   const picker = page.getByRole("dialog", { name: "选择无人机去向" });
   await picker.getByRole("button", { name: "贸易站 1", exact: true }).click();
   await expect(picker).toHaveCount(0);
   expect(await exportedDrones()).toMatchObject({ room: "trading", index: 1, enable: true });
-  await page.getByRole("button", { name: "切换到自动", exact: true }).click();
+  const selectedDrone = page.getByRole("button", { name: /贸易站 1.*无人机加速/ });
+  await expect(selectedDrone).toHaveAttribute("aria-pressed", "true");
+  await selectedDrone.hover();
+  await expect(selectedDrone).toHaveCSS("background-color", /0\.28/);
+  await automaticSwitch.focus();
+  await page.keyboard.press("Space");
+  await expect(automaticSwitch).toBeChecked();
   expect(await exportedDrones()).toEqual(automatic);
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole("button", { name: "切换到手动", exact: true }).click();
+  await automaticSwitch.click();
+  await page.getByRole("button", { name: "选择设施", exact: true }).click();
   await expect(picker).toBeVisible();
   await picker.getByRole("button", { name: "不使用无人机", exact: true }).click();
   expect(await exportedDrones()).toBeUndefined();

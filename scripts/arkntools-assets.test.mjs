@@ -146,6 +146,7 @@ async function createSource(root, operatorIds = ["001_alpha", "002_beta"]) {
       ? [png(path.join(root, "assets/img/building_skill/icon_beta.png"), 36, 36, { r: 30, g: 20, b: 10, alpha: 1 })]
       : []),
     png(path.join(root, "assets/img/item/4001.png"), 183, 183, { r: 220, g: 180, b: 25, alpha: 0.7 }),
+    png(path.join(portraitsRoot, "item/AP_BASE.png"), 183, 183, { r: 160, g: 90, b: 200, alpha: 0.7 }),
     png(path.join(root, "assets/img/item/2003.png"), 183, 183, { r: 50, g: 160, b: 190, alpha: 0.7 }),
     png(path.join(portraitsRoot, "item/MTL_GOLD3.png"), 183, 183, { r: 190, g: 150, b: 20, alpha: 0.7 }),
     png(path.join(portraitsRoot, "item/MTL_DIAMOND_SHD.png"), 183, 183, { r: 80, g: 70, b: 90, alpha: 0.7 }),
@@ -185,7 +186,7 @@ test("generates deterministic catalogs and normalizes the known 35px icon input"
   await generateAssets({ sourceRoot: source, sourceSha: SOURCE_SHA, portraitsRoot: portraitsSource, portraitsSha: PORTRAITS_SHA, outputRoot: first, allowRemovals: true });
   await generateAssets({ sourceRoot: source, sourceSha: SOURCE_SHA, portraitsRoot: portraitsSource, portraitsSha: PORTRAITS_SHA, outputRoot: second, allowRemovals: true });
   const manifest = await checkGeneratedAssets(first);
-  assert.deepEqual(manifest.counts, { operators: 2, buildingSkills: 2, terms: 1, portraits: 2, buildingSkillIcons: 2, productIcons: 5 });
+  assert.deepEqual(manifest.counts, { operators: 2, buildingSkills: 2, terms: 1, portraits: 2, buildingSkillIcons: 2, productIcons: 6 });
   assert.equal(manifest.portraitsSource.repository, ARKNIGHTS_GAME_RESOURCE_REPOSITORY);
   assert.equal(manifest.portraitsSource.commit, PORTRAITS_SHA);
   assert.deepEqual(manifest.products.map((product) => [product.id, product.source]), [
@@ -194,6 +195,7 @@ test("generates deterministic catalogs and normalizes the known 35px icon input"
     ["experience", "arkntools"],
     ["originium_shard", "game-resource"],
     ["orundum", "game-resource"],
+    ["drone", "game-resource"],
   ]);
   assert.equal(manifest.source.repository, ARKNTOOLS_REPOSITORY);
   const operators = JSON.parse(await readFile(path.join(first, "src/generated/arkntools/operator-catalog.json"), "utf8"));
@@ -226,6 +228,7 @@ test("generates deterministic catalogs and normalizes the known 35px icon input"
     "public/images/products/experience.webp",
     "public/images/products/originium_shard.webp",
     "public/images/products/orundum.webp",
+    "public/images/products/drone.webp",
   ];
   for (const relative of relativeFiles) {
     assert.deepEqual(await readFile(path.join(first, relative)), await readFile(path.join(second, relative)));
@@ -235,7 +238,7 @@ test("generates deterministic catalogs and normalizes the known 35px icon input"
   const portrait = await sharp(await readFile(path.join(first, "public/images/operator-portraits/001_alpha.webp"))).metadata();
   assert.deepEqual([portrait.width, portrait.height], [180, 180]);
   assert.equal(portrait.format, "webp");
-  for (const name of ["lmd_orders", "gold", "experience", "originium_shard", "orundum"]) {
+  for (const name of ["lmd_orders", "gold", "experience", "originium_shard", "orundum", "drone"]) {
     const product = await sharp(await readFile(path.join(first, `public/images/products/${name}.webp`))).metadata();
     assert.deepEqual([product.format, product.width, product.height, product.hasAlpha], ["webp", 183, 183, true]);
   }

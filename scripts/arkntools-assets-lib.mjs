@@ -38,6 +38,7 @@ const PRODUCT_ASSETS = [
   { id: "experience", source: "arkntools", path: "assets/img/item/2003.png" },
   { id: "originium_shard", source: "game-resource", path: "item/MTL_DIAMOND_SHD.png" },
   { id: "orundum", source: "game-resource", path: "item/DIAMOND_SHD.png" },
+  { id: "drone", source: "game-resource", path: "item/AP_BASE.png" },
 ];
 
 const SAFE_ASSET_NAME = /^[A-Za-z0-9_&]+$/;
