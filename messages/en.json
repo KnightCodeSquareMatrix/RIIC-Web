@@ -395,7 +395,7 @@
   },
   "components_mastery_MasteryTargetPicker": {
     "chooseATrainee": "Choose a trainee",
-    "ownedE2OperatorsInYourCurrentBoxThisSelection": "{length} E2 operators in your current Box. Unowned operators can also be selected; this does not change your Box.",
+    "ownedE2OperatorsInYourCurrentBoxThisSelection": "{length} owned E2 operators in your current Box. This selection does not change your Box.",
     "select": "Select {value1}",
     "e2": "E2",
     "noMatchingOwnedE2Operators": "No matching owned E2 operators.",
