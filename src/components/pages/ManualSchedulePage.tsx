@@ -369,6 +369,16 @@ export function ManualSchedulePage({
     setPicker({ kind: "slot", roomId: row.roomId, slotIndex });
   }
 
+  function openFiammettaPicker() {
+    setPickerScrolling(false);
+    setPickerQuery("");
+    setPickerRoomFilter(null);
+    setPickerSkillTag(null);
+    setPickerRarity(null);
+    setPickerPage(1);
+    setPicker({ kind: "fiammetta" });
+  }
+
   function changePickerRoomFilter(next: BuildingRoomPrefix | null) {
     setPickerRoomFilter(next);
     setPickerSkillTag(null);
@@ -543,6 +553,7 @@ export function ManualSchedulePage({
 
   const fiammettaTarget = draft.shifts[activeShift]?.fiammettaTarget;
   const fiammettaPortrait = fiammettaTarget ? operatorPortraitFor(fiammettaTarget) : null;
+  const hasFiammetta = ownedOperators.some((operator) => operator.name === "菲亚梅塔");
   const sourceVariantLabel = draft.source?.variant === "progression-adjusted"
     ? (intl("components_pages_ManualSchedulePage.progressionAdjustedPlan"))
     : (intl("components_pages_ManualSchedulePage.originalPlan"));
@@ -609,17 +620,13 @@ export function ManualSchedulePage({
         )}
         shiftInfoSlot={(
           <div className="flex flex-wrap items-center justify-end gap-2 max-sm:w-full max-sm:justify-between" data-shift-actions data-manual-shift-actions>
-            {fiammettaEnabled ? (
+            {hasFiammetta ? (
               <FiammettaTargetChip
-                target={fiammettaTarget}
-                portrait={fiammettaPortrait}
+                target={fiammettaEnabled ? fiammettaTarget : null}
+                portrait={fiammettaEnabled ? fiammettaPortrait : null}
                 onClick={() => {
-                  setPickerQuery("");
-                  setPickerRoomFilter(null);
-                  setPickerSkillTag(null);
-                  setPickerRarity(null);
-                  setPickerPage(1);
-                  setPicker({ kind: "fiammetta" });
+                  if (!fiammettaEnabled) onFiammettaEnabledChange(true);
+                  openFiammettaPicker();
                 }}
               />
             ) : null}
