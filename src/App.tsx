@@ -2021,10 +2021,6 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       onFactoryRecipeChange: handleFactoryRecipeChange,
       onTradeOrderChange: handleTradeOrderChange,
     },
-    comparison: {
-      operbox: accountCanUseCurrentBox ? operbox : null,
-      requiresAccount: !accountCanUseCurrentBox,
-    },
     training: {
       operbox: accountCanUseCurrentBox ? operbox : null,
       layout,

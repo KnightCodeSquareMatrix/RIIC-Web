@@ -8,12 +8,10 @@ import type { InfraCalculatorProps } from "@/components/pages/InfraCalculator";
 import type { ManualSchedulePageProps } from "@/components/pages/ManualSchedulePage";
 import type { TrainingAdviceProps } from "@/components/pages/TrainingAdvice";
 import type { MasteryPlannerProps } from "@/components/pages/MasteryPlanner";
-import type { JobComparisonProps } from "@/components/pages/JobComparison";
 
 export interface WorkbenchContextValue {
   calculator: InfraCalculatorProps;
   manual: ManualSchedulePageProps;
-  comparison: JobComparisonProps;
   training: TrainingAdviceProps;
   mastery: MasteryPlannerProps;
   account: AccountStatusCenterProps & {
