@@ -88,7 +88,6 @@ import { MOTION_DURATION } from "./motion";
 import { emptySklandBindingSummary } from "./skland-binding-state";
 import { createSklandRestoreGuard } from "./skland-restore-guard";
 import { setupConfigurationFingerprint } from "./setup-configuration";
-import { applyDroneAllocationsToMaa } from "@/server/drone-production";
 import {
   BaseBlueprint,
   BoxSource,
@@ -97,6 +96,7 @@ import {
   FeedbackData,
   FeedbackKind,
   OperBoxEntry,
+  MaaJson,
   PublicPlanData,
   PresetDef,
   RotationProfile,
@@ -340,6 +340,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   const sampleTrialInFlightRef = useRef(false);
   const [result, setResult] = useState<PublicPlanData | null>(null);
   const [manualDroneShifts, setManualDroneShifts] = useState<Record<number, boolean>>({});
+  const automaticMaaRef = useRef<{ diagnosticId: string; maa: MaaJson } | null>(null);
   const [upgradeComparison, setUpgradeComparison] = useState<{ baseline: PublicPlanData; trial: PublicPlanData } | null>(null);
   const [scheduleVariant, setScheduleVariant] = useState<"baseline" | "trial">("baseline");
   const [loading, setLoading] = useState(false);
@@ -402,6 +403,8 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     onDone: (finalizedResult) => {
       setCliReady(true);
       setActiveShift(0);
+      automaticMaaRef.current = { diagnosticId: finalizedResult.diagnosticId, maa: structuredClone(finalizedResult.maa) };
+      setManualDroneShifts({});
       setResult(finalizedResult);
       setLoading(false);
       completeOnboarding();
@@ -650,6 +653,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
         setRotationProfile(restored.rotationProfile);
         setFiammettaEnabled(Boolean(restored.fiammettaEnabled));
         setResult(restored.result);
+        automaticMaaRef.current = restored.result ? { diagnosticId: restored.result.diagnosticId, maa: structuredClone(restored.result.maa) } : null;
         setActiveShift(restored.activeShift);
         initialLayoutForRestore.current = restoredLayout;
         initialBoxSource.current = restoredBoxSource;
@@ -1471,6 +1475,9 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     setManualDroneShifts((current) => ({ ...current, [activeShift]: true }));
     setResult((current) => {
       if (!current) return current;
+      if (automaticMaaRef.current?.diagnosticId !== current.diagnosticId) {
+        automaticMaaRef.current = { diagnosticId: current.diagnosticId, maa: structuredClone(current.maa) };
+      }
       const room = layout.rooms.find((candidate) => candidate.id === row.roomId);
       if (!room || (room.kind !== "trade_post" && room.kind !== "factory")) return current;
       const group = room.kind === "trade_post" ? "trading" : "manufacture";
@@ -1487,10 +1494,14 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
 
   function handleAutoDroneAllocation() {
     setManualDroneShifts((current) => ({ ...current, [activeShift]: false }));
-    setResult((current) => current ? {
-      ...current,
-      maa: applyDroneAllocationsToMaa({ layout, maa: current.maa, rotation: current.rotation }),
-    } : current);
+    setResult((current) => {
+      if (!current || automaticMaaRef.current?.diagnosticId !== current.diagnosticId) return current;
+      const next = structuredClone(current);
+      const plan = next.maa.plans[activeShift];
+      if (!plan) return current;
+      plan.drones = structuredClone(automaticMaaRef.current.maa.plans[activeShift]?.drones);
+      return next;
+    });
   }
 
   function handleRoomLevelChange(roomId: string, level: number) {
