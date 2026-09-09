@@ -40,6 +40,8 @@ import type {
 const PlanResultSummary = lazy(() => loadClientFeature("planResultSummary").then((module) => ({ default: module.PlanResultSummary })));
 const ShortcutGuideDialog = lazy(() => loadClientFeature("sharedComponents").then((module) => ({ default: module.ShortcutGuideDialog })));
 const UpgradeSimulationDialog = lazy(() => import("@/components/UpgradeSimulationDialog").then((module) => ({ default: module.UpgradeSimulationDialog })));
+const DroneTargetPicker = lazy(() => import("@/components/DroneTargetPicker").then(module => ({ default: module.DroneTargetPicker })));
+const PlanActionsDialog = lazy(() => import("@/components/PlanActionsDialog").then(module => ({ default: module.PlanActionsDialog })));
 
 function DeferredResultLoading() {
   return <PlanResultSummarySkeleton />;
@@ -721,28 +723,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
         </section>
       </section>
 
-      <Dialog open={dronePickerOpen} onOpenChange={setDronePickerOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>选择无人机去向</DialogTitle>
-            <DialogDescription>选择当前班次的目标房间，点击当前目标可取消。</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-2 p-4">
-            {rows.filter((row) => row.group === "trading" || row.group === "manufacture").map((row) => (
-              <Button key={row.roomId} type="button" variant={droneTargetRoomId === row.roomId ? "default" : "outline"} className="justify-start" onClick={() => { onDroneTargetChange?.(row); setDronePickerOpen(false); }}>
-                {row.title}
-              </Button>
-            ))}
-            <Button type="button" variant="ghost" className="justify-start" onClick={() => { const current = rows.find((row) => row.roomId === droneTargetRoomId); if (current) onDroneTargetChange?.(current); setDronePickerOpen(false); }}>
-              不使用无人机
-            </Button>
-          </div>
-          <DialogFooter>
-            {manualDroneSelection ? <Button type="button" variant="outline" onClick={() => { onAutoDroneAllocation(); setDronePickerOpen(false); }}>恢复自动分配</Button> : null}
-            <Button type="button" variant="outline" onClick={() => setDronePickerOpen(false)}>取消</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {dronePickerOpen && <Suspense fallback={null}><DroneTargetPicker rows={rows} targetRoomId={droneTargetRoomId} manualSelection={manualDroneSelection} onTargetChange={onDroneTargetChange} onAutoAllocation={onAutoDroneAllocation} onOpenChange={setDronePickerOpen} /></Suspense>}
 
       {resultClearNotice ? (
         <aside className="fixed left-1/2 top-[max(5rem,calc(env(safe-area-inset-top)+5rem))] z-[70] w-[min(720px,calc(100vw-2rem))] -translate-x-1/2 border border-[#FFD800]/70 bg-[#313131] px-4 py-3 text-white shadow-[0_16px_44px_rgba(0,0,0,0.35)]" aria-live="polite">
@@ -772,46 +753,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
           />
         </Suspense>
       ) : null}
-      <Dialog open={planActionsOpen} onOpenChange={setPlanActionsOpen}>
-        <DialogContent className="gap-5 max-sm:bottom-0 max-sm:top-auto max-sm:max-w-none max-sm:translate-y-0 max-sm:rounded-t-[24px] max-sm:rounded-b-none sm:max-w-lg sm:p-6" data-plan-actions-dialog>
-          <DialogHeader className="gap-1.5 px-1 sm:px-2">
-            <DialogTitle className="text-lg font-semibold">{intl("components_pages_InfraCalculator.adjustThisPlan")}</DialogTitle>
-            <DialogDescription className="text-sm leading-6">
-              {intl("components_pages_InfraCalculator.youAreViewingTheChooseWhetherToChangeThe", { visibleVariantLabel: visibleVariantLabel })}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-2 px-1 sm:px-2">
-            {operbox ? (
-              <button
-                type="button"
-                className="group flex min-h-20 w-full items-center gap-3 rounded-[var(--radius-md)] border border-border bg-background px-4 py-3 text-left outline-none transition-colors hover:border-foreground/40 hover:bg-muted/45 focus-visible:ring-2 focus-visible:ring-[#FFD800]"
-                onClick={openProgressionAction}
-                data-plan-action="progression"
-              >
-                <span className="grid size-10 shrink-0 place-items-center rounded-[var(--radius-sm)] bg-[#313131] text-[#FFD800]" aria-hidden="true"><FlaskConical className="size-5" /></span>
-                <span className="min-w-0 flex-1">
-                  <strong className="block text-sm font-semibold">{intl("components_pages_InfraCalculator.modifyProgressionAndRecalculate")}</strong>
-                  <span className="mt-1 block text-xs leading-5 text-muted-foreground">{intl("components_pages_InfraCalculator.updateTheCurrentBoxKeepTheOriginalPlanAnd")}</span>
-                </span>
-                <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
-              </button>
-            ) : null}
-            <button
-              type="button"
-              className="group flex min-h-20 w-full items-center gap-3 rounded-[var(--radius-md)] border border-border bg-background px-4 py-3 text-left outline-none transition-colors hover:border-foreground/40 hover:bg-muted/45 focus-visible:ring-2 focus-visible:ring-[#FFD800]"
-              onClick={openManualAction}
-              data-plan-action="manual"
-            >
-              <span className="grid size-10 shrink-0 place-items-center rounded-[var(--radius-sm)] bg-muted text-foreground" aria-hidden="true"><PencilLine className="size-5" /></span>
-              <span className="min-w-0 flex-1">
-                <strong className="block text-sm font-semibold">{intl("components_pages_InfraCalculator.editTheCurrentPlanManually")}</strong>
-                <span className="mt-1 block text-xs leading-5 text-muted-foreground">{intl("components_pages_InfraCalculator.copyThePlanYouAreViewingAndContinueIn")}</span>
-              </span>
-              <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
-            </button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {planActionsOpen && <Suspense fallback={null}><PlanActionsDialog hasBox={!!operbox} visibleVariantLabel={visibleVariantLabel} onOpenChange={setPlanActionsOpen} onProgression={openProgressionAction} onManual={openManualAction} /></Suspense>}
       <Suspense fallback={null}>
         <ShortcutGuideDialog open={shortcutGuideOpen} onOpenChange={setShortcutGuideOpen} />
         <Dialog open={cancelConfirmOpen} onOpenChange={setCancelConfirmOpen}>
