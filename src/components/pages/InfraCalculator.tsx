@@ -353,6 +353,7 @@ export interface InfraCalculatorProps {
   onOpenUpgradeSimulation: () => void;
   onUpgradeSimulationOpenChange: (open: boolean) => void;
   onRun: () => void;
+  onAutoDroneAllocation: () => void;
   onSimulateUpgrades: (trialOperbox: OperBoxEntry[]) => Promise<PublicPlanData>;
   upgradeComparison: { trial: PublicPlanData } | null;
   scheduleVariant: "baseline" | "trial";
@@ -364,6 +365,8 @@ export interface InfraCalculatorProps {
   onPerformanceIssue: () => void;
   onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
+  droneTargetRoomId?: string | null;
+  onDroneTargetChange?: (row: RoomRow) => void;
   onEditManualSchedule: () => void;
   onDownloadMaa: () => void;
   onClearResultNotice: () => void;
@@ -372,6 +375,7 @@ export interface InfraCalculatorProps {
 
 export function InfraCalculator(props: InfraCalculatorProps) {
   const intl = useTranslations();
+  const [dronePickerOpen, setDronePickerOpen] = useState(false);
   const {
     layout,
     result, scheduleResult, activeShift, rows,
@@ -380,9 +384,9 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     feedbackResult,
     operbox,
     sampleLoading, loading, canRun, runCooldownSeconds, hasBox, hasPersonalBox, feedbackDisabledForSampleBox, plannerReady, websiteAuthenticated, showOnboarding, taskQueue, animatePlanEntrance, animateEmptyScheduleEntrance, onPlanEntranceConsumed, requiresAccount = false, accountControl,
-    onRunSampleTrial, onStartPersonalFlow, onDismissOnboarding, onOpenSetup, upgradeSimulationOpen, onOpenUpgradeSimulation, onUpgradeSimulationOpenChange, onRun, onSimulateUpgrades, upgradeComparison, scheduleVariant, onScheduleVariantChange, onUpgradeTrialReady, onCancelRun,
+    onRunSampleTrial, onStartPersonalFlow, onDismissOnboarding, onOpenSetup, upgradeSimulationOpen, onOpenUpgradeSimulation, onUpgradeSimulationOpenChange, onRun, onAutoDroneAllocation, onSimulateUpgrades, upgradeComparison, scheduleVariant, onScheduleVariantChange, onUpgradeTrialReady, onCancelRun,
     onSetActiveShift, onMarkIssue, onPerformanceIssue,
-    onFactoryRecipeChange, onTradeOrderChange,
+    onFactoryRecipeChange, onTradeOrderChange, droneTargetRoomId, onDroneTargetChange,
     onEditManualSchedule, onDownloadMaa,
     onClearResultNotice, onDismissResultClearWarning,
   } = props;
@@ -676,6 +680,14 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                     <FiammettaTargetChip target={fiammettaTarget} portrait={fiammettaPortrait} />
                   ) : null}
                   <DroneTargetChip drones={activePlan?.drones} />
+                  {scheduleResult && onDroneTargetChange ? (
+                    <>
+                      <Button type="button" size="sm" variant="outline" onClick={onAutoDroneAllocation}>
+                        自动分配无人机
+                      </Button>
+                      <Button type="button" size="sm" variant="outline" onClick={() => setDronePickerOpen(true)}>手动选择无人机</Button>
+                    </>
+                  ) : null}
                   <ShiftTabs
                     maaJson={scheduleResult?.maa}
                     rotation={scheduleResult?.rotation}
@@ -690,6 +702,8 @@ export function InfraCalculator(props: InfraCalculatorProps) {
               feedbackDisabled={feedbackDisabledForSampleBox}
               onFactoryRecipeChange={onFactoryRecipeChange}
               onTradeOrderChange={onTradeOrderChange}
+              droneTargetRoomId={droneTargetRoomId}
+              onDroneTargetChange={onDroneTargetChange}
             /> : (
               <div className="flex min-h-[420px] items-center justify-center border-y border-dashed border-border/70 py-6 text-center text-sm text-muted-foreground">
                 {intl("components_pages_InfraCalculator.noLayoutRoomsToDisplay")}
@@ -703,6 +717,26 @@ export function InfraCalculator(props: InfraCalculatorProps) {
           ) : null}
         </section>
       </section>
+
+      <Dialog open={dronePickerOpen} onOpenChange={setDronePickerOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>选择无人机去向</DialogTitle>
+            <DialogDescription>选择当前班次的目标房间，点击当前目标可取消。</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2 p-4">
+            {rows.filter((row) => row.group === "trading" || row.group === "manufacture").map((row) => (
+              <Button key={row.roomId} type="button" variant={droneTargetRoomId === row.roomId ? "default" : "outline"} className="justify-start" onClick={() => { onDroneTargetChange?.(row); setDronePickerOpen(false); }}>
+                {row.title}
+              </Button>
+            ))}
+            <Button type="button" variant="ghost" className="justify-start" onClick={() => { const current = rows.find((row) => row.roomId === droneTargetRoomId); if (current) onDroneTargetChange?.(current); setDronePickerOpen(false); }}>
+              不使用无人机
+            </Button>
+          </div>
+          <DialogFooter><Button type="button" variant="outline" onClick={() => setDronePickerOpen(false)}>取消</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {resultClearNotice ? (
         <aside className="fixed left-1/2 top-[max(5rem,calc(env(safe-area-inset-top)+5rem))] z-[70] w-[min(720px,calc(100vw-2rem))] -translate-x-1/2 border border-[#FFD800]/70 bg-[#313131] px-4 py-3 text-white shadow-[0_16px_44px_rgba(0,0,0,0.35)]" aria-live="polite">

@@ -88,6 +88,7 @@ import { MOTION_DURATION } from "./motion";
 import { emptySklandBindingSummary } from "./skland-binding-state";
 import { createSklandRestoreGuard } from "./skland-restore-guard";
 import { setupConfigurationFingerprint } from "./setup-configuration";
+import { applyDroneAllocationsToMaa } from "@/server/drone-production";
 import {
   BaseBlueprint,
   BoxSource,
@@ -1465,6 +1466,30 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     requestScheduleProductChange({ type: "trade", roomId, order });
   }
 
+  function handleScheduleDroneTargetChange(row: RoomRow) {
+    setResult((current) => {
+      if (!current) return current;
+      const room = layout.rooms.find((candidate) => candidate.id === row.roomId);
+      if (!room || (room.kind !== "trade_post" && room.kind !== "factory")) return current;
+      const group = room.kind === "trade_post" ? "trading" : "manufacture";
+      const index = layout.rooms.filter((candidate) => candidate.kind === room.kind).findIndex((candidate) => candidate.id === room.id) + 1;
+      const next = structuredClone(current);
+      const plan = next.maa.plans[activeShift];
+      if (!plan) return current;
+      plan.drones = plan.drones?.room === group && plan.drones.index === index
+        ? undefined
+        : { enable: true, room: group, index, rule: "all", order: plan.drones?.order ?? "pre" };
+      return next;
+    });
+  }
+
+  function handleAutoDroneAllocation() {
+    setResult((current) => current ? {
+      ...current,
+      maa: applyDroneAllocationsToMaa({ layout, maa: current.maa, rotation: current.rotation }),
+    } : current);
+  }
+
   function handleRoomLevelChange(roomId: string, level: number) {
     applyPartialLocalLayoutEdit((current) => updateRoomLevel(current, roomId, level));
   }
@@ -1934,6 +1959,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       onOpenUpgradeSimulation: handleProtectedUpgradeSimulation,
       onUpgradeSimulationOpenChange: setUpgradeSimulationOpen,
       onRun: handleProtectedRun,
+      onAutoDroneAllocation: handleAutoDroneAllocation,
       onSimulateUpgrades: handleSimulateUpgrades,
       upgradeComparison: upgradeComparison?.baseline === result ? { trial: upgradeComparison.trial } : null,
       scheduleVariant,
@@ -1950,6 +1976,11 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       onPerformanceIssue: handlePerformanceIssue,
       onFactoryRecipeChange: handleScheduleFactoryRecipeChange,
       onTradeOrderChange: handleScheduleTradeOrderChange,
+      droneTargetRoomId: activePlan?.drones?.enable ? (() => {
+        const kind = activePlan.drones.room === "trading" ? "trade_post" : "factory";
+        return layout.rooms.filter((room) => room.kind === kind)[activePlan.drones.index - 1]?.id ?? null;
+      })() : null,
+      onDroneTargetChange: handleScheduleDroneTargetChange,
       onEditManualSchedule: handleProtectedEditManualSchedule,
       onDownloadMaa: handleDownloadMaa,
       onClearResultNotice: () => setResultClearNotice(null),
