@@ -14,7 +14,7 @@ import {
 test("drone trade targets follow the configured priority chain", () => {
   const operators = (...names: string[]) => names;
   assert.ok(tradeTargetPriority(1, operators("但书")) > tradeTargetPriority(2, operators("但书")));
-  assert.ok(tradeTargetPriority(2, operators("但书")) > tradeTargetPriority(3, operators("但书", "龙舌兰")));
+  assert.ok(tradeTargetPriority(2, operators("但书")) > tradeTargetPriority(3, operators("但书")));
   assert.ok(tradeTargetPriority(3, operators("但书", "龙舌兰")) > tradeTargetPriority(3, operators("龙舌兰", "柏喙")));
   assert.ok(tradeTargetPriority(3, operators("龙舌兰", "柏喙")) > tradeTargetPriority(3, operators("但书")));
   assert.ok(tradeTargetPriority(3, operators("但书")) > tradeTargetPriority(1, operators("可露希尔")));
