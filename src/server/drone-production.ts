@@ -306,15 +306,14 @@ export function applyDroneAllocationsToMaa(input: {
   rotation: RotationJson;
 }): MaaJson {
   const production = input.rotation.daily.production;
-  if (!production) return structuredClone(input.maa);
   const maa = structuredClone(input.maa);
   const allocations = chooseDroneAllocations({
     layout: input.layout,
     plans: maa.plans,
     shifts: input.rotation.shifts,
     dailyProduction: {
-      lmd: production.lmd,
-      pure_gold: production.pure_gold + (production.equivalent_gold ?? 0),
+      lmd: production?.lmd ?? 0,
+      pure_gold: (production?.pure_gold ?? 0) + (production?.equivalent_gold ?? 0),
     },
   });
   for (const allocation of allocations) {
