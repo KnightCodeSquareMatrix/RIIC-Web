@@ -14,6 +14,8 @@ const CATALOG = new Map(catalogJson.map((operator) => [operator.id, operator]));
 const CATALOG_BY_NAME = new Map(catalogJson.map((operator) => [operator.name, operator]));
 const BASE_SECONDS = { 1: 8 * 3600, 2: 16 * 3600, 3: 24 * 3600 };
 const EPSILON = 1e-7;
+export const MASTERY_UNSUPPORTED_TARGET_IDS = ["char_4195_radian", "char_4230_mcnist"] as const;
+const MASTERY_UNSUPPORTED_TARGET_ID_SET = new Set<string>(MASTERY_UNSUPPORTED_TARGET_IDS);
 
 export interface MasteryInput {
   operbox: readonly OperBoxEntry[];
@@ -70,8 +72,9 @@ export function normalizeMasteryBox(operbox: readonly OperBoxEntry[]): OperBoxEn
 }
 
 export function eligibleMasteryTargets(operbox: readonly OperBoxEntry[]) {
-  return normalizeMasteryBox(operbox).filter((operator) => operator.own && operator.elite === 2 && operator.rarity >= 4);
+  return normalizeMasteryBox(operbox).filter((operator) => operator.own && operator.elite === 2 && operator.rarity >= 4 && !MASTERY_UNSUPPORTED_TARGET_ID_SET.has(operator.id));
 }
+
 
 /** Same-prefix refs are upgrades. Different groups (e.g. Ulpian's two skills) coexist. */
 export function unlockedMasterySkills(operator: OperBoxEntry): string[] {
