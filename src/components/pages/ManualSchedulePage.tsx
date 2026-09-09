@@ -317,8 +317,14 @@ export function ManualSchedulePage({
   const selectedRoom = picker?.kind === "slot" ? rows.find((row) => row.roomId === picker.roomId) : undefined;
   const selectedAssignment = picker?.kind === "slot" ? draft.shifts[activeShift]?.rooms[picker.roomId] : undefined;
   const selectedOperator = picker?.kind === "slot" ? selectedAssignment?.operators[picker.slotIndex] ?? null : null;
+  const assignedOperatorNames = useMemo(() => new Set(
+    Object.values(draft.shifts[activeShift]?.rooms ?? {}).flatMap((room) => room.operators.filter(Boolean)),
+  ), [activeShift, draft.shifts]);
   const filteredOperators = useMemo(() => {
-    const filterableOwnedOperators = ownedOperators.map((operator) => {
+    const candidates = picker?.kind === "fiammetta"
+      ? ownedOperators.filter((operator) => assignedOperatorNames.has(operator.name))
+      : ownedOperators;
+    const filterableOwnedOperators = candidates.map((operator) => {
       const catalog = OPERATOR_CATALOG_BY_ID.get(operator.id) ?? OPERATOR_CATALOG_BY_NAME.get(operator.name);
       return {
         box: operator,
@@ -336,7 +342,7 @@ export function ManualSchedulePage({
     )
       .filter((operator) => pickerRarity === null || operator.box.rarity === pickerRarity)
       .map((operator) => operator.box);
-  }, [ownedOperators, pickerQuery, pickerRarity, pickerRoomFilter, pickerSkillTag]);
+  }, [assignedOperatorNames, ownedOperators, picker?.kind, pickerQuery, pickerRarity, pickerRoomFilter, pickerSkillTag]);
   const pickerPageCount = Math.max(1, Math.ceil(filteredOperators.length / MANUAL_PICKER_PAGE_SIZE));
   const visibleOperators = filteredOperators.slice(
     (pickerPage - 1) * MANUAL_PICKER_PAGE_SIZE,
@@ -406,6 +412,7 @@ export function ManualSchedulePage({
   function chooseOperator(operator: string | null) {
     if (!picker) return;
     if (picker.kind === "fiammetta") {
+      if (operator && !assignedOperatorNames.has(operator)) return;
       setDraft((current) => {
         const next = structuredClone(current);
         if (next.shifts[activeShift]) next.shifts[activeShift]!.fiammettaTarget = operator;
@@ -603,26 +610,26 @@ export function ManualSchedulePage({
         activePlan={activePlan}
         searchQuery={scheduleQuery}
         viewModeActionSlot={(
-          <Button type="button" variant="outline" size="sm" onClick={() => setClearShiftConfirmationOpen(true)}>
+          <Button type="button" variant="destructive" size="sm" onClick={() => setClearShiftConfirmationOpen(true)}>
             <Trash2 />{intl("components_pages_ManualSchedulePage.clearEveryFacilityInShift")}
           </Button>
         )}
-        shiftInfoSlot={(
-          <div className="flex flex-wrap items-center justify-end gap-2 max-sm:w-full max-sm:justify-between" data-shift-actions data-manual-shift-actions>
-            {fiammettaEnabled ? (
-              <FiammettaTargetChip
-                target={fiammettaTarget}
-                portrait={fiammettaPortrait}
-                onClick={() => {
-                  setPickerQuery("");
-                  setPickerRoomFilter(null);
-                  setPickerSkillTag(null);
-                  setPickerRarity(null);
-                  setPickerPage(1);
-                  setPicker({ kind: "fiammetta" });
-                }}
-              />
-            ) : null}
+        shiftInfoSlot={fiammettaEnabled ? (
+          <FiammettaTargetChip
+            target={fiammettaTarget}
+            portrait={fiammettaPortrait}
+            onClick={() => {
+              setPickerQuery("");
+              setPickerRoomFilter(null);
+              setPickerSkillTag(null);
+              setPickerRarity(null);
+              setPickerPage(1);
+              setPicker({ kind: "fiammetta" });
+            }}
+          />
+        ) : undefined}
+        shiftTabsSlot={(
+          <div className="min-w-0 max-w-full" data-manual-shift-actions>
             <ShiftTabs
               maaJson={maa}
               durations={draft.shifts.map((shift) => shift.durationHours)}

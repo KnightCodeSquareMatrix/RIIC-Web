@@ -13,8 +13,9 @@ test("builds deterministic versioned product URLs from each managed upstream sou
   assert.equal(PRODUCT_ICON_URLS.gold, `/images/products/gold.webp?v=${gameResourceVersion}`);
   assert.equal(PRODUCT_ICON_URLS.shards, `/images/products/originium_shard.webp?v=${gameResourceVersion}`);
   assert.equal(PRODUCT_ICON_URLS.orundum, `/images/products/orundum.webp?v=${gameResourceVersion}`);
-  assert.equal(ALL_PRODUCT_ICON_URLS.length, 5);
-  assert.equal(new Set(ALL_PRODUCT_ICON_URLS).size, 5);
+  assert.equal(PRODUCT_ICON_URLS.drone, `/images/products/drone.webp?v=${gameResourceVersion}`);
+  assert.equal(ALL_PRODUCT_ICON_URLS.length, 6);
+  assert.equal(new Set(ALL_PRODUCT_ICON_URLS).size, 6);
   for (const url of ALL_PRODUCT_ICON_URLS) {
     assert.match(url, /^\/images\/products\/[a-z_]+\.webp\?v=\d+-[0-9a-f]{12}$/);
   }
