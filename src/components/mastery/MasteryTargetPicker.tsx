@@ -54,11 +54,11 @@ export function MasteryTargetPicker({ operbox, selectedId, onSelect, onClose }: 
           <div className="max-w-full overflow-x-auto"><OperatorProfessionFilter value={profession} onChange={(value) => { setProfession(value); setLimit(OPERATOR_PAGE_SIZE); }} /></div>
         </div>
         {filtered.length || unsupportedFiltered.length ? <OperatorRosterGrid hasMore={limit < filtered.length} onLoadMore={() => setLimit((value) => value + OPERATOR_PAGE_SIZE)}>
-          {unsupportedFiltered.map((o) => <button key={o.id} type="button" disabled className="flex min-w-0 items-center gap-3 rounded-[4px] border border-border bg-muted/50 p-3 text-left opacity-65">
+          {unsupportedFiltered.map((o) => <button key={o.id} type="button" disabled className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)] items-center gap-3 rounded-[4px] border border-border bg-muted/50 p-3 text-left opacity-65">
             <OperatorIdentity name={o.name} portrait={byId.get(o.id)?.portrait}>
               <span className="font-number text-xs text-muted-foreground">{o.rarity}★ · {intl("components_mastery_MasteryTargetPicker.e2")} · {en ? PROFESSION_LABELS_ENGLISH[byId.get(o.id)!.profession] : PROFESSION_LABELS[byId.get(o.id)!.profession]}</span>
             </OperatorIdentity>
-            <span className="ml-auto shrink-0 text-xs text-muted-foreground">{en ? "Train this Special Operations operator in the specified Integrated Strategies mode" : "需要在指定的集成战略模式中进行特勤干员培训"}</span>
+            <span className="min-w-0 text-right text-xs leading-5 text-muted-foreground">{en ? "Train this Special Operations operator in the specified Integrated Strategies mode" : "需要在指定的集成战略模式中进行特勤干员培训"}</span>
           </button>)}
           {filtered.slice(0,limit).map((o) => <button key={o.id} type="button" aria-label={intl("components_mastery_MasteryTargetPicker.select", { value1: (en) ? (localizedOperatorName(o.name,locale,gameCatalog)) : "", name: (en) ? "" : (o.name) })} aria-pressed={selected === o.id}
             onClick={() => setSelected(o.id)} className={cn("flex min-w-0 items-center gap-3 rounded-[4px] border bg-background p-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring", selected === o.id ? "border-primary ring-1 ring-primary" : "border-border hover:bg-muted")}>
