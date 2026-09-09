@@ -138,8 +138,8 @@ const WebsiteAccountDialog = lazy(() => loadWebsiteAccountDialog().then((module)
   default: module.WebsiteAccountDialog,
 })));
 const SetupDialog = lazy(() => loadSetupDialog().then((module) => ({ default: module.SetupDialog })));
-const IssueNoteModal = lazy(() => loadComponents().then((module) => ({ default: module.IssueNoteModal })));
-const ProductChangeConfirmModal = lazy(() => loadComponents().then((module) => ({
+const IssueNoteModal = lazy(() => import("@/components/ScheduleFeedbackDialogs").then((module) => ({ default: module.IssueNoteModal })));
+const ProductChangeConfirmModal = lazy(() => import("@/components/ScheduleFeedbackDialogs").then((module) => ({
   default: module.ProductChangeConfirmModal,
 })));
 const ManualDraftReplaceDialog = lazy(() => import("@/components/ManualDraftReplaceDialog").then((module) => ({

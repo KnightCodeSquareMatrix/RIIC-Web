@@ -1252,7 +1252,7 @@ test("two-shift output drives product estimates, room formulas, and profile deta
 
   await page.getByRole("button", { name: "练卡建议" }).click();
   await expect(page.getByText("练度提升", { exact: true })).toBeVisible();
-  await expect(page.getByText("当前 精1 → 目标 精2", { exact: true })).toBeVisible();
+  await expect(page.getByText("目前精一 · 目标精二", { exact: true })).toBeVisible();
 });
 
 test("old sessions normalize duplicate operator names before training advice renders", async ({ page }) => {
