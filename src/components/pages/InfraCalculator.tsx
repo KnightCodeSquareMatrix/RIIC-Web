@@ -682,7 +682,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                   ) : null}
                   <DroneTargetChip drones={activePlan?.drones} />
                   {scheduleResult && onDroneTargetChange ? (
-                    <Button type="button" size="sm" variant={manualDroneSelection ? "default" : "outline"} onClick={() => setDronePickerOpen(true)}>
+                    <Button type="button" size="sm" variant={manualDroneSelection ? "default" : "outline"} onClick={() => { if (manualDroneSelection) onAutoDroneAllocation(); else setDronePickerOpen(true); }}>
                       {manualDroneSelection ? "手动选择无人机" : "自动分配无人机"}
                     </Button>
                   ) : null}
