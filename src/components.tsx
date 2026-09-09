@@ -1521,6 +1521,7 @@ export function ScheduleBoard({
   viewModeActionSlot,
   mobileActionsSlot,
   shiftInfoSlot,
+  shiftTabsSlot,
   activeShift,
   shiftDirection = 0,
   activePlan,
@@ -1549,6 +1550,7 @@ export function ScheduleBoard({
   viewModeActionSlot?: ReactNode;
   mobileActionsSlot?: ReactNode;
   shiftInfoSlot?: ReactNode;
+  shiftTabsSlot?: ReactNode;
   activeShift: number;
   shiftDirection?: ShiftDirection;
   activePlan?: MaaPlan;
@@ -1714,6 +1716,7 @@ export function ScheduleBoard({
               </TabsList>
             </Tabs>
           ) : null}
+          {shiftTabsSlot}
           {viewControlsSlot}
           {viewMode === "compact" ? viewModeActionSlot : null}
           {viewMode === "list" && hiddenAuxiliaryCount ? (

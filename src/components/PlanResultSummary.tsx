@@ -5,7 +5,7 @@ import { useTranslations, useLocale } from "next-intl";
 import { ChevronRight } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import Image from "next/image";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { AnimatedNumber, AnimatedText } from "@/components/AnimatedText";
 import { ShiftComparisonDetails } from "@/components/ShiftComparisonCard";
@@ -108,6 +108,7 @@ export function PlanResultSummary({
   onEntranceConsumed,
   onPerformanceIssue,
   feedbackDisabled = false,
+  controlsSlot,
 }: {
   profile?: UserProfile;
   rotation?: RotationJson;
@@ -122,6 +123,7 @@ export function PlanResultSummary({
   onEntranceConsumed?: (revision: string) => void;
   onPerformanceIssue: () => void;
   feedbackDisabled?: boolean;
+  controlsSlot?: ReactNode;
 }) {
   const intl = useTranslations();
   const locale = useLocale();
@@ -184,12 +186,12 @@ export function PlanResultSummary({
             <ChevronRight className="size-4 shrink-0 text-white/55 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
           </motion.button>
 
-          <div className="grid min-w-0 grid-cols-3 max-sm:grid-cols-2" aria-label={intl("components_PlanResultSummary.estimatedDailyProduction")} data-daily-production-summary data-production-source={productGroups[0]?.source}>
+          <div className={cn("grid min-w-0 max-sm:grid-cols-2", controlsSlot ? "grid-cols-5" : "grid-cols-3")} aria-label={intl("components_PlanResultSummary.estimatedDailyProduction")} data-daily-production-summary data-production-source={productGroups[0]?.source}>
             {productGroups.map((productGroup, index) => (
               <motion.button
                 key={productGroup.id}
                 type="button"
-                className={cn("group relative flex min-h-[84px] min-w-0 flex-col items-stretch justify-start overflow-hidden border-r border-[#313131]/10 px-3 py-3 text-left transition-colors hover:bg-white/55 focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-primary max-sm:min-h-[78px] max-sm:border-t", productGroup.id === "orundum" && "max-sm:col-span-2")}
+                className={cn("group relative flex min-h-[84px] min-w-0 flex-col items-stretch justify-start overflow-hidden border-r border-[#313131]/10 px-3 py-3 text-left transition-colors hover:bg-white/55 focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-primary max-sm:min-h-[78px] max-sm:border-t", productGroup.id === "orundum" && !controlsSlot && "max-sm:col-span-2")}
                 data-plan-details-trigger="efficiency"
                 data-daily-product-group={productGroup.id}
                 whileTap={shouldReduceMotion ? undefined : { scale: 0.98 }}
@@ -225,6 +227,7 @@ export function PlanResultSummary({
                 <motion.span className="absolute inset-x-0 bottom-0 h-0.5 origin-left bg-[#313131]/18" aria-hidden="true" initial={animateOnMount ? { scaleX: 0 } : false} animate={{ scaleX: 1 }} transition={{ duration: shouldReduceMotion ? 0 : 0.42, delay: shouldReduceMotion ? 0 : 0.2 + index * 0.065, ease: MOTION_EASE_OUT }} />
               </motion.button>
             ))}
+            {controlsSlot ? <div className="contents" data-plan-summary-controls>{controlsSlot}</div> : null}
           </div>
 
           {comparison ? (

@@ -1492,6 +1492,10 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     });
   }
 
+  function handleManualDroneAllocation() {
+    setManualDroneShifts((current) => ({ ...current, [activeShift]: true }));
+  }
+
   function handleAutoDroneAllocation() {
     setManualDroneShifts((current) => ({ ...current, [activeShift]: false }));
     setResult((current) => {
@@ -1974,6 +1978,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       onUpgradeSimulationOpenChange: setUpgradeSimulationOpen,
       onRun: handleProtectedRun,
       onAutoDroneAllocation: handleAutoDroneAllocation,
+      onManualDroneAllocation: handleManualDroneAllocation,
       manualDroneSelection: Boolean(manualDroneShifts[activeShift]),
       onSimulateUpgrades: handleSimulateUpgrades,
       upgradeComparison: upgradeComparison?.baseline === result ? { trial: upgradeComparison.trial } : null,

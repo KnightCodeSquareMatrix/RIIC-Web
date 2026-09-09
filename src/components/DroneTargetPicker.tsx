@@ -19,7 +19,7 @@ export function DroneTargetPicker({ rows, targetRoomId, manualSelection, onTarge
         <DialogDescription>选择当前班次的目标房间，点击当前目标可取消。</DialogDescription>
       </DialogHeader>
       <div className="grid gap-2 p-4">
-        {rows.filter(row => row.group === "trading" || row.group === "manufacture").map(row => <Button key={row.roomId} type="button" variant={targetRoomId === row.roomId ? "default" : "outline"} className="justify-start" onClick={() => { onTargetChange?.(row); onOpenChange(false); }}>{row.title}</Button>)}
+        {rows.filter(row => row.group === "trading" || row.group === "manufacture").map(row => <Button key={row.roomId} type="button" variant={targetRoomId === row.roomId ? "default" : "outline"} className={`justify-start ${targetRoomId === row.roomId ? "bg-purple-600 text-white hover:bg-purple-700" : ""}`} onClick={() => { onTargetChange?.(row); onOpenChange(false); }}>{row.title}</Button>)}
         <Button type="button" variant="ghost" className="justify-start" onClick={() => { const current = rows.find(row => row.roomId === targetRoomId); if (current) onTargetChange?.(current); onOpenChange(false); }}>不使用无人机</Button>
       </div>
       <DialogFooter>
