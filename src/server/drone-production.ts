@@ -189,16 +189,27 @@ function tradeTargetForRoom(level: number, operators: MaaRoom["operators"]): Dro
   return { kind: "normal", level: normalizedLevel };
 }
 
+export function tradeTargetPriority(level: number, operators: MaaRoom["operators"]): number {
+  const names = Array.isArray(operators) ? operators.map((operator) => operatorName(operator)).filter(Boolean) : [];
+  const has = (name: string) => names.includes(name);
+  if (level === 1 && has("但书")) return 600;
+  if (level === 2 && has("但书")) return 500;
+  if (level === 3 && has("但书") && has("龙舌兰")) return 400;
+  if (level === 3 && has("龙舌兰") && has("柏喙")) return 300;
+  if (level === 3 && has("但书")) return 200;
+  if (has("可露希尔")) return 100;
+  return 0;
+}
+
 function bestTradeRoom(layout: BaseBlueprint, plan: MaaPlan): { target: DroneRoomTarget; profile: DroneTradeTarget } | null {
   const rooms = layout.rooms.filter((room) => room.kind === "trade_post");
-  const priorities: Record<DroneTradeTarget["kind"], number> = { dantshu: 4, tequila: 3, closure: 2, normal: 1 };
   return rooms.map((room, index) => {
     const maaRoom = plan.rooms.trading?.[index];
     const profile = tradeTargetForRoom(room.level, maaRoom?.operators ?? []);
     return {
       target: { room: "trading" as const, index: index + 1, roomId: room.id, product: "lmd" as const },
       profile,
-      priority: priorities[profile.kind],
+      priority: tradeTargetPriority(room.level, maaRoom?.operators ?? []),
       level: room.level,
     };
   }).sort((left, right) => right.priority - left.priority || right.level - left.level)[0] ?? null;
