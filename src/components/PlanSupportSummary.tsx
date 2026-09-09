@@ -29,6 +29,8 @@ export function PlanSupportSummary({ drones, target, portrait, automatic, onAuto
   const cell = "relative min-h-[84px] min-w-0 border-r border-b border-[#313131]/10 px-3 py-3 max-sm:min-h-[78px] max-sm:border-t";
   const label = "block truncate pr-6 text-[10px] font-medium tracking-[0.06em] text-[#313131]/58";
   const value = "mt-1 flex min-w-0 items-center gap-1 text-[clamp(1rem,1.5vw,1.35rem)] font-semibold leading-none";
+  const droneText = "truncate bg-linear-to-r from-violet-700 from-35% to-purple-300 bg-clip-text text-transparent";
+  const moraleText = "truncate bg-linear-to-r from-red-600 from-35% to-pink-100 bg-clip-text text-transparent";
 
   return <>
     <div className={cell} data-plan-support="drones">
@@ -36,9 +38,9 @@ export function PlanSupportSummary({ drones, target, portrait, automatic, onAuto
       <Image src={PRODUCT_ICON_URLS.drone} alt="" width={32} height={32} unoptimized loading="eager" className="pointer-events-none absolute right-1.5 top-1.5 size-8 object-contain opacity-75" aria-hidden="true" />
       {!automatic && onAutomaticChange ? (
         <button type="button" className={`${value} max-w-full text-purple-700 outline-none hover:underline focus-visible:underline max-sm:min-h-8`} aria-label={en ? "Choose facility" : "选择设施"} onClick={onChooseFacility}>
-          <span className="truncate">{room}</span><ChevronDown className="size-3 shrink-0" />
+          <span className={droneText}>{room}</span><ChevronDown className="size-3 shrink-0" />
         </button>
-      ) : <strong className={`${value} text-purple-700`}><span className="truncate">{room}</span></strong>}
+      ) : <strong className={`${value} text-purple-700`}><span className={droneText}>{room}</span></strong>}
       {onAutomaticChange ? <label className="mt-2 flex min-h-5 cursor-pointer items-center gap-2 text-[10px] text-[#313131]/65 max-sm:min-h-11">
         <Switch size="sm" className="data-checked:bg-purple-300 data-checked:border-purple-400/60 focus-visible:border-purple-400 focus-visible:ring-purple-400/40" checked={automatic} onCheckedChange={onAutomaticChange} />
         {en ? "Auto-assign drones" : "自动分配无人机"}
@@ -47,7 +49,7 @@ export function PlanSupportSummary({ drones, target, portrait, automatic, onAuto
     <div className={`${cell} border-r-0 max-sm:col-span-2`} data-plan-support="morale">
       <span className={label}>{en ? "Morale recovery" : "换心情"}</span>
       {portrait && target ? <img src={portrait} alt="" width={32} height={32} className="absolute right-1.5 top-1.5 size-8 rounded-full border border-rose-400/30 object-cover" /> : <HeartPulse className="absolute right-2 top-2 size-6 text-rose-400" aria-hidden="true" />}
-      <strong className={`${value} text-rose-700`}><span className="truncate">{operator}</span></strong>
+      <strong className={`${value} text-rose-700`}><span className={moraleText}>{operator}</span></strong>
       <span className="mt-2 block text-[10px] text-[#313131]/50">{en ? "Current shift" : "当前班次"}</span>
     </div>
   </>;
