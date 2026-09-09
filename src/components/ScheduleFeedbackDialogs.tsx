@@ -109,7 +109,6 @@ export function IssueNoteModal({
     </Dialog>
   );
 }
-
 export function ProductChangeConfirmModal({
   open,
   roomLabel,
@@ -169,4 +168,3 @@ export function ProductChangeConfirmModal({
     </Dialog>
   );
 }
-
