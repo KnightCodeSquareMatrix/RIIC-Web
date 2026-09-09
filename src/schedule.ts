@@ -17,6 +17,7 @@ export interface RoomRow {
   operatorSlots: RoomOperatorSlot[];
   /** Fixed-position slots used by editors; unlike operatorSlots, empty gaps are preserved. */
   slotAssignments?: Array<RoomOperatorSlot | undefined>;
+  unavailableSlotIndices?: number[];
   positionSlots?: RoomPositionSlot[];
   autofill: boolean;
   efficiency?: RoomEfficiency;
