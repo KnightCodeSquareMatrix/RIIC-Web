@@ -96,6 +96,7 @@ import {
   FeedbackData,
   FeedbackKind,
   OperBoxEntry,
+  MaaJson,
   PublicPlanData,
   PresetDef,
   RotationProfile,
@@ -137,8 +138,8 @@ const WebsiteAccountDialog = lazy(() => loadWebsiteAccountDialog().then((module)
   default: module.WebsiteAccountDialog,
 })));
 const SetupDialog = lazy(() => loadSetupDialog().then((module) => ({ default: module.SetupDialog })));
-const IssueNoteModal = lazy(() => loadComponents().then((module) => ({ default: module.IssueNoteModal })));
-const ProductChangeConfirmModal = lazy(() => loadComponents().then((module) => ({
+const IssueNoteModal = lazy(() => import("@/components/ScheduleFeedbackDialogs").then((module) => ({ default: module.IssueNoteModal })));
+const ProductChangeConfirmModal = lazy(() => import("@/components/ScheduleFeedbackDialogs").then((module) => ({
   default: module.ProductChangeConfirmModal,
 })));
 const ManualDraftReplaceDialog = lazy(() => import("@/components/ManualDraftReplaceDialog").then((module) => ({
@@ -338,6 +339,8 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   const [sampleLoading, setSampleLoading] = useState(false);
   const sampleTrialInFlightRef = useRef(false);
   const [result, setResult] = useState<PublicPlanData | null>(null);
+  const [manualDroneShifts, setManualDroneShifts] = useState<Record<number, boolean>>({});
+  const automaticMaaRef = useRef<{ diagnosticId: string; maa: MaaJson } | null>(null);
   const [upgradeComparison, setUpgradeComparison] = useState<{ baseline: PublicPlanData; trial: PublicPlanData } | null>(null);
   const [scheduleVariant, setScheduleVariant] = useState<"baseline" | "trial">("baseline");
   const [loading, setLoading] = useState(false);
@@ -400,6 +403,8 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     onDone: (finalizedResult) => {
       setCliReady(true);
       setActiveShift(0);
+      automaticMaaRef.current = { diagnosticId: finalizedResult.diagnosticId, maa: structuredClone(finalizedResult.maa) };
+      setManualDroneShifts({});
       setResult(finalizedResult);
       setLoading(false);
       completeOnboarding();
@@ -648,6 +653,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
         setRotationProfile(restored.rotationProfile);
         setFiammettaEnabled(Boolean(restored.fiammettaEnabled));
         setResult(restored.result);
+        automaticMaaRef.current = restored.result ? { diagnosticId: restored.result.diagnosticId, maa: structuredClone(restored.result.maa) } : null;
         setActiveShift(restored.activeShift);
         initialLayoutForRestore.current = restoredLayout;
         initialBoxSource.current = restoredBoxSource;
@@ -1465,6 +1471,39 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     requestScheduleProductChange({ type: "trade", roomId, order });
   }
 
+  function handleScheduleDroneTargetChange(row: RoomRow) {
+    setManualDroneShifts((current) => ({ ...current, [activeShift]: true }));
+    setResult((current) => {
+      if (!current) return current;
+      if (automaticMaaRef.current?.diagnosticId !== current.diagnosticId) {
+        automaticMaaRef.current = { diagnosticId: current.diagnosticId, maa: structuredClone(current.maa) };
+      }
+      const room = layout.rooms.find((candidate) => candidate.id === row.roomId);
+      if (!room || (room.kind !== "trade_post" && room.kind !== "factory")) return current;
+      const group = room.kind === "trade_post" ? "trading" : "manufacture";
+      const index = layout.rooms.filter((candidate) => candidate.kind === room.kind).findIndex((candidate) => candidate.id === room.id) + 1;
+      const next = structuredClone(current);
+      const plan = next.maa.plans[activeShift];
+      if (!plan) return current;
+      plan.drones = plan.drones?.room === group && plan.drones.index === index
+        ? undefined
+        : { enable: true, room: group, index, rule: "all", order: plan.drones?.order ?? "pre" };
+      return next;
+    });
+  }
+
+  function handleAutoDroneAllocation() {
+    setManualDroneShifts((current) => ({ ...current, [activeShift]: false }));
+    setResult((current) => {
+      if (!current || automaticMaaRef.current?.diagnosticId !== current.diagnosticId) return current;
+      const next = structuredClone(current);
+      const plan = next.maa.plans[activeShift];
+      if (!plan) return current;
+      plan.drones = structuredClone(automaticMaaRef.current.maa.plans[activeShift]?.drones);
+      return next;
+    });
+  }
+
   function handleRoomLevelChange(roomId: string, level: number) {
     applyPartialLocalLayoutEdit((current) => updateRoomLevel(current, roomId, level));
   }
@@ -1934,6 +1973,8 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       onOpenUpgradeSimulation: handleProtectedUpgradeSimulation,
       onUpgradeSimulationOpenChange: setUpgradeSimulationOpen,
       onRun: handleProtectedRun,
+      onAutoDroneAllocation: handleAutoDroneAllocation,
+      manualDroneSelection: Boolean(manualDroneShifts[activeShift]),
       onSimulateUpgrades: handleSimulateUpgrades,
       upgradeComparison: upgradeComparison?.baseline === result ? { trial: upgradeComparison.trial } : null,
       scheduleVariant,
@@ -1950,6 +1991,11 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       onPerformanceIssue: handlePerformanceIssue,
       onFactoryRecipeChange: handleScheduleFactoryRecipeChange,
       onTradeOrderChange: handleScheduleTradeOrderChange,
+      droneTargetRoomId: activePlan?.drones?.enable ? (() => {
+        const kind = activePlan.drones.room === "trading" ? "trade_post" : "factory";
+        return layout.rooms.filter((room) => room.kind === kind)[activePlan.drones.index - 1]?.id ?? null;
+      })() : null,
+      onDroneTargetChange: handleScheduleDroneTargetChange,
       onEditManualSchedule: handleProtectedEditManualSchedule,
       onDownloadMaa: handleDownloadMaa,
       onClearResultNotice: () => setResultClearNotice(null),

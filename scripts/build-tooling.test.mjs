@@ -318,7 +318,7 @@ test("CI gates releases on Chromium and a WebKit Skland smoke test, then schedul
   assert.doesNotMatch(workflow, /^\s*pull_request\s*:/m);
   assert.match(workflow, /cancel-in-progress: false/);
   assert.equal(readinessSpecs.length, 4);
-  assert.equal(readinessTestCount, 101);
+  assert.equal(readinessTestCount, 103);
   assert.equal(e2eFiles.includes("production-readiness.spec.ts"), false);
   assert.match(playwrightConfig, /fullyParallel: true/);
   assert.match(playwrightConfig, /workers: process\.env\.CI \? 2 : undefined/);

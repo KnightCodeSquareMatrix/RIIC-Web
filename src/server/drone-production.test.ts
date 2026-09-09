@@ -6,6 +6,7 @@ import {
   droneProductionForShift,
   droneTradeOutputForEfficiency,
   droneTradeOutputForShift,
+  equivalentGoldForRotation,
   powerEfficiencyForShift,
 } from "./drone-production.ts";
 
@@ -30,6 +31,30 @@ test("twelve hours at 1.735 efficiency produces 208.2 drones and 0.43375 equival
   });
   assert.equal(result.drones, 208.2);
   assert.ok(Math.abs(result.equivalentEfficiency - 0.43375) < 1e-12);
+});
+
+test("equivalent gold is weighted by each shift and normalized to one day", () => {
+  const rotation = {
+    profile: "abc_12_12_12" as const,
+    daily: { trade: null, manufacture: null, power: null },
+    shifts: [0, 1, 2].map((index) => ({
+      index,
+      duration_hours: 12,
+      active_teams: [],
+      resting_team: "",
+      weighted_trade: 0,
+      weighted_manu: 0,
+      weighted_power: 0,
+      scores: {
+        trade_score: 0,
+        manu_prod_sum: 0,
+        power_charge_sum: 0,
+        room_lines: [{ room_id: `trade_${index + 1}`, gold_equivalent_efficiency: 0.5 }],
+      },
+    })),
+  };
+  // 3 × (0.5 × 10,000 × 12 / 24), then 24 / 36 = 5,000.
+  assert.equal(equivalentGoldForRotation(rotation), 5_000);
 });
 
 test("trade target conversion supports normal, dantshu, tequila, and closure", () => {

@@ -1,5 +1,6 @@
 import { expect, test, type Locator } from "@playwright/test";
 import arkntoolsSource from "../src/generated/arkntools/source.json" with { type: "json" };
+import { twoShiftPlanData } from "./production-readiness.fixture";
 import { requestId, diagnosticId, waitForOwnAnimations, gotoStable, expectVisibleNumbersUseNumberFont, profile, planData, scheduleVisualPlanData, sampleData, authenticatedSklandSnapshot, mockApis, openSklandOverview, seedPreferences, seedV4Session } from "./production-readiness.fixture";
 
 const fullOperatorCount = arkntoolsSource.counts.operators;
@@ -24,6 +25,36 @@ async function expectSetupAction(button: Locator) {
   await expect(button).toHaveCSS("border-radius", "18px");
   await expect(button).toHaveCSS("font-size", "12px");
 }
+
+test("drone selection updates exports and restores automatic allocation without solving", async ({ page }) => {
+  await mockApis(page);
+  await seedV4Session(page, twoShiftPlanData, { rotationProfile: "main_backup_12_12" });
+  let solves = 0;
+  page.on("request", request => { if (request.method() === "POST" && /\/api\/plan(?:-tasks)?$/.test(new URL(request.url()).pathname)) solves++; });
+  await page.goto("/");
+  async function exportedDrones() {
+    const pending = page.waitForEvent("download");
+    await page.getByRole("button", { name: "导出到 MAA", exact: true }).click();
+    const stream = await (await pending).createReadStream();
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+    return JSON.parse(Buffer.concat(chunks).toString("utf8")).plans[0].drones;
+  }
+  const automatic = await exportedDrones();
+  await page.getByRole("button", { name: "切换到手动", exact: true }).click();
+  const picker = page.getByRole("dialog", { name: "选择无人机去向" });
+  await picker.getByRole("button", { name: "贸易站 1", exact: true }).click();
+  await expect(picker).toHaveCount(0);
+  expect(await exportedDrones()).toMatchObject({ room: "trading", index: 1, enable: true });
+  await page.getByRole("button", { name: "切换到自动", exact: true }).click();
+  expect(await exportedDrones()).toEqual(automatic);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("button", { name: "切换到手动", exact: true }).click();
+  await expect(picker).toBeVisible();
+  await picker.getByRole("button", { name: "不使用无人机", exact: true }).click();
+  expect(await exportedDrones()).toBeUndefined();
+  expect(solves).toBe(0);
+});
 
 test("mobile interactive targets remain at least 44 CSS pixels", async ({ page }) => {
   await mockApis(page);
@@ -679,6 +710,30 @@ test("layout level controls clamp edits and expose the power-safe 342 defaults",
   expect(await firstLevelOption.evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
   await firstLevelOption.click();
   await expect(mobileTradeLevel).toHaveValue("1");
+});
+
+test("training recommendation shows readable promotion and current elite stages", async ({ page }, testInfo) => {
+  await mockApis(page);
+  await seedV4Session(page, {
+    ...planData,
+    profile: { ...profile, actions: [{
+      priority: "中", kind: "promote_tier_up", operator: "阿米娅", domain_id: "general",
+      message: "将「阿米娅」升至 tier_up（需精2）——参考组合成员，现5★精0 1级",
+      current_elite: 0, tier_up_requirement: "精2",
+    }] },
+  });
+  await page.context().addCookies([{ name: "NEXT_LOCALE", value: "zh", url: testInfo.project.use.baseURL! }]);
+  await page.goto("/training");
+  const card = page.locator('[data-recommendation-card="full"]');
+  await expect(card).toContainText("升至精二");
+  await expect(card).toContainText("目前精零 1级（5★）");
+  await expect(card).toContainText("目前精零 · 目标精二");
+  await expect(card).not.toContainText("tier_up");
+  await card.screenshot({ path: testInfo.outputPath("promotion-desktop.png") });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(card).toBeVisible();
+  expect(await card.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  await card.screenshot({ path: testInfo.outputPath("promotion-mobile.png") });
 });
 
 test("calculator owns scheduling controls and training advice uses a single technical stream", async ({ page }) => {

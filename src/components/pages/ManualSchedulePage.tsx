@@ -57,6 +57,7 @@ import { planToRows, type RoomRow } from "@/schedule";
 import type { BaseBlueprint, MaaJson, MaaOperatorSlot, MaaRoom, OperBoxEntry } from "@/types";
 
 const ScrollArea = lazy(() => import("@/components/ui/scroll-area").then((module) => ({ default: module.ScrollArea })));
+const MaaImportDialog = lazy(() => import("@/components/MaaImportDialog").then(module => ({ default: module.MaaImportDialog })));
 const MANUAL_PICKER_PAGE_SIZE = 24;
 const ROOM_GROUP_TO_SKILL_PREFIX: Readonly<Record<RoomRow["group"], BuildingRoomPrefix>> = {
   control: "control",
@@ -769,46 +770,7 @@ export function ManualSchedulePage({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={Boolean(maaImportPreview)} onOpenChange={(open) => { if (!open) setMaaImportPreview(null); }}>
-        <DialogContent className="max-w-[min(520px,calc(100vw-2rem))]">
-          <DialogHeader>
-            <DialogTitle>{intl("components_pages_ManualSchedulePage.importMaaScheduleQuestion")}</DialogTitle>
-            <DialogDescription>
-              {intl("components_pages_ManualSchedulePage.importMaaScheduleDescription")}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-2 px-5 py-2 text-sm sm:px-7">
-            <p className="truncate"><span className="text-muted-foreground">{intl("components_pages_ManualSchedulePage.fileLabel")}</span>{maaImportPreview?.fileName}</p>
-            <p>
-              <span className="text-muted-foreground">{intl("components_pages_ManualSchedulePage.shiftsLabel")}</span>
-              <span className="font-number">{maaImportPreview?.importedShiftCount}</span>
-              {maaImportPreview && maaImportPreview.sourceShiftCount !== maaImportPreview.importedShiftCount ? (
-                <span className="ml-2 text-muted-foreground">
-                  {intl("components_pages_ManualSchedulePage.expandedFromPlans", { count: maaImportPreview.sourceShiftCount })}
-                </span>
-              ) : null}
-            </p>
-            <p>
-              <span className="text-muted-foreground">{intl("components_pages_ManualSchedulePage.assignmentsLabel")}</span>
-              <span className="font-number">{maaImportPreview?.importedAssignmentCount}</span>
-              <span className="text-muted-foreground"> / </span>
-              <span className="font-number">{maaImportPreview?.sourceAssignmentCount}</span>
-              {maaImportPreview && maaImportPreview.sourceAssignmentCount > maaImportPreview.importedAssignmentCount ? (
-                <span className="ml-2 text-amber-700">
-                  {intl("components_pages_ManualSchedulePage.unmappedAssignments", { count: maaImportPreview.sourceAssignmentCount - maaImportPreview.importedAssignmentCount })}
-                </span>
-              ) : null}
-            </p>
-            <p className="text-xs leading-5 text-muted-foreground">
-              {intl("components_pages_ManualSchedulePage.importMaaScheduleDetails")}
-            </p>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => setMaaImportPreview(null)}>{intl("components_pages_ManualSchedulePage.cancel")}</Button>
-            <Button type="button" onClick={confirmMaaImport}><Upload />{intl("components_pages_ManualSchedulePage.replaceDraft")}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {maaImportPreview && <Suspense fallback={null}><MaaImportDialog maaImportPreview={maaImportPreview} confirmMaaImport={confirmMaaImport} onCancel={() => setMaaImportPreview(null)} /></Suspense>}
 
       <Dialog open={Boolean(pendingMove)} onOpenChange={(open) => { if (!open) setPendingMove(null); }}>
         <DialogContent className="max-w-[min(480px,calc(100vw-2rem))]">

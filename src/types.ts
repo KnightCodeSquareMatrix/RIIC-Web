@@ -146,6 +146,8 @@ export interface RoomEfficiency {
   order_multiplier?: number;
   base_efficiency?: number;
   equivalent_efficiency?: number;
+  /** 贸易站特殊机制按赤金价值折算的等效效率。 */
+  gold_equivalent_efficiency?: number;
   global_efficiency?: number;
   /** 贸易等效效率（含订单机制倍率效果，用于展示"等效 × 倍率"标注）。 */
   trade_equivalent_efficiency?: number;
@@ -198,6 +200,8 @@ export interface RotationJson {
       battle_records: number;
       originium_shards: number;
       orundum: number;
+      /** 可露希尔/龙舌兰贸易站产生的每日等效赤金价值。 */
+      equivalent_gold?: number;
     };
     drone_production?: {
       lmd: number;

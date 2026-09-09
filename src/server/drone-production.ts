@@ -45,6 +45,26 @@ export type DroneDailyProduction = {
   battle_records: number;
 };
 
+/**
+ * 将贸易站的 `gold_equivalent_efficiency` 汇总为每日等效赤金价值。
+ * 每班先按自身时长计算，再按整个轮换周期折算至 24 小时。
+ */
+export function equivalentGoldForRotation(rotation: RotationJson): number {
+  const totalHours = rotation.shifts.reduce(
+    (sum, shift) => sum + (positive(shift.duration_hours) ? shift.duration_hours : 0),
+    0,
+  );
+  if (totalHours <= 0) return 0;
+  const cycleValue = rotation.shifts.reduce((sum, shift) => {
+    const efficiency = shift.scores.room_lines.reduce(
+      (roomSum, line) => roomSum + (positive(line.gold_equivalent_efficiency) ? line.gold_equivalent_efficiency : 0),
+      0,
+    );
+    return sum + efficiency * 10_000 * shift.duration_hours / 24;
+  }, 0);
+  return cycleValue * 24 / totalHours;
+}
+
 const NORMAL_TRADE_DAILY: Record<1 | 2 | 3, number> = {
   1: 10_000,
   2: 10_141,
@@ -286,13 +306,15 @@ export function applyDroneAllocationsToMaa(input: {
   rotation: RotationJson;
 }): MaaJson {
   const production = input.rotation.daily.production;
-  if (!production) return structuredClone(input.maa);
   const maa = structuredClone(input.maa);
   const allocations = chooseDroneAllocations({
     layout: input.layout,
     plans: maa.plans,
     shifts: input.rotation.shifts,
-    dailyProduction: { lmd: production.lmd, pure_gold: production.pure_gold },
+    dailyProduction: {
+      lmd: production?.lmd ?? 0,
+      pure_gold: (production?.pure_gold ?? 0) + (production?.equivalent_gold ?? 0),
+    },
   });
   for (const allocation of allocations) {
     const position = input.rotation.shifts.findIndex((shift) => shift.index === allocation.shiftIndex);
@@ -321,7 +343,8 @@ export function droneProductionForRotation(input: {
     shifts: input.rotation.shifts,
     dailyProduction: {
       lmd: input.rotation.daily.production?.lmd ?? 0,
-      pure_gold: input.rotation.daily.production?.pure_gold ?? 0,
+      pure_gold: (input.rotation.daily.production?.pure_gold ?? 0)
+        + (input.rotation.daily.production?.equivalent_gold ?? 0),
     },
   });
   const totalHours = input.rotation.shifts.reduce((sum, shift) => sum + (positive(shift.duration_hours) ? shift.duration_hours : 0), 0);

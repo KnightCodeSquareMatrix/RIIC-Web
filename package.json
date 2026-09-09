@@ -55,7 +55,7 @@
     "drizzle-orm": "^0.45.2",
     "lucide-react": "^0.475.0",
     "motion": "^13.0.0",
-    "next": "16.3.0",
+    "next": "16.3.4",
     "next-intl": "^4.14.2",
     "overlayscrollbars": "^2.16.0",
     "pg": "^8.23.0",
@@ -88,7 +88,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^15.15.0",
     "react-test-renderer": "^19.2.8",
-    "sharp": "0.35.3",
+    "sharp": "0.35.4",
     "tailwindcss": "4.3.3",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.65.0"
@@ -96,6 +96,6 @@
   "overrides": {
     "postcss": "8.5.24",
     "esbuild": "0.25.12",
-    "sharp": "0.35.3"
+    "sharp": "0.35.4"
   }
 }

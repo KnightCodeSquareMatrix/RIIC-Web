@@ -403,23 +403,47 @@ test("manual scheduling previews and imports an external MAA schedule file", asy
   const importedSchedule = {
     title: "外部排版",
     plans: [
-      { name: "白班", period: [["08:15", "19:59"]], rooms: { control: [{ operators: ["外部测试干员"] }] } },
-      { name: "夜班", period: [["20:00", "23:59"], ["00:00", "08:14"]], rooms: { trading: [{ operators: ["锡兰"] }] } },
+      {
+        name: "白班",
+        period: [["08:15", "19:59"]],
+        rooms: {
+          control: [{ operators: ["外部测试干员"] }],
+          trading: [{ product: "Originium Shard", operators: [] }],
+        },
+      },
+      {
+        name: "夜班",
+        period: [["20:00", "23:59"], ["00:00", "08:14"]],
+        rooms: {
+          trading: [{ product: "Originium Shard", operators: ["锡兰"] }],
+          manufacture: [{ product: "Battle Record", operators: [] }],
+        },
+      },
     ],
   };
-  await page.getByLabel("选择 MAA 排版 JSON 文件").setInputFiles({
+  await expect(page.getByRole("button", { name: "导入排班文件" })).toBeVisible();
+  await page.getByLabel("选择 MAA 排班 JSON 文件").setInputFiles({
     name: "external-schedule.json",
     mimeType: "application/json",
     buffer: Buffer.from(JSON.stringify(importedSchedule)),
   });
 
-  const preview = page.getByRole("dialog", { name: "导入这个 MAA 排版？" });
+  const preview = page.getByRole("dialog", { name: "导入这个 MAA 排班？" });
   await expect(preview).toContainText("external-schedule.json");
   await expect(preview).toContainText("干员位置：2 / 2");
   await preview.getByRole("button", { name: "导入并替换草稿" }).click();
 
   await expect(page.getByRole("tab", { name: /班次 1.*08:15至19:59.*11小时45分钟/ })).toBeVisible();
   await expect(page.locator('[data-room-title="控制中枢"] [data-operator-identity="外部测试干员"]')).toBeVisible();
+  await expect(page.locator('[data-room-title="贸易站 1"]')).toContainText("开采协力");
+  await expect(page.locator('[data-room-title="制造站 1"]')).toContainText("作战记录");
   await page.getByRole("tab", { name: /班次 2.*20:00至08:14.*12小时15分钟/ }).click();
   await expect(page.locator('[data-room-title="贸易站 1"] [data-operator-identity="锡兰"]')).toBeVisible();
+
+  await page.getByRole("button", { name: "配置 Box 与布局" }).first().click();
+  const setup = page.getByRole("dialog");
+  await setup.getByRole("button", { name: "继续", exact: true }).click();
+  await setup.getByRole("button", { name: "继续", exact: true }).click();
+  await expect(setup.locator('[data-facility-group="trade"] [data-slot="setup-room-row"]').first().getByRole("button", { name: "开采协力" })).toHaveAttribute("aria-pressed", "true");
+  await expect(setup.locator('[data-facility-group="factory"] [data-slot="setup-room-row"]').first().getByRole("button", { name: "作战记录" })).toHaveAttribute("aria-pressed", "true");
 });

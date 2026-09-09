@@ -3,6 +3,8 @@ import { PRODUCT_ICON_URLS } from "./product-assets.ts";
 import type { RotationJson } from "./types.ts";
 
 type SolverDailyProduction = NonNullable<RotationJson["daily"]["production"]>;
+const DAILY_GOLD_VALUE = 5_000;
+const DAILY_GOLD_UNITS = DAILY_GOLD_VALUE / 500;
 
 export type ProductionDetailProduct = {
   id: string;
@@ -56,7 +58,8 @@ function originiumBottleneck(production: DailyProductionEstimate): string {
 function solverGroups(production: SolverDailyProduction, drone: NonNullable<RotationJson["daily"]["drone_production"]> = { lmd: 0, pure_gold: 0, battle_records: 0 }): DailyProductionGroup[] {
   const goldUnits = Math.floor(production.pure_gold / 500);
   const droneGoldUnits = Math.floor(drone.pure_gold / 500);
-  const totalGoldUnits = Math.floor((production.pure_gold + drone.pure_gold) / 500);
+  const equivalentGoldUnits = Math.floor((production.equivalent_gold ?? 0) / 500);
+  const totalGoldUnits = Math.floor((production.pure_gold + drone.pure_gold + (production.equivalent_gold ?? 0) + DAILY_GOLD_VALUE) / 500);
   const totalLmd = production.lmd + drone.lmd;
   const totalExperience = production.battle_records + drone.battle_records;
   return [
@@ -80,7 +83,7 @@ function solverGroups(production: SolverDailyProduction, drone: NonNullable<Rota
       supporting: {
         ...solverProduct("gold", "赤金", "枚", PRODUCT_ICON_URLS.gold, totalGoldUnits, "订单原料"),
         amount: { value: totalGoldUnits, natural: goldUnits, drones: droneGoldUnits },
-        rows: [["估算自然制造", goldUnits, "枚"], ["估算无人机制造", droneGoldUnits, "枚"], ["总产出", totalGoldUnits, "枚"]],
+        rows: [["估算自然制造", goldUnits, "枚"], ["估算等效赤金", equivalentGoldUnits, "枚"], ["估算无人机制造", droneGoldUnits, "枚"], ["日常获取", DAILY_GOLD_UNITS, "枚"], ["总产出", totalGoldUnits, "枚"]],
       },
     },
     {
@@ -152,8 +155,33 @@ function estimateGroups(production: DailyProductionEstimate): DailyProductionGro
   ];
 }
 
-function solverGroupsWithEstimate(production: SolverDailyProduction, drone?: NonNullable<RotationJson["daily"]["drone_production"]>): DailyProductionGroup[] {
-  return solverGroups(production, drone);
+function withSolverTotal(product: ProductionDetailProduct, value: number): ProductionDetailProduct {
+  return {
+    ...product,
+    amount: { ...product.amount, value },
+    rows: product.rows.map(([label, rowValue, unit]) => [`估算${label}`, rowValue, unit]),
+  };
+}
+
+function solverGroupsWithEstimate(
+  production: SolverDailyProduction,
+  estimate: DailyProductionEstimate,
+  drone?: NonNullable<RotationJson["daily"]["drone_production"]>,
+): DailyProductionGroup[] {
+  const groups = solverGroups(production, drone);
+  const estimated = estimateGroups(estimate);
+  const originium = estimated.find((group) => group.id === "orundum");
+  if (!originium) return groups;
+  return groups.map((group) => group.id !== "orundum"
+    ? group
+    : {
+        ...originium,
+        source: "solver" as const,
+        primary: withSolverTotal(originium.primary, production.orundum),
+        ...(originium.supporting
+          ? { supporting: withSolverTotal(originium.supporting, production.originium_shards) }
+          : {}),
+      });
 }
 
 export function dailyProductionGroups(
@@ -161,7 +189,7 @@ export function dailyProductionGroups(
   solverProduction: SolverDailyProduction | null,
   droneProduction?: NonNullable<RotationJson["daily"]["drone_production"]>,
 ): DailyProductionGroup[] {
-  if (solverProduction && estimate) return solverGroupsWithEstimate(solverProduction, droneProduction);
+  if (solverProduction && estimate) return solverGroupsWithEstimate(solverProduction, estimate, droneProduction);
   if (solverProduction) return solverGroups(solverProduction, droneProduction);
   return estimate ? estimateGroups(estimate) : [];
 }

@@ -71,6 +71,20 @@ test("empty trainer has no 5% placement bonus; ordinary owned trainer does", () 
   near(calculateMastery(ordinary).fast.totalSeconds,8/1.05*3600);
 });
 
+test("excludes operators whose progression is handled by Integrated Strategies", () => {
+  const value = box("电弧", "机械师", "逻各斯");
+  assert.deepEqual(eligibleMasteryTargets(value).map((o) => o.name), ["逻各斯"]);
+  assert.throws(() => calculateMastery({
+    operbox: value,
+    targetId: value[0]!.id,
+    current: 0,
+    target: 1,
+    controlBonus: false,
+    bufferMinutes: 0,
+    environment: {},
+  }));
+});
+
 test("legacy short and name-only IDs resolve locally without changing imported Box", () => {
   const value = input("埃癸斯",["艾丽妮","W"]);
   const expected = calculateMastery(value).fast.totalSeconds;

@@ -62,6 +62,8 @@
   "unitPieces": "pcs",
   "estimatedNaturalManufacturing": "Estimated natural manufacturing",
   "estimatedDroneManufacturing": "Estimated drone manufacturing",
+  "estimatedEquivalentGold": "Estimated equivalent Pure Gold",
+  "dailyAcquisition": "Daily acquisition",
   "estimatedNaturalOrders": "Estimated natural orders",
   "estimatedDroneOrders": "Estimated drone orders",
   "estimatedDrones": "Estimated drones",
@@ -70,5 +72,14 @@
   "surplus": "Surplus",
   "loss": "Loss",
   "moneyBookRatio": "LMD / EXP",
-  "noExperienceManufactured": "No EXP manufactured"
+  "noExperienceManufactured": "No EXP manufactured",
+  "estimatedShardStageCapacity": "Estimated shard-stage capacity",
+  "estimatedOrderStageCapacity": "Estimated order-stage delivery",
+  "orundumBottleneckManufacture": "Bottleneck: shard manufacturing",
+  "orundumBottleneckTrade": "Bottleneck: Orundum orders",
+  "orundumBottleneckBalanced": "Bottleneck: balanced stages",
+  "orundumBottleneckNone": "Bottleneck: no Orundum line",
+  "orundumBottleneckUnavailable": "Bottleneck: insufficient production data",
+  "orderMaterial": "Order material",
+  "manufactureStage": "Manufacturing stage"
 }

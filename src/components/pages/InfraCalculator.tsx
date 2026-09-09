@@ -40,6 +40,8 @@ import type {
 const PlanResultSummary = lazy(() => loadClientFeature("planResultSummary").then((module) => ({ default: module.PlanResultSummary })));
 const ShortcutGuideDialog = lazy(() => loadClientFeature("sharedComponents").then((module) => ({ default: module.ShortcutGuideDialog })));
 const UpgradeSimulationDialog = lazy(() => import("@/components/UpgradeSimulationDialog").then((module) => ({ default: module.UpgradeSimulationDialog })));
+const DroneTargetPicker = lazy(() => import("@/components/DroneTargetPicker").then(module => ({ default: module.DroneTargetPicker })));
+const PlanActionsDialog = lazy(() => import("@/components/PlanActionsDialog").then(module => ({ default: module.PlanActionsDialog })));
 
 function DeferredResultLoading() {
   return <PlanResultSummarySkeleton />;
@@ -353,6 +355,8 @@ export interface InfraCalculatorProps {
   onOpenUpgradeSimulation: () => void;
   onUpgradeSimulationOpenChange: (open: boolean) => void;
   onRun: () => void;
+  onAutoDroneAllocation: () => void;
+  manualDroneSelection?: boolean;
   onSimulateUpgrades: (trialOperbox: OperBoxEntry[]) => Promise<PublicPlanData>;
   upgradeComparison: { trial: PublicPlanData } | null;
   scheduleVariant: "baseline" | "trial";
@@ -364,6 +368,8 @@ export interface InfraCalculatorProps {
   onPerformanceIssue: () => void;
   onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
+  droneTargetRoomId?: string | null;
+  onDroneTargetChange?: (row: RoomRow) => void;
   onEditManualSchedule: () => void;
   onDownloadMaa: () => void;
   onClearResultNotice: () => void;
@@ -372,6 +378,7 @@ export interface InfraCalculatorProps {
 
 export function InfraCalculator(props: InfraCalculatorProps) {
   const intl = useTranslations();
+  const [dronePickerOpen, setDronePickerOpen] = useState(false);
   const {
     layout,
     result, scheduleResult, activeShift, rows,
@@ -380,9 +387,9 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     feedbackResult,
     operbox,
     sampleLoading, loading, canRun, runCooldownSeconds, hasBox, hasPersonalBox, feedbackDisabledForSampleBox, plannerReady, websiteAuthenticated, showOnboarding, taskQueue, animatePlanEntrance, animateEmptyScheduleEntrance, onPlanEntranceConsumed, requiresAccount = false, accountControl,
-    onRunSampleTrial, onStartPersonalFlow, onDismissOnboarding, onOpenSetup, upgradeSimulationOpen, onOpenUpgradeSimulation, onUpgradeSimulationOpenChange, onRun, onSimulateUpgrades, upgradeComparison, scheduleVariant, onScheduleVariantChange, onUpgradeTrialReady, onCancelRun,
+    onRunSampleTrial, onStartPersonalFlow, onDismissOnboarding, onOpenSetup, upgradeSimulationOpen, onOpenUpgradeSimulation, onUpgradeSimulationOpenChange, onRun, onAutoDroneAllocation, manualDroneSelection = false, onSimulateUpgrades, upgradeComparison, scheduleVariant, onScheduleVariantChange, onUpgradeTrialReady, onCancelRun,
     onSetActiveShift, onMarkIssue, onPerformanceIssue,
-    onFactoryRecipeChange, onTradeOrderChange,
+    onFactoryRecipeChange, onTradeOrderChange, droneTargetRoomId, onDroneTargetChange,
     onEditManualSchedule, onDownloadMaa,
     onClearResultNotice, onDismissResultClearWarning,
   } = props;
@@ -676,6 +683,16 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                     <FiammettaTargetChip target={fiammettaTarget} portrait={fiammettaPortrait} />
                   ) : null}
                   <DroneTargetChip drones={activePlan?.drones} />
+                  {scheduleResult && onDroneTargetChange ? (
+                    <div className="flex items-center gap-1.5">
+                      <Button type="button" size="sm" variant={manualDroneSelection ? "default" : "outline"} disabled>
+                        {manualDroneSelection ? "手动选择无人机" : "自动分配无人机"}
+                      </Button>
+                      <Button type="button" size="sm" variant="outline" onClick={() => { if (manualDroneSelection) onAutoDroneAllocation(); else setDronePickerOpen(true); }}>
+                        {manualDroneSelection ? "切换到自动" : "切换到手动"}
+                      </Button>
+                    </div>
+                  ) : null}
                   <ShiftTabs
                     maaJson={scheduleResult?.maa}
                     rotation={scheduleResult?.rotation}
@@ -690,6 +707,8 @@ export function InfraCalculator(props: InfraCalculatorProps) {
               feedbackDisabled={feedbackDisabledForSampleBox}
               onFactoryRecipeChange={onFactoryRecipeChange}
               onTradeOrderChange={onTradeOrderChange}
+              droneTargetRoomId={droneTargetRoomId}
+              onDroneTargetChange={onDroneTargetChange}
             /> : (
               <div className="flex min-h-[420px] items-center justify-center border-y border-dashed border-border/70 py-6 text-center text-sm text-muted-foreground">
                 {intl("components_pages_InfraCalculator.noLayoutRoomsToDisplay")}
@@ -703,6 +722,8 @@ export function InfraCalculator(props: InfraCalculatorProps) {
           ) : null}
         </section>
       </section>
+
+      {dronePickerOpen && <Suspense fallback={null}><DroneTargetPicker rows={rows} targetRoomId={droneTargetRoomId} manualSelection={manualDroneSelection} onTargetChange={onDroneTargetChange} onAutoAllocation={onAutoDroneAllocation} onOpenChange={setDronePickerOpen} /></Suspense>}
 
       {resultClearNotice ? (
         <aside className="fixed left-1/2 top-[max(5rem,calc(env(safe-area-inset-top)+5rem))] z-[70] w-[min(720px,calc(100vw-2rem))] -translate-x-1/2 border border-[#FFD800]/70 bg-[#313131] px-4 py-3 text-white shadow-[0_16px_44px_rgba(0,0,0,0.35)]" aria-live="polite">
@@ -732,46 +753,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
           />
         </Suspense>
       ) : null}
-      <Dialog open={planActionsOpen} onOpenChange={setPlanActionsOpen}>
-        <DialogContent className="gap-5 max-sm:bottom-0 max-sm:top-auto max-sm:max-w-none max-sm:translate-y-0 max-sm:rounded-t-[24px] max-sm:rounded-b-none sm:max-w-lg sm:p-6" data-plan-actions-dialog>
-          <DialogHeader className="gap-1.5 px-1 sm:px-2">
-            <DialogTitle className="text-lg font-semibold">{intl("components_pages_InfraCalculator.adjustThisPlan")}</DialogTitle>
-            <DialogDescription className="text-sm leading-6">
-              {intl("components_pages_InfraCalculator.youAreViewingTheChooseWhetherToChangeThe", { visibleVariantLabel: visibleVariantLabel })}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-2 px-1 sm:px-2">
-            {operbox ? (
-              <button
-                type="button"
-                className="group flex min-h-20 w-full items-center gap-3 rounded-[var(--radius-md)] border border-border bg-background px-4 py-3 text-left outline-none transition-colors hover:border-foreground/40 hover:bg-muted/45 focus-visible:ring-2 focus-visible:ring-[#FFD800]"
-                onClick={openProgressionAction}
-                data-plan-action="progression"
-              >
-                <span className="grid size-10 shrink-0 place-items-center rounded-[var(--radius-sm)] bg-[#313131] text-[#FFD800]" aria-hidden="true"><FlaskConical className="size-5" /></span>
-                <span className="min-w-0 flex-1">
-                  <strong className="block text-sm font-semibold">{intl("components_pages_InfraCalculator.modifyProgressionAndRecalculate")}</strong>
-                  <span className="mt-1 block text-xs leading-5 text-muted-foreground">{intl("components_pages_InfraCalculator.updateTheCurrentBoxKeepTheOriginalPlanAnd")}</span>
-                </span>
-                <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
-              </button>
-            ) : null}
-            <button
-              type="button"
-              className="group flex min-h-20 w-full items-center gap-3 rounded-[var(--radius-md)] border border-border bg-background px-4 py-3 text-left outline-none transition-colors hover:border-foreground/40 hover:bg-muted/45 focus-visible:ring-2 focus-visible:ring-[#FFD800]"
-              onClick={openManualAction}
-              data-plan-action="manual"
-            >
-              <span className="grid size-10 shrink-0 place-items-center rounded-[var(--radius-sm)] bg-muted text-foreground" aria-hidden="true"><PencilLine className="size-5" /></span>
-              <span className="min-w-0 flex-1">
-                <strong className="block text-sm font-semibold">{intl("components_pages_InfraCalculator.editTheCurrentPlanManually")}</strong>
-                <span className="mt-1 block text-xs leading-5 text-muted-foreground">{intl("components_pages_InfraCalculator.copyThePlanYouAreViewingAndContinueIn")}</span>
-              </span>
-              <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
-            </button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {planActionsOpen && <Suspense fallback={null}><PlanActionsDialog hasBox={!!operbox} visibleVariantLabel={visibleVariantLabel} onOpenChange={setPlanActionsOpen} onProgression={openProgressionAction} onManual={openManualAction} /></Suspense>}
       <Suspense fallback={null}>
         <ShortcutGuideDialog open={shortcutGuideOpen} onOpenChange={setShortcutGuideOpen} />
         <Dialog open={cancelConfirmOpen} onOpenChange={setCancelConfirmOpen}>
