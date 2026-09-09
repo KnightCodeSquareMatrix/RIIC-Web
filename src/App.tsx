@@ -339,6 +339,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   const [sampleLoading, setSampleLoading] = useState(false);
   const sampleTrialInFlightRef = useRef(false);
   const [result, setResult] = useState<PublicPlanData | null>(null);
+  const [manualDroneShifts, setManualDroneShifts] = useState<Record<number, boolean>>({});
   const [upgradeComparison, setUpgradeComparison] = useState<{ baseline: PublicPlanData; trial: PublicPlanData } | null>(null);
   const [scheduleVariant, setScheduleVariant] = useState<"baseline" | "trial">("baseline");
   const [loading, setLoading] = useState(false);
@@ -1467,6 +1468,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   }
 
   function handleScheduleDroneTargetChange(row: RoomRow) {
+    setManualDroneShifts((current) => ({ ...current, [activeShift]: true }));
     setResult((current) => {
       if (!current) return current;
       const room = layout.rooms.find((candidate) => candidate.id === row.roomId);
@@ -1484,6 +1486,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   }
 
   function handleAutoDroneAllocation() {
+    setManualDroneShifts((current) => ({ ...current, [activeShift]: false }));
     setResult((current) => current ? {
       ...current,
       maa: applyDroneAllocationsToMaa({ layout, maa: current.maa, rotation: current.rotation }),
@@ -1960,6 +1963,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       onUpgradeSimulationOpenChange: setUpgradeSimulationOpen,
       onRun: handleProtectedRun,
       onAutoDroneAllocation: handleAutoDroneAllocation,
+      manualDroneSelection: Boolean(manualDroneShifts[activeShift]),
       onSimulateUpgrades: handleSimulateUpgrades,
       upgradeComparison: upgradeComparison?.baseline === result ? { trial: upgradeComparison.trial } : null,
       scheduleVariant,

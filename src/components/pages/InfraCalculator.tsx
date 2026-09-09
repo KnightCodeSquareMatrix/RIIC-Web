@@ -354,6 +354,7 @@ export interface InfraCalculatorProps {
   onUpgradeSimulationOpenChange: (open: boolean) => void;
   onRun: () => void;
   onAutoDroneAllocation: () => void;
+  manualDroneSelection?: boolean;
   onSimulateUpgrades: (trialOperbox: OperBoxEntry[]) => Promise<PublicPlanData>;
   upgradeComparison: { trial: PublicPlanData } | null;
   scheduleVariant: "baseline" | "trial";
@@ -384,7 +385,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     feedbackResult,
     operbox,
     sampleLoading, loading, canRun, runCooldownSeconds, hasBox, hasPersonalBox, feedbackDisabledForSampleBox, plannerReady, websiteAuthenticated, showOnboarding, taskQueue, animatePlanEntrance, animateEmptyScheduleEntrance, onPlanEntranceConsumed, requiresAccount = false, accountControl,
-    onRunSampleTrial, onStartPersonalFlow, onDismissOnboarding, onOpenSetup, upgradeSimulationOpen, onOpenUpgradeSimulation, onUpgradeSimulationOpenChange, onRun, onAutoDroneAllocation, onSimulateUpgrades, upgradeComparison, scheduleVariant, onScheduleVariantChange, onUpgradeTrialReady, onCancelRun,
+    onRunSampleTrial, onStartPersonalFlow, onDismissOnboarding, onOpenSetup, upgradeSimulationOpen, onOpenUpgradeSimulation, onUpgradeSimulationOpenChange, onRun, onAutoDroneAllocation, manualDroneSelection = false, onSimulateUpgrades, upgradeComparison, scheduleVariant, onScheduleVariantChange, onUpgradeTrialReady, onCancelRun,
     onSetActiveShift, onMarkIssue, onPerformanceIssue,
     onFactoryRecipeChange, onTradeOrderChange, droneTargetRoomId, onDroneTargetChange,
     onEditManualSchedule, onDownloadMaa,
@@ -681,12 +682,9 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                   ) : null}
                   <DroneTargetChip drones={activePlan?.drones} />
                   {scheduleResult && onDroneTargetChange ? (
-                    <>
-                      <Button type="button" size="sm" variant="outline" onClick={onAutoDroneAllocation}>
-                        自动分配无人机
-                      </Button>
-                      <Button type="button" size="sm" variant="outline" onClick={() => setDronePickerOpen(true)}>手动选择无人机</Button>
-                    </>
+                    <Button type="button" size="sm" variant={manualDroneSelection ? "default" : "outline"} onClick={() => setDronePickerOpen(true)}>
+                      {manualDroneSelection ? "手动选择无人机" : "自动分配无人机"}
+                    </Button>
                   ) : null}
                   <ShiftTabs
                     maaJson={scheduleResult?.maa}
@@ -734,7 +732,10 @@ export function InfraCalculator(props: InfraCalculatorProps) {
               不使用无人机
             </Button>
           </div>
-          <DialogFooter><Button type="button" variant="outline" onClick={() => setDronePickerOpen(false)}>取消</Button></DialogFooter>
+          <DialogFooter>
+            {manualDroneSelection ? <Button type="button" variant="outline" onClick={() => { onAutoDroneAllocation(); setDronePickerOpen(false); }}>恢复自动分配</Button> : null}
+            <Button type="button" variant="outline" onClick={() => setDronePickerOpen(false)}>取消</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
