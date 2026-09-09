@@ -395,7 +395,7 @@
   },
   "components_mastery_MasteryTargetPicker": {
     "chooseATrainee": "选择专精干员",
-    "ownedE2OperatorsInYourCurrentBoxThisSelection": "当前 Box 中已拥有的 {length} 名精二干员。选择不会修改 Box。",
+    "ownedE2OperatorsInYourCurrentBoxThisSelection": "当前 Box 中的 {length} 名精二干员。未拥有干员也可选择，选择不会修改 Box。",
     "select": "选择{name}",
     "e2": "精二",
     "noMatchingOwnedE2Operators": "没有符合条件的已拥有精二干员。",

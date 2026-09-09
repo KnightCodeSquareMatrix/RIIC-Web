@@ -58,7 +58,7 @@ test("eligibility, target exclusion and no Box mutation", () => {
   const value = input("逻各斯",["艾丽妮","黑","W"]);
   value.operbox[1]!.own = false;
   value.operbox[2]!.elite = 1;
-  assert.deepEqual(eligibleMasteryTargets(value.operbox).map((o) => o.name),["逻各斯","W"]);
+  assert.deepEqual(eligibleMasteryTargets(value.operbox).map((o) => o.name),["逻各斯","艾丽妮","W"]);
   const trainers = masteryTrainers(value);
   assert.ok(!trainers.some((t) => ["逻各斯","艾丽妮"].includes(t.name)));
   assert.ok(trainers.some((t) => t.name === "黑"));

@@ -72,7 +72,7 @@ export function normalizeMasteryBox(operbox: readonly OperBoxEntry[]): OperBoxEn
 }
 
 export function eligibleMasteryTargets(operbox: readonly OperBoxEntry[]) {
-  return normalizeMasteryBox(operbox).filter((operator) => operator.own && operator.elite === 2 && operator.rarity >= 4 && !MASTERY_UNSUPPORTED_TARGET_ID_SET.has(operator.id));
+  return normalizeMasteryBox(operbox).filter((operator) => operator.elite === 2 && operator.rarity >= 4 && !MASTERY_UNSUPPORTED_TARGET_ID_SET.has(operator.id));
 }
 
 
@@ -123,7 +123,7 @@ export function masteryTrainers(input: MasteryInput): MasteryTrainer[] {
 }
 
 function validate(input: MasteryInput) {
-  if (!eligibleMasteryTargets(input.operbox).some((o) => o.id === input.targetId)) throw new Error("请选择 Box 中已拥有的精二干员。 / Select an owned E2 operator.");
+  if (!eligibleMasteryTargets(input.operbox).some((o) => o.id === input.targetId)) throw new Error("请选择 Box 中的精二干员。 / Select an E2 operator in the Box.");
   if (![0,1,2].includes(input.current) || ![1,2,3].includes(input.target) || input.target <= input.current) throw new Error("目标专精等级必须高于当前等级。 / Target mastery must exceed current mastery.");
   if (!Number.isFinite(input.bufferMinutes) || input.bufferMinutes < 0 || !Number.isFinite(input.bufferMinutes * 60)) throw new Error("操作余量必须是非负数。 / Invalid time buffer.");
   for (const [key, value] of Object.entries(input.environment)) {
