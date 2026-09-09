@@ -682,9 +682,14 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                   ) : null}
                   <DroneTargetChip drones={activePlan?.drones} />
                   {scheduleResult && onDroneTargetChange ? (
-                    <Button type="button" size="sm" variant={manualDroneSelection ? "default" : "outline"} onClick={() => { if (manualDroneSelection) onAutoDroneAllocation(); else setDronePickerOpen(true); }}>
-                      {manualDroneSelection ? "手动选择无人机" : "自动分配无人机"}
-                    </Button>
+                    <div className="flex items-center gap-1.5">
+                      <Button type="button" size="sm" variant={manualDroneSelection ? "default" : "outline"} disabled>
+                        {manualDroneSelection ? "手动选择无人机" : "自动分配无人机"}
+                      </Button>
+                      <Button type="button" size="sm" variant="outline" onClick={() => { if (manualDroneSelection) onAutoDroneAllocation(); else setDronePickerOpen(true); }}>
+                        {manualDroneSelection ? "切换到自动" : "切换到手动"}
+                      </Button>
+                    </div>
                   ) : null}
                   <ShiftTabs
                     maaJson={scheduleResult?.maa}
