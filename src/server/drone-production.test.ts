@@ -8,7 +8,41 @@ import {
   droneTradeOutputForShift,
   equivalentGoldForRotation,
   powerEfficiencyForShift,
+  tradeTargetPriority,
 } from "./drone-production.ts";
+
+test("drone trade targets follow the configured priority chain", () => {
+  const operators = (...names: string[]) => names;
+  assert.ok(tradeTargetPriority(1, operators("但书")) > tradeTargetPriority(2, operators("但书")));
+  assert.ok(tradeTargetPriority(2, operators("但书")) > tradeTargetPriority(3, operators("但书", "龙舌兰")));
+  assert.ok(tradeTargetPriority(3, operators("但书", "龙舌兰")) > tradeTargetPriority(3, operators("龙舌兰", "柏喙")));
+  assert.ok(tradeTargetPriority(3, operators("龙舌兰", "柏喙")) > tradeTargetPriority(3, operators("但书")));
+  assert.ok(tradeTargetPriority(3, operators("但书")) > tradeTargetPriority(1, operators("可露希尔")));
+  assert.equal(tradeTargetPriority(1, operators("可露希尔")), 100);
+});
+
+test("automatic allocation selects the highest-priority trade room", () => {
+  const layout = {
+    template: "153", drone_cap: 0, scenario: {}, rooms: [
+      { id: "trade_1", kind: "trade_post" as const, level: 3, product: { trade: { order: "gold" as const } } },
+      { id: "trade_2", kind: "trade_post" as const, level: 1, product: { trade: { order: "gold" as const } } },
+      { id: "power_1", kind: "power_plant" as const, level: 3 },
+    ],
+  };
+  const plan = { name: "A", rooms: {
+    trading: [
+      { product: "LMD", operators: ["但书", "龙舌兰"] },
+      { product: "LMD", operators: ["但书"] },
+    ],
+    power: [{ operators: ["雷蛇"] }],
+  } };
+  const shift = {
+    index: 0, duration_hours: 12, active_teams: [], resting_team: "", weighted_trade: 0, weighted_manu: 0, weighted_power: 0,
+    scores: { trade_score: 0, manu_prod_sum: 0, power_charge_sum: 0, room_lines: [{ room_id: "power_1", equivalent_efficiency: 0.2 }] },
+  };
+  const [allocation] = chooseDroneAllocations({ layout, plans: [plan], shifts: [shift], dailyProduction: { lmd: 0, pure_gold: 0 } });
+  assert.equal(allocation.target.roomId, "trade_2");
+});
 
 test("power efficiency includes one shared base, working-operator bonuses, and station efficiency", () => {
   assert.ok(Math.abs(powerEfficiencyForShift({
