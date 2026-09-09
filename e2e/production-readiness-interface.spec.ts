@@ -681,6 +681,30 @@ test("layout level controls clamp edits and expose the power-safe 342 defaults",
   await expect(mobileTradeLevel).toHaveValue("1");
 });
 
+test("training recommendation shows readable promotion and current elite stages", async ({ page }, testInfo) => {
+  await mockApis(page);
+  await seedV4Session(page, {
+    ...planData,
+    profile: { ...profile, actions: [{
+      priority: "中", kind: "promote_tier_up", operator: "阿米娅", domain_id: "general",
+      message: "将「阿米娅」升至 tier_up（需精2）——参考组合成员，现5★精0 1级",
+      current_elite: 0, tier_up_requirement: "精2",
+    }] },
+  });
+  await page.context().addCookies([{ name: "NEXT_LOCALE", value: "zh", url: testInfo.project.use.baseURL! }]);
+  await page.goto("/training");
+  const card = page.locator('[data-recommendation-card="full"]');
+  await expect(card).toContainText("升至精二");
+  await expect(card).toContainText("目前精零 1级（5★）");
+  await expect(card).toContainText("目前精零 · 目标精二");
+  await expect(card).not.toContainText("tier_up");
+  await card.screenshot({ path: testInfo.outputPath("promotion-desktop.png") });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(card).toBeVisible();
+  expect(await card.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  await card.screenshot({ path: testInfo.outputPath("promotion-mobile.png") });
+});
+
 test("calculator owns scheduling controls and training advice uses a single technical stream", async ({ page }) => {
   const adviceResult = {
     ...planData,
