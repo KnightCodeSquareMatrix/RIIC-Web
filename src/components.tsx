@@ -1196,7 +1196,7 @@ function OperatorSlotShell({
         </span>
       ) : editableHint ? (
         <span className="pointer-events-none absolute bottom-0.5 right-0.5 z-20 bg-black/72 px-1 py-0.5 text-[9px] font-medium leading-none tracking-wide text-[#FFD800]">
-          {unavailable ? "未解锁" : editableHint}
+          {editableHint}
         </span>
       ) : null}
     </div>
@@ -1371,7 +1371,8 @@ export function OperatorSlot({
   const professionLabelEnglish = slot ? operatorProfessionLabelEnglishForCode(slot.profession) : undefined;
   const enterX = shouldReduceMotion ? 0 : shiftDirection * 6;
   const exitX = shouldReduceMotion ? 0 : shiftDirection * -4;
-  const occupantLabel = unavailable ? "未解锁" : displayName ?? (autofill ? (intl("components.autoFill")) : (intl("components.empty")));
+  const unavailableLabel = intl("components.slotLocked");
+  const occupantLabel = unavailable ? unavailableLabel : displayName ?? (autofill ? (intl("components.autoFill")) : (intl("components.empty")));
   const occupantAriaLabel = displayPositionLabel
     ? `${displayPositionLabel}${intl("components.label2")}${occupantLabel}`
     : occupantLabel;
@@ -1393,7 +1394,7 @@ export function OperatorSlot({
       compactView={compactView}
       editableAppearance={!selectionMode}
       unavailable={unavailable}
-      editableHint={unavailable ? "未解锁" : onActivate && !selectionMode ? (intl("components.edit")) : undefined}
+      editableHint={unavailable ? unavailableLabel : onActivate && !selectionMode ? (intl("components.edit")) : undefined}
       frameClassName={frameClassName}
       frameContent={
         <AnimatePresence initial={false} mode="sync">
