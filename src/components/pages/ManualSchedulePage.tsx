@@ -40,6 +40,7 @@ import {
   loadManualScheduleDraft,
   manualShiftTimeRanges,
   manualScheduleToMaa,
+  manualRoomCapacity,
   normalizeMaaScheduleForManualImport,
   parseMaaScheduleText,
   persistManualScheduleDraft,
@@ -304,10 +305,20 @@ export function ManualSchedulePage({
   const rows = useMemo(
     () => addOperatorPresentations(planToRows(activePlan, undefined, layout, activeTrainingRoomShift).map((row) => {
       const assignment = draft.shifts[activeShift]?.rooms[row.roomId];
+      const room = layout.rooms.find((candidate) => candidate.id === row.roomId);
+      const capacity = room ? manualRoomCapacity(room) : 0;
+      const visibleSlots = row.group === "control" ? 5 : row.group === "trading" || row.group === "manufacture" ? 3 : capacity;
       return {
         ...row,
         ...(row.positionSlots ? {} : {
-          slotAssignments: assignment?.operators.map((name) => name ? { name, label: name } : undefined),
+          slotAssignments: Array.from(
+            { length: visibleSlots },
+            (_, index) => {
+              const name = index < capacity ? assignment?.operators[index] : undefined;
+              return name ? { name, label: name } : undefined;
+            },
+          ),
+          unavailableSlotIndices: Array.from({ length: Math.max(0, visibleSlots - capacity) }, (_, index) => capacity + index),
         }),
         ...(row.group === "dormitory" ? { autofill: Boolean(assignment?.autofill) } : {}),
       };
@@ -366,6 +377,7 @@ export function ManualSchedulePage({
   }
 
   function openSlotPicker(row: RoomRow, slotIndex: number) {
+    if (row.unavailableSlotIndices?.includes(slotIndex)) return;
     setPickerScrolling(false);
     setPickerQuery("");
     setPickerRoomFilter(ROOM_GROUP_TO_SKILL_PREFIX[row.group]);

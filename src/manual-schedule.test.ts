@@ -12,6 +12,7 @@ import {
   manualScheduleDraftContentEqual,
   manualShiftTimeRanges,
   manualScheduleToMaa,
+  manualRoomCapacity,
   normalizeMaaScheduleForManualImport,
   parseMaaScheduleText,
   reconcileManualScheduleDraft,
@@ -49,6 +50,14 @@ test("manual draft defaults to independent 12/6/6 shifts and preserves filled sh
   const resized = resizeManualScheduleDraft(assigned, resizeManualShiftDurations([12, 6, 6], 4));
   assert.equal(resized.shifts[0]?.rooms.trade_1?.operators[0], "但书");
   assert.deepEqual(resized.shifts.map((shift) => shift.durationHours), [12, 6, 3, 3]);
+});
+
+test("manual room capacity follows control, trading and manufacturing room levels", () => {
+  assert.equal(manualRoomCapacity({ kind: "control_center", level: 2, id: "control" } as never), 2);
+  assert.equal(manualRoomCapacity({ kind: "control_center", level: 5, id: "control" } as never), 5);
+  assert.equal(manualRoomCapacity({ kind: "trade_post", level: 1, id: "trade_1" } as never), 1);
+  assert.equal(manualRoomCapacity({ kind: "factory", level: 2, id: "manu_1" } as never), 2);
+  assert.equal(manualRoomCapacity({ kind: "factory", level: 5, id: "manu_1" } as never), 3);
 });
 
 test("manual shift boundaries use minute precision, stay contiguous and cover one day", () => {

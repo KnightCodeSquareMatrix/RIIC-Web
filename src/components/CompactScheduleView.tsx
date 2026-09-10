@@ -213,6 +213,7 @@ function CompactRoomCard({
       shiftDirection={shiftDirection}
       transitionDelay={Math.min(index, 2) * 0.02}
       positionLabel={positionLabel}
+      unavailable={row.unavailableSlotIndices?.includes(index)}
       onActivate={onSlotClick ? () => onSlotClick(row, index) : undefined}
     />
   ));
