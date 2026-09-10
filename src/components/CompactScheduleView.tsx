@@ -194,7 +194,7 @@ function CompactRoomCard({
       )}
     </div>
   ) : null;
-  const emptyWorkstationState = !efficiency && (row.group === "trading" || row.group === "manufacture" || (isPower && onClearRoom)) ? (
+  const emptyWorkstationState = !efficiency && (row.group === "trading" || row.group === "manufacture" || isPower) ? (
     <div className="font-technical text-xs tracking-[0.01em] text-white/38">
       {intl("components_CompactScheduleView.awaitingSchedule")}
     </div>
