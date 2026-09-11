@@ -804,9 +804,11 @@ test("calculator owns scheduling controls and training advice uses a single tech
   expect(exportOrder).toEqual([
     expect.stringContaining("调整方案"),
     expect.stringContaining("导出到 MAA"),
+    expect.stringContaining("导出图片"),
     expect.stringContaining("修改练度并重算"),
     expect.stringContaining("基于当前方案编辑"),
     expect.stringContaining("导出到 MAA"),
+    expect.stringContaining("导出图片"),
   ]);
 
   await page.getByRole("button", { name: "练卡建议" }).click();
