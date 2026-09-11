@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import pinyinNames from "./generated/arkntools/operator-pinyin.json" with { type: "json" };
 
 import {
   BUILDING_ROOM_LABELS,
@@ -123,6 +124,33 @@ test("combines room and name-substring filters with AND and sorts by name", () =
   const all = filterOperators(operators, null, null, "", lookup).map((operator) => operator.name);
   assert.equal(all.length, 3);
   assert.ok(all.includes("阿米娅") && all.includes("阿能") && all.includes("能天使"));
+});
+
+test("supports English operator name queries only when English names are provided", () => {
+  const operators: OperatorWithSkills[] = [
+    { name: "能天使", buildingSkills: [{ id: "control_x" }] },
+  ];
+  const lookup: SkillRecordLookup = () => ({});
+  assert.deepEqual(filterOperators(operators, null, null, "Exusiai", lookup), []);
+  assert.deepEqual(filterOperators(operators, null, null, "Exusiai", lookup, { englishNames: { "能天使": "Exusiai" } }).map((operator) => operator.name), ["能天使"]);
+});
+
+test("supports Chinese operator-name fuzzy search with initials and full pinyin", () => {
+  const operators: OperatorWithSkills[] = [
+    { name: "阿米娅", buildingSkills: [{ id: "control_x" }] },
+    { name: "能天使", buildingSkills: [{ id: "manu_x" }] },
+  ];
+  const lookup: SkillRecordLookup = () => ({});
+  assert.deepEqual(filterOperators(operators, null, null, "amy", lookup, { pinyinNames }).map((operator) => operator.name), ["阿米娅"]);
+  assert.deepEqual(filterOperators(operators, null, null, "amiya", lookup, { pinyinNames }).map((operator) => operator.name), ["阿米娅"]);
+  assert.deepEqual(filterOperators(operators, null, null, "nts", lookup, { pinyinNames }).map((operator) => operator.name), ["能天使"]);
+});
+
+test("keeps both pinyin readings for 仇白", () => {
+  const operators: OperatorWithSkills[] = [{ name: "仇白", buildingSkills: [{ id: "control_x" }] }];
+  const lookup: SkillRecordLookup = () => ({});
+  assert.deepEqual(filterOperators(operators, null, null, "choubai", lookup, { pinyinNames }).map((operator) => operator.name), ["仇白"]);
+  assert.deepEqual(filterOperators(operators, null, null, "qiubai", lookup, { pinyinNames }).map((operator) => operator.name), ["仇白"]);
 });
 
 test("matches queries against skill names and plain-text descriptions", () => {

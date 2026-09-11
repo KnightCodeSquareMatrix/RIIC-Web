@@ -829,7 +829,7 @@ function maaRoom(room: BlueprintRoom, assignment: ManualRoomAssignment | undefin
   const product = maaProduct(room);
   return {
     operators,
-    sort: false,
+    sort: true,
     skip: false,
     autofill: room.kind === "dormitory" ? assignment?.autofill ?? true : false,
     ...(product ? { product } : {}),

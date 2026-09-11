@@ -5,6 +5,14 @@ import { setTimeout as delay } from "node:timers/promises";
 import path from "node:path";
 
 import sharp from "sharp";
+import { pinyin } from "pinyin-pro";
+
+export function generateOperatorPinyin(operators) {
+  return Object.fromEntries(operators.map(({ name }) => [name, [
+    pinyin(name, { pattern: "first", toneType: "none", type: "array" }).join("").toLowerCase(),
+    pinyin(name, { toneType: "none", type: "array" }).join("").toLowerCase(),
+  ]]));
+}
 
 export const ARKNTOOLS_REPOSITORY = "https://github.com/arkntools/arknights-toolbox-data";
 export const ARKNIGHTS_GAME_RESOURCE_REPOSITORY = "https://github.com/yuanyan3060/ArknightsGameResource";
@@ -477,6 +485,7 @@ async function writeStage(stageRoot, generated) {
       await writeFile(path.join(productTarget, name), output);
     }),
     writeFile(path.join(dataTarget, "operator-catalog.json"), json(generated.operators), "utf8"),
+    writeFile(path.join(dataTarget, "operator-pinyin.json"), json(generateOperatorPinyin(generated.operators)), "utf8"),
     writeFile(path.join(dataTarget, "operator-rarities.json"), json(Object.fromEntries(generated.operators.map(({ id, rarity }) => [id, rarity]))), "utf8"),
     writeFile(path.join(dataTarget, "building-skill-catalog.json"), json(generated.skills), "utf8"),
     writeFile(path.join(dataTarget, "term-catalog.json"), json(generated.terms), "utf8"),
@@ -509,6 +518,8 @@ export async function checkGeneratedAssets(root) {
   assert(JSON.stringify(rarities) === JSON.stringify(Object.fromEntries(operators.map(({ id, rarity }) => [id, rarity]))), "干员星级索引与干员目录不一致。");
   assert(isObject(skills), "已生成基建技能目录必须是对象。");
   assert(isObject(terms), "已生成词条目录必须是对象。");
+  const operatorPinyin = await readJson(path.join(dataRoot, "operator-pinyin.json"), "干员拼音索引");
+  assert(JSON.stringify(operatorPinyin) === JSON.stringify(generateOperatorPinyin(operators)), "干员拼音索引需要随资源同步更新。");
   assert(isObject(manifest) && manifest.version === GENERATED_VERSION, "已生成来源清单版本无效。");
   normalizeCommit(manifest.source?.commit);
   assert(manifest.source?.repository === ARKNTOOLS_REPOSITORY, "已生成来源仓库无效。");
