@@ -387,6 +387,16 @@ export function ManualSchedulePage({
     setPicker({ kind: "slot", roomId: row.roomId, slotIndex });
   }
 
+  function openFiammettaPicker() {
+    setPickerScrolling(false);
+    setPickerQuery("");
+    setPickerRoomFilter(null);
+    setPickerSkillTag(null);
+    setPickerRarity(null);
+    setPickerPage(1);
+    setPicker({ kind: "fiammetta" });
+  }
+
   function changePickerRoomFilter(next: BuildingRoomPrefix | null) {
     setPickerRoomFilter(next);
     setPickerSkillTag(null);
@@ -562,6 +572,7 @@ export function ManualSchedulePage({
 
   const fiammettaTarget = draft.shifts[activeShift]?.fiammettaTarget;
   const fiammettaPortrait = fiammettaTarget ? operatorPortraitFor(fiammettaTarget) : null;
+  const hasFiammetta = ownedOperators.some((operator) => operator.name === "菲亚梅塔");
   const sourceVariantLabel = draft.source?.variant === "progression-adjusted"
     ? (intl("components_pages_ManualSchedulePage.progressionAdjustedPlan"))
     : (intl("components_pages_ManualSchedulePage.originalPlan"));
@@ -626,17 +637,13 @@ export function ManualSchedulePage({
             <Trash2 />{intl("components_pages_ManualSchedulePage.clearEveryFacilityInShift")}
           </Button>
         )}
-        shiftInfoSlot={fiammettaEnabled ? (
+        shiftInfoSlot={hasFiammetta ? (
           <FiammettaTargetChip
-            target={fiammettaTarget}
-            portrait={fiammettaPortrait}
+            target={fiammettaEnabled ? fiammettaTarget : null}
+            portrait={fiammettaEnabled ? fiammettaPortrait : null}
             onClick={() => {
-              setPickerQuery("");
-              setPickerRoomFilter(null);
-              setPickerSkillTag(null);
-              setPickerRarity(null);
-              setPickerPage(1);
-              setPicker({ kind: "fiammetta" });
+              if (!fiammettaEnabled) onFiammettaEnabledChange(true);
+              openFiammettaPicker();
             }}
           />
         ) : undefined}
@@ -726,7 +733,13 @@ export function ManualSchedulePage({
               </div>
             ) : null}
 
-            <div className={picker?.kind === "slot" ? "mt-1" : ""} role="group" aria-label={skillFilters("rarity")}>
+            {picker?.kind === "fiammetta" ? (
+              <div className="flex justify-end">
+                <Button type="button" variant="destructive" size="sm" className="px-2 text-xs max-sm:min-h-8" data-manual-clear-morale-target onClick={() => chooseOperator(null)}><Trash2 />{intl("components_pages_ManualSchedulePage.clearSlot")}</Button>
+              </div>
+            ) : null}
+
+            <div className="mt-1" role="group" aria-label={skillFilters("rarity")}>
               <SkillFilterRow label={skillFilters("rarity")}>
                 <OperatorRarityFilter
                   value={pickerRarity === null ? "all" : String(pickerRarity)}
