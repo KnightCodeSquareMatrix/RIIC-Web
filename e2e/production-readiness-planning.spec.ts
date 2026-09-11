@@ -214,7 +214,11 @@ test("buffered plans show a quiet candidate-ring state and can be dismissed with
 });
 
 test("stopped task polling allows immediate manual retry and single-flight network recovery", async ({ page }) => {
-  await mockApis(page, { taskQueueEnabled: true });
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  // Keep the completion notice open: this test controls polling time, while
+  // the dedicated notice test verifies dismissal with real animation time.
+  await mockApis(page, { taskQueueEnabled: true, dismissSolverWarning: false });
   let submissions = 0;
   let polls = 0;
   let recovering = false;
@@ -274,6 +278,7 @@ test("stopped task polling allows immediate manual retry and single-flight netwo
   releaseRecovery();
   await expect(page.locator("[data-plan-board]")).toHaveAttribute("data-plan-revision", diagnosticId);
   expect(submissions).toBe(1);
+  expect(pageErrors.filter((message) => message.includes("Illegal invocation"))).toEqual([]);
 });
 
 test("operator skill terms reveal square hover cards on pointer and keyboard focus", async ({ page }) => {
