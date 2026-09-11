@@ -38,29 +38,18 @@ export function loadUserSettings(storage: StorageLike): UserSettings {
     const raw = storage.getItem(USER_SETTINGS_STORAGE_KEY);
     if (!raw) return { ...DEFAULT_USER_SETTINGS };
     const value = JSON.parse(raw) as Partial<UserSettings>;
+    const settings = { ...DEFAULT_USER_SETTINGS };
+    for (const key of Object.keys(settings) as Array<keyof UserSettings>) {
+      if (typeof settings[key] === "boolean" && typeof value[key] === "boolean") {
+        Object.assign(settings, { [key]: value[key] });
+      }
+    }
     return {
-      strictMaaOperatorOrder: typeof value.strictMaaOperatorOrder === "boolean"
-        ? value.strictMaaOperatorOrder
-        : DEFAULT_USER_SETTINGS.strictMaaOperatorOrder,
-      showProgressionRecalculate: typeof value.showProgressionRecalculate === "boolean"
-        ? value.showProgressionRecalculate
-        : DEFAULT_USER_SETTINGS.showProgressionRecalculate,
-      showManualScheduleEdit: typeof value.showManualScheduleEdit === "boolean"
-        ? value.showManualScheduleEdit
-        : DEFAULT_USER_SETTINGS.showManualScheduleEdit,
+      ...settings,
       scheduleViewControl: value.scheduleViewControl === "select" ? "select" : DEFAULT_USER_SETTINGS.scheduleViewControl,
-      linkShiftViewControl: typeof value.linkShiftViewControl === "boolean"
-        ? value.linkShiftViewControl
-        : DEFAULT_USER_SETTINGS.linkShiftViewControl,
       shiftViewControl: value.shiftViewControl === "select" ? "select" : DEFAULT_USER_SETTINGS.shiftViewControl,
       imageExportScope: value.imageExportScope === "all" ? "all" : DEFAULT_USER_SETTINGS.imageExportScope,
-      loadEnglishResources: typeof value.loadEnglishResources === "boolean" ? value.loadEnglishResources : DEFAULT_USER_SETTINGS.loadEnglishResources,
       skillPagination: value.skillPagination === "manual" ? "manual" : DEFAULT_USER_SETTINGS.skillPagination,
-      showFeedback: typeof value.showFeedback === "boolean" ? value.showFeedback : DEFAULT_USER_SETTINGS.showFeedback,
-      showImages: typeof value.showImages === "boolean" ? value.showImages : DEFAULT_USER_SETTINGS.showImages,
-      allowReplacementOperatorSort: typeof value.allowReplacementOperatorSort === "boolean"
-        ? value.allowReplacementOperatorSort
-        : DEFAULT_USER_SETTINGS.allowReplacementOperatorSort,
     };
   } catch {
     return { ...DEFAULT_USER_SETTINGS };

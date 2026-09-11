@@ -98,7 +98,7 @@ const nextConfig: NextConfig = {
   experimental: {
     cpus: 4,
     turbopackChunking: {
-      minChunkSize: 90_000,
+      minChunkSize: 100_000,
     },
   },
   typedRoutes: false,

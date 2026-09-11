@@ -8,12 +8,7 @@ import type { FactoryRecipe, TradeOrder } from "@/blueprint";
 import { filterOperators, ROOM_SKILL_TAGS, type BuildingRoomPrefix } from "@/building-rooms";
 import { OperatorSlot, ScheduleBoard, ShiftTabs } from "@/components";
 import { FiammettaTargetChip } from "@/components/FiammettaTargetChip";
-import { OperatorRarityFilter, OperatorSearch } from "@/components/operators/OperatorPickerParts";
 import { ManualScheduleRoomActions } from "@/components/ManualScheduleRoomActions";
-import { Pagination } from "@/components/skill-query/Pagination";
-import { SkillFilterRow } from "@/components/skill-query/SkillFilterRow";
-import { SkillRoomTagBar } from "@/components/skill-query/SkillRoomTagBar";
-import { SkillTagBar } from "@/components/skill-query/SkillTagBar";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -59,6 +54,12 @@ import { planToRows, type RoomRow } from "@/schedule";
 import type { BaseBlueprint, MaaJson, MaaOperatorSlot, MaaRoom, OperBoxEntry } from "@/types";
 
 const ScrollArea = lazy(() => import("@/components/ui/scroll-area").then((module) => ({ default: module.ScrollArea })));
+const OperatorRarityFilter = lazy(() => import("@/components/operators/OperatorPickerParts").then(module => ({ default: module.OperatorRarityFilter })));
+const OperatorSearch = lazy(() => import("@/components/operators/OperatorPickerParts").then(module => ({ default: module.OperatorSearch })));
+const Pagination = lazy(() => import("@/components/skill-query/Pagination").then(module => ({ default: module.Pagination })));
+const SkillFilterRow = lazy(() => import("@/components/skill-query/SkillFilterRow").then(module => ({ default: module.SkillFilterRow })));
+const SkillRoomTagBar = lazy(() => import("@/components/skill-query/SkillRoomTagBar").then(module => ({ default: module.SkillRoomTagBar })));
+const SkillTagBar = lazy(() => import("@/components/skill-query/SkillTagBar").then(module => ({ default: module.SkillTagBar })));
 const MaaImportDialog = lazy(() => import("@/components/MaaImportDialog").then(module => ({ default: module.MaaImportDialog })));
 const MANUAL_PICKER_PAGE_SIZE = 24;
 const ROOM_GROUP_TO_SKILL_PREFIX: Readonly<Record<RoomRow["group"], BuildingRoomPrefix>> = {

@@ -20,6 +20,14 @@ function memoryStorage(): Storage {
   };
 }
 
+test("invalid or unknown stored settings do not overwrite defaults", () => {
+  const storage = memoryStorage();
+  for (const value of [null, [], { showImages: "false", imageExportScope: "invalid", unknown: true }]) {
+    storage.setItem(USER_SETTINGS_STORAGE_KEY, JSON.stringify(value));
+    assert.deepEqual(loadUserSettings(storage), DEFAULT_USER_SETTINGS);
+  }
+});
+
 test("user settings persist and fall back to defaults", () => {
   const storage = memoryStorage();
   assert.deepEqual(loadUserSettings(storage), DEFAULT_USER_SETTINGS);

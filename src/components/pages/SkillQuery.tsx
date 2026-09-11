@@ -1,5 +1,5 @@
 "use client";
-import { useTranslations, useLocale } from "next-intl";
+import { useTranslations } from "next-intl";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { LoadMore } from "@/components/ui/load-more";
 import { BUILDING_SKILL_CATALOG, OPERATOR_CATALOG } from "@/operatorPortraits";
-import operatorEnglishNames from "@/generated/operator-english-names.json" with { type: "json" };
+import { useGameCatalog } from "@/i18n/game-data-client";
 import { indexSkillAnnotations } from "@/skill-annotations";
 import type { ApiResponse, SkillAnnotationListData } from "@/types";
 import { DEFAULT_USER_SETTINGS, loadUserSettings } from "@/user-settings";
@@ -25,7 +25,7 @@ export const SKILL_QUERY_PAGE_SIZE = 10;
 
 export function SkillQuery() {
   const intl = useTranslations();
-  const locale = useLocale();
+  const gameCatalog = useGameCatalog();
   const [pinyinNames, setPinyinNames] = useState<Readonly<Record<string, readonly string[]>>>();
   useEffect(() => {
     let active = true;
@@ -76,9 +76,9 @@ export function SkillQuery() {
       selectedTag,
       query,
       (skillId) => BUILDING_SKILL_CATALOG[skillId],
-      { rarity: rarity === "all" ? null : Number(rarity), profession: profession === "all" ? null : Number(profession), englishNames: locale === "en" ? operatorEnglishNames : undefined, pinyinNames },
+      { rarity: rarity === "all" ? null : Number(rarity), profession: profession === "all" ? null : Number(profession), englishNames: gameCatalog?.operatorNames, pinyinNames },
     ),
-    [query, selectedRoom, selectedTag, rarity, profession, locale, pinyinNames],
+    [query, selectedRoom, selectedTag, rarity, profession, gameCatalog, pinyinNames],
   );
   const visible = filtered.slice(0, visibleCount);
   const annotationIndex = useMemo(() => indexSkillAnnotations(annotations), [annotations]);

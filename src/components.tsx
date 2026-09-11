@@ -689,6 +689,20 @@ export function ShiftTabs({
     );
   }
 
+  const labelForShift = (index: number) => {
+    const shift = rotation?.shifts[index];
+    const durationHours = shift?.duration_hours ?? durations?.[index];
+    return localize_components.text(en, "additional1", {
+      value1: en ? String(index + 1) : "",
+      choice2: en && durationHours !== undefined ? "yes" : "no",
+      value3: en && durationHours !== undefined ? String(compactNumber(durationHours)) : "",
+      choice4: !en && durationHours !== undefined ? "yes" : "no",
+      value5: !en && durationHours !== undefined ? String(index + 1) : "",
+      value6: !en && durationHours !== undefined ? String(compactNumber(durationHours)) : "",
+      value7: !en && durationHours === undefined ? String(shiftTabLabel(shift, index)) : "",
+    });
+  };
+
   if (control === "select") {
     return (
       <label className="flex min-w-0 items-center">
@@ -700,17 +714,7 @@ export function ShiftTabs({
           aria-label={en ? "Shift" : "班次"}
         >
           {plans.map((plan, index) => {
-            const shift = rotation?.shifts[index];
-            const durationHours = shift?.duration_hours ?? durations?.[index];
-            const label = localize_components.text(en, "additional1", {
-              value1: en ? String(index + 1) : "",
-              choice2: en && durationHours !== undefined ? "yes" : "no",
-              value3: en && durationHours !== undefined ? String(compactNumber(durationHours)) : "",
-              choice4: !en && durationHours !== undefined ? "yes" : "no",
-              value5: !en && durationHours !== undefined ? String(index + 1) : "",
-              value6: !en && durationHours !== undefined ? String(compactNumber(durationHours)) : "",
-              value7: !en && durationHours === undefined ? String(shiftTabLabel(shift, index)) : "",
-            });
+            const label = labelForShift(index);
             return <option key={`${plan.name}-${index}`} value={String(index)}>{label}</option>;
           })}
         </select>
@@ -732,8 +736,7 @@ export function ShiftTabs({
       >
         {plans.map((plan, index) => {
           const shift = rotation?.shifts[index];
-          const durationHours = shift?.duration_hours ?? durations?.[index];
-          const label = localize_components.text(en, "additional1", { value1: ((en)) ? String(index + 1) : "", choice2: ((en)) && (durationHours !== undefined) ? "yes" : "no", value3: ((en) && (durationHours !== undefined)) ? String(compactNumber(durationHours)) : "", choice4: (!(en)) && (durationHours !== undefined) ? "yes" : "no", value5: (!(en) && (durationHours !== undefined)) ? String(index + 1) : "", value6: (!(en) && (durationHours !== undefined)) ? String(compactNumber(durationHours)) : "", value7: (!(en) && !(durationHours !== undefined)) ? String(shiftTabLabel(shift, index)) : "" });
+          const label = labelForShift(index);
           const originalTeamSummary = shiftTeamSummary(shift, rotation?.profile ?? DEFAULT_ROTATION_PROFILE);
           const teamSummary = en && originalTeamSummary ? originalTeamSummary.replaceAll("主力", "Main").replaceAll("替补", "Backup").replaceAll("上班", "working").replaceAll("休息", "resting") : originalTeamSummary;
           const customLabel = labels?.[index];
