@@ -136,6 +136,13 @@ test("supports Chinese operator-name fuzzy search with initials and full pinyin"
   assert.deepEqual(filterOperators(operators, null, null, "nts", lookup).map((operator) => operator.name), ["能天使"]);
 });
 
+test("keeps both pinyin readings for 仇白", () => {
+  const operators: OperatorWithSkills[] = [{ name: "仇白", buildingSkills: [{ id: "control_x" }] }];
+  const lookup: SkillRecordLookup = () => ({});
+  assert.deepEqual(filterOperators(operators, null, null, "choubai", lookup).map((operator) => operator.name), ["仇白"]);
+  assert.deepEqual(filterOperators(operators, null, null, "qiubai", lookup).map((operator) => operator.name), ["仇白"]);
+});
+
 test("matches queries against skill names and plain-text descriptions", () => {
   const operators: OperatorWithSkills[] = [
     { name: "阿米娅", buildingSkills: [{ id: "control_x" }] },
