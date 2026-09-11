@@ -67,6 +67,7 @@ import {
   type OnboardingPreference,
 } from "./onboarding";
 import { normalizeOperboxEntries } from "./operbox-normalization";
+import { prepareMaaForExport } from "./maa-safety";
 import { upgradeSimulationBoxSource } from "./upgrade-simulation";
 import {
   DEFAULT_MANUAL_SHIFT_DURATIONS,
@@ -1169,7 +1170,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   async function handleDownloadMaa() {
     if (!result?.maa) return;
     const { downloadJson } = await import("./download");
-    downloadJson("arknights-infra-schedule-maa.json", result.maa);
+    downloadJson("arknights-infra-schedule-maa.json", prepareMaaForExport(result.maa));
   }
 
   function openManualScheduleDraft(draft: ManualScheduleDraft) {
