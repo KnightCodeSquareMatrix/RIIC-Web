@@ -226,8 +226,8 @@ function finitePositive(value: unknown, fallback: number): number {
 }
 
 export function manualRoomCapacity(room: BlueprintRoom): number {
-  if (room.kind === "control_center") return 5;
-  if (room.kind === "trade_post" || room.kind === "factory") return 3;
+  if (room.kind === "control_center") return Math.max(1, Math.min(5, room.level));
+  if (room.kind === "trade_post" || room.kind === "factory") return Math.max(1, Math.min(3, room.level));
   if (room.kind === "meeting_room" || room.kind === "training_room") return 2;
   if (room.kind === "dormitory") return Math.max(1, Math.min(5, room.dorm_beds ?? 5));
   return 1;
@@ -823,13 +823,13 @@ function maaProduct(room: BlueprintRoom): string | undefined {
 }
 
 function maaRoom(room: BlueprintRoom, assignment: ManualRoomAssignment | undefined): MaaRoom {
-  const operators = (assignment?.operators ?? []).filter(
+  const operators = (assignment?.operators ?? []).slice(0, manualRoomCapacity(room)).filter(
     (operator): operator is string => typeof operator === "string" && operator.length > 0,
   );
   const product = maaProduct(room);
   return {
     operators,
-    sort: false,
+    sort: true,
     skip: false,
     autofill: room.kind === "dormitory" ? assignment?.autofill ?? true : false,
     ...(product ? { product } : {}),

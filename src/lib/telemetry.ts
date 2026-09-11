@@ -70,7 +70,7 @@ let fallbackSessionId: string | null = null;
 const queue = createTelemetryQueue<QueuedEvent>({
   now: Date.now,
   schedule: (callback,delay) => setTimeout(callback,delay),
-  cancel: clearTimeout,
+  cancel: (timer) => clearTimeout(timer),
   readCooldown: () => {
     try { const value=Number(window.localStorage.getItem(COOLDOWN_KEY)); return Number.isFinite(value) ? Math.min(value,Date.now()+3_600_000) : 0; }
     catch { return 0; }

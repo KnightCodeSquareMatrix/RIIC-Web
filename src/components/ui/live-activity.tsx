@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { ThinkingOrb } from "thinking-orbs";
 
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { MOTION_DURATION, MOTION_EASE_OUT } from "@/motion";
 import { roomVisualFor } from "@/room-visuals";
@@ -99,6 +100,7 @@ export function LiveActivity({ activity, onRetry, onCopyDiagnostic, retryCountdo
   const en = locale === "en";
   const [copied, setCopied] = useState(false);
   const [dismissed, setDismissed] = useState<{ id: number; phase: ActivityPhase } | null>(null);
+  const [solverWarningOpen, setSolverWarningOpen] = useState(false);
 
   // 阶段切换（running ↔ queued、进入 success/error）时取消之前的关闭状态。
   useEffect(() => {
@@ -122,6 +124,10 @@ export function LiveActivity({ activity, onRetry, onCopyDiagnostic, retryCountdo
     setCopied(false);
   }, [activity]);
 
+  useEffect(() => {
+    if (activity?.phase === "success" && activity.kind === "schedule") setSolverWarningOpen(true);
+  }, [activity]);
+
   const diagnostic = activity?.error ? solverDiagnosticFor(activity.error, en) : null;
   const progressionAdjustment = activity?.kind === "progression-adjustment";
   const label = activity?.phase === "running"
@@ -140,7 +146,8 @@ export function LiveActivity({ activity, onRetry, onCopyDiagnostic, retryCountdo
   );
 
   return (
-    <AnimatePresence initial={false}>
+    <>
+      <AnimatePresence initial={false}>
       {activity && !hidden ? (
         <motion.aside
           key={activity.id}
@@ -288,7 +295,23 @@ export function LiveActivity({ activity, onRetry, onCopyDiagnostic, retryCountdo
           </div>
         </motion.aside>
       ) : null}
-    </AnimatePresence>
+      </AnimatePresence>
+
+      <Dialog open={solverWarningOpen} onOpenChange={setSolverWarningOpen}>
+        <DialogContent className="grid max-h-[min(680px,calc(100dvh-2rem))] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 sm:max-w-[min(540px,calc(100vw-2rem))]">
+          <DialogHeader>
+            <DialogTitle className="text-xl">{intl("components_ui_live_activity.scheduleGenerated")}</DialogTitle>
+            <DialogDescription className="text-base leading-7">{intl("components_ui_live_activity.theThreeShiftResultIsReadyToViewOr")}</DialogDescription>
+          </DialogHeader>
+          <div className="px-5 pb-2 text-lg font-medium leading-8 text-amber-700 sm:px-7">
+            {intl("components_ui_live_activity.solverIterationWarning")}
+          </div>
+          <DialogFooter>
+            <DialogClose render={<Button type="button" />}>{intl("components_ui_live_activity.dismiss")}</DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

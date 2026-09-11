@@ -218,6 +218,7 @@ test("generates deterministic catalogs and normalizes the known 35px icon input"
 
   const relativeFiles = [
     "src/generated/arkntools/operator-catalog.json",
+    "src/generated/arkntools/operator-pinyin.json",
     "src/generated/arkntools/building-skill-catalog.json",
     "src/generated/arkntools/term-catalog.json",
     "src/generated/arkntools/source.json",

@@ -13,6 +13,23 @@ test.beforeEach(async ({ page }) => {
   }));
 });
 
+test("solver iteration notice appears after completion and can be dismissed to use results", async ({ page }) => {
+  await mockApis(page, { dismissSolverWarning: false });
+  await seedV4Session(page, null);
+  await page.goto("/");
+  const notice = page.getByRole("dialog", { name: "排班已生成", exact: true });
+  await expect(notice).toHaveCount(0);
+  await page.getByRole("button", { name: "生成排班", exact: true }).click();
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText("对应房间右上角的反馈按钮");
+  await notice.getByRole("button", { name: "关闭", exact: true }).click();
+  await expect(notice).toHaveCount(0);
+  await expect(page.locator("[data-plan-summary]")).toBeVisible();
+  await page.getByRole("button", { name: "练卡建议", exact: true }).click();
+  await expect(page).toHaveURL(/\/training$/);
+  await expect(notice).toHaveCount(0);
+});
+
 test("the legacy beta query is inert and never opts plan requests into debug data", async ({ page }) => {
   await mockApis(page, { debugTools: true });
   await seedV4Session(page);
@@ -197,7 +214,11 @@ test("buffered plans show a quiet candidate-ring state and can be dismissed with
 });
 
 test("stopped task polling allows immediate manual retry and single-flight network recovery", async ({ page }) => {
-  await mockApis(page, { taskQueueEnabled: true });
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  // Keep the completion notice open: this test controls polling time, while
+  // the dedicated notice test verifies dismissal with real animation time.
+  await mockApis(page, { taskQueueEnabled: true, dismissSolverWarning: false });
   let submissions = 0;
   let polls = 0;
   let recovering = false;
@@ -257,6 +278,7 @@ test("stopped task polling allows immediate manual retry and single-flight netwo
   releaseRecovery();
   await expect(page.locator("[data-plan-board]")).toHaveAttribute("data-plan-revision", diagnosticId);
   expect(submissions).toBe(1);
+  expect(pageErrors.filter((message) => message.includes("Illegal invocation"))).toEqual([]);
 });
 
 test("operator skill terms reveal square hover cards on pointer and keyboard focus", async ({ page }) => {
