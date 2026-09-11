@@ -110,6 +110,16 @@ export function operatorMatchesNameContains(name: string, query: string): boolea
   return name.toLocaleLowerCase("zh-CN").includes(normalizedQuery);
 }
 
+function operatorNameMatchesQuery(name: string, query: string): boolean {
+  const normalizedQuery = query.trim().toLocaleLowerCase("zh-CN");
+  if (!normalizedQuery) return true;
+  if (name.toLocaleLowerCase("zh-CN").includes(normalizedQuery)) return true;
+  const initials = pinyin(name, { pattern: "first", toneType: "none", type: "array" }).join("").toLocaleLowerCase("en-US");
+  if (initials.includes(normalizedQuery)) return true;
+  const fullPinyin = pinyin(name, { toneType: "none", type: "array" }).join("").toLocaleLowerCase("en-US");
+  return fullPinyin.includes(normalizedQuery);
+}
+
 /** 搜索命中干员名称、技能名称或技能纯文本描述（任意一项命中即可）。 */
 export function operatorMatchesQuery(
   name: string,
@@ -119,7 +129,7 @@ export function operatorMatchesQuery(
 ): boolean {
   const normalizedQuery = query.trim().toLocaleLowerCase("zh-CN");
   if (!normalizedQuery) return true;
-  if (name.toLocaleLowerCase("zh-CN").includes(normalizedQuery)) return true;
+  if (operatorNameMatchesQuery(name, normalizedQuery)) return true;
   return skillIds.some((id) => {
     const skill = skillLookup(id);
     if (!skill) return false;
@@ -157,3 +167,4 @@ export function filterOperators<T extends OperatorWithSkills>(
       return (right.order ?? 0) - (left.order ?? 0) || left.name.localeCompare(right.name, "zh-CN");
     });
 }
+import { pinyin } from "pinyin-pro";

@@ -125,6 +125,17 @@ test("combines room and name-substring filters with AND and sorts by name", () =
   assert.ok(all.includes("阿米娅") && all.includes("阿能") && all.includes("能天使"));
 });
 
+test("supports Chinese operator-name fuzzy search with initials and full pinyin", () => {
+  const operators: OperatorWithSkills[] = [
+    { name: "阿米娅", buildingSkills: [{ id: "control_x" }] },
+    { name: "能天使", buildingSkills: [{ id: "manu_x" }] },
+  ];
+  const lookup: SkillRecordLookup = () => ({});
+  assert.deepEqual(filterOperators(operators, null, null, "amy", lookup).map((operator) => operator.name), ["阿米娅"]);
+  assert.deepEqual(filterOperators(operators, null, null, "amiya", lookup).map((operator) => operator.name), ["阿米娅"]);
+  assert.deepEqual(filterOperators(operators, null, null, "nts", lookup).map((operator) => operator.name), ["能天使"]);
+});
+
 test("matches queries against skill names and plain-text descriptions", () => {
   const operators: OperatorWithSkills[] = [
     { name: "阿米娅", buildingSkills: [{ id: "control_x" }] },
