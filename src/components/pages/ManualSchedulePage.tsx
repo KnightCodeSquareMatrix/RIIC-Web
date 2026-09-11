@@ -44,6 +44,7 @@ import {
   resizeManualScheduleDraft,
   setManualDormAutofill,
   setManualDroneTarget,
+  swapManualOperators,
   type ManualOperatorConflict,
   type ManualScheduleDraft,
   type ManualScheduleMode,
@@ -233,6 +234,8 @@ export function ManualSchedulePage({
   const [storageWarning, setStorageWarning] = useState<string | null>(null);
   const [scheduleQuery, setScheduleQuery] = useState("");
   const [pickerScrolling, setPickerScrolling] = useState(false);
+  const [sortRoomId, setSortRoomId] = useState<string | null>(null);
+  const [sortSelection, setSortSelection] = useState<{ roomId: string; slotIndex: number } | null>(null);
   const pickerScrollTimer = useRef<number | null>(null);
   const maaImportInputRef = useRef<HTMLInputElement>(null);
   const pickerScrollContainerRef = useRef<HTMLDivElement>(null);
@@ -385,6 +388,8 @@ export function ManualSchedulePage({
   }, [activeShift, draft.shifts, gameCatalog, locale, rows]);
 
   function setActiveShift(index: number) {
+    setSortRoomId(null);
+    setSortSelection(null);
     setDraft((current) => ({ ...current, activeShift: index }));
   }
 
@@ -397,6 +402,42 @@ export function ManualSchedulePage({
     setPickerRarity(null);
     setPickerPage(1);
     setPicker({ kind: "slot", roomId: row.roomId, slotIndex });
+  }
+
+  function toggleSortMode(row: RoomRow) {
+    setSortRoomId((current) => current === row.roomId ? null : row.roomId);
+    setSortSelection(null);
+  }
+
+  function handleSortSlotClick(row: RoomRow, slotIndex: number) {
+    if (row.roomId !== sortRoomId) return;
+    const operator = row.operatorSlots[slotIndex]?.name;
+    if (!operator) return;
+    if (!sortSelection) {
+      setSortSelection({ roomId: row.roomId, slotIndex });
+      return;
+    }
+    if (sortSelection.roomId !== row.roomId) {
+      setSortSelection({ roomId: row.roomId, slotIndex });
+      return;
+    }
+    setDraft((current) => swapManualOperators(
+      current,
+      layout,
+      activeShift,
+      row.roomId,
+      sortSelection.slotIndex,
+      slotIndex,
+    ));
+    setSortSelection(null);
+  }
+
+  function handleSlotClick(row: RoomRow, slotIndex: number) {
+    if (allowReplacementOperatorSort && sortRoomId === row.roomId) {
+      handleSortSlotClick(row, slotIndex);
+      return;
+    }
+    openSlotPicker(row, slotIndex);
   }
 
   function openFiammettaPicker() {
@@ -688,7 +729,11 @@ export function ManualSchedulePage({
             />
           </div>
         )}
-        onSlotClick={openSlotPicker}
+        onSlotClick={handleSlotClick}
+        sortRoomId={allowReplacementOperatorSort ? sortRoomId : null}
+        sortSelection={sortSelection}
+        onSortToggle={allowReplacementOperatorSort ? toggleSortMode : undefined}
+        onSortSlotClick={handleSortSlotClick}
         viewModeControl={scheduleViewControl}
         hideImages={!showImages}
         renderListRoomActions={(row, position) => (
@@ -700,6 +745,8 @@ export function ManualSchedulePage({
             onDormAutofillChange={setDormAutofill}
             droneTargetRoomId={draft.shifts[activeShift]?.droneTargetRoomId}
             onDroneTargetChange={toggleDroneTarget}
+            sortMode={sortRoomId === row.roomId}
+            onSortToggle={allowReplacementOperatorSort ? toggleSortMode : undefined}
           />
         )}
         onClearRoom={clearRoom}

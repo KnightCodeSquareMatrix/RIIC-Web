@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
-import { mockApis, seedV4Session } from "./production-readiness.fixture";
+import { mockApis, seedV4Session, scheduleVisualPlanData } from "./production-readiness.fixture";
 
 test("settings persist and control language, schedule controls and MAA export", async ({ page }) => {
   await mockApis(page);
@@ -41,4 +41,23 @@ test("one-shift image export preserves the selected shift", async ({ page }) => 
   await expect(shifts).toHaveValue("1");
   const bytes = await readFile((await download.path())!);
   expect(bytes.subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a");
+});
+
+test("calculator room sorting is reflected in MAA export and stays within the active shift", async ({ page }) => {
+  await mockApis(page);
+  await seedV4Session(page, scheduleVisualPlanData);
+  await page.addInitScript(() => localStorage.setItem("riic-web-user-settings", JSON.stringify({ allowReplacementOperatorSort: true })));
+  await page.goto("/");
+  const room = page.locator('[data-compact-schedule-view] [data-room-group="trading"]').first();
+  await room.getByRole("button", { name: "调整干员顺序", exact: true }).click();
+  await expect(room.getByRole("button", { name: "退出调整顺序", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await room.locator('.infra-operator-slot[role="button"]').nth(0).click();
+  await room.locator('.infra-operator-slot[role="button"]').nth(1).click();
+  const pending = page.waitForEvent("download");
+  await page.locator('[data-calculator-export-actions="desktop"]').getByRole("button", { name: "导出到 MAA", exact: true }).click();
+  const download = await pending;
+  const exported = JSON.parse(await readFile((await download.path())!, "utf8"));
+  const names = (operators: Array<string | { name: string }>) => operators.map((operator) => typeof operator === "string" ? operator : operator.name);
+  expect(names(exported.plans[0].rooms.trading[0].operators)).toEqual(["凯尔希", "阿米娅", "贝洛内"]);
+  expect(names(exported.plans[1].rooms.trading[0].operators)).toEqual(["阿米娅", "凯尔希", "贝洛内"]);
 });

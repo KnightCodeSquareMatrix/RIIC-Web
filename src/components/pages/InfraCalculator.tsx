@@ -369,6 +369,7 @@ export interface InfraCalculatorProps {
   onPerformanceIssue: () => void;
   onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
+  onSwapOperators?: (row: RoomRow, firstSlotIndex: number, secondSlotIndex: number) => void;
   droneTargetRoomId?: string | null;
   onDroneTargetChange?: (row: RoomRow) => void;
   onEditManualSchedule: () => void;
@@ -381,6 +382,7 @@ export interface InfraCalculatorProps {
   imageExportScope?: "single" | "all";
   showFeedback?: boolean;
   showImages?: boolean;
+  allowReplacementOperatorSort?: boolean;
   onClearResultNotice: () => void;
   onDismissResultClearWarning: () => void;
 }
@@ -399,8 +401,9 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     onRunSampleTrial, onStartPersonalFlow, onDismissOnboarding, onOpenSetup, upgradeSimulationOpen, onOpenUpgradeSimulation, onUpgradeSimulationOpenChange, onRun, onAutoDroneAllocation, onManualDroneAllocation, manualDroneSelection = false, onSimulateUpgrades, upgradeComparison, scheduleVariant, onScheduleVariantChange, onUpgradeTrialReady, onCancelRun,
     onSetActiveShift, onMarkIssue, onPerformanceIssue,
     onFactoryRecipeChange, onTradeOrderChange, droneTargetRoomId, onDroneTargetChange,
+    onSwapOperators,
     onEditManualSchedule, onDownloadMaa, onDownloadImage, showProgressionRecalculate = true, showManualScheduleEdit = true, scheduleViewControl = "tabs", shiftViewControl = "tabs", imageExportScope = "single", showFeedback = true, showImages = true,
-    onClearResultNotice, onDismissResultClearWarning,
+    onClearResultNotice, onDismissResultClearWarning, allowReplacementOperatorSort = false,
   } = props;
 
   const eliteByOperator = useMemo(() => {
@@ -423,7 +426,28 @@ export function InfraCalculator(props: InfraCalculatorProps) {
   const [operatorQuery, setOperatorQuery] = useState("");
   const [imageExporting, setImageExporting] = useState(false);
   const [imageExportFailed, setImageExportFailed] = useState(false);
+  const [sortRoomId, setSortRoomId] = useState<string | null>(null);
+  const [sortSelection, setSortSelection] = useState<{ roomId: string; slotIndex: number } | null>(null);
   const imageExportInFlight = useRef(false);
+
+  function toggleSortMode(row: RoomRow) {
+    setSortRoomId((current) => current === row.roomId ? null : row.roomId);
+    setSortSelection(null);
+  }
+
+  function handleSortSlotClick(row: RoomRow, slotIndex: number) {
+    if (row.roomId !== sortRoomId || !row.operatorSlots[slotIndex]) return;
+    if (!sortSelection) {
+      setSortSelection({ roomId: row.roomId, slotIndex });
+      return;
+    }
+    if (sortSelection.roomId !== row.roomId) {
+      setSortSelection({ roomId: row.roomId, slotIndex });
+      return;
+    }
+    onSwapOperators?.(row, sortSelection.slotIndex, slotIndex);
+    setSortSelection(null);
+  }
 
   async function handleImageExport() {
     if (imageExportScope === "all") return;
@@ -465,6 +489,8 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     return () => { cancelled = true; };
   }, [fiammettaTarget]);
   const handleSetActiveShift = (nextShift: number) => {
+    setSortRoomId(null);
+    setSortSelection(null);
     setShiftDirection(nextShift === activeShift ? 0 : nextShift > activeShift ? 1 : -1);
     onSetActiveShift(nextShift);
   };
@@ -734,6 +760,10 @@ export function InfraCalculator(props: InfraCalculatorProps) {
               feedbackDisabled={feedbackDisabledForSampleBox}
               onFactoryRecipeChange={onFactoryRecipeChange}
               onTradeOrderChange={onTradeOrderChange}
+              sortRoomId={allowReplacementOperatorSort ? sortRoomId : null}
+              sortSelection={sortSelection}
+              onSortToggle={allowReplacementOperatorSort && onSwapOperators ? toggleSortMode : undefined}
+              onSortSlotClick={allowReplacementOperatorSort && onSwapOperators ? handleSortSlotClick : undefined}
               viewModeControl={scheduleViewControl}
               hideImages={!showImages}
               droneTargetRoomId={droneTargetRoomId}
