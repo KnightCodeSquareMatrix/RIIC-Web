@@ -8,12 +8,7 @@ import type { FactoryRecipe, TradeOrder } from "@/blueprint";
 import { filterOperators, ROOM_SKILL_TAGS, type BuildingRoomPrefix } from "@/building-rooms";
 import { OperatorSlot, ScheduleBoard, ShiftTabs } from "@/components";
 import { FiammettaTargetChip } from "@/components/FiammettaTargetChip";
-import { OperatorRarityFilter, OperatorSearch } from "@/components/operators/OperatorPickerParts";
 import { ManualScheduleRoomActions } from "@/components/ManualScheduleRoomActions";
-import { Pagination } from "@/components/skill-query/Pagination";
-import { SkillFilterRow } from "@/components/skill-query/SkillFilterRow";
-import { SkillRoomTagBar } from "@/components/skill-query/SkillRoomTagBar";
-import { SkillTagBar } from "@/components/skill-query/SkillTagBar";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -49,6 +44,7 @@ import {
   resizeManualScheduleDraft,
   setManualDormAutofill,
   setManualDroneTarget,
+  swapManualOperators,
   type ManualOperatorConflict,
   type ManualScheduleDraft,
   type ManualScheduleMode,
@@ -59,6 +55,12 @@ import { planToRows, type RoomRow } from "@/schedule";
 import type { BaseBlueprint, MaaJson, MaaOperatorSlot, MaaRoom, OperBoxEntry } from "@/types";
 
 const ScrollArea = lazy(() => import("@/components/ui/scroll-area").then((module) => ({ default: module.ScrollArea })));
+const OperatorRarityFilter = lazy(() => import("@/components/operators/OperatorPickerParts").then(module => ({ default: module.OperatorRarityFilter })));
+const OperatorSearch = lazy(() => import("@/components/operators/OperatorPickerParts").then(module => ({ default: module.OperatorSearch })));
+const Pagination = lazy(() => import("@/components/skill-query/Pagination").then(module => ({ default: module.Pagination })));
+const SkillFilterRow = lazy(() => import("@/components/skill-query/SkillFilterRow").then(module => ({ default: module.SkillFilterRow })));
+const SkillRoomTagBar = lazy(() => import("@/components/skill-query/SkillRoomTagBar").then(module => ({ default: module.SkillRoomTagBar })));
+const SkillTagBar = lazy(() => import("@/components/skill-query/SkillTagBar").then(module => ({ default: module.SkillTagBar })));
 const MaaImportDialog = lazy(() => import("@/components/MaaImportDialog").then(module => ({ default: module.MaaImportDialog })));
 const MANUAL_PICKER_PAGE_SIZE = 24;
 const ROOM_GROUP_TO_SKILL_PREFIX: Readonly<Record<RoomRow["group"], BuildingRoomPrefix>> = {
@@ -94,6 +96,11 @@ export interface ManualSchedulePageProps {
   onOpenSetup: () => void;
   onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
+  strictMaaOperatorOrder: boolean;
+  allowReplacementOperatorSort: boolean;
+  scheduleViewControl?: "tabs" | "select";
+  shiftViewControl?: "tabs" | "select";
+  showImages?: boolean;
 }
 
 type PickerTarget =
@@ -201,6 +208,11 @@ export function ManualSchedulePage({
   onOpenSetup,
   onFactoryRecipeChange,
   onTradeOrderChange,
+  strictMaaOperatorOrder,
+  allowReplacementOperatorSort,
+  scheduleViewControl = "tabs",
+  shiftViewControl = "tabs",
+  showImages = true,
 }: ManualSchedulePageProps) {
   const intl = useTranslations();
   const skillFilters = useTranslations("SkillFilters");
@@ -222,6 +234,8 @@ export function ManualSchedulePage({
   const [storageWarning, setStorageWarning] = useState<string | null>(null);
   const [scheduleQuery, setScheduleQuery] = useState("");
   const [pickerScrolling, setPickerScrolling] = useState(false);
+  const [sortRoomId, setSortRoomId] = useState<string | null>(null);
+  const [sortSelection, setSortSelection] = useState<{ roomId: string; slotIndex: number } | null>(null);
   const pickerScrollTimer = useRef<number | null>(null);
   const maaImportInputRef = useRef<HTMLInputElement>(null);
   const pickerScrollContainerRef = useRef<HTMLDivElement>(null);
@@ -374,6 +388,8 @@ export function ManualSchedulePage({
   }, [activeShift, draft.shifts, gameCatalog, locale, rows]);
 
   function setActiveShift(index: number) {
+    setSortRoomId(null);
+    setSortSelection(null);
     setDraft((current) => ({ ...current, activeShift: index }));
   }
 
@@ -386,6 +402,42 @@ export function ManualSchedulePage({
     setPickerRarity(null);
     setPickerPage(1);
     setPicker({ kind: "slot", roomId: row.roomId, slotIndex });
+  }
+
+  function toggleSortMode(row: RoomRow) {
+    setSortRoomId((current) => current === row.roomId ? null : row.roomId);
+    setSortSelection(null);
+  }
+
+  function handleSortSlotClick(row: RoomRow, slotIndex: number) {
+    if (row.roomId !== sortRoomId) return;
+    const operator = row.operatorSlots[slotIndex]?.name;
+    if (!operator) return;
+    if (!sortSelection) {
+      setSortSelection({ roomId: row.roomId, slotIndex });
+      return;
+    }
+    if (sortSelection.roomId !== row.roomId) {
+      setSortSelection({ roomId: row.roomId, slotIndex });
+      return;
+    }
+    setDraft((current) => swapManualOperators(
+      current,
+      layout,
+      activeShift,
+      row.roomId,
+      sortSelection.slotIndex,
+      slotIndex,
+    ));
+    setSortSelection(null);
+  }
+
+  function handleSlotClick(row: RoomRow, slotIndex: number) {
+    if (allowReplacementOperatorSort && sortRoomId === row.roomId) {
+      handleSortSlotClick(row, slotIndex);
+      return;
+    }
+    openSlotPicker(row, slotIndex);
   }
 
   function openFiammettaPicker() {
@@ -506,7 +558,11 @@ export function ManualSchedulePage({
   }
 
   function exportMaa() {
-    downloadJson("arknights-infra-schedule-maa.json", prepareMaaForExport(maa));
+    downloadJson("arknights-infra-schedule-maa.json", prepareMaaForExport(
+      maa,
+      strictMaaOperatorOrder,
+      allowReplacementOperatorSort,
+    ));
   }
 
   async function prepareMaaImport(file: File) {
@@ -668,11 +724,18 @@ export function ManualSchedulePage({
               })) : undefined}
               wrap
               active={activeShift}
+              control={shiftViewControl}
               onChange={setActiveShift}
             />
           </div>
         )}
-        onSlotClick={openSlotPicker}
+        onSlotClick={handleSlotClick}
+        sortRoomId={allowReplacementOperatorSort ? sortRoomId : null}
+        sortSelection={sortSelection}
+        onSortToggle={allowReplacementOperatorSort ? toggleSortMode : undefined}
+        onSortSlotClick={handleSortSlotClick}
+        viewModeControl={scheduleViewControl}
+        hideImages={!showImages}
         renderListRoomActions={(row, position) => (
           <ManualScheduleRoomActions
             row={row}
@@ -682,6 +745,8 @@ export function ManualSchedulePage({
             onDormAutofillChange={setDormAutofill}
             droneTargetRoomId={draft.shifts[activeShift]?.droneTargetRoomId}
             onDroneTargetChange={toggleDroneTarget}
+            sortMode={sortRoomId === row.roomId}
+            onSortToggle={allowReplacementOperatorSort ? toggleSortMode : undefined}
           />
         )}
         onClearRoom={clearRoom}
