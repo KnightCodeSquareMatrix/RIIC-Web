@@ -29,6 +29,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { downloadJson } from "@/download";
 import { localizedOperatorName, localizedRoomTitle } from "@/i18n/game-data";
 import { useGameCatalog } from "@/i18n/game-data-client";
+import { prepareMaaForExport } from "@/maa-safety";
 import {
   assignManualOperator,
   clearManualRoom,
@@ -505,7 +506,7 @@ export function ManualSchedulePage({
   }
 
   function exportMaa() {
-    downloadJson("arknights-infra-schedule-maa.json", maa);
+    downloadJson("arknights-infra-schedule-maa.json", prepareMaaForExport(maa));
   }
 
   async function prepareMaaImport(file: File) {

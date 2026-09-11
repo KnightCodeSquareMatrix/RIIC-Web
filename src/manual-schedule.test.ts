@@ -193,7 +193,7 @@ test("MAA export includes contiguous minute periods, per-shift Fiammetta targets
   assert.deepEqual(maa.plans[1]?.Fiammetta, { enable: false, target: "", order: "pre" });
   assert.equal(maa.plans[0]?.rooms.dormitory?.[0]?.autofill, true);
   assert.deepEqual(maa.plans[0]?.rooms.dormitory?.[0]?.operators, []);
-  assert.deepEqual(maa.plans[0]?.rooms.control?.[0], { operators: [], sort: false, skip: false, autofill: false });
+  assert.deepEqual(maa.plans[0]?.rooms.control?.[0], { operators: [], sort: true, skip: false, autofill: false });
   assert.equal(maa.plans[0]?.rooms.trading?.[0]?.product, "LMD");
   assert.equal(maa.plans[0]?.rooms.manufacture?.[0]?.product, "Battle Record");
   assert.equal("training" in (maa.plans[0]?.rooms ?? {}), false);
