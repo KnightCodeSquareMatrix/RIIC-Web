@@ -12,7 +12,8 @@ test("settings persist and control language, schedule controls and MAA export", 
   await page.getByRole("switch", { name: /^严格按照顺序入驻/ }).click();
   await page.getByRole("switch", { name: /^加载干员图片/ }).click();
   await page.getByRole("button", { name: "细致调整", exact: true }).click();
-  await page.locator("#schedule-view-control-detail").selectOption("select");
+  await page.getByRole("combobox", { name: "一图流和列表式控件", exact: true }).click();
+  await page.getByRole("option", { name: "下拉表单", exact: true }).click();
   await page.reload();
   await expect(page.getByRole("switch", { name: /^严格按照顺序入驻/ })).not.toBeChecked();
   await expect(page.getByRole("button", { name: "EN（关闭）", exact: true })).toBeDisabled();
@@ -25,6 +26,40 @@ test("settings persist and control language, schedule controls and MAA export", 
   const download = await pending;
   const exported = JSON.parse(await readFile((await download.path())!, "utf8"));
   expect(exported.plans.flatMap((plan: { rooms: Record<string, Array<{ sort: boolean }>> }) => Object.values(plan.rooms).flat()).every((room: { sort: boolean }) => room.sort === false)).toBe(true);
+});
+
+test("settings dropdowns preserve independent choices and fit narrow screens", async ({ page }) => {
+  await mockApis(page);
+  await page.goto("/settings");
+  await page.getByRole("button", { name: "细致调整", exact: true }).click();
+  const shifts = page.getByRole("combobox", { name: "多班制切换方式", exact: true });
+  await expect(shifts).toBeDisabled();
+  await page.getByRole("switch", { name: /^统一使用总设置/ }).click();
+  await shifts.click();
+  await shifts.press("ArrowDown");
+  await shifts.press("Enter");
+  await expect(shifts).toHaveValue("下拉表单");
+  await expect(page.getByRole("combobox", { name: "一图流和列表式控件", exact: true })).toHaveValue("按钮");
+  await page.getByRole("combobox", { name: "导出图片范围", exact: true }).click();
+  await page.getByRole("option", { name: "全班", exact: true }).click();
+  await page.getByRole("combobox", { name: "技能页加载方式", exact: true }).click();
+  await page.getByRole("option", { name: "每十条点击加载", exact: true }).click();
+  await page.reload();
+  await page.getByRole("button", { name: "细致调整", exact: true }).click();
+  await expect(shifts).toHaveValue("下拉表单");
+  await expect(page.getByRole("combobox", { name: "导出图片范围", exact: true })).toHaveValue("全班");
+  const pagination = page.getByRole("combobox", { name: "技能页加载方式", exact: true });
+  await expect(pagination).toHaveValue("每十条点击加载");
+  await page.setViewportSize({ width: 375, height: 812 });
+  await pagination.click();
+  await expect(page.getByRole("option", { name: "无限下滚", exact: true })).toBeVisible();
+  const popup = await page.locator('[data-slot="combobox-content"]').boundingBox();
+  expect(popup).not.toBeNull();
+  expect(popup!.x).toBeGreaterThanOrEqual(0);
+  expect(popup!.x + popup!.width).toBeLessThanOrEqual(375);
+  await pagination.press("Escape");
+  await expect(page.getByRole("listbox")).toHaveCount(0);
+  await expect(pagination).toHaveValue("每十条点击加载");
 });
 
 test("one-shift image export preserves the selected shift", async ({ page }) => {
