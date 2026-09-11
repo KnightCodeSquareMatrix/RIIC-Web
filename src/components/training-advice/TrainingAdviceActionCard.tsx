@@ -69,8 +69,7 @@ export function TrainingAdviceActionCard({
         dataSlot="training-advice-card"
         showEmblem={false}
       >
-        {onToggleBlacklist ? <Button type="button" size="icon" variant="ghost" onClick={onToggleBlacklist} aria-label={en ? `${blacklisted ? "Unblock" : "Block"} ${operatorName}` : `${blacklisted ? "取消拉黑" : "拉黑"}${operatorName}`} title={en ? (blacklisted ? "Unblock operator" : "Hide this operator") : (blacklisted ? "取消拉黑" : "拉黑此干员")} className="absolute right-3 top-3 z-20 border-white/15 bg-black/20 text-white/60 hover:bg-white/10 hover:text-white"><Ban className="size-4" /></Button> : null}
-        <div className={`grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-4 ${onToggleBlacklist ? "pr-10 max-sm:pr-12" : ""}`}>
+        <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-4">
           <OperatorSlot
             slot={{
               name: action.operator,
@@ -123,13 +122,18 @@ export function TrainingAdviceActionCard({
                 </ul>
               ) : null}
             </div>
-            <div className="flex flex-wrap items-center gap-2 sm:flex-col sm:items-end">
-              <span className="font-number border border-[var(--room-accent)] bg-[var(--room-accent)] px-2.5 py-1 text-xs font-semibold text-[#202223]">
-                {trainingPriorityLabel("priority" in action ? action.priority : undefined, en)}
-              </span>
-              <span className="border border-white/15 bg-white/7 px-2.5 py-1 text-xs text-white/70">
-                {trainingReasonLabel("reason" in action ? action.reason : undefined, en)}
-              </span>
+            <div className="flex items-center gap-2">
+              <div className="flex flex-col items-center gap-2">
+                <span className="font-number border border-[var(--room-accent)] bg-[var(--room-accent)] px-2.5 py-1 text-xs font-semibold text-[#202223]">
+                  {trainingPriorityLabel("priority" in action ? action.priority : undefined, en)}
+                </span>
+                {"reason" in action && action.reason ? (
+                  <span className="border border-white/15 bg-white/7 px-2.5 py-1 text-xs text-white/70">
+                    {trainingReasonLabel(action.reason, en)}
+                  </span>
+                ) : null}
+              </div>
+              {onToggleBlacklist ? <Button type="button" size="icon-sm" variant="ghost" onClick={onToggleBlacklist} aria-label={en ? `${blacklisted ? "Unblock" : "Block"} ${operatorName}` : `${blacklisted ? "取消拉黑" : "拉黑"}${operatorName}`} title={en ? (blacklisted ? "Unblock operator" : "Hide this operator") : (blacklisted ? "取消拉黑" : "拉黑此干员")} className="size-8 border border-white/15 bg-black/20 text-white/60 hover:bg-white/10 hover:text-white"><Ban className="size-4" /></Button> : null}
             </div>
           </div>
         </div>
