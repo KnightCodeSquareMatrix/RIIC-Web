@@ -8,6 +8,7 @@ import {
   ChevronRight,
   FileWarning,
   Loader2,
+  LockKeyhole,
   Play,
   Smile,
 } from "lucide-react";
@@ -1154,6 +1155,7 @@ function OperatorSlotShell({
   positionLabel,
   title,
   onActivate,
+  unavailable = false,
 }: {
   ariaLabel?: string;
   centerFrameInList: boolean;
@@ -1171,22 +1173,28 @@ function OperatorSlotShell({
   positionLabel?: string;
   title?: string;
   onActivate?: () => void;
+  unavailable?: boolean;
 }) {
   const frame = (
     <div
       className={cn(
         "relative aspect-square h-[var(--operator-slot-size)] min-w-0 shrink-0 overflow-hidden border-2 max-sm:border",
         frameClassName,
-        frameFocusable && "cursor-help outline-none transition-[border-color,box-shadow] hover:border-white/90 focus-visible:border-[#FFD501] focus-visible:ring-2 focus-visible:ring-[#FFD501]/70",
-        onActivate && editableAppearance && "border-[#FFD800] shadow-[0_0_0_1px_rgba(255,216,0,0.42),0_0_12px_rgba(255,216,0,0.2)]",
+        !unavailable && frameFocusable && "cursor-help outline-none transition-[border-color,box-shadow] hover:border-white/90 focus-visible:border-[#FFD501] focus-visible:ring-2 focus-visible:ring-[#FFD501]/70",
+        unavailable ? "border-[#666] bg-[#292929] opacity-70" : onActivate && editableAppearance && "border-[#FFD800] shadow-[0_0_0_1px_rgba(255,216,0,0.42),0_0_12px_rgba(255,216,0,0.2)]",
         centerFrameInList && "max-sm:h-auto max-sm:w-full sm:absolute sm:left-0 sm:top-1/2 sm:-translate-y-1/2",
       )}
       aria-label={ariaLabel}
-      role={frameFocusable ? "button" : undefined}
-      tabIndex={frameFocusable ? 0 : undefined}
+      role={!unavailable && frameFocusable ? "button" : undefined}
+      tabIndex={!unavailable && frameFocusable ? 0 : undefined}
     >
       {frameContent}
-      {editableHint ? (
+      {unavailable ? (
+        <span className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-1 bg-black/55 text-xs text-white/80" data-operator-slot-lock-overlay>
+          <LockKeyhole className="size-4" aria-hidden="true" />
+          <span>{editableHint}</span>
+        </span>
+      ) : editableHint ? (
         <span className="pointer-events-none absolute bottom-0.5 right-0.5 z-20 bg-black/72 px-1 py-0.5 text-[9px] font-medium leading-none tracking-wide text-[#FFD800]">
           {editableHint}
         </span>
@@ -1203,15 +1211,15 @@ function OperatorSlotShell({
           : "[--operator-slot-size:clamp(70px,7.3vw,80px)] max-sm:[--operator-slot-size:clamp(56px,16vw,76px)]",
         compactFactory && "min-[1800px]:[--operator-slot-size:70px]",
         centerFrameInList && "max-sm:w-full sm:relative sm:h-full sm:w-[var(--operator-slot-size)]",
-        onActivate && "cursor-pointer rounded-[4px] outline-none focus-visible:ring-2 focus-visible:ring-[#FFD800]",
-        onActivate && editableAppearance && "focus-visible:ring-offset-2 focus-visible:ring-offset-[#313131]",
+        !unavailable && onActivate && "cursor-pointer rounded-[4px] outline-none focus-visible:ring-2 focus-visible:ring-[#FFD800]",
+        !unavailable && onActivate && editableAppearance && "focus-visible:ring-offset-2 focus-visible:ring-offset-[#313131]",
       )}
       data-position={positionLabel || undefined}
       title={title}
-      role={onActivate ? "button" : undefined}
-      tabIndex={onActivate ? 0 : undefined}
-      onClick={onActivate}
-      onKeyDown={onActivate ? (event) => {
+      role={!unavailable && onActivate ? "button" : undefined}
+      tabIndex={!unavailable && onActivate ? 0 : undefined}
+      onClick={unavailable ? undefined : onActivate}
+      onKeyDown={!unavailable && onActivate ? (event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
           onActivate();
@@ -1320,6 +1328,7 @@ export function OperatorSlot({
   skillTooltipContextLabel,
   searchQuery = "",
   onActivate,
+  unavailable = false,
 }: {
   slot: RoomRow["operatorSlots"][number] | undefined;
   currentMorale?: number;
@@ -1348,6 +1357,7 @@ export function OperatorSlot({
   skillTooltipContextLabel?: string;
   searchQuery?: string;
   onActivate?: () => void;
+  unavailable?: boolean;
 }) {
   const intl = useTranslations();
   const shouldReduceMotion = useReducedMotion();
@@ -1361,7 +1371,8 @@ export function OperatorSlot({
   const professionLabelEnglish = slot ? operatorProfessionLabelEnglishForCode(slot.profession) : undefined;
   const enterX = shouldReduceMotion ? 0 : shiftDirection * 6;
   const exitX = shouldReduceMotion ? 0 : shiftDirection * -4;
-  const occupantLabel = displayName ?? (autofill ? (intl("components.autoFill")) : (intl("components.empty")));
+  const unavailableLabel = intl("components.slotLocked");
+  const occupantLabel = unavailable ? unavailableLabel : displayName ?? (autofill ? (intl("components.autoFill")) : (intl("components.empty")));
   const occupantAriaLabel = displayPositionLabel
     ? `${displayPositionLabel}${intl("components.label2")}${occupantLabel}`
     : occupantLabel;
@@ -1382,7 +1393,8 @@ export function OperatorSlot({
       compactFactory={compactFactory}
       compactView={compactView}
       editableAppearance={!selectionMode}
-      editableHint={onActivate && !selectionMode ? (intl("components.edit")) : undefined}
+      unavailable={unavailable}
+      editableHint={unavailable ? unavailableLabel : onActivate && !selectionMode ? (intl("components.edit")) : undefined}
       frameClassName={frameClassName}
       frameContent={
         <AnimatePresence initial={false} mode="sync">
@@ -1958,6 +1970,7 @@ export function ScheduleBoard({
                             transitionDelay={Math.min(index, 2) * 0.02}
                             searchQuery={normalizedQuery}
                             positionLabel={positionLabel}
+                            unavailable={row.unavailableSlotIndices?.includes(index)}
                             onActivate={onSlotClick ? () => onSlotClick(row, index) : undefined}
                           />
                         ))}
