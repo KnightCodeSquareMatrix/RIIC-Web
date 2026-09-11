@@ -277,6 +277,11 @@ test("manual scheduling configures independent shifts, moves conflicts and enabl
   await expect(manualShiftActions.getByRole("button", { name: "换心情 锡兰" })).toBeVisible();
   await expect(manualShiftActions.locator("[data-fiammetta-target-chip] img")).toBeVisible();
 
+  await manualShiftActions.locator("[data-fiammetta-target-chip]").click();
+  await expect(fiammettaPicker.getByRole("button", { name: "清空", exact: true })).toBeVisible();
+  await fiammettaPicker.getByRole("button", { name: "清空", exact: true }).click();
+  await expect(manualShiftActions.getByRole("button", { name: "选择换心情目标" })).toBeVisible();
+
   const trade = page.locator('[data-room-title="贸易站 1"]');
   const factory = page.locator('[data-room-title="制造站 1"]');
   const tradeDrones = trade.getByRole("button", { name: "贸易站 1 无人机加速" });

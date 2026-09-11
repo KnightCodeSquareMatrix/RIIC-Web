@@ -714,7 +714,13 @@ export function ManualSchedulePage({
               </div>
             ) : null}
 
-            <div className={picker?.kind === "slot" ? "mt-1" : ""} role="group" aria-label={skillFilters("rarity")}>
+            {picker?.kind === "fiammetta" ? (
+              <div className="flex justify-end">
+                <Button type="button" variant="destructive" size="sm" className="px-2 text-xs max-sm:min-h-8" onClick={() => chooseOperator(null)}><Trash2 />{intl("components_pages_ManualSchedulePage.clearSlot")}</Button>
+              </div>
+            ) : null}
+
+            <div className="mt-1" role="group" aria-label={skillFilters("rarity")}>
               <SkillFilterRow label={skillFilters("rarity")}>
                 <OperatorRarityFilter
                   value={pickerRarity === null ? "all" : String(pickerRarity)}
