@@ -4,7 +4,7 @@ import { useTranslations, useLocale } from "next-intl";
 import type { CSSProperties } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { MOTION_DURATION, MOTION_EASE_OUT } from "@/motion";
-import { FileWarning, Trash2 } from "lucide-react";
+import { ArrowLeftRight, FileWarning, Trash2 } from "lucide-react";
 import { DroneIcon } from "@/components/DroneIcon";
 
 import {
@@ -86,6 +86,10 @@ function CompactRoomCard({
   className = "",
   style,
   onSlotClick,
+  sortMode,
+  sortSelection,
+  onSortToggle,
+  onSortSlotClick,
   onClearRoom,
   onDormAutofillChange,
   droneTargetRoomId,
@@ -105,6 +109,10 @@ function CompactRoomCard({
   className?: string;
   style?: CSSProperties;
   onSlotClick?: (row: RoomRow, slotIndex: number) => void;
+  sortMode?: boolean;
+  sortSelection?: { roomId: string; slotIndex: number } | null;
+  onSortToggle?: (row: RoomRow) => void;
+  onSortSlotClick?: (row: RoomRow, slotIndex: number) => void;
   onClearRoom?: (row: RoomRow) => void;
   onDormAutofillChange?: (row: RoomRow, enabled: boolean) => void;
   droneTargetRoomId?: string | null;
@@ -144,9 +152,22 @@ function CompactRoomCard({
           aria-pressed={row.autofill}
           aria-label={`${localizedRoomTitle(row.title, row.group, locale, gameCatalog)}${intl("components.label")}${intl("components.autoFill")}`}
           className={`ml-1 h-7 border px-2 text-xs text-white hover:text-white ${row.autofill ? "border-[#FFD800]/70 bg-[#FFD800]/18 hover:bg-[#FFD800]/28" : "border-white/15 bg-[#3C3C3C]/55 hover:bg-[#4B4B4B]"}`}
-          onClick={() => onDormAutofillChange(row, !row.autofill)}
+      onClick={() => onDormAutofillChange(row, !row.autofill)}
         >
           {intl("components.autoFill")}
+        </Button>
+      ) : null}
+      {(row.group === "trading" || row.group === "manufacture") && onSortToggle ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-pressed={sortMode}
+          aria-label={sortMode ? "退出调整顺序" : "调整干员顺序"}
+          className={`ml-1 h-7 w-7 border text-white hover:text-white ${sortMode ? "border-[#FFD800]/70 bg-[#FFD800]/18" : "border-white/15 bg-[#3C3C3C]/55 hover:bg-[#4B4B4B]"}`}
+          onClick={() => onSortToggle(row)}
+        >
+          <ArrowLeftRight className="size-3.5" />
         </Button>
       ) : null}
         {isTrade ? (() => {
@@ -215,6 +236,8 @@ function CompactRoomCard({
       transitionDelay={Math.min(index, 2) * 0.02}
       positionLabel={positionLabel}
       onActivate={onSlotClick ? () => onSlotClick(row, index) : undefined}
+      sortSelected={sortSelection?.roomId === row.roomId && sortSelection.slotIndex === index}
+      onSortActivate={sortMode && onSortSlotClick ? () => onSortSlotClick(row, index) : undefined}
     />
   ));
 
@@ -381,7 +404,7 @@ function CompactFeedbackButton({ row, disabled, offset, onIssue }: { row: RoomRo
 
 export function CompactScheduleView(props: CompactScheduleViewProps) {
   const intl = useTranslations();
-  const { rows, layout, eliteByOperator, levelByOperator, shiftDirection, onIssue, feedbackDisabled = false, hideImages = false, onSlotClick, onClearRoom, onDormAutofillChange, droneTargetRoomId, onDroneTargetChange, highlightedOperators, onSkillTermOpen } = props;
+  const { rows, layout, eliteByOperator, levelByOperator, shiftDirection, onIssue, feedbackDisabled = false, hideImages = false, onSlotClick, sortMode, sortSelection, onSortToggle, onSortSlotClick, onClearRoom, onDormAutofillChange, droneTargetRoomId, onDroneTargetChange, highlightedOperators, onSkillTermOpen } = props;
 
   if (rows.length === 0) {
     return (
@@ -428,6 +451,10 @@ export function CompactScheduleView(props: CompactScheduleViewProps) {
         onIssue={onIssue}
         feedbackDisabled={feedbackDisabled}
         onSlotClick={onSlotClick}
+        sortMode={sortMode}
+        sortSelection={sortSelection}
+        onSortToggle={onSortToggle}
+        onSortSlotClick={onSortSlotClick}
         onClearRoom={onClearRoom}
         onDormAutofillChange={onDormAutofillChange}
         droneTargetRoomId={droneTargetRoomId}

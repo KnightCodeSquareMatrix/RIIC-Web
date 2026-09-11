@@ -1174,13 +1174,30 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   }
 
   async function handleDownloadMaa() {
-    if (!result?.maa) return;
+    if (!scheduleResult?.maa) return;
     const { downloadJson } = await import("./download");
     downloadJson("arknights-infra-schedule-maa.json", prepareMaaForExport(
-      result.maa,
+      scheduleResult.maa,
       userSettings.strictMaaOperatorOrder,
       userSettings.allowReplacementOperatorSort,
     ));
+  }
+
+  function handleSwapCalculatorOperators(row: RoomRow, firstSlotIndex: number, secondSlotIndex: number) {
+    if (row.group !== "trading" && row.group !== "manufacture") return;
+    setResult((current) => {
+      if (!current) return current;
+      const next = structuredClone(current);
+      const rooms = next.maa.plans[activeShift]?.rooms[row.group];
+      const room = rooms?.[row.index];
+      if (!room || firstSlotIndex === secondSlotIndex) return current;
+      if (!room.operators[firstSlotIndex] || !room.operators[secondSlotIndex]) return current;
+      [room.operators[firstSlotIndex], room.operators[secondSlotIndex]] = [
+        room.operators[secondSlotIndex],
+        room.operators[firstSlotIndex],
+      ];
+      return next;
+    });
   }
 
   async function handleDownloadScheduleImage() {
@@ -2041,6 +2058,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       onPerformanceIssue: handlePerformanceIssue,
       onFactoryRecipeChange: handleScheduleFactoryRecipeChange,
       onTradeOrderChange: handleScheduleTradeOrderChange,
+      onSwapOperators: handleSwapCalculatorOperators,
       droneTargetRoomId: activePlan?.drones?.enable ? (() => {
         const kind = activePlan.drones.room === "trading" ? "trade_post" : "factory";
         return layout.rooms.filter((room) => room.kind === kind)[activePlan.drones.index - 1]?.id ?? null;
@@ -2058,6 +2076,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       imageExportScope: userSettings.imageExportScope,
       showFeedback: userSettings.showFeedback,
       showImages: userSettings.showImages,
+      allowReplacementOperatorSort: userSettings.allowReplacementOperatorSort,
     },
     manual: {
       layout,

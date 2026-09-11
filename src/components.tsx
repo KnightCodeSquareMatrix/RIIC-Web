@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ArrowLeftRight,
   FileWarning,
   Loader2,
   Play,
@@ -1351,6 +1352,8 @@ export function OperatorSlot({
   skillTooltipContextLabel,
   searchQuery = "",
   onActivate,
+  sortSelected = false,
+  onSortActivate,
 }: {
   slot: RoomRow["operatorSlots"][number] | undefined;
   currentMorale?: number;
@@ -1379,6 +1382,8 @@ export function OperatorSlot({
   skillTooltipContextLabel?: string;
   searchQuery?: string;
   onActivate?: () => void;
+  sortSelected?: boolean;
+  onSortActivate?: () => void;
 }) {
   const intl = useTranslations();
   const shouldReduceMotion = useReducedMotion();
@@ -1400,7 +1405,9 @@ export function OperatorSlot({
     ? `${occupantAriaLabel}${intl("components.focusToViewInfrastructureSkills")}`
     : occupantAriaLabel;
   const searchMatched = Boolean(slot && searchQuery && slot.name.toLocaleLowerCase("zh-CN").includes(searchQuery));
-  const frameClassName = slot
+  const frameClassName = sortSelected
+    ? "border-[#FFD800] bg-[#3C3C3C] ring-2 ring-[#FFD800]/70"
+    : slot
     ? "border-[#7F7F7F] bg-[#3C3C3C] shadow-[inset_0_0_18px_rgba(255,255,255,0.16)]"
     : autofill
       ? "border-[#666] bg-[#3C3C3C] shadow-[inset_0_0_18px_rgba(255,255,255,0.08)]"
@@ -1535,7 +1542,7 @@ export function OperatorSlot({
           : "text-transparent select-none"}
       positionLabel={displayPositionLabel}
       title={suppressNativeTitles ? undefined : displayName ?? slot?.label}
-      onActivate={onActivate}
+      onActivate={onSortActivate ?? onActivate}
     />
   );
 
@@ -1566,6 +1573,10 @@ export function ScheduleBoard({
   viewModeControl = "tabs",
   hideImages = false,
   onSlotClick,
+  sortMode,
+  sortSelection,
+  onSortToggle,
+  onSortSlotClick,
   onClearRoom,
   onDormAutofillChange,
   droneTargetRoomId,
@@ -1597,6 +1608,10 @@ export function ScheduleBoard({
   viewModeControl?: "tabs" | "select";
   hideImages?: boolean;
   onSlotClick?: (row: RoomRow, slotIndex: number) => void;
+  sortMode?: boolean;
+  sortSelection?: { roomId: string; slotIndex: number } | null;
+  onSortToggle?: (row: RoomRow) => void;
+  onSortSlotClick?: (row: RoomRow, slotIndex: number) => void;
   onClearRoom?: (row: RoomRow) => void;
   onDormAutofillChange?: (row: RoomRow, enabled: boolean) => void;
   droneTargetRoomId?: string | null;
@@ -1952,6 +1967,24 @@ export function ScheduleBoard({
                                 {localizedRoomTitle(row.title, row.group, locale, gameCatalog)}
                               </div>
                               <LevelDiamonds level={row.level} maxLevel={layoutRoom ? maxRoomLevel(layoutRoom.kind) : row.level} />
+                              {onSortToggle && (row.group === "trading" || row.group === "manufacture") ? (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  aria-pressed={sortMode && sortSelection?.roomId === row.roomId}
+                                  aria-label={sortMode && sortSelection?.roomId === row.roomId ? "退出调整顺序" : "调整干员顺序"}
+                                  className={cn(
+                                    "h-7 w-7 border text-white hover:text-white",
+                                    sortMode && sortSelection?.roomId === row.roomId
+                                      ? "border-[#FFD800]/70 bg-[#FFD800]/18"
+                                      : "border-white/15 bg-[#3C3C3C]/55 hover:bg-[#4B4B4B]",
+                                  )}
+                                  onClick={() => onSortToggle(row)}
+                                >
+                                  <ArrowLeftRight className="size-3.5" />
+                                </Button>
+                              ) : null}
                               {renderListRoomActions?.(row, "header")}
                             </div>
                           </div>
@@ -2014,6 +2047,8 @@ export function ScheduleBoard({
                             searchQuery={normalizedQuery}
                             positionLabel={positionLabel}
                             onActivate={onSlotClick ? () => onSlotClick(row, index) : undefined}
+                            sortSelected={sortSelection?.roomId === row.roomId && sortSelection.slotIndex === index}
+                            onSortActivate={sortMode && onSortSlotClick ? () => onSortSlotClick(row, index) : undefined}
                           />
                         ))}
                       </div>
@@ -2071,6 +2106,10 @@ export function ScheduleBoard({
               feedbackDisabled={feedbackDisabled}
               hideImages={hideImages}
               onSlotClick={onSlotClick}
+              sortMode={sortMode}
+              sortSelection={sortSelection}
+              onSortToggle={onSortToggle}
+              onSortSlotClick={onSortSlotClick}
               onClearRoom={onClearRoom}
               onDormAutofillChange={onDormAutofillChange}
               droneTargetRoomId={droneTargetRoomId}
