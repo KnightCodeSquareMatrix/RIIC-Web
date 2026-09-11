@@ -382,7 +382,7 @@ function CompactFeedbackButton({ row, disabled, offset, onIssue }: { row: RoomRo
 
 export function CompactScheduleView(props: CompactScheduleViewProps) {
   const intl = useTranslations();
-  const { rows, layout, eliteByOperator, levelByOperator, shiftDirection, onIssue, feedbackDisabled = false, hideImages = false, onSlotClick, onClearRoom, onDormAutofillChange, droneTargetRoomId, onDroneTargetChange, highlightedOperators, onSkillTermOpen } = props;
+  const { rows, layout, eliteByOperator, levelByOperator, shiftDirection, onIssue, feedbackDisabled = false, hideImages = false, onSlotClick, onClearRoom, onDormAutofillChange, droneTargetRoomId, onDroneTargetChange } = props;
 
   if (rows.length === 0) {
     return (
@@ -433,8 +433,6 @@ export function CompactScheduleView(props: CompactScheduleViewProps) {
         onDormAutofillChange={onDormAutofillChange}
         droneTargetRoomId={droneTargetRoomId}
         onDroneTargetChange={onDroneTargetChange}
-        highlightedOperators={highlightedOperators}
-        onSkillTermOpen={onSkillTermOpen}
         horizontal={COMPACT_AUXILIARY_GROUPS.has(row.group)}
         className="min-w-0"
         style={widthPercent !== undefined ? { flexBasis: `${widthPercent}%` } : { flex: 1 }}
