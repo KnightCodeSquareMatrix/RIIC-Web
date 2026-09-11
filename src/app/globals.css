@@ -953,3 +953,6 @@
     animation-duration: 1600ms !important;
   }
 }
+
+[data-hide-images] img { visibility: hidden; }
+[data-hide-images] [data-operator-portrait-alert] { display: none; }

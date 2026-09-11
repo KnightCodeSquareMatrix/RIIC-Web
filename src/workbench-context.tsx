@@ -8,6 +8,7 @@ import type { InfraCalculatorProps } from "@/components/pages/InfraCalculator";
 import type { ManualSchedulePageProps } from "@/components/pages/ManualSchedulePage";
 import type { TrainingAdviceProps } from "@/components/pages/TrainingAdvice";
 import type { MasteryPlannerProps } from "@/components/pages/MasteryPlanner";
+import type { UserSettings } from "@/user-settings";
 
 export interface WorkbenchContextValue {
   calculator: InfraCalculatorProps;
@@ -17,6 +18,10 @@ export interface WorkbenchContextValue {
   account: AccountStatusCenterProps & {
     authenticated: boolean;
     pending: boolean;
+  };
+  settings: {
+    value: UserSettings;
+    onChange: (settings: UserSettings) => void;
   };
   skland: DevelopmentSklandStatusCenterProps | null;
 }

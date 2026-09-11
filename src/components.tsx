@@ -663,6 +663,7 @@ export function ShiftTabs({
   active,
   closest,
   onChange,
+  control = "tabs",
 }: {
   maaJson?: MaaJson;
   rotation?: RotationJson;
@@ -672,6 +673,7 @@ export function ShiftTabs({
   active: number;
   closest?: number;
   onChange: (index: number) => void;
+  control?: "tabs" | "select";
 }) {
   const intl = useTranslations();
   const locale = useLocale();
@@ -683,6 +685,35 @@ export function ShiftTabs({
       <Button type="button" variant="outline" disabled size="sm">
         {intl("components.awaitingResult")}
       </Button>
+    );
+  }
+
+  if (control === "select") {
+    return (
+      <label className="flex min-w-0 items-center">
+        <span className="sr-only">{en ? "Shift" : "班次"}</span>
+        <select
+          value={String(active)}
+          onChange={(event) => onChange(Number(event.target.value))}
+          className="h-9 max-w-full rounded-md border border-input bg-background px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={en ? "Shift" : "班次"}
+        >
+          {plans.map((plan, index) => {
+            const shift = rotation?.shifts[index];
+            const durationHours = shift?.duration_hours ?? durations?.[index];
+            const label = localize_components.text(en, "additional1", {
+              value1: en ? String(index + 1) : "",
+              choice2: en && durationHours !== undefined ? "yes" : "no",
+              value3: en && durationHours !== undefined ? String(compactNumber(durationHours)) : "",
+              choice4: !en && durationHours !== undefined ? "yes" : "no",
+              value5: !en && durationHours !== undefined ? String(index + 1) : "",
+              value6: !en && durationHours !== undefined ? String(compactNumber(durationHours)) : "",
+              value7: !en && durationHours === undefined ? String(shiftTabLabel(shift, index)) : "",
+            });
+            return <option key={`${plan.name}-${index}`} value={String(index)}>{label}</option>;
+          })}
+        </select>
+      </label>
     );
   }
 
@@ -1532,6 +1563,8 @@ export function ScheduleBoard({
   onFactoryRecipeChange,
   onTradeOrderChange,
   onViewModeChange,
+  viewModeControl = "tabs",
+  hideImages = false,
   onSlotClick,
   onClearRoom,
   onDormAutofillChange,
@@ -1561,6 +1594,8 @@ export function ScheduleBoard({
   onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
   onViewModeChange?: (viewMode: "list" | "compact") => void;
+  viewModeControl?: "tabs" | "select";
+  hideImages?: boolean;
   onSlotClick?: (row: RoomRow, slotIndex: number) => void;
   onClearRoom?: (row: RoomRow) => void;
   onDormAutofillChange?: (row: RoomRow, enabled: boolean) => void;
@@ -1699,7 +1734,7 @@ export function ScheduleBoard({
     <div ref={scheduleBoardRef} className="flex flex-col gap-7">
       <div className="flex flex-wrap items-center justify-between gap-3 max-sm:flex-col max-sm:items-stretch" data-schedule-toolbar>
         <div className="flex flex-wrap items-center gap-2 max-sm:w-full" data-schedule-view-controls>
-          {supportsCompactLayout && viewMode ? (
+          {supportsCompactLayout && viewMode && viewModeControl === "tabs" ? (
             <Tabs
               className="hidden lg:block"
               value={viewMode}
@@ -1715,6 +1750,25 @@ export function ScheduleBoard({
                 <TabsTrigger value="list">{intl("components.list")}</TabsTrigger>
               </TabsList>
             </Tabs>
+          ) : null}
+          {supportsCompactLayout && viewMode && viewModeControl === "select" ? (
+            <label className="hidden items-center gap-2 lg:flex">
+              <span className="sr-only">{intl("components.scheduleLayout")}</span>
+              <select
+                value={viewMode}
+                onChange={(event) => {
+                  const nextViewMode = event.target.value as ScheduleViewMode;
+                  preferredViewMode.current = nextViewMode;
+                  setViewMode(nextViewMode);
+                  onViewModeChange?.(nextViewMode);
+                }}
+                className="h-9 rounded-md border border-input bg-background px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label={intl("components.scheduleLayout")}
+              >
+                <option value="compact">{intl("components.overview")}</option>
+                <option value="list">{intl("components.list")}</option>
+              </select>
+            </label>
           ) : null}
           {shiftTabsSlot}
           {viewControlsSlot}
@@ -1751,6 +1805,7 @@ export function ScheduleBoard({
       </div>
       <motion.div
         data-plan-board
+        data-hide-images={hideImages ? "" : undefined}
         data-plan-revision={planRevision || undefined}
       >
           <AnimatePresence initial={animateInitialView && !shouldReduceMotion} mode="wait">
@@ -2014,6 +2069,7 @@ export function ScheduleBoard({
               shiftDirection={shiftDirection}
               onIssue={onIssue}
               feedbackDisabled={feedbackDisabled}
+              hideImages={hideImages}
               onSlotClick={onSlotClick}
               onClearRoom={onClearRoom}
               onDormAutofillChange={onDormAutofillChange}

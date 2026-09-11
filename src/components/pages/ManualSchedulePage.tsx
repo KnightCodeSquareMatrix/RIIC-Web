@@ -29,6 +29,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { downloadJson } from "@/download";
 import { localizedOperatorName, localizedRoomTitle } from "@/i18n/game-data";
 import { useGameCatalog } from "@/i18n/game-data-client";
+import { prepareMaaForExport } from "@/maa-safety";
 import {
   assignManualOperator,
   clearManualRoom,
@@ -92,6 +93,10 @@ export interface ManualSchedulePageProps {
   onOpenSetup: () => void;
   onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
+  strictMaaOperatorOrder: boolean;
+  scheduleViewControl?: "tabs" | "select";
+  shiftViewControl?: "tabs" | "select";
+  showImages?: boolean;
 }
 
 type PickerTarget =
@@ -199,6 +204,10 @@ export function ManualSchedulePage({
   onOpenSetup,
   onFactoryRecipeChange,
   onTradeOrderChange,
+  strictMaaOperatorOrder,
+  scheduleViewControl = "tabs",
+  shiftViewControl = "tabs",
+  showImages = true,
 }: ManualSchedulePageProps) {
   const intl = useTranslations();
   const skillFilters = useTranslations("SkillFilters");
@@ -375,6 +384,16 @@ export function ManualSchedulePage({
     setPicker({ kind: "slot", roomId: row.roomId, slotIndex });
   }
 
+  function openFiammettaPicker() {
+    setPickerScrolling(false);
+    setPickerQuery("");
+    setPickerRoomFilter(null);
+    setPickerSkillTag(null);
+    setPickerRarity(null);
+    setPickerPage(1);
+    setPicker({ kind: "fiammetta" });
+  }
+
   function changePickerRoomFilter(next: BuildingRoomPrefix | null) {
     setPickerRoomFilter(next);
     setPickerSkillTag(null);
@@ -483,7 +502,7 @@ export function ManualSchedulePage({
   }
 
   function exportMaa() {
-    downloadJson("arknights-infra-schedule-maa.json", maa);
+    downloadJson("arknights-infra-schedule-maa.json", prepareMaaForExport(maa, strictMaaOperatorOrder));
   }
 
   async function prepareMaaImport(file: File) {
@@ -550,6 +569,7 @@ export function ManualSchedulePage({
 
   const fiammettaTarget = draft.shifts[activeShift]?.fiammettaTarget;
   const fiammettaPortrait = fiammettaTarget ? operatorPortraitFor(fiammettaTarget) : null;
+  const hasFiammetta = ownedOperators.some((operator) => operator.name === "菲亚梅塔");
   const sourceVariantLabel = draft.source?.variant === "progression-adjusted"
     ? (intl("components_pages_ManualSchedulePage.progressionAdjustedPlan"))
     : (intl("components_pages_ManualSchedulePage.originalPlan"));
@@ -614,17 +634,13 @@ export function ManualSchedulePage({
             <Trash2 />{intl("components_pages_ManualSchedulePage.clearEveryFacilityInShift")}
           </Button>
         )}
-        shiftInfoSlot={fiammettaEnabled ? (
+        shiftInfoSlot={hasFiammetta ? (
           <FiammettaTargetChip
-            target={fiammettaTarget}
-            portrait={fiammettaPortrait}
+            target={fiammettaEnabled ? fiammettaTarget : null}
+            portrait={fiammettaEnabled ? fiammettaPortrait : null}
             onClick={() => {
-              setPickerQuery("");
-              setPickerRoomFilter(null);
-              setPickerSkillTag(null);
-              setPickerRarity(null);
-              setPickerPage(1);
-              setPicker({ kind: "fiammetta" });
+              if (!fiammettaEnabled) onFiammettaEnabledChange(true);
+              openFiammettaPicker();
             }}
           />
         ) : undefined}
@@ -648,11 +664,14 @@ export function ManualSchedulePage({
               })) : undefined}
               wrap
               active={activeShift}
+              control={shiftViewControl}
               onChange={setActiveShift}
             />
           </div>
         )}
         onSlotClick={openSlotPicker}
+        viewModeControl={scheduleViewControl}
+        hideImages={!showImages}
         renderListRoomActions={(row, position) => (
           <ManualScheduleRoomActions
             row={row}

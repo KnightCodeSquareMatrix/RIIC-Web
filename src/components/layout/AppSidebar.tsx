@@ -8,6 +8,7 @@ import {
   Cloud,
   GraduationCap,
   Search,
+  Settings2,
   SquarePen,
   UserRound,
   type LucideIcon,
@@ -114,6 +115,7 @@ export function AppSidebar({ page, onPageChange }: AppSidebarProps) {
               <AppNavigationItem page={page} target="skland" label={labels.skland} icon={Cloud} onPageChange={onPageChange} />
             ) : null}
             <AppNavigationItem page={page} target="account" label={labels.account} icon={UserRound} onPageChange={onPageChange} />
+            <AppNavigationItem page={page} target="settings" label={labels.settings} icon={Settings2} onPageChange={onPageChange} />
           </SidebarMenu>
         </SidebarGroup>
       </SidebarContent>
