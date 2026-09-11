@@ -258,6 +258,7 @@ test("manual scheduling configures independent shifts, moves conflicts and enabl
   await expect(page.getByRole("dialog")).toContainText("请先在页面中安排干员");
   await page.keyboard.press("Escape");
 
+
   const trade = page.locator('[data-room-title="贸易站 1"]');
   const factory = page.locator('[data-room-title="制造站 1"]');
   const tradeDrones = trade.getByRole("button", { name: "贸易站 1 无人机加速" });
@@ -326,6 +327,12 @@ test("manual scheduling configures independent shifts, moves conflicts and enabl
   await fiammettaPicker.getByRole("button", { name: /锡兰/ }).click();
   await expect(manualShiftActions.getByRole("button", { name: "换心情 锡兰" })).toBeVisible();
   await expect(manualShiftActions.locator("[data-fiammetta-target-chip] img")).toBeVisible();
+
+  await manualShiftActions.locator("[data-fiammetta-target-chip]").click();
+  const clearMoraleTarget = fiammettaPicker.locator("[data-manual-clear-morale-target]");
+  await expect(clearMoraleTarget).toBeVisible();
+  await clearMoraleTarget.click();
+  await expect(manualShiftActions.getByRole("button", { name: "选择换心情目标" })).toBeVisible();
 
   await trade.getByRole("button", { name: /阿米娅/ }).click();
   operatorPicker = page.getByRole("dialog");
