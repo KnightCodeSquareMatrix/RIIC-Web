@@ -81,6 +81,7 @@ export type SkillRecordLookup = (skillId: string) => SkillRecord | undefined;
 export interface OperatorFilters {
   rarity?: number | null;
   profession?: number | null;
+  englishNames?: Readonly<Record<string, string>>;
 }
 
 export function operatorMatchesRoom(
@@ -116,10 +117,13 @@ export function operatorMatchesQuery(
   skillIds: readonly string[],
   query: string,
   skillLookup: SkillRecordLookup,
+  englishNames?: Readonly<Record<string, string>>,
 ): boolean {
   const normalizedQuery = query.trim().toLocaleLowerCase("zh-CN");
   if (!normalizedQuery) return true;
   if (name.toLocaleLowerCase("zh-CN").includes(normalizedQuery)) return true;
+  const englishName = englishNames?.[name];
+  if (englishName?.toLocaleLowerCase("en-US").includes(normalizedQuery.toLocaleLowerCase("en-US"))) return true;
   return skillIds.some((id) => {
     const skill = skillLookup(id);
     if (!skill) return false;
@@ -148,7 +152,7 @@ export function filterOperators<T extends OperatorWithSkills>(
         &&
         operatorMatchesRoom(skillIds, room)
         && operatorMatchesTag(skillIds, room, tag, skillLookup)
-        && operatorMatchesQuery(operator.name, skillIds, query, skillLookup)
+        && operatorMatchesQuery(operator.name, skillIds, query, skillLookup, filters.englishNames)
       );
     })
     .sort((left, right) => {

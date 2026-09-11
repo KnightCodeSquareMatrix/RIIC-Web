@@ -1,5 +1,5 @@
 "use client";
-import { useTranslations } from "next-intl";
+import { useTranslations, useLocale } from "next-intl";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { LoadMore } from "@/components/ui/load-more";
 import { BUILDING_SKILL_CATALOG, OPERATOR_CATALOG } from "@/operatorPortraits";
+import operatorEnglishNames from "@/generated/operator-english-names.json" with { type: "json" };
 import { indexSkillAnnotations } from "@/skill-annotations";
 import type { ApiResponse, SkillAnnotationListData } from "@/types";
 
@@ -23,6 +24,7 @@ export const SKILL_QUERY_PAGE_SIZE = 10;
 
 export function SkillQuery() {
   const intl = useTranslations();
+  const locale = useLocale();
 
   const filters = useTranslations("SkillFilters");
   const [rarity, setRarity] = useState("all");
@@ -60,9 +62,9 @@ export function SkillQuery() {
       selectedTag,
       query,
       (skillId) => BUILDING_SKILL_CATALOG[skillId],
-      { rarity: rarity === "all" ? null : Number(rarity), profession: profession === "all" ? null : Number(profession) },
+      { rarity: rarity === "all" ? null : Number(rarity), profession: profession === "all" ? null : Number(profession), englishNames: locale === "en" ? operatorEnglishNames : undefined },
     ),
-    [query, selectedRoom, selectedTag, rarity, profession],
+    [query, selectedRoom, selectedTag, rarity, profession, locale],
   );
   const visible = filtered.slice(0, visibleCount);
   const annotationIndex = useMemo(() => indexSkillAnnotations(annotations), [annotations]);
