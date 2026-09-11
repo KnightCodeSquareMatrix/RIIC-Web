@@ -735,7 +735,7 @@ export function ManualSchedulePage({
 
             {picker?.kind === "fiammetta" ? (
               <div className="flex justify-end">
-                <Button type="button" variant="destructive" size="sm" className="px-2 text-xs max-sm:min-h-8" onClick={() => chooseOperator(null)}><Trash2 />{intl("components_pages_ManualSchedulePage.clearSlot")}</Button>
+                <Button type="button" variant="destructive" size="sm" className="px-2 text-xs max-sm:min-h-8" data-manual-clear-morale-target onClick={() => chooseOperator(null)}><Trash2 />{intl("components_pages_ManualSchedulePage.clearSlot")}</Button>
               </div>
             ) : null}
 
