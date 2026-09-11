@@ -27,4 +27,7 @@ test("prepares MAA export with sort enabled and preserves displayed operator ord
 
   const relaxed = prepareMaaForExport(maa, false);
   assert.equal(relaxed.plans[0]!.rooms.trading![0]!.sort, false);
+
+  const replacementSorted = prepareMaaForExport(maa, false, true);
+  assert.equal(replacementSorted.plans[0]!.rooms.trading![0]!.sort, true);
 });

@@ -12,6 +12,7 @@ export interface UserSettings {
   skillPagination: "infinite" | "manual";
   showFeedback: boolean;
   showImages: boolean;
+  allowReplacementOperatorSort: boolean;
 }
 
 export const DEFAULT_USER_SETTINGS: UserSettings = {
@@ -26,6 +27,7 @@ export const DEFAULT_USER_SETTINGS: UserSettings = {
   skillPagination: "infinite",
   showFeedback: true,
   showImages: true,
+  allowReplacementOperatorSort: false,
 };
 
 type StorageLike = Pick<Storage, "getItem" | "setItem">;
@@ -55,6 +57,9 @@ export function loadUserSettings(storage: StorageLike): UserSettings {
       skillPagination: value.skillPagination === "manual" ? "manual" : DEFAULT_USER_SETTINGS.skillPagination,
       showFeedback: typeof value.showFeedback === "boolean" ? value.showFeedback : DEFAULT_USER_SETTINGS.showFeedback,
       showImages: typeof value.showImages === "boolean" ? value.showImages : DEFAULT_USER_SETTINGS.showImages,
+      allowReplacementOperatorSort: typeof value.allowReplacementOperatorSort === "boolean"
+        ? value.allowReplacementOperatorSort
+        : DEFAULT_USER_SETTINGS.allowReplacementOperatorSort,
     };
   } catch {
     return { ...DEFAULT_USER_SETTINGS };

@@ -94,6 +94,7 @@ export interface ManualSchedulePageProps {
   onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
   strictMaaOperatorOrder: boolean;
+  allowReplacementOperatorSort: boolean;
   scheduleViewControl?: "tabs" | "select";
   shiftViewControl?: "tabs" | "select";
   showImages?: boolean;
@@ -205,6 +206,7 @@ export function ManualSchedulePage({
   onFactoryRecipeChange,
   onTradeOrderChange,
   strictMaaOperatorOrder,
+  allowReplacementOperatorSort,
   scheduleViewControl = "tabs",
   shiftViewControl = "tabs",
   showImages = true,
@@ -502,7 +504,11 @@ export function ManualSchedulePage({
   }
 
   function exportMaa() {
-    downloadJson("arknights-infra-schedule-maa.json", prepareMaaForExport(maa, strictMaaOperatorOrder));
+    downloadJson("arknights-infra-schedule-maa.json", prepareMaaForExport(
+      maa,
+      strictMaaOperatorOrder,
+      allowReplacementOperatorSort,
+    ));
   }
 
   async function prepareMaaImport(file: File) {

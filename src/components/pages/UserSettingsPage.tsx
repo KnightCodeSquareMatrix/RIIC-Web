@@ -64,6 +64,25 @@ export function UserSettingsPage({ settings, onSettingsChange }: UserSettingsPag
                 aria-label={en ? "Strict operator order" : "严格按照顺序入驻"}
               />
             </div>
+            <div className="flex items-center justify-between gap-6 border-t border-border/60 pt-4">
+              <Label htmlFor="allow-replacement-operator-sort" className="grid min-w-0 gap-1">
+                <span>{en ? "Allow replacement operator sorting" : "替换排班允许调整干员顺序"}</span>
+                <span className="font-normal text-sm text-muted-foreground">
+                  {en
+                    ? "Only allows MAA to adjust operator order inside the same facility when replacing a schedule. Off by default."
+                    : "仅允许替换排班时在同一设施内调整干员顺序；默认关闭。"}
+                </span>
+              </Label>
+              <Switch
+                id="allow-replacement-operator-sort"
+                checked={settings.allowReplacementOperatorSort}
+                onCheckedChange={(checked) => onSettingsChange({
+                  ...settings,
+                  allowReplacementOperatorSort: checked,
+                })}
+                aria-label={en ? "Allow replacement operator sorting" : "替换排班允许调整干员顺序"}
+              />
+            </div>
             <div className="grid gap-3 border-t border-border/60 pt-4">
               <div className="flex items-center justify-between gap-6">
               <Label htmlFor="schedule-view-control" className="grid min-w-0 gap-1">

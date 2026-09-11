@@ -54,14 +54,18 @@ export function sanitizeMaaJson<T extends MaaJson>(maa: T): T {
  * `operators` array. The array already follows the order shown in the UI,
  * so preserve it exactly while removing runtime-only fields.
  */
-export function prepareMaaForExport<T extends MaaJson>(maa: T, strictOperatorOrder = true): T {
+export function prepareMaaForExport<T extends MaaJson>(
+  maa: T,
+  strictOperatorOrder = true,
+  allowReplacementOperatorSort = false,
+): T {
   const exported = sanitizeMaaJson(maa);
 
   for (const plan of exported.plans) {
     for (const rooms of Object.values(plan.rooms)) {
       if (!rooms) continue;
       for (const room of rooms) {
-        room.sort = strictOperatorOrder;
+        room.sort = strictOperatorOrder || allowReplacementOperatorSort;
       }
     }
   }

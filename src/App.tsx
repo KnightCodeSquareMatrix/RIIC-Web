@@ -1176,7 +1176,11 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   async function handleDownloadMaa() {
     if (!result?.maa) return;
     const { downloadJson } = await import("./download");
-    downloadJson("arknights-infra-schedule-maa.json", prepareMaaForExport(result.maa, userSettings.strictMaaOperatorOrder));
+    downloadJson("arknights-infra-schedule-maa.json", prepareMaaForExport(
+      result.maa,
+      userSettings.strictMaaOperatorOrder,
+      userSettings.allowReplacementOperatorSort,
+    ));
   }
 
   async function handleDownloadScheduleImage() {
@@ -2074,6 +2078,8 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       onOpenSetup: handleManualSetup,
       onFactoryRecipeChange: handleFactoryRecipeChange,
       onTradeOrderChange: handleTradeOrderChange,
+      strictMaaOperatorOrder: userSettings.strictMaaOperatorOrder,
+      allowReplacementOperatorSort: userSettings.allowReplacementOperatorSort,
       scheduleViewControl: userSettings.scheduleViewControl,
       shiftViewControl: userSettings.linkShiftViewControl ? userSettings.scheduleViewControl : userSettings.shiftViewControl,
       imageExportScope: userSettings.imageExportScope,
