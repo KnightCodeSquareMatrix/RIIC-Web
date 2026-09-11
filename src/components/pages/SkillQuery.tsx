@@ -19,6 +19,7 @@ import { BUILDING_SKILL_CATALOG, OPERATOR_CATALOG } from "@/operatorPortraits";
 import operatorEnglishNames from "@/generated/operator-english-names.json" with { type: "json" };
 import { indexSkillAnnotations } from "@/skill-annotations";
 import type { ApiResponse, SkillAnnotationListData } from "@/types";
+import { DEFAULT_USER_SETTINGS, loadUserSettings } from "@/user-settings";
 
 export const SKILL_QUERY_PAGE_SIZE = 10;
 
@@ -44,8 +45,13 @@ export function SkillQuery() {
   const [annotations, setAnnotations] = useState<SkillAnnotationListData["annotations"]>([]);
   const [annotationError, setAnnotationError] = useState(false);
   const [annotationRequest, setAnnotationRequest] = useState(0);
+  const [paginationMode, setPaginationMode] = useState<"infinite" | "manual">(DEFAULT_USER_SETTINGS.skillPagination);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const shouldReduceMotion = useReducedMotion();
+
+  useEffect(() => {
+    setPaginationMode(loadUserSettings(window.localStorage).skillPagination);
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -194,6 +200,7 @@ export function SkillQuery() {
             <LoadMore
               key={`${query}:${rarity}:${profession}:${selectedRoom ?? ""}:${selectedTag ?? ""}`}
               hasMore={hasMore}
+              auto={paginationMode === "infinite"}
               onLoad={loadMore}
               className="mt-4 border-t border-border/60 pt-2"
             />

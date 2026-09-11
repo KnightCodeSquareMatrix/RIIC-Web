@@ -4,6 +4,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import { useLocale } from "next-intl";
 import { loadGameCatalog } from "./game-data.ts";
 import type { EnglishCatalog } from "./game-catalog.ts";
+import { loadUserSettings } from "../user-settings.ts";
 
 type CatalogListener = () => void;
 
@@ -46,7 +47,9 @@ export function useGameCatalog(): EnglishCatalog | null {
     gameCatalogStore.getServerSnapshot,
   );
   useEffect(() => {
-    if (locale === "en" && !catalog) void gameCatalogStore.ensureLoaded().catch(() => { /* Keep upstream text and retry after a later mount. */ });
+    if (locale === "en" && !catalog && loadUserSettings(window.localStorage).loadEnglishResources) {
+      void gameCatalogStore.ensureLoaded().catch(() => { /* Keep upstream text and retry after a later mount. */ });
+    }
   }, [catalog, locale]);
   return locale === "en" ? catalog : null;
 }

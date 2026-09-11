@@ -94,6 +94,11 @@ export interface ManualSchedulePageProps {
   onOpenSetup: () => void;
   onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
+  strictMaaOperatorOrder: boolean;
+  allowReplacementOperatorSort: boolean;
+  scheduleViewControl?: "tabs" | "select";
+  shiftViewControl?: "tabs" | "select";
+  showImages?: boolean;
 }
 
 type PickerTarget =
@@ -201,6 +206,11 @@ export function ManualSchedulePage({
   onOpenSetup,
   onFactoryRecipeChange,
   onTradeOrderChange,
+  strictMaaOperatorOrder,
+  allowReplacementOperatorSort,
+  scheduleViewControl = "tabs",
+  shiftViewControl = "tabs",
+  showImages = true,
 }: ManualSchedulePageProps) {
   const intl = useTranslations();
   const skillFilters = useTranslations("SkillFilters");
@@ -506,7 +516,11 @@ export function ManualSchedulePage({
   }
 
   function exportMaa() {
-    downloadJson("arknights-infra-schedule-maa.json", prepareMaaForExport(maa));
+    downloadJson("arknights-infra-schedule-maa.json", prepareMaaForExport(
+      maa,
+      strictMaaOperatorOrder,
+      allowReplacementOperatorSort,
+    ));
   }
 
   async function prepareMaaImport(file: File) {
@@ -668,11 +682,14 @@ export function ManualSchedulePage({
               })) : undefined}
               wrap
               active={activeShift}
+              control={shiftViewControl}
               onChange={setActiveShift}
             />
           </div>
         )}
         onSlotClick={openSlotPicker}
+        viewModeControl={scheduleViewControl}
+        hideImages={!showImages}
         renderListRoomActions={(row, position) => (
           <ManualScheduleRoomActions
             row={row}

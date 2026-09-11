@@ -51,6 +51,7 @@ export interface CompactScheduleViewProps {
   shiftDirection: ShiftDirection;
   onIssue?: (row: RoomRow) => void;
   feedbackDisabled?: boolean;
+  hideImages?: boolean;
   onSlotClick?: (row: RoomRow, slotIndex: number) => void;
   onClearRoom?: (row: RoomRow) => void;
   onDormAutofillChange?: (row: RoomRow, enabled: boolean) => void;
@@ -381,7 +382,7 @@ function CompactFeedbackButton({ row, disabled, offset, onIssue }: { row: RoomRo
 
 export function CompactScheduleView(props: CompactScheduleViewProps) {
   const intl = useTranslations();
-  const { rows, layout, eliteByOperator, levelByOperator, shiftDirection, onIssue, feedbackDisabled = false, onSlotClick, onClearRoom, onDormAutofillChange, droneTargetRoomId, onDroneTargetChange } = props;
+  const { rows, layout, eliteByOperator, levelByOperator, shiftDirection, onIssue, feedbackDisabled = false, hideImages = false, onSlotClick, onClearRoom, onDormAutofillChange, droneTargetRoomId, onDroneTargetChange, highlightedOperators, onSkillTermOpen } = props;
 
   if (rows.length === 0) {
     return (
@@ -432,6 +433,8 @@ export function CompactScheduleView(props: CompactScheduleViewProps) {
         onDormAutofillChange={onDormAutofillChange}
         droneTargetRoomId={droneTargetRoomId}
         onDroneTargetChange={onDroneTargetChange}
+        highlightedOperators={highlightedOperators}
+        onSkillTermOpen={onSkillTermOpen}
         horizontal={COMPACT_AUXILIARY_GROUPS.has(row.group)}
         className="min-w-0"
         style={widthPercent !== undefined ? { flexBasis: `${widthPercent}%` } : { flex: 1 }}
@@ -446,7 +449,7 @@ export function CompactScheduleView(props: CompactScheduleViewProps) {
   const processing = getGroup("processing")[0];
 
   return (
-    <div className={COMPACT_GRID_CLASS} data-compact-schedule-view>
+    <div className={COMPACT_GRID_CLASS} data-compact-schedule-view data-hide-images={hideImages ? "" : undefined}>
       <div
         className={COMPACT_COLUMN_CLASS}
         style={{ flexBasis: `${GRID_LEFT_PCT}%` }}

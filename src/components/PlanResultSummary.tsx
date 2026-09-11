@@ -121,7 +121,7 @@ export function PlanResultSummary({
   animationRevision?: string;
   animateEntrance?: boolean;
   onEntranceConsumed?: (revision: string) => void;
-  onPerformanceIssue: () => void;
+  onPerformanceIssue?: () => void;
   feedbackDisabled?: boolean;
   controlsSlot?: ReactNode;
 }) {
@@ -154,7 +154,7 @@ export function PlanResultSummary({
   const handleDrawerCloseComplete = () => {
     if (!performanceFeedbackPendingRef.current) return;
     performanceFeedbackPendingRef.current = false;
-    onPerformanceIssue();
+    onPerformanceIssue?.();
   };
 
   return (
@@ -278,7 +278,7 @@ export function PlanResultSummary({
               ) : null}
             </div>
           </Tabs>
-          <div className="shrink-0 border-t border-[#313131]/12 px-5 py-2.5">
+          {onPerformanceIssue ? <div className="shrink-0 border-t border-[#313131]/12 px-5 py-2.5">
             <Button
               type="button"
               variant="link"
@@ -291,7 +291,7 @@ export function PlanResultSummary({
               {intl("components_PlanResultSummary.reportSolvePerformance")}
             </Button>
             {feedbackDisabled ? <p className="mt-1 text-xs text-[#313131]/55">{intl("components_PlanResultSummary.theFullRosterSampleCannotSubmitFeedback2")}</p> : null}
-          </div>
+          </div> : null}
         </div>
       </Drawer>
     </>

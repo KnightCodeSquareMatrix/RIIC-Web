@@ -3,7 +3,7 @@ import { localize as localize_components_pages_InfraCalculator } from "../../i18
 
 import { useTranslations, useLocale } from "next-intl";
 
-import { ArrowRight, Download, Ellipsis, FlaskConical, Keyboard, Loader2, PencilLine, Play, RefreshCw, Search, Settings2, SlidersHorizontal, X } from "lucide-react";
+import { ArrowRight, Download, Ellipsis, FlaskConical, ImageDown, Keyboard, Loader2, PencilLine, Play, RefreshCw, Search, Settings2, SlidersHorizontal, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { ScheduleBoard, ShiftTabs } from "@/components";
@@ -372,6 +372,14 @@ export interface InfraCalculatorProps {
   onDroneTargetChange?: (row: RoomRow) => void;
   onEditManualSchedule: () => void;
   onDownloadMaa: () => void;
+  onDownloadImage: () => Promise<void>;
+  showProgressionRecalculate?: boolean;
+  showManualScheduleEdit?: boolean;
+  scheduleViewControl?: "tabs" | "select";
+  shiftViewControl?: "tabs" | "select";
+  imageExportScope?: "single" | "all";
+  showFeedback?: boolean;
+  showImages?: boolean;
   onClearResultNotice: () => void;
   onDismissResultClearWarning: () => void;
 }
@@ -390,7 +398,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     onRunSampleTrial, onStartPersonalFlow, onDismissOnboarding, onOpenSetup, upgradeSimulationOpen, onOpenUpgradeSimulation, onUpgradeSimulationOpenChange, onRun, onAutoDroneAllocation, onManualDroneAllocation, manualDroneSelection = false, onSimulateUpgrades, upgradeComparison, scheduleVariant, onScheduleVariantChange, onUpgradeTrialReady, onCancelRun,
     onSetActiveShift, onMarkIssue, onPerformanceIssue,
     onFactoryRecipeChange, onTradeOrderChange, droneTargetRoomId, onDroneTargetChange,
-    onEditManualSchedule, onDownloadMaa,
+    onEditManualSchedule, onDownloadMaa, onDownloadImage, showProgressionRecalculate = true, showManualScheduleEdit = true, scheduleViewControl = "tabs", shiftViewControl = "tabs", imageExportScope = "single", showFeedback = true, showImages = true,
     onClearResultNotice, onDismissResultClearWarning,
   } = props;
 
@@ -412,6 +420,47 @@ export function InfraCalculator(props: InfraCalculatorProps) {
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [planActionsOpen, setPlanActionsOpen] = useState(false);
   const [operatorQuery, setOperatorQuery] = useState("");
+  const [imageExporting, setImageExporting] = useState(false);
+  const [imageExportFailed, setImageExportFailed] = useState(false);
+  const imageExportInFlight = useRef(false);
+
+  async function handleImageExport() {
+    if (imageExportScope === "all") return;
+    if (imageExportInFlight.current) return;
+    imageExportInFlight.current = true;
+    setImageExporting(true);
+    setImageExportFailed(false);
+    try {
+      await onDownloadImage();
+    } catch {
+      setImageExportFailed(true);
+    } finally {
+      imageExportInFlight.current = false;
+      setImageExporting(false);
+    }
+  }
+
+  const imageExportAction = (
+    <div className="flex min-w-0 items-center">
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={!scheduleResult?.maa || loading || imageExporting || imageExportScope === "all"}
+        aria-busy={imageExporting}
+        title={imageExportScope === "all" ? intl("components_pages_InfraCalculator.imageExportAllMaintenance") : undefined}
+        onClick={() => void handleImageExport()}
+      >
+        {imageExporting ? <Loader2 className="animate-spin" /> : <ImageDown />}
+        {intl(imageExportScope === "all"
+          ? "components_pages_InfraCalculator.imageExportAllMaintenance"
+          : imageExporting
+            ? "components_pages_InfraCalculator.exportingImage"
+            : "components_pages_InfraCalculator.exportImage")}
+      </Button>
+    </div>
+  );
+
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [shiftDirection, setShiftDirection] = useState<ShiftDirection>(0);
   const [fiammettaPortrait, setFiammettaPortrait] = useState<string | null>(null);
@@ -450,17 +499,18 @@ export function InfraCalculator(props: InfraCalculatorProps) {
       data-calculator-export-actions={placement}
       data-calculator-plan-actions={placement}
     >
-      {operbox ? (
+      {operbox && showProgressionRecalculate ? (
         <Button type="button" size="sm" variant="outline" onClick={onOpenUpgradeSimulation}>
           <FlaskConical />{intl("components_pages_InfraCalculator.modifyProgressionRecalculate")}
         </Button>
       ) : null}
-      <Button type="button" size="sm" variant="outline" onClick={onEditManualSchedule}>
+      {showManualScheduleEdit ? <Button type="button" size="sm" variant="outline" onClick={onEditManualSchedule}>
         <PencilLine />{intl("components_pages_InfraCalculator.editTheCurrentPlan")}<ArrowRight />
-      </Button>
+      </Button> : null}
       <Button type="button" size="sm" variant="outline" disabled={!result?.maa} onClick={onDownloadMaa}>
         <Download />{intl("components_pages_InfraCalculator.exportToMaa")}
       </Button>
+      {imageExportAction}
     </div>
   ) : (
     <div
@@ -471,9 +521,12 @@ export function InfraCalculator(props: InfraCalculatorProps) {
       <Button type="button" size="sm" variant="outline" className="min-w-0 flex-1" onClick={() => setPlanActionsOpen(true)}>
         <SlidersHorizontal />{intl("components_pages_InfraCalculator.adjustPlan")}
       </Button>
-      <Button type="button" size="sm" variant="outline" disabled={!result?.maa} onClick={onDownloadMaa}>
+      <Button type="button" size="sm" variant="outline" className="min-w-0 flex-1" disabled={!result?.maa} onClick={onDownloadMaa}>
         <Download />{intl("components_pages_InfraCalculator.exportMaa")}
       </Button>
+      <div className="flex min-w-0 flex-1 [&>div]:w-full [&_button]:min-w-0 [&_button]:flex-1">
+        {imageExportAction}
+      </div>
     </div>
   );
 
@@ -632,7 +685,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                     animationRevision={result?.diagnosticId ?? scheduleResult.diagnosticId}
                     animateEntrance={animatePlanEntrance}
                     onEntranceConsumed={onPlanEntranceConsumed}
-                    onPerformanceIssue={onPerformanceIssue}
+                    onPerformanceIssue={showFeedback ? onPerformanceIssue : undefined}
                     feedbackDisabled={feedbackDisabledForSampleBox}
                     controlsSlot={(
                       <Suspense fallback={null}>
@@ -642,6 +695,11 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                   />
                 </Suspense>
               </>
+            ) : null}
+            {imageExportFailed ? (
+              <p role="alert" className="text-sm text-red-700">
+                {intl("components_pages_InfraCalculator.exportImageFailed")}
+              </p>
             ) : null}
             {!scheduleResult && showOnboarding ? (
               <CalculatorStartPanel
@@ -683,13 +741,15 @@ export function InfraCalculator(props: InfraCalculatorProps) {
               ) : undefined}
               mobileActionsSlot={scheduleResult ? renderPlanActions("mobile") : undefined}
               shiftTabsSlot={(
-                <ShiftTabs maaJson={scheduleResult?.maa} rotation={scheduleResult?.rotation} active={activeShift} closest={closestComparison?.planIndex} onChange={handleSetActiveShift} />
+                <ShiftTabs maaJson={scheduleResult?.maa} rotation={scheduleResult?.rotation} active={activeShift} closest={closestComparison?.planIndex} control={shiftViewControl} onChange={handleSetActiveShift} />
               )}
               shiftInfoSlot={scheduleResult ? renderPlanActions("desktop") : undefined}
-              onIssue={onMarkIssue}
+              onIssue={showFeedback ? onMarkIssue : undefined}
               feedbackDisabled={feedbackDisabledForSampleBox}
               onFactoryRecipeChange={onFactoryRecipeChange}
               onTradeOrderChange={onTradeOrderChange}
+              viewModeControl={scheduleViewControl}
+              hideImages={!showImages}
               droneTargetRoomId={droneTargetRoomId}
               onDroneTargetChange={manualDroneSelection ? onDroneTargetChange : undefined}
             /> : (
@@ -736,7 +796,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
           />
         </Suspense>
       ) : null}
-      {planActionsOpen && <Suspense fallback={null}><PlanActionsDialog hasBox={!!operbox} visibleVariantLabel={visibleVariantLabel} onOpenChange={setPlanActionsOpen} onProgression={openProgressionAction} onManual={openManualAction} /></Suspense>}
+      {planActionsOpen && <Suspense fallback={null}><PlanActionsDialog hasBox={!!operbox} showProgression={showProgressionRecalculate} showManual={showManualScheduleEdit} visibleVariantLabel={visibleVariantLabel} onOpenChange={setPlanActionsOpen} onProgression={openProgressionAction} onManual={openManualAction} /></Suspense>}
       <Suspense fallback={null}>
         <ShortcutGuideDialog open={shortcutGuideOpen} onOpenChange={setShortcutGuideOpen} />
         <Dialog open={cancelConfirmOpen} onOpenChange={setCancelConfirmOpen}>

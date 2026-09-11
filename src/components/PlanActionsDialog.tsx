@@ -4,8 +4,10 @@ import { useTranslations } from "next-intl";
 import { ArrowRight, FlaskConical, PencilLine } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
-export function PlanActionsDialog({ hasBox, visibleVariantLabel, onOpenChange, onProgression, onManual }: {
+export function PlanActionsDialog({ hasBox, showProgression, showManual, visibleVariantLabel, onOpenChange, onProgression, onManual }: {
   hasBox: boolean;
+  showProgression: boolean;
+  showManual: boolean;
   visibleVariantLabel: string;
   onOpenChange: (open: boolean) => void;
   onProgression: () => void;
@@ -22,7 +24,7 @@ export function PlanActionsDialog({ hasBox, visibleVariantLabel, onOpenChange, o
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-2 px-1 sm:px-2">
-            {hasBox ? (
+            {hasBox && showProgression ? (
               <button
                 type="button"
                 className="group flex min-h-20 w-full items-center gap-3 rounded-[var(--radius-md)] border border-border bg-background px-4 py-3 text-left outline-none transition-colors hover:border-foreground/40 hover:bg-muted/45 focus-visible:ring-2 focus-visible:ring-[#FFD800]"
@@ -37,7 +39,7 @@ export function PlanActionsDialog({ hasBox, visibleVariantLabel, onOpenChange, o
                 <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
               </button>
             ) : null}
-            <button
+            {showManual ? <button
               type="button"
               className="group flex min-h-20 w-full items-center gap-3 rounded-[var(--radius-md)] border border-border bg-background px-4 py-3 text-left outline-none transition-colors hover:border-foreground/40 hover:bg-muted/45 focus-visible:ring-2 focus-visible:ring-[#FFD800]"
               onClick={onManual}
@@ -49,7 +51,7 @@ export function PlanActionsDialog({ hasBox, visibleVariantLabel, onOpenChange, o
                 <span className="mt-1 block text-xs leading-5 text-muted-foreground">{intl("components_pages_InfraCalculator.copyThePlanYouAreViewingAndContinueIn")}</span>
               </span>
               <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
-            </button>
+            </button> : null}
           </div>
         </DialogContent>
       </Dialog>

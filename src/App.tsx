@@ -75,6 +75,7 @@ import {
   MANUAL_SCHEDULE_STORAGE_KEY,
 } from "./manual-schedule-config";
 import type { ManualScheduleDraft, ManualScheduleMode } from "./manual-schedule";
+import { DEFAULT_USER_SETTINGS, loadUserSettings, persistUserSettings, USER_SETTINGS_CHANGED_EVENT, type UserSettings } from "./user-settings";
 import { effectiveFiammettaSetting, resolvePlanPresentationLayout } from "./plan-presentation";
 import {
   applyLocalLayoutPatch,
@@ -260,6 +261,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   const [hasRestoredSession, setHasRestoredSession] = useState(false);
   const restoredLocalSession = useRef(false);
   const [onboardingPreference, setOnboardingPreference] = useState<OnboardingPreference>("active");
+  const [userSettings, setUserSettings] = useState<UserSettings>(DEFAULT_USER_SETTINGS);
   const [preset, setPreset] = useState<PresetDef>(defaultPreset);
   const [layout, setLayout] = useState<BaseBlueprint>(defaultLayout);
   const powerBudget = useMemo(() => computePowerBudget(layout), [layout]);
@@ -398,6 +400,10 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
 
   useEffect(() => () => {
     if (planRetryTimerRef.current) clearInterval(planRetryTimerRef.current);
+  }, []);
+
+  useEffect(() => {
+    setUserSettings(loadUserSettings(window.localStorage));
   }, []);
 
   const planTask = usePlanTask({
@@ -1170,7 +1176,19 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   async function handleDownloadMaa() {
     if (!result?.maa) return;
     const { downloadJson } = await import("./download");
-    downloadJson("arknights-infra-schedule-maa.json", prepareMaaForExport(result.maa));
+    downloadJson("arknights-infra-schedule-maa.json", prepareMaaForExport(
+      result.maa,
+      userSettings.strictMaaOperatorOrder,
+      userSettings.allowReplacementOperatorSort,
+    ));
+  }
+
+  async function handleDownloadScheduleImage() {
+    if (!scheduleResult?.maa?.plans?.length) throw new Error("Schedule result is not ready");
+    const { downloadScheduleImage } = await import("./schedule-image");
+    const board = document.querySelector<HTMLElement>("[data-plan-board]");
+    if (!board) throw new Error("Schedule board is not ready");
+    await downloadScheduleImage(board, `arknights-infra-schedule-shift-${activeShift + 1}.png`);
   }
 
   function openManualScheduleDraft(draft: ManualScheduleDraft) {
@@ -1359,6 +1377,16 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   function handleFiammettaEnabledChange(enabled: boolean) {
     setFiammettaEnabled(enabled);
     clearPlanResult();
+  }
+
+  function handleUserSettingsChange(nextSettings: UserSettings) {
+    setUserSettings(nextSettings);
+    window.dispatchEvent(new CustomEvent(USER_SETTINGS_CHANGED_EVENT, { detail: nextSettings }));
+    try {
+      persistUserSettings(window.localStorage, nextSettings);
+    } catch {
+      // Keep the setting active for this session if storage is unavailable.
+    }
   }
 
   function applyPartialLocalLayoutEdit(patch: (layout: BaseBlueprint) => BaseBlueprint): BaseBlueprint {
@@ -2004,8 +2032,16 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       onDroneTargetChange: handleScheduleDroneTargetChange,
       onEditManualSchedule: handleProtectedEditManualSchedule,
       onDownloadMaa: handleDownloadMaa,
+      onDownloadImage: handleDownloadScheduleImage,
       onClearResultNotice: () => setResultClearNotice(null),
       onDismissResultClearWarning: dismissResultClearWarning,
+      showProgressionRecalculate: userSettings.showProgressionRecalculate,
+      showManualScheduleEdit: userSettings.showManualScheduleEdit,
+      scheduleViewControl: userSettings.scheduleViewControl,
+      shiftViewControl: userSettings.linkShiftViewControl ? userSettings.scheduleViewControl : userSettings.shiftViewControl,
+      imageExportScope: userSettings.imageExportScope,
+      showFeedback: userSettings.showFeedback,
+      showImages: userSettings.showImages,
     },
     manual: {
       layout,
@@ -2026,6 +2062,12 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       onOpenSetup: handleManualSetup,
       onFactoryRecipeChange: handleFactoryRecipeChange,
       onTradeOrderChange: handleTradeOrderChange,
+      strictMaaOperatorOrder: userSettings.strictMaaOperatorOrder,
+      allowReplacementOperatorSort: userSettings.allowReplacementOperatorSort,
+      scheduleViewControl: userSettings.scheduleViewControl,
+      shiftViewControl: userSettings.linkShiftViewControl ? userSettings.scheduleViewControl : userSettings.shiftViewControl,
+      imageExportScope: userSettings.imageExportScope,
+      showImages: userSettings.showImages,
     },
     training: {
       operbox: accountCanUseCurrentBox ? operbox : null,
@@ -2070,6 +2112,10 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
         },
         onCloudDataChanged: accountCloudWorkspace.refreshCloudData,
       } : {}),
+    },
+    settings: {
+      value: userSettings,
+      onChange: handleUserSettingsChange,
     },
     skland: CLIENT_SKLAND_ENABLED ? {
       websiteAuthenticated: Boolean(websiteSession),
