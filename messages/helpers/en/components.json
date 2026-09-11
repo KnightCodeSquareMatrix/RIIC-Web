@@ -59,6 +59,7 @@
   "infrastructureSkillS": "Infrastructure skill S{index}: {name}, {unlockLabel}",
   "autoFill": "Auto-fill",
   "empty": "Empty",
+  "slotLocked": "Locked",
   "label2": ": ",
   "focusToViewInfrastructureSkills": ". Focus to view infrastructure skills",
   "edit": "EDIT",

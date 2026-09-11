@@ -59,6 +59,7 @@
   "infrastructureSkillS": "基建技能 S{index}：{nameValue}，{unlockLabel}",
   "autoFill": "自动补位",
   "empty": "空置",
+  "slotLocked": "未解锁",
   "label2": "：",
   "focusToViewInfrastructureSkills": "，聚焦可查看基建技能",
   "edit": "可编辑",

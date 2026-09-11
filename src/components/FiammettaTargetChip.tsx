@@ -25,16 +25,16 @@ export function FiammettaTargetChip({ target, portrait, onClick }: FiammettaTarg
   const title = displayTarget
     ? (intl("components_FiammettaTargetChip.fiammettaRestores", { displayTarget: displayTarget }))
     : label;
-  const className = "flex h-7 items-center gap-1 rounded-[min(var(--radius-md),12px)] border border-[#016E65]/30 bg-[#016E65]/10 px-2.5 text-[0.8rem] text-[#016E65] shadow-xs max-sm:h-11";
+  const className = "flex h-7 items-center gap-1 rounded-[min(var(--radius-md),12px)] border border-rose-500/30 bg-rose-500/10 px-2.5 text-[0.8rem] text-rose-700 shadow-xs max-sm:h-11";
   const content = (
     <>
-      <span className="size-5 shrink-0 overflow-hidden rounded-full border border-[#016E65]/25 bg-[#272A2B]">
+      <span className="size-5 shrink-0 overflow-hidden rounded-full border border-rose-500/25 bg-rose-100">
         {portrait && displayTarget
           ? <img src={portrait} alt="" className="size-full object-cover" />
-          : <HeartPulse className="m-1 size-3 text-[#016E65]" />}
+          : <HeartPulse className="m-1 size-3 text-rose-600" />}
       </span>
       {displayTarget ? (
-        <span className="whitespace-nowrap"><span className="text-[#016E65]/70">{intl("components_FiammettaTargetChip.moraleRecovery2")}</span> {displayTarget}</span>
+        <span className="whitespace-nowrap"><span className="text-rose-700/80">{intl("components_FiammettaTargetChip.moraleRecovery2")}</span> {displayTarget}</span>
       ) : (
         <span className="whitespace-nowrap">{label}</span>
       )}
@@ -44,7 +44,7 @@ export function FiammettaTargetChip({ target, portrait, onClick }: FiammettaTarg
   return onClick ? (
     <button
       type="button"
-      className={`${className} cursor-pointer outline-none transition-colors hover:bg-[#016E65]/15 focus-visible:ring-2 focus-visible:ring-[#FFD800] focus-visible:ring-offset-1`}
+      className={`${className} cursor-pointer outline-none transition-colors hover:bg-rose-500/15 focus-visible:ring-2 focus-visible:ring-rose-400 focus-visible:ring-offset-1`}
       aria-label={label}
       title={title}
       data-fiammetta-target-chip

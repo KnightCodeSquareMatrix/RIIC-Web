@@ -19,7 +19,7 @@
   "owned": "名已拥有干员",
   "fiammettaMoraleTarget": "选择菲亚梅塔换心情目标",
   "assign": "安排{value2}干员",
-  "thisTargetIsStoredOnlyForTheActiveShift": "该目标只应用于当前班次。",
+  "thisTargetIsStoredOnlyForTheActiveShift": "仅可选择当前班次已排入设施的干员。请先在页面中安排干员，换心情目标只应用于当前班次。",
   "onlyOwnedOperatorsInTheCurrentBoxAreShown": "这里只显示当前 Box 中已拥有的干员。",
   "searchOperators": "搜索干员",
   "searchSelectableOperators": "搜索可选干员",

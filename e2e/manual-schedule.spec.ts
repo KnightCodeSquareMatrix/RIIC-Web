@@ -220,6 +220,7 @@ test("manual scheduling configures independent shifts, moves conflicts and enabl
   await expect(shiftTabs).toHaveAttribute("data-slot", "tabs-list");
   const [layoutTabsBox, shiftTabsBox] = await Promise.all([layoutTabs.boundingBox(), shiftTabs.boundingBox()]);
   expect(shiftTabsBox?.y).toBeCloseTo(layoutTabsBox?.y ?? 0, 0);
+  expect(shiftTabsBox?.x).toBeGreaterThan((layoutTabsBox?.x ?? 0) + (layoutTabsBox?.width ?? 0));
   await expect(shiftTabs.getByRole("tab", { name: /第 1 班.*12h/ })).toBeVisible();
 
   await page.getByRole("button", { name: "配置 Box 与布局" }).first().click();
@@ -243,44 +244,20 @@ test("manual scheduling configures independent shifts, moves conflicts and enabl
 
   await expect(page.getByRole("tab", { name: /班次 1.*08:15至19:59.*11小时45分钟/ })).toBeVisible();
   await expect(page.locator("[data-manual-shift-actions] [data-shift-tabs]").getByRole("tab")).toHaveCount(2);
-  const manualShiftActions = page.locator("[data-manual-shift-actions]");
+  const manualShiftActions = scheduleToolbar;
   const moraleTarget = manualShiftActions.getByRole("button", { name: "选择换心情目标" });
   const [moraleTargetBox, configuredShiftTabsBox] = await Promise.all([
     moraleTarget.boundingBox(),
     manualShiftActions.locator("[data-shift-tabs]").boundingBox(),
   ]);
-  expect(moraleTargetBox?.x).toBeLessThan(configuredShiftTabsBox?.x ?? 0);
+  expect(moraleTargetBox?.x).toBeGreaterThan(configuredShiftTabsBox?.x ?? 0);
   expect((moraleTargetBox?.y ?? 0) + (moraleTargetBox?.height ?? 0) / 2)
     .toBeCloseTo((configuredShiftTabsBox?.y ?? 0) + (configuredShiftTabsBox?.height ?? 0) / 2, 0);
   await moraleTarget.click();
-  const fiammettaPicker = page.getByRole("dialog");
-  await expect(fiammettaPicker.locator("[data-manual-operator-choice]").first().locator('img[width="180"]')).toBeVisible();
-  await expect(fiammettaPicker.locator("[data-elite-badge]").first()).toBeVisible();
-  await expect(fiammettaPicker.getByRole("group", { name: "星级" })).toBeVisible();
-  await expect(fiammettaPicker.getByRole("button", { name: "上一页" })).toBeDisabled();
-  await expect(fiammettaPicker.getByRole("button", { name: "下一页" })).toBeDisabled();
-  await expect(fiammettaPicker.locator("[data-manual-operator-placeholder]")).toHaveCount(21);
-  const pickerSearch = fiammettaPicker.getByLabel("搜索可选干员或基建技能");
-  await pickerSearch.fill("锡兰");
-  await fiammettaPicker.getByRole("button", { name: /锡兰/ }).hover();
-  await expect(page.locator('[data-slot="tooltip-content"][data-open]')).toBeVisible({ timeout: 1_000 });
-  await fiammettaPicker.locator('[data-slot="scroll-area-viewport"]').evaluate((element) => {
-    element.dispatchEvent(new Event("scroll"));
-  });
-  await expect(page.locator('[data-slot="tooltip-content"][data-open]')).toHaveCount(0);
-  await page.waitForTimeout(200);
-  await pickerSearch.fill("阿米娅");
-  await fiammettaPicker.getByRole("button", { name: /阿米娅/ }).hover();
-  await expect(page.locator('[data-slot="tooltip-content"][data-open]')).toBeVisible({ timeout: 1_000 });
-  await pickerSearch.fill("锡兰");
-  await fiammettaPicker.getByRole("button", { name: /锡兰/ }).click();
-  await expect(manualShiftActions.getByRole("button", { name: "换心情 锡兰" })).toBeVisible();
-  await expect(manualShiftActions.locator("[data-fiammetta-target-chip] img")).toBeVisible();
+  await expect(page.getByRole("dialog").locator("[data-manual-operator-choice]")).toHaveCount(0);
+  await expect(page.getByRole("dialog")).toContainText("请先在页面中安排干员");
+  await page.keyboard.press("Escape");
 
-  await manualShiftActions.locator("[data-fiammetta-target-chip]").click();
-  await expect(fiammettaPicker.getByRole("button", { name: "清空", exact: true })).toBeVisible();
-  await fiammettaPicker.getByRole("button", { name: "清空", exact: true }).click();
-  await expect(manualShiftActions.getByRole("button", { name: "选择换心情目标" })).toBeVisible();
 
   const trade = page.locator('[data-room-title="贸易站 1"]');
   const factory = page.locator('[data-room-title="制造站 1"]');
@@ -295,7 +272,12 @@ test("manual scheduling configures independent shifts, moves conflicts and enabl
   await expect(page.locator('[data-schedule-view="list"]')).toBeVisible();
   const listFactoryDrones = page.locator('[data-schedule-view="list"] [data-room-title="制造站 1"]').getByRole("button", { name: "制造站 1 无人机加速" });
   await listFactoryDrones.hover();
+  await expect(listFactoryDrones).toHaveCSS("background-color", /0\.28/);
   await expect(page.getByText("取消当前班次无人机加速", { exact: true })).toBeVisible();
+  const listAutofill = page.getByRole("button", { name: /宿舍 1.*自动补位/ });
+  await expect(listAutofill.locator("svg")).toHaveCount(0);
+  await listAutofill.hover();
+  await expect(listAutofill).toHaveCSS("background-color", /0\.28/);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await expect(page.locator('[data-schedule-view="compact"]')).toBeVisible();
   await expect(trade.getByRole("button", { name: "空置" }).first()).toContainText("可编辑");
@@ -319,6 +301,38 @@ test("manual scheduling configures independent shifts, moves conflicts and enabl
   await operatorPicker.getByRole("tablist", { name: "工作房间" }).getByRole("tab", { name: "全部", exact: true }).click();
   await operatorPicker.getByLabel("搜索可选干员或基建技能").fill("锡兰");
   await operatorPicker.getByRole("button", { name: /锡兰/ }).click();
+
+  await moraleTarget.click();
+  const fiammettaPicker = page.getByRole("dialog");
+  await expect(fiammettaPicker.locator("[data-manual-operator-choice]").first().locator('img[width="180"]')).toBeVisible();
+  await expect(fiammettaPicker.locator("[data-elite-badge]").first()).toBeVisible();
+  await expect(fiammettaPicker.getByRole("group", { name: "星级" })).toBeVisible();
+  await expect(fiammettaPicker.getByRole("button", { name: "上一页" })).toBeDisabled();
+  await expect(fiammettaPicker.getByRole("button", { name: "下一页" })).toBeDisabled();
+  await expect(fiammettaPicker.locator("[data-manual-operator-placeholder]")).toHaveCount(22);
+  await expect(fiammettaPicker.getByRole("button", { name: /菲亚梅塔/ })).toHaveCount(0);
+  const pickerSearch = fiammettaPicker.getByLabel("搜索可选干员或基建技能");
+  await pickerSearch.fill("锡兰");
+  await fiammettaPicker.getByRole("button", { name: /锡兰/ }).hover();
+  await expect(page.locator('[data-slot="tooltip-content"][data-open]')).toBeVisible({ timeout: 1_000 });
+  await fiammettaPicker.locator('[data-slot="scroll-area-viewport"]').evaluate((element) => {
+    element.dispatchEvent(new Event("scroll"));
+  });
+  await expect(page.locator('[data-slot="tooltip-content"][data-open]')).toHaveCount(0);
+  await page.waitForTimeout(200);
+  await pickerSearch.fill("阿米娅");
+  await fiammettaPicker.getByRole("button", { name: /阿米娅/ }).hover();
+  await expect(page.locator('[data-slot="tooltip-content"][data-open]')).toBeVisible({ timeout: 1_000 });
+  await pickerSearch.fill("锡兰");
+  await fiammettaPicker.getByRole("button", { name: /锡兰/ }).click();
+  await expect(manualShiftActions.getByRole("button", { name: "换心情 锡兰" })).toBeVisible();
+  await expect(manualShiftActions.locator("[data-fiammetta-target-chip] img")).toBeVisible();
+
+  await manualShiftActions.locator("[data-fiammetta-target-chip]").click();
+  await expect(fiammettaPicker.getByRole("button", { name: "清空", exact: true })).toBeVisible();
+  await fiammettaPicker.getByRole("button", { name: "清空", exact: true }).click();
+  await expect(manualShiftActions.getByRole("button", { name: "选择换心情目标" })).toBeVisible();
+
   await trade.getByRole("button", { name: /阿米娅/ }).click();
   operatorPicker = page.getByRole("dialog");
   await operatorPicker.getByRole("tablist", { name: "工作房间" }).getByRole("tab", { name: "全部", exact: true }).click();
@@ -357,6 +371,11 @@ test("manual scheduling configures independent shifts, moves conflicts and enabl
   await expect(dorm.locator('[data-operator-identity="autofill"]')).toHaveCount(5);
   const dormAutofill = dorm.getByRole("button", { name: /宿舍 1.*自动补位/ });
   await expect(dormAutofill).toHaveAttribute("aria-pressed", "true");
+  await expect(dormAutofill.locator("svg")).toHaveCount(0);
+  await dormAutofill.hover();
+  await expect(dormAutofill).toHaveCSS("background-color", /0\.28/);
+  await factoryDrones.hover();
+  await expect(factoryDrones).toHaveCSS("background-color", /0\.28/);
   await dormAutofill.click();
   await expect(dorm.locator('[data-operator-identity="autofill"]')).toHaveCount(0);
   await expect(dormAutofill).toHaveAttribute("aria-pressed", "false");
@@ -367,6 +386,9 @@ test("manual scheduling configures independent shifts, moves conflicts and enabl
   await expect(dormAutofill).toHaveAttribute("aria-pressed", "false");
 
   await page.getByRole("tab", { name: /班次 2.*20:00至08:14.*12小时15分钟/ }).click();
+  await moraleTarget.click();
+  await expect(page.getByRole("dialog").locator("[data-manual-operator-choice]")).toHaveCount(0);
+  await page.keyboard.press("Escape");
   await expect(factory.locator('[data-operator-identity="阿米娅"]')).toHaveCount(0);
   await factory.getByRole("button", { name: "空置" }).first().click();
   await page.getByRole("dialog").getByRole("tablist", { name: "工作房间" }).getByRole("tab", { name: "全部", exact: true }).click();
