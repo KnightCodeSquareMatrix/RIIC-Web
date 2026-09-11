@@ -873,8 +873,16 @@ export async function mockApis(
     plannerReady?: boolean;
     taskQueueEnabled?: boolean;
     telemetryBatches?: Array<Array<Record<string, unknown>>>;
+    dismissSolverWarning?: boolean;
   } = {}
 ) {
+  if (options.dismissSolverWarning !== false) {
+    // Result tests continue after acknowledging the new solver notice.
+    // Its own coverage opts out and verifies the full dialog interaction.
+    await page.addLocatorHandler(page.getByRole("dialog", { name: /^(排班已生成|Schedule generated)$/ }), async (dialog) => {
+      await dialog.getByRole("button", { name: /^(关闭|Dismiss)$/ }).click();
+    });
+  }
   // Existing feature tests are independent of database-backed release announcements.
   await page.route("**/api/releases*", (route) => route.fulfill({
     status: 200,

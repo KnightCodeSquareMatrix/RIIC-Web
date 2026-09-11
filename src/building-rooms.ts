@@ -1,10 +1,12 @@
-import { pinyin } from "pinyin-pro";
+import operatorPinyin from "./generated/arkntools/operator-pinyin.json" with { type: "json" };
+
+const OPERATOR_PINYIN: Readonly<Record<string, readonly string[]>> = operatorPinyin;
 const OPERATOR_PINYIN_ALIASES: Readonly<Record<string, readonly string[]>> = {
   "仇白": ["qiubai"],
 };
 
 // 基建技能房间标签：技能 id 第一个下划线之前就是房间前缀，
-// 例如 control_tra_spd_000 → control → 控制中枢。无依赖，可被页面/组件/测试直接复用。
+// 例如 control_tra_spd_000 → control → 控制中枢。仅依赖生成的干员拼音索引。
 
 export type BuildingRoomPrefix =
   | "control"
@@ -120,10 +122,7 @@ function operatorNameMatchesQuery(name: string, query: string): boolean {
   const normalizedQuery = query.trim().toLocaleLowerCase("zh-CN");
   if (!normalizedQuery) return true;
   if (name.toLocaleLowerCase("zh-CN").includes(normalizedQuery)) return true;
-  const initials = pinyin(name, { pattern: "first", toneType: "none", type: "array" }).join("").toLocaleLowerCase("en-US");
-  if (initials.includes(normalizedQuery)) return true;
-  const fullPinyin = pinyin(name, { toneType: "none", type: "array" }).join("").toLocaleLowerCase("en-US");
-  return fullPinyin.includes(normalizedQuery)
+  return (OPERATOR_PINYIN[name] ?? []).some((value) => value.includes(normalizedQuery))
     || (OPERATOR_PINYIN_ALIASES[name] ?? []).some((alias) => alias.includes(normalizedQuery));
 }
 

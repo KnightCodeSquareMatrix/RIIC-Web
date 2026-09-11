@@ -13,6 +13,23 @@ test.beforeEach(async ({ page }) => {
   }));
 });
 
+test("solver iteration notice appears after completion and can be dismissed to use results", async ({ page }) => {
+  await mockApis(page, { dismissSolverWarning: false });
+  await seedV4Session(page, null);
+  await page.goto("/");
+  const notice = page.getByRole("dialog", { name: "排班已生成", exact: true });
+  await expect(notice).toHaveCount(0);
+  await page.getByRole("button", { name: "生成排班", exact: true }).click();
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText("对应房间右上角的反馈按钮");
+  await notice.getByRole("button", { name: "关闭", exact: true }).click();
+  await expect(notice).toHaveCount(0);
+  await expect(page.locator("[data-plan-summary]")).toBeVisible();
+  await page.getByRole("button", { name: "练卡建议", exact: true }).click();
+  await expect(page).toHaveURL(/\/training$/);
+  await expect(notice).toHaveCount(0);
+});
+
 test("the legacy beta query is inert and never opts plan requests into debug data", async ({ page }) => {
   await mockApis(page, { debugTools: true });
   await seedV4Session(page);
