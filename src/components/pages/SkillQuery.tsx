@@ -25,6 +25,14 @@ export const SKILL_QUERY_PAGE_SIZE = 10;
 export function SkillQuery() {
   const intl = useTranslations();
   const locale = useLocale();
+  const [pinyinNames, setPinyinNames] = useState<Readonly<Record<string, readonly string[]>>>();
+  useEffect(() => {
+    let active = true;
+    void import("@/generated/arkntools/operator-pinyin.json").then((module) => {
+      if (active) setPinyinNames(module.default);
+    });
+    return () => { active = false; };
+  }, []);
 
   const filters = useTranslations("SkillFilters");
   const [rarity, setRarity] = useState("all");
@@ -62,9 +70,9 @@ export function SkillQuery() {
       selectedTag,
       query,
       (skillId) => BUILDING_SKILL_CATALOG[skillId],
-      { rarity: rarity === "all" ? null : Number(rarity), profession: profession === "all" ? null : Number(profession), englishNames: locale === "en" ? operatorEnglishNames : undefined },
+      { rarity: rarity === "all" ? null : Number(rarity), profession: profession === "all" ? null : Number(profession), englishNames: locale === "en" ? operatorEnglishNames : undefined, pinyinNames },
     ),
-    [query, selectedRoom, selectedTag, rarity, profession, locale],
+    [query, selectedRoom, selectedTag, rarity, profession, locale, pinyinNames],
   );
   const visible = filtered.slice(0, visibleCount);
   const annotationIndex = useMemo(() => indexSkillAnnotations(annotations), [annotations]);

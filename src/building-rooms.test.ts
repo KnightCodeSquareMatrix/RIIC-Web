@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import pinyinNames from "./generated/arkntools/operator-pinyin.json" with { type: "json" };
 
 import {
   BUILDING_ROOM_LABELS,
@@ -140,16 +141,16 @@ test("supports Chinese operator-name fuzzy search with initials and full pinyin"
     { name: "能天使", buildingSkills: [{ id: "manu_x" }] },
   ];
   const lookup: SkillRecordLookup = () => ({});
-  assert.deepEqual(filterOperators(operators, null, null, "amy", lookup).map((operator) => operator.name), ["阿米娅"]);
-  assert.deepEqual(filterOperators(operators, null, null, "amiya", lookup).map((operator) => operator.name), ["阿米娅"]);
-  assert.deepEqual(filterOperators(operators, null, null, "nts", lookup).map((operator) => operator.name), ["能天使"]);
+  assert.deepEqual(filterOperators(operators, null, null, "amy", lookup, { pinyinNames }).map((operator) => operator.name), ["阿米娅"]);
+  assert.deepEqual(filterOperators(operators, null, null, "amiya", lookup, { pinyinNames }).map((operator) => operator.name), ["阿米娅"]);
+  assert.deepEqual(filterOperators(operators, null, null, "nts", lookup, { pinyinNames }).map((operator) => operator.name), ["能天使"]);
 });
 
 test("keeps both pinyin readings for 仇白", () => {
   const operators: OperatorWithSkills[] = [{ name: "仇白", buildingSkills: [{ id: "control_x" }] }];
   const lookup: SkillRecordLookup = () => ({});
-  assert.deepEqual(filterOperators(operators, null, null, "choubai", lookup).map((operator) => operator.name), ["仇白"]);
-  assert.deepEqual(filterOperators(operators, null, null, "qiubai", lookup).map((operator) => operator.name), ["仇白"]);
+  assert.deepEqual(filterOperators(operators, null, null, "choubai", lookup, { pinyinNames }).map((operator) => operator.name), ["仇白"]);
+  assert.deepEqual(filterOperators(operators, null, null, "qiubai", lookup, { pinyinNames }).map((operator) => operator.name), ["仇白"]);
 });
 
 test("matches queries against skill names and plain-text descriptions", () => {
