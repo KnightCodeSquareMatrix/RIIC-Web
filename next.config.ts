@@ -97,8 +97,9 @@ const nextConfig: NextConfig = {
   },
   experimental: {
     cpus: 4,
+    turbopackFileSystemCacheForDev: process.env.RIIC_DEV_DISK_CACHE !== "0",
     turbopackChunking: {
-      minChunkSize: 75_000,
+      minChunkSize: 130_000,
     },
   },
   typedRoutes: false,

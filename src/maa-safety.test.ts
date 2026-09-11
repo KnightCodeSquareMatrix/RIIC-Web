@@ -24,4 +24,10 @@ test("prepares MAA export with sort enabled and preserves displayed operator ord
   assert.equal(room.sort, true);
   assert.deepEqual(room.operators, ["古米", "银灰", "梅"]);
   assert.equal(maa.plans[0]!.rooms.trading![0]!.sort, false);
+
+  const relaxed = prepareMaaForExport(maa, false);
+  assert.equal(relaxed.plans[0]!.rooms.trading![0]!.sort, false);
+
+  const replacementSorted = prepareMaaForExport(maa, false, true);
+  assert.equal(replacementSorted.plans[0]!.rooms.trading![0]!.sort, true);
 });

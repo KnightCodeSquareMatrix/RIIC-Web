@@ -1,13 +1,13 @@
 "use client";
 import { useTranslations } from "next-intl";
-import { Trash2 } from "lucide-react";
+import { ArrowLeftRight, Trash2 } from "lucide-react";
 import { DroneIcon } from "@/components/DroneIcon";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { RoomRow } from "@/schedule";
 
-export function ManualScheduleRoomActions({ row, position, roomTitle, onClearRoom, onDormAutofillChange, droneTargetRoomId, onDroneTargetChange }: {
+export function ManualScheduleRoomActions({ row, position, roomTitle, onClearRoom, onDormAutofillChange, droneTargetRoomId, onDroneTargetChange, sortMode, onSortToggle }: {
   row: RoomRow;
   position: "header" | "clear";
   roomTitle: string;
@@ -15,6 +15,8 @@ export function ManualScheduleRoomActions({ row, position, roomTitle, onClearRoo
   onDormAutofillChange: (row: RoomRow, enabled: boolean) => void;
   droneTargetRoomId?: string | null;
   onDroneTargetChange: (row: RoomRow) => void;
+  sortMode?: boolean;
+  onSortToggle?: (row: RoomRow) => void;
 }) {
   const intl = useTranslations();
   return position === "header" ? (
@@ -62,6 +64,22 @@ export function ManualScheduleRoomActions({ row, position, roomTitle, onClearRoo
       : intl("components_CompactScheduleView.useDronesForShift")}
       </TooltipContent>
       </Tooltip>
+      ) : null}
+      {(row.group === "trading" || row.group === "manufacture") && onSortToggle ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-pressed={sortMode}
+          aria-label={sortMode ? "退出调整顺序" : "调整干员顺序"}
+          className={cn(
+            "ml-1 h-7 w-7 border text-white hover:text-white",
+            sortMode ? "border-[#FFD800]/70 bg-[#FFD800]/18" : "border-white/15 bg-[#3C3C3C]/55 hover:bg-[#4B4B4B]",
+          )}
+          onClick={() => onSortToggle(row)}
+        >
+          <ArrowLeftRight className="size-3.5" />
+        </Button>
       ) : null}
     </>
   ) : (

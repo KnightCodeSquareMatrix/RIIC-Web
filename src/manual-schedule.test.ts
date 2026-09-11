@@ -21,6 +21,7 @@ import {
   setManualDormAutofill,
   updateManualShiftBoundary,
   setManualDroneTarget,
+  swapManualOperators,
 } from "./manual-schedule.ts";
 import type { BaseBlueprint, OperBoxEntry } from "./types.ts";
 
@@ -40,6 +41,21 @@ const layout: BaseBlueprint = {
 const box: OperBoxEntry[] = ["菲亚梅塔", "但书", "巫恋"].map((name, index) => ({
   id: String(index), name, own: true, elite: 2, level: 80, potential: 1, rarity: 6,
 }));
+
+test("manual sorting swaps one room in one shift without mutating the source draft", () => {
+  let draft = createManualScheduleDraft();
+  for (const [slotIndex, operator] of ["但书", "巫恋"].entries()) {
+    draft = assignManualOperator({ draft, layout, shiftIndex: 0, roomId: "trade_1", slotIndex, operator }).draft;
+  }
+  const before = structuredClone(draft);
+  const swapped = swapManualOperators(draft, layout, 0, "trade_1", 0, 1);
+  assert.deepEqual(draft, before);
+  assert.deepEqual(swapped.shifts[0]?.rooms.trade_1?.operators.slice(0, 2), ["巫恋", "但书"]);
+  assert.deepEqual(swapped.shifts.slice(1), before.shifts.slice(1));
+  assert.equal(swapManualOperators(draft, layout, 0, "trade_1", -1, 1), draft);
+  assert.equal(swapManualOperators(draft, layout, 0, "trade_1", 0.5, 1), draft);
+  assert.equal(swapManualOperators(draft, layout, 0, "trade_1", 0, 3), draft);
+});
 
 test("manual draft defaults to independent 12/6/6 shifts and preserves filled shifts when resized", () => {
   const initial = createManualScheduleDraft();
