@@ -1,3 +1,8 @@
+import { pinyin } from "pinyin-pro";
+const OPERATOR_PINYIN_ALIASES: Readonly<Record<string, readonly string[]>> = {
+  "仇白": ["qiubai"],
+};
+
 // 基建技能房间标签：技能 id 第一个下划线之前就是房间前缀，
 // 例如 control_tra_spd_000 → control → 控制中枢。无依赖，可被页面/组件/测试直接复用。
 
@@ -111,6 +116,17 @@ export function operatorMatchesNameContains(name: string, query: string): boolea
   return name.toLocaleLowerCase("zh-CN").includes(normalizedQuery);
 }
 
+function operatorNameMatchesQuery(name: string, query: string): boolean {
+  const normalizedQuery = query.trim().toLocaleLowerCase("zh-CN");
+  if (!normalizedQuery) return true;
+  if (name.toLocaleLowerCase("zh-CN").includes(normalizedQuery)) return true;
+  const initials = pinyin(name, { pattern: "first", toneType: "none", type: "array" }).join("").toLocaleLowerCase("en-US");
+  if (initials.includes(normalizedQuery)) return true;
+  const fullPinyin = pinyin(name, { toneType: "none", type: "array" }).join("").toLocaleLowerCase("en-US");
+  return fullPinyin.includes(normalizedQuery)
+    || (OPERATOR_PINYIN_ALIASES[name] ?? []).some((alias) => alias.includes(normalizedQuery));
+}
+
 /** 搜索命中干员名称、技能名称或技能纯文本描述（任意一项命中即可）。 */
 export function operatorMatchesQuery(
   name: string,
@@ -121,7 +137,7 @@ export function operatorMatchesQuery(
 ): boolean {
   const normalizedQuery = query.trim().toLocaleLowerCase("zh-CN");
   if (!normalizedQuery) return true;
-  if (name.toLocaleLowerCase("zh-CN").includes(normalizedQuery)) return true;
+  if (operatorNameMatchesQuery(name, normalizedQuery)) return true;
   const englishName = englishNames?.[name];
   if (englishName?.toLocaleLowerCase("en-US").includes(normalizedQuery.toLocaleLowerCase("en-US"))) return true;
   return skillIds.some((id) => {

@@ -127,11 +127,29 @@ test("combines room and name-substring filters with AND and sorts by name", () =
 
 test("supports English operator name queries only when English names are provided", () => {
   const operators: OperatorWithSkills[] = [
-    { name: "阿米娅", buildingSkills: [{ id: "control_x" }] },
+    { name: "能天使", buildingSkills: [{ id: "control_x" }] },
   ];
   const lookup: SkillRecordLookup = () => ({});
-  assert.deepEqual(filterOperators(operators, null, null, "Amiya", lookup), []);
-  assert.deepEqual(filterOperators(operators, null, null, "Amiya", lookup, { englishNames: { "阿米娅": "Amiya" } }).map((operator) => operator.name), ["阿米娅"]);
+  assert.deepEqual(filterOperators(operators, null, null, "Exusiai", lookup), []);
+  assert.deepEqual(filterOperators(operators, null, null, "Exusiai", lookup, { englishNames: { "能天使": "Exusiai" } }).map((operator) => operator.name), ["能天使"]);
+});
+
+test("supports Chinese operator-name fuzzy search with initials and full pinyin", () => {
+  const operators: OperatorWithSkills[] = [
+    { name: "阿米娅", buildingSkills: [{ id: "control_x" }] },
+    { name: "能天使", buildingSkills: [{ id: "manu_x" }] },
+  ];
+  const lookup: SkillRecordLookup = () => ({});
+  assert.deepEqual(filterOperators(operators, null, null, "amy", lookup).map((operator) => operator.name), ["阿米娅"]);
+  assert.deepEqual(filterOperators(operators, null, null, "amiya", lookup).map((operator) => operator.name), ["阿米娅"]);
+  assert.deepEqual(filterOperators(operators, null, null, "nts", lookup).map((operator) => operator.name), ["能天使"]);
+});
+
+test("keeps both pinyin readings for 仇白", () => {
+  const operators: OperatorWithSkills[] = [{ name: "仇白", buildingSkills: [{ id: "control_x" }] }];
+  const lookup: SkillRecordLookup = () => ({});
+  assert.deepEqual(filterOperators(operators, null, null, "choubai", lookup).map((operator) => operator.name), ["仇白"]);
+  assert.deepEqual(filterOperators(operators, null, null, "qiubai", lookup).map((operator) => operator.name), ["仇白"]);
 });
 
 test("matches queries against skill names and plain-text descriptions", () => {
