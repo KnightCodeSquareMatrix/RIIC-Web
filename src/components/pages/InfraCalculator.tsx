@@ -3,7 +3,7 @@ import { localize as localize_components_pages_InfraCalculator } from "../../i18
 
 import { useTranslations, useLocale } from "next-intl";
 
-import { ArrowRight, Download, Ellipsis, FlaskConical, ImageDown, Keyboard, Loader2, PencilLine, Play, RefreshCw, Search, Settings2, SlidersHorizontal, X } from "lucide-react";
+import { ArrowRight, Download, Ellipsis, FlaskConical, Keyboard, Loader2, PencilLine, Play, RefreshCw, Search, Settings2, SlidersHorizontal, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { ScheduleBoard, ShiftTabs } from "@/components";
@@ -40,6 +40,7 @@ const PlanSupportSummary = lazy(() => import("@/components/PlanSupportSummary").
 const ShortcutGuideDialog = lazy(() => loadClientFeature("sharedComponents").then((module) => ({ default: module.ShortcutGuideDialog })));
 const UpgradeSimulationDialog = lazy(() => import("@/components/UpgradeSimulationDialog").then((module) => ({ default: module.UpgradeSimulationDialog })));
 const DroneTargetPicker = lazy(() => import("@/components/DroneTargetPicker").then(module => ({ default: module.DroneTargetPicker })));
+const ScheduleImageExportAction = lazy(() => import("@/components/ScheduleImageExportAction").then(module => ({ default: module.ScheduleImageExportAction })));
 const PlanActionsDialog = lazy(() => import("@/components/PlanActionsDialog").then(module => ({ default: module.PlanActionsDialog })));
 
 function DeferredResultLoading() {
@@ -440,26 +441,11 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     }
   }
 
-  const imageExportAction = (
-    <div className="flex min-w-0 items-center">
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        disabled={!scheduleResult?.maa || loading || imageExporting || imageExportScope === "all"}
-        aria-busy={imageExporting}
-        title={imageExportScope === "all" ? intl("components_pages_InfraCalculator.imageExportAllMaintenance") : undefined}
-        onClick={() => void handleImageExport()}
-      >
-        {imageExporting ? <Loader2 className="animate-spin" /> : <ImageDown />}
-        {intl(imageExportScope === "all"
-          ? "components_pages_InfraCalculator.imageExportAllMaintenance"
-          : imageExporting
-            ? "components_pages_InfraCalculator.exportingImage"
-            : "components_pages_InfraCalculator.exportImage")}
-      </Button>
-    </div>
-  );
+  const imageExportAction = scheduleResult?.maa ? (
+    <Suspense fallback={null}>
+      <ScheduleImageExportAction disabled={!scheduleResult?.maa || loading} exporting={imageExporting} scope={imageExportScope} onExport={handleImageExport} />
+    </Suspense>
+  ) : null;
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [shiftDirection, setShiftDirection] = useState<ShiftDirection>(0);

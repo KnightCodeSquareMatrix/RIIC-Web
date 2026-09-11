@@ -800,6 +800,7 @@ test("calculator owns scheduling controls and training advice uses a single tech
   const controlOrder = await calculatorControls.locator("button").allTextContents();
   expect(controlOrder.at(-1)).toContain("生成排班");
   expect(controlOrder.some((label) => label.includes("全角色导入"))).toBe(false);
+  await expect(page.locator("[data-calculator-export-actions]").getByRole("button", { name: "导出图片", includeHidden: true })).toHaveCount(2);
   const exportOrder = await page.locator("[data-calculator-export-actions]").locator("button").allTextContents();
   expect(exportOrder).toEqual([
     expect.stringContaining("调整方案"),
