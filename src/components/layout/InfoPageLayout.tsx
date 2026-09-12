@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import { LanguageSwitch } from "@/i18n/client";
-import { cn } from "@/lib/utils";
 import { FilingLinks } from "./FilingLinks";
 
 /** Shared public-document shell: help and release notes don't load the calculator. */
@@ -38,7 +37,10 @@ export function InfoPageLayout({ title, href, contentId, children, floatingContr
       <div className="app-content-track flex-1 pb-8 sm:pb-10">
         <div id={contentId} className="min-w-0" tabIndex={-1}>{children}</div>
       </div>
-      <footer className={cn("app-content-track flex flex-wrap items-center gap-x-4 border-t border-border/80 py-5 text-xs text-muted-foreground", floatingControls && "pr-20 sm:pr-24")}>
+      <footer
+        className="app-content-track flex flex-wrap items-center gap-x-4 border-t border-border/80 py-5 text-xs text-muted-foreground"
+        style={floatingControls ? { paddingInlineEnd: "max(6rem, env(safe-area-inset-right))" } : undefined}
+      >
         <Link className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/changelog">{t("changelog")}</Link>
         <Link className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/terms">{t("terms")}</Link>
         <Link className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/privacy">{t("privacy")}</Link>
