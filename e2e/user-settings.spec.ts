@@ -62,6 +62,19 @@ test("settings dropdowns preserve independent choices and fit narrow screens", a
   await expect(pagination).toHaveValue("每十条点击加载");
 });
 
+test("Mower controls stay hidden by default and appear when enabled", async ({ page }) => {
+  await mockApis(page);
+  await seedV4Session(page);
+  await page.goto("/settings");
+  const mower = page.getByRole("switch", { name: /Mower/ });
+  await expect(mower).not.toBeChecked();
+  await mower.click();
+  await page.reload();
+  await expect(mower).toBeChecked();
+  await page.goto("/manual");
+  await expect(page.getByRole("button", { name: /Export Mower|导出 Mower/ })).toBeVisible();
+});
+
 test("one-shift image export preserves the selected shift", async ({ page }) => {
   await mockApis(page);
   await seedV4Session(page);

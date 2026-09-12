@@ -2084,6 +2084,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       onShiftStartTimeChange: setManualShiftStartTime,
       onScheduleModeChange: setManualScheduleMode,
       onImportedLayoutChange: handleManualImportedLayout,
+      showMower: userSettings.showMower,
       onFiammettaEnabledChange: setManualFiammettaEnabled,
       onOpenSetup: handleManualSetup,
       onFactoryRecipeChange: handleFactoryRecipeChange,

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 export function MaaImportDialog({ maaImportPreview, confirmMaaImport, onCancel }: {
-  maaImportPreview: { fileName: string; sourceShiftCount: number; importedShiftCount: number; sourceAssignmentCount: number; importedAssignmentCount: number };
+  maaImportPreview: { format?: "maa" | "mower"; fileName: string; sourceShiftCount: number; importedShiftCount: number; sourceAssignmentCount: number; importedAssignmentCount: number };
   confirmMaaImport: () => void;
   onCancel: () => void;
 }) {
@@ -15,7 +15,7 @@ export function MaaImportDialog({ maaImportPreview, confirmMaaImport, onCancel }
       <Dialog open onOpenChange={open => { if (!open) onCancel(); }}>
         <DialogContent className="max-w-[min(520px,calc(100vw-2rem))]">
           <DialogHeader>
-            <DialogTitle>{intl("components_pages_ManualSchedulePage.importMaaScheduleQuestion")}</DialogTitle>
+            <DialogTitle>{intl(maaImportPreview.format === "mower" ? "components_pages_ManualSchedulePage.importMowerScheduleQuestion" : "components_pages_ManualSchedulePage.importMaaScheduleQuestion")}</DialogTitle>
             <DialogDescription>
               {intl("components_pages_ManualSchedulePage.importMaaScheduleDescription")}
             </DialogDescription>
@@ -43,7 +43,7 @@ export function MaaImportDialog({ maaImportPreview, confirmMaaImport, onCancel }
               ) : null}
             </p>
             <p className="text-xs leading-5 text-muted-foreground">
-              {intl("components_pages_ManualSchedulePage.importMaaScheduleDetails")}
+              {intl(maaImportPreview.format === "mower" ? "components_pages_ManualSchedulePage.importMowerScheduleDetails" : "components_pages_ManualSchedulePage.importMaaScheduleDetails")}
             </p>
           </div>
           <DialogFooter>
