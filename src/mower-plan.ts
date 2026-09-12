@@ -1,27 +1,18 @@
 import type { MaaJson, MaaRoom, MaaRooms } from "./types.ts";
 
-export interface MowerPlanEntry {
+interface MowerPlanEntry {
   agent: string;
   group?: string;
   replacement?: string[];
 }
 
-export interface MowerFacility {
+interface MowerFacility {
   name?: string;
   plans?: MowerPlanEntry[];
   product?: string | null;
 }
 
-export interface MowerBackupPlan {
-  name: string;
-  plan: Record<string, MowerFacility | null>;
-  conf: Record<string, string | number>;
-  task: Record<string, string[] | null>;
-  trigger: Record<string, unknown>;
-  trigger_timing: string;
-}
-
-export interface MowerPlanDocument {
+interface MowerPlanDocument {
   default: "plan1";
   plan1: Record<string, MowerFacility | null>;
   conf: {
@@ -34,7 +25,7 @@ export interface MowerPlanDocument {
     refresh_drained: string;
     ope_resting_priority: string;
   };
-  backup_plans: MowerBackupPlan[];
+  backup_plans: [];
 }
 
 const MOWER_ROOM_KEYS = Array.from({ length: 3 }, (_, floor) => (

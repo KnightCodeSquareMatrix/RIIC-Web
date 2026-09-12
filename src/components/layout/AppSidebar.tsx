@@ -10,7 +10,6 @@ import {
   Search,
   Settings2,
   SquarePen,
-  Bot,
   UserRound,
   type LucideIcon,
 } from "lucide-react";
@@ -35,7 +34,6 @@ import { useLocale } from "next-intl";
 const CLIENT_SKLAND_ENABLED = process.env.APP_CLIENT_SKLAND_ENABLED === "1";
 
 interface AppSidebarProps {
-  showMower?: boolean;
   page: AppPage;
   onPageChange: (page: AppPage, trigger?: HTMLElement) => boolean;
 }
@@ -81,7 +79,7 @@ function AppNavigationItem({
   );
 }
 
-export function AppSidebar({ page, onPageChange, showMower = false }: AppSidebarProps) {
+export function AppSidebar({ page, onPageChange }: AppSidebarProps) {
   const locale = useLocale();
   const labels = messageRecord(locale, "components_layout_AppSidebar_labels");
   return (
@@ -95,7 +93,6 @@ export function AppSidebar({ page, onPageChange, showMower = false }: AppSidebar
           <SidebarMenu>
             <AppNavigationItem page={page} target="calculator" label={labels.calculator} icon={Calculator} onPageChange={onPageChange} />
             <AppNavigationItem page={page} target="manual" label={labels.manual} icon={SquarePen} onPageChange={onPageChange} />
-            {showMower ? <AppNavigationItem page={page} target="mower" label={locale === "en" ? "Mower Schedule" : "排班表（Mower）"} icon={Bot} onPageChange={onPageChange} /> : null}
             <AppNavigationItem page={page} target="training" label={labels.training} icon={GraduationCap} onPageChange={onPageChange} />
           </SidebarMenu>
         </SidebarGroup>
