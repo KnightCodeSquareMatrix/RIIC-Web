@@ -109,3 +109,13 @@ test("calculator room sorting is reflected in MAA export and stays within the ac
   expect(names(exported.plans[0].rooms.trading[0].operators)).toEqual(["凯尔希", "阿米娅", "贝洛内"]);
   expect(names(exported.plans[1].rooms.trading[0].operators)).toEqual(["阿米娅", "凯尔希", "贝洛内"]);
 });
+
+test("standalone Mower editor uses the shared schedule components", async ({ page }) => {
+  await page.goto("/mower");
+  await expect(page.locator("[data-mower-schedule-page]")).toBeVisible();
+  await expect(page.locator('[data-infra-technical-card][data-slot="mower-board"]')).toBeVisible();
+  await expect(page.locator("[data-mower-room]")).toHaveCount(18);
+  await page.locator('[data-mower-room="room_1_1"]').click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(page.getByRole("button", { name: "添加干员" })).toBeVisible();
+});
