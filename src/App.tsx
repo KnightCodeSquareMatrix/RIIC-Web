@@ -20,6 +20,7 @@ import {
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { useAccountCloudWorkspace } from "account-cloud-workspace-bridge";
 import { AppSidebar } from "@/components/layout/AppSidebar";
+import { FilingLinks } from "@/components/layout/FilingLinks";
 import { AppTopBar, SklandAccountControl } from "@/components/layout/AppTopBar";
 import { AppMotionProvider } from "@/components/MotionProvider";
 import { PrimaryPageTransition } from "@/components/layout/PrimaryPageTransition";
@@ -2222,9 +2223,9 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
         <Link prefetch={false} className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/terms">{intl("App.terms")}</Link>
         <Link prefetch={false} className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/privacy">{intl("App.privacy")}</Link>
         <a className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/about" data-about-link>{intl("App.about")}</a>
-        <div className="ml-auto flex shrink-0 items-center gap-3 max-sm:ml-0 max-sm:w-full max-sm:justify-end">
-          <a className="whitespace-nowrap underline underline-offset-4 hover:text-foreground" href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer" data-ui-number-font>沪ICP备2026041492号</a>
-          <span className="h-4 w-px shrink-0 bg-border" aria-hidden="true" />
+        <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-1 max-sm:ml-0 max-sm:w-full">
+          <FilingLinks />
+          <span className="h-4 w-px shrink-0 bg-border max-sm:hidden" aria-hidden="true" />
           <a
             href="https://www.rainyun.com/riic_"
             target="_blank"
@@ -2241,9 +2242,9 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
               height={390}
               loading="eager"
               decoding="async"
-              className="block h-5 w-14 object-contain sm:h-[23px] sm:w-16"
+              className="block h-5 w-14 -translate-y-0.5 object-contain sm:h-[23px] sm:w-16"
             />
-            {locale === "en" ? null : <span className="block leading-none">提供赞助</span>}
+            {locale === "en" ? null : <span className="block leading-none">提供云计算服务</span>}
           </a>
         </div>
       </footer>
