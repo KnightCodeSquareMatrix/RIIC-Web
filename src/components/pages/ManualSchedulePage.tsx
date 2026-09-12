@@ -25,6 +25,7 @@ import { downloadJson } from "@/download";
 import { localizedOperatorName, localizedRoomTitle } from "@/i18n/game-data";
 import { useGameCatalog } from "@/i18n/game-data-client";
 import { prepareMaaForExport } from "@/maa-safety";
+import { maaToMowerPlan, mowerPlanToMaa } from "@/mower-plan";
 import {
   assignManualOperator,
   clearManualRoom,
@@ -101,6 +102,7 @@ export interface ManualSchedulePageProps {
   scheduleViewControl?: "tabs" | "select";
   shiftViewControl?: "tabs" | "select";
   showImages?: boolean;
+  showMower?: boolean;
 }
 
 type PickerTarget =
@@ -115,6 +117,7 @@ type PendingMove = {
 
 
 type MaaImportPreview = {
+  format: "maa" | "mower";
   fileName: string;
   draft: ManualScheduleDraft;
   layout: BaseBlueprint;
@@ -213,6 +216,7 @@ export function ManualSchedulePage({
   scheduleViewControl = "tabs",
   shiftViewControl = "tabs",
   showImages = true,
+  showMower = false,
 }: ManualSchedulePageProps) {
   const intl = useTranslations();
   const skillFilters = useTranslations("SkillFilters");
@@ -225,6 +229,7 @@ export function ManualSchedulePage({
   const [pickerQuery, setPickerQuery] = useState("");
   const [maaImportPreview, setMaaImportPreview] = useState<MaaImportPreview | null>(null);
   const [maaImportError, setMaaImportError] = useState<string | null>(null);
+  const [mowerExportOpen, setMowerExportOpen] = useState(false);
   const [pickerRoomFilter, setPickerRoomFilter] = useState<BuildingRoomPrefix | null>(null);
   const [pickerSkillTag, setPickerSkillTag] = useState<string | null>(null);
   const [pickerRarity, setPickerRarity] = useState<number | null>(null);
@@ -572,7 +577,9 @@ export function ManualSchedulePage({
       return;
     }
     try {
-      const sourceMaa = parseMaaScheduleText(await file.text());
+      const sourceText = await file.text();
+      const importedMower = showMower ? mowerPlanToMaa(JSON.parse(sourceText)) : null;
+      const sourceMaa = importedMower ?? parseMaaScheduleText(sourceText);
       const importedMaa = normalizeMaaScheduleForManualImport(sourceMaa);
       const importedLayout = layoutFromMaaSchedule(importedMaa, layout);
       const fiammettaImported = importedMaa.plans.some((plan) => plan.Fiammetta?.enable === true);
@@ -586,6 +593,7 @@ export function ManualSchedulePage({
       });
       const reconciled = reconcileManualScheduleDraft(converted, importedLayout, operbox);
       setMaaImportPreview({
+        format: importedMower ? "mower" : "maa",
         fileName: file.name,
         draft: reconciled,
         layout: importedLayout,
@@ -595,7 +603,9 @@ export function ManualSchedulePage({
         importedAssignmentCount: countDraftAssignments(reconciled),
       });
     } catch (error) {
-      setMaaImportError(en
+      setMaaImportError(showMower
+        ? intl("components_pages_ManualSchedulePage.invalidMowerOrMaaSchedule")
+        : en
         ? intl("components_pages_ManualSchedulePage.invalidMaaSchedule")
         : error instanceof Error ? error.message : intl("components_pages_ManualSchedulePage.invalidMaaSchedule"));
     }
@@ -655,7 +665,7 @@ export function ManualSchedulePage({
           type="file"
           accept="application/json,.json"
           className="sr-only"
-          aria-label={intl("components_pages_ManualSchedulePage.chooseMaaScheduleFile")}
+          aria-label={intl(showMower ? "components_pages_ManualSchedulePage.chooseMowerOrMaaScheduleFile" : "components_pages_ManualSchedulePage.chooseMaaScheduleFile")}
           onChange={(event) => {
             const file = event.currentTarget.files?.[0];
             if (file) void prepareMaaImport(file);
@@ -663,6 +673,11 @@ export function ManualSchedulePage({
           }}
         />
         <Button type="button" size="sm" onClick={exportMaa}><Download />{intl("components_pages_ManualSchedulePage.exportMaa")}</Button>
+        {showMower ? (
+          <Button type="button" variant="outline" size="sm" onClick={() => setMowerExportOpen(true)}>
+            <Download />{intl("components_pages_ManualSchedulePage.exportMower")}
+          </Button>
+        ) : null}
       </header>
 
       {maaImportError ? <p className="mb-3 text-sm text-destructive" role="alert">{maaImportError}</p> : null}
@@ -869,6 +884,27 @@ export function ManualSchedulePage({
       </Dialog>
 
       {maaImportPreview && <Suspense fallback={null}><MaaImportDialog maaImportPreview={maaImportPreview} confirmMaaImport={confirmMaaImport} onCancel={() => setMaaImportPreview(null)} /></Suspense>}
+
+      <Dialog open={showMower && mowerExportOpen} onOpenChange={setMowerExportOpen}>
+        <DialogContent className="max-w-[min(520px,calc(100vw-2rem))]">
+          <DialogHeader>
+            <DialogTitle>{intl("components_pages_ManualSchedulePage.mowerExportQuestion")}</DialogTitle>
+            <DialogDescription>{intl("components_pages_ManualSchedulePage.mowerExportDetails", { shift: activeShift + 1 })}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => setMowerExportOpen(false)}>{intl("components_pages_ManualSchedulePage.cancel")}</Button>
+            <Button type="button" onClick={() => {
+              try {
+                downloadJson("plan.json", maaToMowerPlan(maa, activeShift));
+                setMaaImportError(null);
+              } catch {
+                setMaaImportError(intl("components_pages_ManualSchedulePage.mowerExportFailed"));
+              }
+              setMowerExportOpen(false);
+            }}><Download />{intl("components_pages_ManualSchedulePage.exportMower")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={Boolean(pendingMove)} onOpenChange={(open) => { if (!open) setPendingMove(null); }}>
         <DialogContent className="max-w-[min(480px,calc(100vw-2rem))]">
