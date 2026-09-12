@@ -18,8 +18,8 @@ import type { MowerFacility } from "@/mower-plan";
 import { OPERATOR_CATALOG, operatorPresentationFor } from "@/operatorPortraits";
 import type { RoomRow } from "@/schedule";
 
-const FIELD_CLASS = "h-9 rounded-[4px] border-border bg-background";
-const SELECT_CLASS = "h-9 min-w-0 rounded-[4px] border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring";
+const FIELD_CLASS = "h-9 border-border bg-background";
+const SELECT_CLASS = "h-9 min-w-0 border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 function capacityFor(key: string, name?: string): number {
   if (key.startsWith("room_")) return name === "发电站" ? 1 : 3;
@@ -27,10 +27,10 @@ function capacityFor(key: string, name?: string): number {
 }
 
 function roomTone(name?: string): string {
-  if (name === "贸易站") return "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950/35 dark:text-blue-300";
-  if (name === "制造站") return "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300";
-  if (name === "发电站") return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300";
-  return "border-border/60 bg-muted/55 text-foreground";
+  if (name === "贸易站") return "infra-room-surface border-[#22BBFF]/55 bg-[#272A2B] text-[#22BBFF]";
+  if (name === "制造站") return "infra-room-surface border-[#FFD800]/55 bg-[#272A2B] text-[#FFD800]";
+  if (name === "发电站") return "infra-room-surface border-[#72D7A2]/55 bg-[#272A2B] text-[#72D7A2]";
+  return "infra-room-surface border-white/10 bg-[#272A2B] text-white/80";
 }
 
 function Portrait({ name }: { name: string }) {
@@ -186,7 +186,7 @@ export function MowerSchedulePage() {
   return (
     <StatusCenterPage className="mx-auto max-w-[1180px]" data-mower-schedule-page>
       <StatusCenterHeader
-        identity={<div className="flex min-w-0 items-center gap-3"><span className="grid size-10 place-items-center rounded-[4px] bg-blue-600 text-white"><Bot className="size-6" /></span><h1 className="truncate text-xl font-semibold">{text("排班表（Mower）", "Mower Schedule")}</h1></div>}
+        identity={<div className="flex min-w-0 items-center gap-3"><span className="grid size-10 place-items-center rounded-[4px] bg-[#272A2B] text-[#FFD800]"><Bot className="size-6" /></span><h1 className="font-technical truncate text-xl font-semibold">{text("排班表（Mower）", "Mower Schedule")}</h1></div>}
         actions={<span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Check className="size-3.5" />{saved ? text("已保存到本地", "Saved locally") : text("本地草稿", "Local draft")}</span>}
       />
 
@@ -199,7 +199,7 @@ export function MowerSchedulePage() {
         <div className="flex flex-wrap gap-3 md:col-span-2">
           <label className="flex min-w-48 flex-1 items-center gap-3 text-sm"><span className="shrink-0">{text("排班 ID", "Plan ID")}</span><Input className={FIELD_CLASS} value={document.id} onChange={(event) => setDocument({ ...document, id: event.target.value })} /></label>
           <Button variant="outline" className="h-9 rounded-[4px]" onClick={() => fileInput.current?.click()}><Upload />{text("导入排班文件", "Import plan")}</Button>
-          <Button className="h-9 rounded-[4px] bg-blue-600 text-white hover:bg-blue-700" onClick={() => downloadJson("plan.json", document)}><Download />{text("下载排班文件", "Download plan")}</Button>
+          <Button className="h-9 bg-white text-[#272A2B] hover:bg-white/90" onClick={() => downloadJson("plan.json", document)}><Download />{text("下载排班文件", "Download plan")}</Button>
           <input ref={fileInput} type="file" accept="application/json,.json" className="sr-only" aria-label={text("选择 Mower 排班文件", "Choose Mower plan file")} onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) void importFile(file); event.currentTarget.value = ""; }} />
         </div>
       </section>
