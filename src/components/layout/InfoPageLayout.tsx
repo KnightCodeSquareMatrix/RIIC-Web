@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import { LanguageSwitch } from "@/i18n/client";
 import { cn } from "@/lib/utils";
+import { FilingLinks } from "./FilingLinks";
 
 /** Shared public-document shell: help and release notes don't load the calculator. */
 export function InfoPageLayout({ title, href, contentId, children, floatingControls }: {
@@ -42,7 +43,7 @@ export function InfoPageLayout({ title, href, contentId, children, floatingContr
         <Link className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/terms">{t("terms")}</Link>
         <Link className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/privacy">{t("privacy")}</Link>
         <Link className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/about">{t("about")}</Link>
-        <a className="ml-auto whitespace-nowrap underline underline-offset-4 hover:text-foreground max-sm:ml-0 max-sm:w-full" href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">沪ICP备2026041492号</a>
+        <div className="ml-auto min-w-0 max-sm:ml-0 max-sm:w-full"><FilingLinks /></div>
       </footer>
       {floatingControls}
     </main>
