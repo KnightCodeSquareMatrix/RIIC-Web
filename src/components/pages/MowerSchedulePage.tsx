@@ -1,0 +1,253 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { useLocale } from "next-intl";
+import { ArrowDown, ArrowUp, Bot, Check, Download, FileJson, GitBranch, Pencil, Plus, Trash2, Upload, Users } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { downloadJson } from "@/download";
+import { cn } from "@/lib/utils";
+import { createMowerEditorDocument, MOWER_EDITOR_STORAGE_KEY, MOWER_FIXED_ROOMS, MOWER_PRODUCTION_KEYS, parseMowerEditorDocument, type MowerEditorDocument } from "@/mower-editor";
+import type { MowerFacility } from "@/mower-plan";
+import { OPERATOR_CATALOG, operatorPortraitFor } from "@/operatorPortraits";
+
+const FIELD_CLASS = "h-9 rounded-[4px] border-border bg-background";
+const SELECT_CLASS = "h-9 min-w-0 rounded-[4px] border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
+function capacityFor(key: string, name?: string): number {
+  if (key.startsWith("room_")) return name === "发电站" ? 1 : 3;
+  return MOWER_FIXED_ROOMS.find((room) => room.key === key)?.capacity ?? 1;
+}
+
+function roomTone(name?: string): string {
+  if (name === "贸易站") return "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950/35 dark:text-blue-300";
+  if (name === "制造站") return "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300";
+  if (name === "发电站") return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300";
+  return "border-border/60 bg-muted/55 text-foreground";
+}
+
+function Portrait({ name }: { name: string }) {
+  const portrait = name && name !== "Free" ? operatorPortraitFor(name) : undefined;
+  return (
+    <span className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-[3px] bg-background/90" title={name || "Empty"}>
+      {portrait ? <img src={portrait} alt={name} width={40} height={40} loading="lazy" className="size-10 object-contain" /> : name && name !== "Free" ? <span className="max-w-full px-0.5 text-center text-[10px] leading-3">{name}</span> : <Plus className="size-4 opacity-25" />}
+    </span>
+  );
+}
+
+export function MowerSchedulePage() {
+  const en = useLocale() === "en";
+  const [document, setDocument] = useState<MowerEditorDocument>(createMowerEditorDocument);
+  const [restored, setRestored] = useState(false);
+  const [active, setActive] = useState(-1);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [editingRoom, setEditingRoom] = useState<string | null>(null);
+  const [roomDraft, setRoomDraft] = useState<MowerFacility>({ plans: [] });
+  const [editorMode, setEditorMode] = useState<"rename" | "trigger" | "task" | null>(null);
+  const [editorValue, setEditorValue] = useState("");
+  const [editorError, setEditorError] = useState<string | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const backup = active >= 0 ? document.backup_plans[active] : undefined;
+  const currentPlan = backup?.plan ?? document.plan1;
+  const currentConf = backup?.conf ?? document.conf;
+  const text = (zh: string, english: string) => en ? english : zh;
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(MOWER_EDITOR_STORAGE_KEY);
+      if (stored) setDocument(parseMowerEditorDocument(stored));
+    } catch {
+      setError(en ? "The saved Mower plan could not be restored." : "无法恢复本地 Mower 排班。可重新导入文件。");
+    }
+    setRestored(true);
+  }, [en]);
+
+  useEffect(() => {
+    if (!restored) return;
+    try {
+      window.localStorage.setItem(MOWER_EDITOR_STORAGE_KEY, JSON.stringify(document));
+      setSaved(true);
+    } catch {
+      setSaved(false);
+    }
+  }, [document, restored]);
+
+  function updateFacility(key: string, facility: MowerFacility) {
+    setDocument((current) => {
+      const next = structuredClone(current);
+      const plan = active >= 0 ? next.backup_plans[active]?.plan : next.plan1;
+      if (plan) plan[key] = facility;
+      return next;
+    });
+  }
+
+  function openRoom(key: string, name: string) {
+    setEditingRoom(key);
+    setRoomDraft(structuredClone(currentPlan[key] ?? { name, plans: [] }));
+  }
+
+  function changeConf(key: string, value: string | number) {
+    setDocument((current) => {
+      const next = structuredClone(current);
+      if (active >= 0 && next.backup_plans[active]) next.backup_plans[active]!.conf[key] = value;
+      else Object.assign(next.conf, { [key]: value });
+      return next;
+    });
+  }
+
+  function addBackup() {
+    const nextIndex = document.backup_plans.length;
+    setDocument((current) => ({
+      ...current,
+      backup_plans: [...current.backup_plans, {
+        name: `${text("副表", "Backup")} ${nextIndex + 1}`,
+        plan: structuredClone(currentPlan),
+        conf: {},
+        task: {},
+        trigger: { left: "", operator: "", right: "" },
+        trigger_timing: "AFTER_PLANNING",
+      }],
+    }));
+    setActive(nextIndex);
+  }
+
+  function moveBackup(direction: number) {
+    const target = active + direction;
+    if (active < 0 || target < 0 || target >= document.backup_plans.length) return;
+    setDocument((current) => {
+      const next = structuredClone(current);
+      [next.backup_plans[active], next.backup_plans[target]] = [next.backup_plans[target]!, next.backup_plans[active]!];
+      return next;
+    });
+    setActive(target);
+  }
+
+  function openEditor(mode: "rename" | "trigger" | "task") {
+    if (!backup) return;
+    setEditorMode(mode);
+    setEditorError(null);
+    setEditorValue(mode === "rename" ? backup.name : JSON.stringify(backup[mode], null, 2));
+  }
+
+  function saveEditor() {
+    if (!editorMode || active < 0) return;
+    try {
+      const value: unknown = editorMode === "rename" ? editorValue.trim() : JSON.parse(editorValue);
+      if (editorMode === "rename" ? !value : !value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid");
+      if (editorMode === "task" && Object.values(value as Record<string, unknown>).some((entry) => entry !== null && (!Array.isArray(entry) || entry.some((name) => typeof name !== "string")))) throw new Error("invalid");
+      setDocument((current) => {
+        const next = structuredClone(current);
+        const selected = next.backup_plans[active];
+        if (selected) Object.assign(selected, { [editorMode === "rename" ? "name" : editorMode]: value });
+        return next;
+      });
+      setEditorMode(null);
+    } catch {
+      setEditorError(text("内容格式不正确，请检查后保存。", "Invalid content. Check the format before saving."));
+    }
+  }
+
+  async function importFile(file: File) {
+    try {
+      if (file.size > 5 * 1024 * 1024) throw new Error("too large");
+      const imported = parseMowerEditorDocument(await file.text());
+      setDocument(imported);
+      setActive(-1);
+      setError(null);
+    } catch {
+      setError(text("导入失败，请选择不超过 5 MB 的 Mower plan.json 文件。", "Choose a valid Mower plan.json file smaller than 5 MB."));
+    }
+  }
+
+  function renderRoom(key: string, title: string, column: number, row: number) {
+    const room = currentPlan[key];
+    const name = room?.name || title;
+    const occupants = room?.plans ?? [];
+    const label = key.startsWith("room_") ? `${name} B${key.split("_")[1]}0${key.split("_")[2]}` : title;
+    return (
+      <button key={key} type="button" onClick={() => openRoom(key, name)} aria-label={`${text("编辑", "Edit ")}${label}`} data-mower-room={key}
+        style={{ gridColumn: column, gridRow: row }}
+        className={cn("flex h-[92px] min-w-0 flex-col items-center justify-center gap-2 rounded-[4px] border px-2 transition-shadow hover:ring-2 hover:ring-blue-400/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500", roomTone(room?.name))}>
+        <span className="flex max-w-full items-center gap-2 text-[13px] font-medium"><span className="truncate">{key.startsWith("room_") ? name : title}</span>{key.startsWith("room_") ? <span className="text-[10px] font-normal opacity-55">B{key.split("_")[1]}0{key.split("_")[2]}</span> : null}</span>
+        <span className="flex max-w-full items-center justify-center gap-1.5">
+          {occupants.length ? occupants.slice(0, capacityFor(key, name)).map((operator, index) => <Portrait key={index} name={operator.agent} />) : <span className="grid h-10 w-10 place-items-center rounded-[3px] border border-dashed border-current/20"><Plus className="size-4 opacity-40" /></span>}
+        </span>
+      </button>
+    );
+  }
+
+  return (
+    <div className="mx-auto max-w-[1180px] space-y-6 pb-6 pt-3" data-mower-schedule-page>
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
+        <div className="flex items-center gap-3"><span className="grid size-10 place-items-center rounded-[4px] bg-blue-600 text-white"><Bot className="size-6" /></span><h1 className="text-xl font-semibold">{text("排班表（Mower）", "Mower Schedule")}</h1></div>
+        <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Check className="size-3.5" />{saved ? text("已保存到本地", "Saved locally") : text("本地草稿", "Local draft")}</span>
+      </header>
+
+      <section className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-3">
+          <label className="grid grid-cols-[56px_minmax(0,1fr)] items-center gap-3 text-sm"><span>{text("标题", "Title")}</span><Input className={FIELD_CLASS} value={document.title} onChange={(event) => setDocument({ ...document, title: event.target.value })} /></label>
+          <label className="grid grid-cols-[56px_minmax(0,1fr)] items-center gap-3 text-sm"><span>{text("作者", "Author")}</span><Input className={FIELD_CLASS} value={document.author} onChange={(event) => setDocument({ ...document, author: event.target.value })} /></label>
+        </div>
+        <label className="grid gap-2 text-sm"><span>{text("笔记", "Notes")}</span><Textarea className="min-h-20 rounded-[4px]" value={document.description} onChange={(event) => setDocument({ ...document, description: event.target.value })} /></label>
+        <div className="flex flex-wrap gap-3 md:col-span-2">
+          <label className="flex min-w-48 flex-1 items-center gap-3 text-sm"><span className="shrink-0">{text("排班 ID", "Plan ID")}</span><Input className={FIELD_CLASS} value={document.id} onChange={(event) => setDocument({ ...document, id: event.target.value })} /></label>
+          <Button variant="outline" className="h-9 rounded-[4px]" onClick={() => fileInput.current?.click()}><Upload />{text("导入排班文件", "Import plan")}</Button>
+          <Button className="h-9 rounded-[4px] bg-blue-600 text-white hover:bg-blue-700" onClick={() => downloadJson("plan.json", document)}><Download />{text("下载排班文件", "Download plan")}</Button>
+          <input ref={fileInput} type="file" accept="application/json,.json" className="sr-only" aria-label={text("选择 Mower 排班文件", "Choose Mower plan file")} onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) void importFile(file); event.currentTarget.value = ""; }} />
+        </div>
+      </section>
+
+      {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
+
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2 border-y border-border/70 py-3" data-mower-plan-toolbar>
+          <Button size="icon" variant="outline" disabled={active <= 0} onClick={() => moveBackup(-1)} title={text("上移", "Move up")} aria-label={text("上移", "Move up")}><ArrowUp /></Button>
+          <Button size="icon" variant="outline" disabled={active < 0 || active >= document.backup_plans.length - 1} onClick={() => moveBackup(1)} title={text("下移", "Move down")} aria-label={text("下移", "Move down")}><ArrowDown /></Button>
+          <select className={cn(SELECT_CLASS, "w-40")} value={active} onChange={(event) => setActive(Number(event.target.value))} aria-label={text("选择排班表", "Select plan")}><option value={-1}>{text("主表", "Main plan")}</option>{document.backup_plans.map((plan, index) => <option key={index} value={index}>{plan.name}</option>)}</select>
+          <Button size="icon" variant="outline" disabled={!backup} onClick={() => openEditor("rename")} title={text("重命名", "Rename")} aria-label={text("重命名", "Rename")}><Pencil /></Button>
+          <Button variant="outline" onClick={addBackup}><Plus />{text("新建副表", "New backup")}</Button>
+          <Button variant="outline" disabled={!backup} onClick={() => openEditor("trigger")}><GitBranch />{text("编辑触发条件", "Edit trigger")}</Button>
+          <Button variant="outline" disabled={!backup} onClick={() => openEditor("task")}><FileJson />{text("编辑任务", "Edit task")}</Button>
+          <Button size="icon" variant="destructive" disabled={!backup} onClick={() => setDeleteOpen(true)} title={text("删除此副表", "Delete backup")} aria-label={text("删除此副表", "Delete backup")}><Trash2 /></Button>
+        </div>
+
+        <div className="overflow-x-auto pb-2" role="region" aria-label={text("Mower 基建布局", "Mower base layout")} tabIndex={0}>
+          <div className="grid min-w-[810px] grid-cols-[repeat(3,minmax(130px,1fr))_minmax(230px,1.55fr)_minmax(105px,.8fr)] gap-1.5" data-mower-base-grid>
+            {MOWER_PRODUCTION_KEYS.map((key, index) => renderRoom(key, text("空设施", "Empty facility"), index % 3 + 1, Math.floor(index / 3) + 2))}
+            {MOWER_FIXED_ROOMS.map((room) => renderRoom(room.key, en ? room.en : room.name, room.column, room.row))}
+          </div>
+        </div>
+        {["gaming_1", "gaming_2", "gaming_3"].some((key) => currentPlan[key]) ? <div className="grid grid-cols-3 gap-2">{["gaming_1", "gaming_2", "gaming_3"].map((key, index) => renderRoom(key, `${text("活动室", "Activity room")} ${index + 1}`, index + 1, 1))}</div> : null}
+      </section>
+
+      <section className="grid gap-3 border-t border-border/70 pt-5">
+        <div className="grid gap-3 sm:grid-cols-[210px_minmax(0,1fr)] sm:items-center"><span className="text-sm">{text("令夕模式", "Ling / Dusk mode")}</span><div className="flex flex-wrap gap-x-6 gap-y-2">{[[1, "感知信息", "Perception"], [2, "人间烟火", "Worldly"], [3, "均衡模式", "Balanced"]].map(([value, zh, english]) => <label key={value} className="flex items-center gap-2 text-sm"><input type="radio" name="mower-ling-xi" value={value} checked={Number(currentConf.ling_xi ?? 1) === value} onChange={() => changeConf("ling_xi", Number(value))} className="size-4 accent-blue-600" />{en ? english : zh}</label>)}</div></div>
+        {[["rest_in_full", "需要回满心情的干员", "Rest to full morale"], ["exhaust_require", "需要用尽心情的干员", "Work to exhaustion"], ["workaholic", "0 心情工作的干员", "Work at zero morale"], ["resting_priority", "低优先级休息干员", "Low rest priority"], ["ope_resting_priority", "休息排序优先级", "Resting order priority"], ["refresh_trading", "跑单时间刷新干员", "Refresh trading timers"], ["refresh_drained", "用尽时间刷新干员", "Refresh exhaustion timers"]].map(([key, zh, english]) => <label key={key} className="grid gap-2 text-sm sm:grid-cols-[210px_minmax(0,1fr)] sm:items-center"><span>{en ? english : zh}</span><Input className={FIELD_CLASS} value={String(currentConf[key as keyof typeof currentConf] ?? "")} onChange={(event) => changeConf(key!, event.target.value)} /></label>)}
+      </section>
+
+      <Dialog open={Boolean(editingRoom)} onOpenChange={(open) => { if (!open) setEditingRoom(null); }}>
+        <DialogContent className="max-h-[90svh] sm:max-w-[min(800px,calc(100vw-2rem))]">
+          <DialogHeader><DialogTitle>{text("编辑设施", "Edit facility")} · {editingRoom}</DialogTitle><DialogDescription>{roomDraft.name}</DialogDescription></DialogHeader>
+          <DialogBody className="max-h-[60svh] overflow-auto">
+            {editingRoom?.startsWith("room_") ? <div className="flex flex-wrap gap-3"><select className={SELECT_CLASS} aria-label={text("设施类型", "Facility type")} value={roomDraft.name ?? "制造站"} onChange={(event) => setRoomDraft({ ...roomDraft, name: event.target.value, product: event.target.value === "贸易站" ? "lmd" : event.target.value === "制造站" ? "gold" : undefined })}><option value="贸易站">{text("贸易站", "Trading Post")}</option><option value="制造站">{text("制造站", "Factory")}</option><option value="发电站">{text("发电站", "Power Plant")}</option></select>{roomDraft.name !== "发电站" ? <select className={SELECT_CLASS} aria-label={text("产物", "Product")} value={roomDraft.product ?? (roomDraft.name === "贸易站" ? "lmd" : "gold")} onChange={(event) => setRoomDraft({ ...roomDraft, product: event.target.value })}>{(roomDraft.name === "贸易站" ? [["lmd", "龙门币", "LMD"], ["orundum", "合成玉", "Orundum"]] : [["gold", "赤金", "Gold"], ["exp3", "中级作战记录", "Battle Record"], ["orirock", "源石碎片", "Originium Shard"]]).map(([value, zh, english]) => <option key={value} value={value}>{en ? english : zh}</option>)}</select> : null}</div> : null}
+            <div className="space-y-3">{(roomDraft.plans ?? []).map((operator, index) => <div key={index} className="grid grid-cols-[40px_minmax(0,1fr)_32px] items-start gap-2 border-b border-border/60 pb-3"><Portrait name={operator.agent} /><div className="grid gap-2 sm:grid-cols-2"><Input className={FIELD_CLASS} list="mower-operator-names" value={operator.agent} aria-label={`${text("干员", "Operator")} ${index + 1}`} onChange={(event) => setRoomDraft({ ...roomDraft, plans: roomDraft.plans?.map((entry, position) => position === index ? { ...entry, agent: event.target.value } : entry) })} /><Input className={FIELD_CLASS} value={operator.group ?? ""} placeholder={text("分组", "Group")} aria-label={`${text("分组", "Group")} ${index + 1}`} onChange={(event) => setRoomDraft({ ...roomDraft, plans: roomDraft.plans?.map((entry, position) => position === index ? { ...entry, group: event.target.value } : entry) })} /><Input className={cn(FIELD_CLASS, "sm:col-span-2")} value={(operator.replacement ?? []).join(", ")} placeholder={text("替换干员", "Replacement operators")} aria-label={`${text("替换干员", "Replacements")} ${index + 1}`} onChange={(event) => setRoomDraft({ ...roomDraft, plans: roomDraft.plans?.map((entry, position) => position === index ? { ...entry, replacement: event.target.value.split(/[,，]/).map((name) => name.trim()) } : entry) })} /></div><Button variant="ghost" size="icon" onClick={() => setRoomDraft({ ...roomDraft, plans: roomDraft.plans?.filter((_, position) => position !== index) })} aria-label={text("移除干员", "Remove operator")}><Trash2 /></Button></div>)}</div>
+            <Button variant="outline" disabled={(roomDraft.plans?.length ?? 0) >= capacityFor(editingRoom ?? "", roomDraft.name)} onClick={() => setRoomDraft({ ...roomDraft, plans: [...(roomDraft.plans ?? []), { agent: "", group: "", replacement: [] }] })}><Users />{text("添加干员", "Add operator")}</Button>
+            <datalist id="mower-operator-names"><option value="Free" />{OPERATOR_CATALOG.map((operator) => <option key={operator.id} value={operator.name} />)}</datalist>
+          </DialogBody>
+          <DialogFooter><Button variant="ghost" onClick={() => setEditingRoom(null)}>{text("取消", "Cancel")}</Button><Button onClick={() => { if (editingRoom) updateFacility(editingRoom, { ...roomDraft, plans: (roomDraft.plans ?? []).filter((entry) => entry.agent.trim()).slice(0, capacityFor(editingRoom, roomDraft.name)).map((entry) => ({ ...entry, agent: entry.agent.trim(), replacement: (entry.replacement ?? []).filter(Boolean) })) }); setEditingRoom(null); }}><Check />{text("保存", "Save")}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(editorMode)} onOpenChange={(open) => { if (!open) setEditorMode(null); }}>
+        <DialogContent className="sm:max-w-[min(660px,calc(100vw-2rem))]"><DialogHeader><DialogTitle>{editorMode === "rename" ? text("重命名副表", "Rename backup") : editorMode === "trigger" ? text("编辑触发条件", "Edit trigger") : text("编辑任务", "Edit task")}</DialogTitle><DialogDescription>{backup?.name}</DialogDescription></DialogHeader><DialogBody>{editorMode === "rename" ? <Input value={editorValue} onChange={(event) => setEditorValue(event.target.value)} aria-label={text("副表名称", "Backup name")} /> : <Textarea className="min-h-64 font-mono text-xs" value={editorValue} onChange={(event) => setEditorValue(event.target.value)} aria-label="JSON" />}{editorMode === "trigger" && backup ? <select className={SELECT_CLASS} value={backup.trigger_timing} aria-label={text("触发时机", "Trigger timing")} onChange={(event) => setDocument((current) => { const next = structuredClone(current); next.backup_plans[active]!.trigger_timing = event.target.value; return next; })}>{["BEGINNING", "BEFORE_PLANNING", "AFTER_PLANNING", "END"].map((timing) => <option key={timing}>{timing}</option>)}</select> : null}{editorError ? <p className="text-sm text-destructive" role="alert">{editorError}</p> : null}</DialogBody><DialogFooter><Button variant="ghost" onClick={() => setEditorMode(null)}>{text("取消", "Cancel")}</Button><Button onClick={saveEditor}><Check />{text("保存", "Save")}</Button></DialogFooter></DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}><DialogContent><DialogHeader><DialogTitle>{text("删除副表？", "Delete backup?")}</DialogTitle><DialogDescription>{backup?.name}</DialogDescription></DialogHeader><DialogFooter><Button variant="ghost" onClick={() => setDeleteOpen(false)}>{text("取消", "Cancel")}</Button><Button variant="destructive" onClick={() => { setDocument((current) => ({ ...current, backup_plans: current.backup_plans.filter((_, index) => index !== active) })); setActive(-1); setDeleteOpen(false); }}><Trash2 />{text("删除", "Delete")}</Button></DialogFooter></DialogContent></Dialog>
+    </div>
+  );
+}

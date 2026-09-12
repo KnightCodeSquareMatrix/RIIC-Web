@@ -69,10 +69,13 @@ test("Mower controls stay hidden by default and appear when enabled", async ({ p
   const mower = page.getByRole("switch", { name: /Mower/ });
   await expect(mower).not.toBeChecked();
   await mower.click();
+  await expect(page.locator('[data-primary-navigation-page="mower"]')).toBeVisible();
   await page.reload();
   await expect(mower).toBeChecked();
   await page.goto("/manual");
   await expect(page.getByRole("button", { name: /Export Mower|导出 Mower/ })).toBeVisible();
+  await page.goto("/mower");
+  await expect(page.getByRole("heading", { name: /Mower Schedule|排班表（Mower）/ })).toBeVisible();
 });
 
 test("one-shift image export preserves the selected shift", async ({ page }) => {
