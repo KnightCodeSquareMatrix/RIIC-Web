@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { InfraTechnicalCard, InfraTechnicalHeading } from "@/components/InfraTechnicalCard";
 import { OperatorSlot } from "@/components";
+import { OperatorIdentity, OperatorRarityFilter, OperatorRosterGrid, OperatorSearch } from "@/components/operators/OperatorPickerParts";
 import { StatusCenterHeader, StatusCenterPage } from "@/components/pages/StatusCenterShell";
 import { downloadJson } from "@/download";
 import { cn } from "@/lib/utils";
@@ -17,6 +18,7 @@ import { createMowerEditorDocument, MOWER_EDITOR_STORAGE_KEY, MOWER_FIXED_ROOMS,
 import type { MowerFacility } from "@/mower-plan";
 import { OPERATOR_CATALOG, operatorPresentationFor } from "@/operatorPortraits";
 import type { RoomRow } from "@/schedule";
+import type { OperBoxEntry } from "@/types";
 
 const FIELD_CLASS = "h-9 border-border bg-background";
 const SELECT_CLASS = "h-9 min-w-0 border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring";
@@ -40,7 +42,45 @@ function Portrait({ name }: { name: string }) {
   return <OperatorSlot slot={slot} portraitSize={48} selectionMode tooltipDisabled />;
 }
 
-export function MowerSchedulePage() {
+function MowerOperatorPicker({ label, selected, operators, onChange, text }: {
+  label: string;
+  selected: string[];
+  operators: OperBoxEntry[];
+  onChange: (names: string[]) => void;
+  text: (zh: string, en: string) => string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [rarity, setRarity] = useState("all");
+  const selectedSet = new Set(selected);
+  const normalizedQuery = query.trim().toLocaleLowerCase("zh-CN");
+  const filtered = operators.filter((operator) => (
+    (rarity === "all" || operator.rarity === Number(rarity))
+    && (!normalizedQuery || operator.name.toLocaleLowerCase("zh-CN").includes(normalizedQuery) || operator.id.toLocaleLowerCase("en-US").includes(normalizedQuery))
+  ));
+  const toggle = (name: string) => onChange(selectedSet.has(name) ? selected.filter((item) => item !== name) : [...selected, name]);
+  return (
+    <>
+      <button type="button" className="flex min-h-9 w-full min-w-0 flex-wrap items-center gap-1.5 rounded-lg border border-input bg-background px-2.5 py-1 text-left text-sm outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50" onClick={() => setOpen(true)} aria-label={label}>
+        {selected.length ? selected.map((name) => <span key={name} className="inline-flex max-w-full items-center rounded-[3px] border border-border bg-muted px-1.5 py-0.5 text-xs"><span className="max-w-40 truncate">{name}</span></span>) : <span className="text-muted-foreground">{text("选择干员", "Choose operators")}</span>}
+      </button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-h-[90svh] sm:max-w-[min(860px,calc(100vw-2rem))]">
+          <DialogHeader><DialogTitle>{label}</DialogTitle><DialogDescription>{text("从当前 Box 选择，可多选。再次点击已选干员取消选择。", "Select from the current Box. Click a selected operator again to remove it.")}</DialogDescription></DialogHeader>
+          <DialogBody className="min-h-0 overflow-auto">
+            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]"><OperatorSearch value={query} onChange={setQuery} compact label={text("搜索当前 Box 干员", "Search current Box")} placeholder={text("搜索干员", "Search operators")} /><OperatorRarityFilter value={rarity} onChange={setRarity} /></div>
+            <OperatorRosterGrid compact hasMore={false} onLoadMore={() => undefined}>
+              {filtered.map((operator) => <button key={operator.id} type="button" className={cn("flex min-w-0 items-center gap-3 rounded-[4px] border p-2 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-[#FFD800]", selectedSet.has(operator.name) ? "border-[#FFD800] bg-[#FFD800]/10" : "border-border/70")} onClick={() => toggle(operator.name)} aria-pressed={selectedSet.has(operator.name)}><OperatorIdentity name={operator.name} portrait={operatorPresentationFor({ name: operator.name }).portrait} compact><span className="font-number text-xs text-muted-foreground">{operator.rarity}★ · E{operator.elite}</span></OperatorIdentity>{selectedSet.has(operator.name) ? <Check className="ml-auto size-4 shrink-0 text-[#B18F00]" /> : null}</button>)}
+            </OperatorRosterGrid>
+          </DialogBody>
+          <DialogFooter><Button onClick={() => setOpen(false)}><Check />{text("完成", "Done")}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+export function MowerSchedulePage({ operbox = null }: { operbox?: OperBoxEntry[] | null }) {
   const en = useLocale() === "en";
   const [document, setDocument] = useState<MowerEditorDocument>(createMowerEditorDocument);
   const [restored, setRestored] = useState(false);
@@ -58,6 +98,7 @@ export function MowerSchedulePage() {
   const currentPlan = backup?.plan ?? document.plan1;
   const currentConf = backup?.conf ?? document.conf;
   const text = (zh: string, english: string) => en ? english : zh;
+  const boxOperators = (operbox ?? []).filter((operator) => operator.own);
 
   useEffect(() => {
     try {
@@ -232,7 +273,7 @@ export function MowerSchedulePage() {
 
       <section className="grid gap-3 border-t border-border/70 pt-5">
         <div className="grid gap-3 sm:grid-cols-[210px_minmax(0,1fr)] sm:items-center"><span className="text-sm">{text("令夕模式", "Ling / Dusk mode")}</span><div className="flex flex-wrap gap-x-6 gap-y-2">{[[1, "感知信息", "Perception"], [2, "人间烟火", "Worldly"], [3, "均衡模式", "Balanced"]].map(([value, zh, english]) => <label key={value} className="flex items-center gap-2 text-sm"><input type="radio" name="mower-ling-xi" value={value} checked={Number(currentConf.ling_xi ?? 1) === value} onChange={() => changeConf("ling_xi", Number(value))} className="size-4 accent-blue-600" />{en ? english : zh}</label>)}</div></div>
-        {[["rest_in_full", "需要回满心情的干员", "Rest to full morale"], ["exhaust_require", "需要用尽心情的干员", "Work to exhaustion"], ["workaholic", "0 心情工作的干员", "Work at zero morale"], ["resting_priority", "低优先级休息干员", "Low rest priority"], ["ope_resting_priority", "休息排序优先级", "Resting order priority"], ["refresh_trading", "跑单时间刷新干员", "Refresh trading timers"], ["refresh_drained", "用尽时间刷新干员", "Refresh exhaustion timers"]].map(([key, zh, english]) => <label key={key} className="grid gap-2 text-sm sm:grid-cols-[210px_minmax(0,1fr)] sm:items-center"><span>{en ? english : zh}</span><Input className={FIELD_CLASS} value={String(currentConf[key as keyof typeof currentConf] ?? "")} onChange={(event) => changeConf(key!, event.target.value)} /></label>)}
+        {[["rest_in_full", "需要回满心情的干员", "Rest to full morale"], ["exhaust_require", "需要用尽心情的干员", "Work to exhaustion"], ["workaholic", "0 心情工作的干员", "Work at zero morale"], ["resting_priority", "低优先级休息干员", "Low rest priority"], ["ope_resting_priority", "休息排序优先级", "Resting order priority"], ["refresh_trading", "跑单时间刷新干员", "Refresh trading timers"], ["refresh_drained", "用尽时间刷新干员", "Refresh exhaustion timers"]].map(([key, zh, english]) => <label key={key} className="grid gap-2 text-sm sm:grid-cols-[210px_minmax(0,1fr)] sm:items-center"><span>{en ? english : zh}</span><MowerOperatorPicker label={en ? english : zh} selected={String(currentConf[key as keyof typeof currentConf] ?? "").split(",").map((name) => name.trim()).filter(Boolean)} operators={boxOperators} onChange={(names) => changeConf(key!, names.join(","))} text={text} /></label>)}
       </section>
 
       <Dialog open={Boolean(editingRoom)} onOpenChange={(open) => { if (!open) setEditingRoom(null); }}>

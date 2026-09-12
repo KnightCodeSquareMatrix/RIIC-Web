@@ -119,3 +119,13 @@ test("standalone Mower editor uses the shared schedule components", async ({ pag
   await expect(page.getByRole("dialog")).toBeVisible();
   await expect(page.getByRole("button", { name: "添加干员" })).toBeVisible();
 });
+
+test("Mower morale rules use the current Box picker", async ({ page }) => {
+  await mockApis(page);
+  await seedV4Session(page);
+  await page.goto("/mower");
+  await page.getByRole("button", { name: "需要回满心情的干员", exact: true }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(page.getByRole("dialog").getByRole("textbox", { name: "搜索当前 Box 干员" })).toBeVisible();
+  await expect(page.getByRole("dialog").getByRole("button", { name: /阿米娅|Amiya/ }).first()).toBeVisible();
+});

@@ -1,8 +1,8 @@
 import { pageMetadata } from "@/i18n/metadata";
-import { MowerSchedulePage } from "@/components/pages/MowerSchedulePage";
+import { MowerScheduleRoute } from "@/components/workbench/MowerScheduleRoute";
 
 export default function Page() {
-  return <MowerSchedulePage />;
+  return <MowerScheduleRoute />;
 }
 
 export function generateMetadata() { return pageMetadata("mower"); }
