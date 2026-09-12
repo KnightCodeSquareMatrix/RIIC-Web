@@ -48,6 +48,11 @@ test("account-data deletion uses the verified website user and unbinds it after 
       },
     },
   });
+  await context.mock.module(new URL("../plan-cache.ts", import.meta.url), {
+    namedExports: {
+      evictSklandPlanCaches: async (userId: string) => calls.push(["evict-cache", userId]),
+    },
+  });
   await context.mock.module(new URL("./bindings.ts", import.meta.url), {
     namedExports: {
       removeSklandBindings: async (websiteUserId: string) => calls.push(["remove-bindings", websiteUserId]),
@@ -90,6 +95,9 @@ test("account-data deletion uses the verified website user and unbinds it after 
   const removeBindingsIndex = calls.findIndex((entry) => Array.isArray(entry) && entry[0] === "remove-bindings");
   const setCookiesIndex = calls.findIndex((entry) => Array.isArray(entry) && entry[0] === "set-cookies");
   assert.ok(readStoreIndex >= 0 && deleteOwnedIndex > readStoreIndex);
+  const evictCacheIndex = calls.findIndex((entry) => Array.isArray(entry) && entry[0] === "evict-cache");
+  assert.ok(evictCacheIndex > readStoreIndex && evictCacheIndex < deleteOwnedIndex);
+  assert.deepEqual(calls[evictCacheIndex], ["evict-cache", "website-user"]);
   assert.ok(removeBindingsIndex > deleteOwnedIndex);
   assert.ok(setCookiesIndex > removeBindingsIndex);
   assert.deepEqual(calls[readStoreIndex], ["read-store", "website-user"]);
@@ -124,5 +132,9 @@ test("account-data deletion uses the verified website user and unbinds it after 
   assert.deepEqual(
     calls.find((entry) => Array.isArray(entry) && entry[0] === "remove-bindings"),
     ["remove-bindings", "website-user"],
+  );
+  assert.deepEqual(
+    calls.find((entry) => Array.isArray(entry) && entry[0] === "evict-cache"),
+    ["evict-cache", "website-user"],
   );
 });

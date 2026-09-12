@@ -10,6 +10,7 @@ import {
 } from "../api-contract";
 import { requireWebsiteSession } from "../auth/authorization";
 import { deleteSklandOwnedData } from "../infra";
+import { evictSklandPlanCaches } from "../plan-cache";
 import { removeSklandBindings } from "./bindings";
 import {
   assertSklandAvailable,
@@ -31,6 +32,7 @@ export async function handleDeleteSklandAccountData(request: Request, route: str
     await assertEmptyBody(request, 1024);
     enforceRateLimit("skland-delete", requestClientIp(request), 5, 60 * 60_000);
     const previous = await readSklandAccountStore(website.user.id);
+    await evictSklandPlanCaches(website.user.id);
     const deleted = await deleteSklandOwnedData(
       previous.accounts.map((account) => sklandDataOwnerTag(account.session.userId)),
     );
