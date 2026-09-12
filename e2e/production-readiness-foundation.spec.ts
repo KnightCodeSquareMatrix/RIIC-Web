@@ -355,21 +355,25 @@ test("a 768px solved plan defaults to list layout and stays inside the viewport"
   expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth + 1);
 });
 
-test("ICP filing and Rainyun sponsorship stay grouped at the page footer's right edge", async ({ page }) => {
+test("filing links and Rainyun cloud services stay grouped at the page footer's right edge", async ({ page }) => {
   await mockApis(page);
   await seedPreferences(page);
   await page.goto("/");
 
   const filingLink = page.getByRole("link", { name: "沪ICP备2026041492号" });
-  const link = page.getByRole("link", { name: "由雨云提供赞助（在新标签页打开雨云官网）" });
+  const publicSecurityLink = page.getByRole("link", { name: "沪公网安备31011502407364号" });
+  const link = page.getByRole("link", { name: "由雨云提供云计算服务（在新标签页打开雨云官网）" });
   const image = link.locator("img");
   await expect(filingLink).toHaveAttribute("href", "https://beian.miit.gov.cn/");
+  await expect(publicSecurityLink).toHaveAttribute("href", "https://www.beian.gov.cn/portal/registerSystemInfo?recordcode=31011502407364");
+  await expect(publicSecurityLink).toHaveAttribute("rel", /noopener/);
+  await expect.poll(() => publicSecurityLink.locator("img").evaluate((element) => (element as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
   await expect(link).toHaveAttribute("href", "https://www.rainyun.com/riic_");
   await expect(link).toHaveAttribute("target", "_blank");
   await expect(link).toHaveAttribute("rel", /noopener/);
   await expect(link).toHaveAttribute("rel", /noreferrer/);
   await expect(link).toContainText("由");
-  await expect(link).toContainText("提供赞助");
+  await expect(link).toContainText("提供云计算服务");
   await expect(image).toHaveAttribute("src", /rainyun-logo\.png/);
   await expect.poll(() => image.evaluate((element) => {
     const logo = element as HTMLImageElement;
@@ -382,6 +386,14 @@ test("ICP filing and Rainyun sponsorship stay grouped at the page footer's right
     { width: 1440, height: 900 },
   ]) {
     await page.setViewportSize(viewport);
+    await expect(publicSecurityLink).toBeVisible();
+    if (viewport.width === 1440) {
+      await expect.poll(() => page.locator("[data-filing-links]").evaluate((element) => {
+        const [icp, security] = Array.from(element.querySelectorAll("a"), (link) => link.getBoundingClientRect());
+        return security.x > icp.right && Math.abs(security.y - icp.y) < 1;
+      })).toBe(true);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
     await expect(link).toBeVisible();
     await link.focus();
     await expect(link).toBeFocused();
@@ -407,7 +419,7 @@ test("ICP filing and Rainyun sponsorship stay grouped at the page footer's right
     expect(geometry.height).toBeGreaterThanOrEqual(44 - 0.01);
     expect(geometry.logoWidth).toBeCloseTo(viewport.width < 640 ? 56 : 64, 0);
     for (const copyCenterY of geometry.copyCenterYs) {
-      expect(Math.abs(copyCenterY - geometry.logoCenterY)).toBeLessThanOrEqual(1);
+      expect(copyCenterY - geometry.logoCenterY).toBeCloseTo(2, 0);
     }
     expect(geometry.right).toBeCloseTo(geometry.footerRight - geometry.footerPaddingRight, 0);
   }

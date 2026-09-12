@@ -40,6 +40,7 @@ const PlanSupportSummary = lazy(() => import("@/components/PlanSupportSummary").
 const ShortcutGuideDialog = lazy(() => loadClientFeature("sharedComponents").then((module) => ({ default: module.ShortcutGuideDialog })));
 const UpgradeSimulationDialog = lazy(() => import("@/components/UpgradeSimulationDialog").then((module) => ({ default: module.UpgradeSimulationDialog })));
 const DroneTargetPicker = lazy(() => import("@/components/DroneTargetPicker").then(module => ({ default: module.DroneTargetPicker })));
+const ScheduleImageExportAction = lazy(() => import("@/components/ScheduleImageExportAction").then(module => ({ default: module.ScheduleImageExportAction })));
 const PlanActionsDialog = lazy(() => import("@/components/PlanActionsDialog").then(module => ({ default: module.PlanActionsDialog })));
 
 function DeferredResultLoading() {
@@ -368,10 +369,20 @@ export interface InfraCalculatorProps {
   onPerformanceIssue: () => void;
   onFactoryRecipeChange: (roomId: string, recipe: FactoryRecipe) => void;
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
+  onSwapOperators?: (row: RoomRow, firstSlotIndex: number, secondSlotIndex: number) => void;
   droneTargetRoomId?: string | null;
   onDroneTargetChange?: (row: RoomRow) => void;
   onEditManualSchedule: () => void;
   onDownloadMaa: () => void;
+  onDownloadImage: () => Promise<void>;
+  showProgressionRecalculate?: boolean;
+  showManualScheduleEdit?: boolean;
+  scheduleViewControl?: "tabs" | "select";
+  shiftViewControl?: "tabs" | "select";
+  imageExportScope?: "single" | "all";
+  showFeedback?: boolean;
+  showImages?: boolean;
+  allowReplacementOperatorSort?: boolean;
   onClearResultNotice: () => void;
   onDismissResultClearWarning: () => void;
 }
@@ -390,8 +401,9 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     onRunSampleTrial, onStartPersonalFlow, onDismissOnboarding, onOpenSetup, upgradeSimulationOpen, onOpenUpgradeSimulation, onUpgradeSimulationOpenChange, onRun, onAutoDroneAllocation, onManualDroneAllocation, manualDroneSelection = false, onSimulateUpgrades, upgradeComparison, scheduleVariant, onScheduleVariantChange, onUpgradeTrialReady, onCancelRun,
     onSetActiveShift, onMarkIssue, onPerformanceIssue,
     onFactoryRecipeChange, onTradeOrderChange, droneTargetRoomId, onDroneTargetChange,
-    onEditManualSchedule, onDownloadMaa,
-    onClearResultNotice, onDismissResultClearWarning,
+    onSwapOperators,
+    onEditManualSchedule, onDownloadMaa, onDownloadImage, showProgressionRecalculate = true, showManualScheduleEdit = true, scheduleViewControl = "tabs", shiftViewControl = "tabs", imageExportScope = "single", showFeedback = true, showImages = true,
+    onClearResultNotice, onDismissResultClearWarning, allowReplacementOperatorSort = false,
   } = props;
 
   const eliteByOperator = useMemo(() => {
@@ -412,6 +424,53 @@ export function InfraCalculator(props: InfraCalculatorProps) {
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [planActionsOpen, setPlanActionsOpen] = useState(false);
   const [operatorQuery, setOperatorQuery] = useState("");
+  const [imageExporting, setImageExporting] = useState(false);
+  const [imageExportFailed, setImageExportFailed] = useState(false);
+  const [sortRoomId, setSortRoomId] = useState<string | null>(null);
+  const [sortSelection, setSortSelection] = useState<{ roomId: string; slotIndex: number } | null>(null);
+  const imageExportInFlight = useRef(false);
+
+  function toggleSortMode(row: RoomRow) {
+    setSortRoomId((current) => current === row.roomId ? null : row.roomId);
+    setSortSelection(null);
+  }
+
+  function handleSortSlotClick(row: RoomRow, slotIndex: number) {
+    if (row.roomId !== sortRoomId || !row.operatorSlots[slotIndex]) return;
+    if (!sortSelection) {
+      setSortSelection({ roomId: row.roomId, slotIndex });
+      return;
+    }
+    if (sortSelection.roomId !== row.roomId) {
+      setSortSelection({ roomId: row.roomId, slotIndex });
+      return;
+    }
+    onSwapOperators?.(row, sortSelection.slotIndex, slotIndex);
+    setSortSelection(null);
+  }
+
+  async function handleImageExport() {
+    if (imageExportScope === "all") return;
+    if (imageExportInFlight.current) return;
+    imageExportInFlight.current = true;
+    setImageExporting(true);
+    setImageExportFailed(false);
+    try {
+      await onDownloadImage();
+    } catch {
+      setImageExportFailed(true);
+    } finally {
+      imageExportInFlight.current = false;
+      setImageExporting(false);
+    }
+  }
+
+  const imageExportAction = scheduleResult?.maa ? (
+    <Suspense fallback={null}>
+      <ScheduleImageExportAction disabled={!scheduleResult?.maa || loading} exporting={imageExporting} scope={imageExportScope} onExport={handleImageExport} />
+    </Suspense>
+  ) : null;
+
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [shiftDirection, setShiftDirection] = useState<ShiftDirection>(0);
   const [fiammettaPortrait, setFiammettaPortrait] = useState<string | null>(null);
@@ -430,6 +489,8 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     return () => { cancelled = true; };
   }, [fiammettaTarget]);
   const handleSetActiveShift = (nextShift: number) => {
+    setSortRoomId(null);
+    setSortSelection(null);
     setShiftDirection(nextShift === activeShift ? 0 : nextShift > activeShift ? 1 : -1);
     onSetActiveShift(nextShift);
   };
@@ -450,17 +511,18 @@ export function InfraCalculator(props: InfraCalculatorProps) {
       data-calculator-export-actions={placement}
       data-calculator-plan-actions={placement}
     >
-      {operbox ? (
+      {operbox && showProgressionRecalculate ? (
         <Button type="button" size="sm" variant="outline" onClick={onOpenUpgradeSimulation}>
           <FlaskConical />{intl("components_pages_InfraCalculator.modifyProgressionRecalculate")}
         </Button>
       ) : null}
-      <Button type="button" size="sm" variant="outline" onClick={onEditManualSchedule}>
+      {showManualScheduleEdit ? <Button type="button" size="sm" variant="outline" onClick={onEditManualSchedule}>
         <PencilLine />{intl("components_pages_InfraCalculator.editTheCurrentPlan")}<ArrowRight />
-      </Button>
+      </Button> : null}
       <Button type="button" size="sm" variant="outline" disabled={!result?.maa} onClick={onDownloadMaa}>
         <Download />{intl("components_pages_InfraCalculator.exportToMaa")}
       </Button>
+      {imageExportAction}
     </div>
   ) : (
     <div
@@ -471,9 +533,12 @@ export function InfraCalculator(props: InfraCalculatorProps) {
       <Button type="button" size="sm" variant="outline" className="min-w-0 flex-1" onClick={() => setPlanActionsOpen(true)}>
         <SlidersHorizontal />{intl("components_pages_InfraCalculator.adjustPlan")}
       </Button>
-      <Button type="button" size="sm" variant="outline" disabled={!result?.maa} onClick={onDownloadMaa}>
+      <Button type="button" size="sm" variant="outline" className="min-w-0 flex-1" disabled={!result?.maa} onClick={onDownloadMaa}>
         <Download />{intl("components_pages_InfraCalculator.exportMaa")}
       </Button>
+      <div className="flex min-w-0 flex-1 [&>div]:w-full [&_button]:min-w-0 [&_button]:flex-1">
+        {imageExportAction}
+      </div>
     </div>
   );
 
@@ -632,7 +697,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                     animationRevision={result?.diagnosticId ?? scheduleResult.diagnosticId}
                     animateEntrance={animatePlanEntrance}
                     onEntranceConsumed={onPlanEntranceConsumed}
-                    onPerformanceIssue={onPerformanceIssue}
+                    onPerformanceIssue={showFeedback ? onPerformanceIssue : undefined}
                     feedbackDisabled={feedbackDisabledForSampleBox}
                     controlsSlot={(
                       <Suspense fallback={null}>
@@ -642,6 +707,11 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                   />
                 </Suspense>
               </>
+            ) : null}
+            {imageExportFailed ? (
+              <p role="alert" className="text-sm text-red-700">
+                {intl("components_pages_InfraCalculator.exportImageFailed")}
+              </p>
             ) : null}
             {!scheduleResult && showOnboarding ? (
               <CalculatorStartPanel
@@ -683,13 +753,19 @@ export function InfraCalculator(props: InfraCalculatorProps) {
               ) : undefined}
               mobileActionsSlot={scheduleResult ? renderPlanActions("mobile") : undefined}
               shiftTabsSlot={(
-                <ShiftTabs maaJson={scheduleResult?.maa} rotation={scheduleResult?.rotation} active={activeShift} closest={closestComparison?.planIndex} onChange={handleSetActiveShift} />
+                <ShiftTabs maaJson={scheduleResult?.maa} rotation={scheduleResult?.rotation} active={activeShift} closest={closestComparison?.planIndex} control={shiftViewControl} onChange={handleSetActiveShift} />
               )}
               shiftInfoSlot={scheduleResult ? renderPlanActions("desktop") : undefined}
-              onIssue={onMarkIssue}
+              onIssue={showFeedback ? onMarkIssue : undefined}
               feedbackDisabled={feedbackDisabledForSampleBox}
               onFactoryRecipeChange={onFactoryRecipeChange}
               onTradeOrderChange={onTradeOrderChange}
+              sortRoomId={allowReplacementOperatorSort ? sortRoomId : null}
+              sortSelection={sortSelection}
+              onSortToggle={allowReplacementOperatorSort && onSwapOperators ? toggleSortMode : undefined}
+              onSortSlotClick={allowReplacementOperatorSort && onSwapOperators ? handleSortSlotClick : undefined}
+              viewModeControl={scheduleViewControl}
+              hideImages={!showImages}
               droneTargetRoomId={droneTargetRoomId}
               onDroneTargetChange={manualDroneSelection ? onDroneTargetChange : undefined}
             /> : (
@@ -736,7 +812,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
           />
         </Suspense>
       ) : null}
-      {planActionsOpen && <Suspense fallback={null}><PlanActionsDialog hasBox={!!operbox} visibleVariantLabel={visibleVariantLabel} onOpenChange={setPlanActionsOpen} onProgression={openProgressionAction} onManual={openManualAction} /></Suspense>}
+      {planActionsOpen && <Suspense fallback={null}><PlanActionsDialog hasBox={!!operbox} showProgression={showProgressionRecalculate} showManual={showManualScheduleEdit} visibleVariantLabel={visibleVariantLabel} onOpenChange={setPlanActionsOpen} onProgression={openProgressionAction} onManual={openManualAction} /></Suspense>}
       <Suspense fallback={null}>
         <ShortcutGuideDialog open={shortcutGuideOpen} onOpenChange={setShortcutGuideOpen} />
         <Dialog open={cancelConfirmOpen} onOpenChange={setCancelConfirmOpen}>

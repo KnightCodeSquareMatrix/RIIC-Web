@@ -1,5 +1,9 @@
+const OPERATOR_PINYIN_ALIASES: Readonly<Record<string, readonly string[]>> = {
+  "仇白": ["qiubai"],
+};
+
 // 基建技能房间标签：技能 id 第一个下划线之前就是房间前缀，
-// 例如 control_tra_spd_000 → control → 控制中枢。无依赖，可被页面/组件/测试直接复用。
+// 例如 control_tra_spd_000 → control → 控制中枢。查询索引由调用方提供。
 
 export type BuildingRoomPrefix =
   | "control"
@@ -81,6 +85,8 @@ export type SkillRecordLookup = (skillId: string) => SkillRecord | undefined;
 export interface OperatorFilters {
   rarity?: number | null;
   profession?: number | null;
+  englishNames?: Readonly<Record<string, string>>;
+  pinyinNames?: Readonly<Record<string, readonly string[]>>;
 }
 
 export function operatorMatchesRoom(
@@ -110,16 +116,28 @@ export function operatorMatchesNameContains(name: string, query: string): boolea
   return name.toLocaleLowerCase("zh-CN").includes(normalizedQuery);
 }
 
+function operatorNameMatchesQuery(name: string, query: string, pinyinNames?: OperatorFilters["pinyinNames"]): boolean {
+  const normalizedQuery = query.trim().toLocaleLowerCase("zh-CN");
+  if (!normalizedQuery) return true;
+  if (name.toLocaleLowerCase("zh-CN").includes(normalizedQuery)) return true;
+  return (pinyinNames?.[name] ?? []).some((value) => value.includes(normalizedQuery))
+    || Boolean(pinyinNames && (OPERATOR_PINYIN_ALIASES[name] ?? []).some((alias) => alias.includes(normalizedQuery)));
+}
+
 /** 搜索命中干员名称、技能名称或技能纯文本描述（任意一项命中即可）。 */
 export function operatorMatchesQuery(
   name: string,
   skillIds: readonly string[],
   query: string,
   skillLookup: SkillRecordLookup,
+  englishNames?: Readonly<Record<string, string>>,
+  pinyinNames?: OperatorFilters["pinyinNames"],
 ): boolean {
   const normalizedQuery = query.trim().toLocaleLowerCase("zh-CN");
   if (!normalizedQuery) return true;
-  if (name.toLocaleLowerCase("zh-CN").includes(normalizedQuery)) return true;
+  if (operatorNameMatchesQuery(name, normalizedQuery, pinyinNames)) return true;
+  const englishName = englishNames?.[name];
+  if (englishName?.toLocaleLowerCase("en-US").includes(normalizedQuery.toLocaleLowerCase("en-US"))) return true;
   return skillIds.some((id) => {
     const skill = skillLookup(id);
     if (!skill) return false;
@@ -148,7 +166,7 @@ export function filterOperators<T extends OperatorWithSkills>(
         &&
         operatorMatchesRoom(skillIds, room)
         && operatorMatchesTag(skillIds, room, tag, skillLookup)
-        && operatorMatchesQuery(operator.name, skillIds, query, skillLookup)
+        && operatorMatchesQuery(operator.name, skillIds, query, skillLookup, filters.englishNames, filters.pinyinNames)
       );
     })
     .sort((left, right) => {

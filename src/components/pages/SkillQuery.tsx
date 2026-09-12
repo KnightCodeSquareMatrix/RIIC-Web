@@ -16,13 +16,24 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { LoadMore } from "@/components/ui/load-more";
 import { BUILDING_SKILL_CATALOG, OPERATOR_CATALOG } from "@/operatorPortraits";
+import { useGameCatalog } from "@/i18n/game-data-client";
 import { indexSkillAnnotations } from "@/skill-annotations";
 import type { ApiResponse, SkillAnnotationListData } from "@/types";
+import { DEFAULT_USER_SETTINGS, loadUserSettings } from "@/user-settings";
 
 export const SKILL_QUERY_PAGE_SIZE = 10;
 
 export function SkillQuery() {
   const intl = useTranslations();
+  const gameCatalog = useGameCatalog();
+  const [pinyinNames, setPinyinNames] = useState<Readonly<Record<string, readonly string[]>>>();
+  useEffect(() => {
+    let active = true;
+    void import("@/generated/arkntools/operator-pinyin.json").then((module) => {
+      if (active) setPinyinNames(module.default);
+    });
+    return () => { active = false; };
+  }, []);
 
   const filters = useTranslations("SkillFilters");
   const [rarity, setRarity] = useState("all");
@@ -34,8 +45,13 @@ export function SkillQuery() {
   const [annotations, setAnnotations] = useState<SkillAnnotationListData["annotations"]>([]);
   const [annotationError, setAnnotationError] = useState(false);
   const [annotationRequest, setAnnotationRequest] = useState(0);
+  const [paginationMode, setPaginationMode] = useState<"infinite" | "manual">(DEFAULT_USER_SETTINGS.skillPagination);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const shouldReduceMotion = useReducedMotion();
+
+  useEffect(() => {
+    setPaginationMode(loadUserSettings(window.localStorage).skillPagination);
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -60,9 +76,9 @@ export function SkillQuery() {
       selectedTag,
       query,
       (skillId) => BUILDING_SKILL_CATALOG[skillId],
-      { rarity: rarity === "all" ? null : Number(rarity), profession: profession === "all" ? null : Number(profession) },
+      { rarity: rarity === "all" ? null : Number(rarity), profession: profession === "all" ? null : Number(profession), englishNames: gameCatalog?.operatorNames, pinyinNames },
     ),
-    [query, selectedRoom, selectedTag, rarity, profession],
+    [query, selectedRoom, selectedTag, rarity, profession, gameCatalog, pinyinNames],
   );
   const visible = filtered.slice(0, visibleCount);
   const annotationIndex = useMemo(() => indexSkillAnnotations(annotations), [annotations]);
@@ -184,6 +200,7 @@ export function SkillQuery() {
             <LoadMore
               key={`${query}:${rarity}:${profession}:${selectedRoom ?? ""}:${selectedTag ?? ""}`}
               hasMore={hasMore}
+              auto={paginationMode === "infinite"}
               onLoad={loadMore}
               className="mt-4 border-t border-border/60 pt-2"
             />

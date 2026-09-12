@@ -20,6 +20,7 @@ import {
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { useAccountCloudWorkspace } from "account-cloud-workspace-bridge";
 import { AppSidebar } from "@/components/layout/AppSidebar";
+import { FilingLinks } from "@/components/layout/FilingLinks";
 import { AppTopBar, SklandAccountControl } from "@/components/layout/AppTopBar";
 import { AppMotionProvider } from "@/components/MotionProvider";
 import { PrimaryPageTransition } from "@/components/layout/PrimaryPageTransition";
@@ -67,6 +68,7 @@ import {
   type OnboardingPreference,
 } from "./onboarding";
 import { normalizeOperboxEntries } from "./operbox-normalization";
+import { prepareMaaForExport } from "./maa-safety";
 import { upgradeSimulationBoxSource } from "./upgrade-simulation";
 import {
   DEFAULT_MANUAL_SHIFT_DURATIONS,
@@ -74,6 +76,7 @@ import {
   MANUAL_SCHEDULE_STORAGE_KEY,
 } from "./manual-schedule-config";
 import type { ManualScheduleDraft, ManualScheduleMode } from "./manual-schedule";
+import { DEFAULT_USER_SETTINGS, loadUserSettings, persistUserSettings, USER_SETTINGS_CHANGED_EVENT, type UserSettings } from "./user-settings";
 import { effectiveFiammettaSetting, resolvePlanPresentationLayout } from "./plan-presentation";
 import {
   applyLocalLayoutPatch,
@@ -259,6 +262,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   const [hasRestoredSession, setHasRestoredSession] = useState(false);
   const restoredLocalSession = useRef(false);
   const [onboardingPreference, setOnboardingPreference] = useState<OnboardingPreference>("active");
+  const [userSettings, setUserSettings] = useState<UserSettings>(DEFAULT_USER_SETTINGS);
   const [preset, setPreset] = useState<PresetDef>(defaultPreset);
   const [layout, setLayout] = useState<BaseBlueprint>(defaultLayout);
   const powerBudget = useMemo(() => computePowerBudget(layout), [layout]);
@@ -397,6 +401,10 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
 
   useEffect(() => () => {
     if (planRetryTimerRef.current) clearInterval(planRetryTimerRef.current);
+  }, []);
+
+  useEffect(() => {
+    setUserSettings(loadUserSettings(window.localStorage));
   }, []);
 
   const planTask = usePlanTask({
@@ -1167,9 +1175,44 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   }
 
   async function handleDownloadMaa() {
-    if (!result?.maa) return;
+    if (!scheduleResult?.maa) return;
     const { downloadJson } = await import("./download");
-    downloadJson("arknights-infra-schedule-maa.json", result.maa);
+    downloadJson("arknights-infra-schedule-maa.json", prepareMaaForExport(
+      scheduleResult.maa,
+      userSettings.strictMaaOperatorOrder,
+      userSettings.allowReplacementOperatorSort,
+    ));
+  }
+
+  function handleSwapCalculatorOperators(row: RoomRow, firstSlotIndex: number, secondSlotIndex: number) {
+    if (row.group !== "trading" && row.group !== "manufacture") return;
+    const group = row.group;
+    const swap = (current: PublicPlanData | null) => {
+      if (!current) return current;
+      const next = structuredClone(current);
+      const rooms = next.maa.plans[activeShift]?.rooms[group];
+      const room = rooms?.[row.index];
+      if (!room || firstSlotIndex === secondSlotIndex) return current;
+      if (!room.operators[firstSlotIndex] || !room.operators[secondSlotIndex]) return current;
+      [room.operators[firstSlotIndex], room.operators[secondSlotIndex]] = [
+        room.operators[secondSlotIndex],
+        room.operators[firstSlotIndex],
+      ];
+      return next;
+    };
+    if (scheduleVariant === "trial" && upgradeComparison?.baseline === result) {
+      setUpgradeComparison((current) => current ? { ...current, trial: swap(current.trial)! } : current);
+    } else {
+      setResult(swap);
+    }
+  }
+
+  async function handleDownloadScheduleImage() {
+    if (!scheduleResult?.maa?.plans?.length) throw new Error("Schedule result is not ready");
+    const { downloadScheduleImage } = await import("./schedule-image");
+    const board = document.querySelector<HTMLElement>("[data-plan-board]");
+    if (!board) throw new Error("Schedule board is not ready");
+    await downloadScheduleImage(board, `arknights-infra-schedule-shift-${activeShift + 1}.png`);
   }
 
   function openManualScheduleDraft(draft: ManualScheduleDraft) {
@@ -1358,6 +1401,16 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   function handleFiammettaEnabledChange(enabled: boolean) {
     setFiammettaEnabled(enabled);
     clearPlanResult();
+  }
+
+  function handleUserSettingsChange(nextSettings: UserSettings) {
+    setUserSettings(nextSettings);
+    window.dispatchEvent(new CustomEvent(USER_SETTINGS_CHANGED_EVENT, { detail: nextSettings }));
+    try {
+      persistUserSettings(window.localStorage, nextSettings);
+    } catch {
+      // Keep the setting active for this session if storage is unavailable.
+    }
   }
 
   function applyPartialLocalLayoutEdit(patch: (layout: BaseBlueprint) => BaseBlueprint): BaseBlueprint {
@@ -1996,6 +2049,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       onPerformanceIssue: handlePerformanceIssue,
       onFactoryRecipeChange: handleScheduleFactoryRecipeChange,
       onTradeOrderChange: handleScheduleTradeOrderChange,
+      onSwapOperators: handleSwapCalculatorOperators,
       droneTargetRoomId: activePlan?.drones?.enable ? (() => {
         const kind = activePlan.drones.room === "trading" ? "trade_post" : "factory";
         return layout.rooms.filter((room) => room.kind === kind)[activePlan.drones.index - 1]?.id ?? null;
@@ -2003,8 +2057,17 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       onDroneTargetChange: handleScheduleDroneTargetChange,
       onEditManualSchedule: handleProtectedEditManualSchedule,
       onDownloadMaa: handleDownloadMaa,
+      onDownloadImage: handleDownloadScheduleImage,
       onClearResultNotice: () => setResultClearNotice(null),
       onDismissResultClearWarning: dismissResultClearWarning,
+      showProgressionRecalculate: userSettings.showProgressionRecalculate,
+      showManualScheduleEdit: userSettings.showManualScheduleEdit,
+      scheduleViewControl: userSettings.scheduleViewControl,
+      shiftViewControl: userSettings.linkShiftViewControl ? userSettings.scheduleViewControl : userSettings.shiftViewControl,
+      imageExportScope: userSettings.imageExportScope,
+      showFeedback: userSettings.showFeedback,
+      showImages: userSettings.showImages,
+      allowReplacementOperatorSort: userSettings.allowReplacementOperatorSort,
     },
     manual: {
       layout,
@@ -2025,6 +2088,12 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       onOpenSetup: handleManualSetup,
       onFactoryRecipeChange: handleFactoryRecipeChange,
       onTradeOrderChange: handleTradeOrderChange,
+      strictMaaOperatorOrder: userSettings.strictMaaOperatorOrder,
+      allowReplacementOperatorSort: userSettings.allowReplacementOperatorSort,
+      scheduleViewControl: userSettings.scheduleViewControl,
+      shiftViewControl: userSettings.linkShiftViewControl ? userSettings.scheduleViewControl : userSettings.shiftViewControl,
+      imageExportScope: userSettings.imageExportScope,
+      showImages: userSettings.showImages,
     },
     training: {
       operbox: accountCanUseCurrentBox ? operbox : null,
@@ -2069,6 +2138,10 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
         },
         onCloudDataChanged: accountCloudWorkspace.refreshCloudData,
       } : {}),
+    },
+    settings: {
+      value: userSettings,
+      onChange: handleUserSettingsChange,
     },
     skland: CLIENT_SKLAND_ENABLED ? {
       websiteAuthenticated: Boolean(websiteSession),
@@ -2150,9 +2223,9 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
         <Link prefetch={false} className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/terms">{intl("App.terms")}</Link>
         <Link prefetch={false} className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/privacy">{intl("App.privacy")}</Link>
         <a className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/about" data-about-link>{intl("App.about")}</a>
-        <div className="ml-auto flex shrink-0 items-center gap-3 max-sm:ml-0 max-sm:w-full max-sm:justify-end">
-          <a className="whitespace-nowrap underline underline-offset-4 hover:text-foreground" href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer" data-ui-number-font>沪ICP备2026041492号</a>
-          <span className="h-4 w-px shrink-0 bg-border" aria-hidden="true" />
+        <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-1 max-sm:ml-0 max-sm:w-full">
+          <FilingLinks />
+          <span className="h-4 w-px shrink-0 bg-border max-sm:hidden" aria-hidden="true" />
           <a
             href="https://www.rainyun.com/riic_"
             target="_blank"
@@ -2169,9 +2242,9 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
               height={390}
               loading="eager"
               decoding="async"
-              className="block h-5 w-14 object-contain sm:h-[23px] sm:w-16"
+              className="block h-5 w-14 -translate-y-0.5 object-contain sm:h-[23px] sm:w-16"
             />
-            {locale === "en" ? null : <span className="block leading-none">提供赞助</span>}
+            {locale === "en" ? null : <span className="block leading-none">提供云计算服务</span>}
           </a>
         </div>
       </footer>

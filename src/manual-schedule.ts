@@ -745,6 +745,31 @@ export function assignManualOperator(input: {
   return { draft: next, conflict };
 }
 
+export function swapManualOperators(
+  draft: ManualScheduleDraft,
+  layout: BaseBlueprint,
+  shiftIndex: number,
+  roomId: string,
+  firstSlotIndex: number,
+  secondSlotIndex: number,
+): ManualScheduleDraft {
+  const room = layout.rooms.find((candidate) => candidate.id === roomId);
+  const assignment = draft.shifts[shiftIndex]?.rooms[roomId];
+  if (!room || !assignment || firstSlotIndex === secondSlotIndex) return draft;
+  if (
+    !Number.isInteger(firstSlotIndex)
+    || !Number.isInteger(secondSlotIndex)
+    || firstSlotIndex < 0
+    || secondSlotIndex < 0
+    || firstSlotIndex >= manualRoomCapacity(room)
+    || secondSlotIndex >= manualRoomCapacity(room)
+  ) return draft;
+  const next = structuredClone(draft);
+  const operators = next.shifts[shiftIndex]!.rooms[roomId]!.operators;
+  [operators[firstSlotIndex], operators[secondSlotIndex]] = [operators[secondSlotIndex], operators[firstSlotIndex]];
+  return next;
+}
+
 export function setManualDormAutofill(
   draft: ManualScheduleDraft,
   layout: BaseBlueprint,
@@ -829,7 +854,7 @@ function maaRoom(room: BlueprintRoom, assignment: ManualRoomAssignment | undefin
   const product = maaProduct(room);
   return {
     operators,
-    sort: false,
+    sort: true,
     skip: false,
     autofill: room.kind === "dormitory" ? assignment?.autofill ?? true : false,
     ...(product ? { product } : {}),
