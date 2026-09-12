@@ -1,5 +1,22 @@
 import { expect, test } from "@playwright/test";
 
+test("help filing links stay clear of floating controls", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/help");
+  const filing = page.getByRole("link", { name: "沪公网安备31011502407364号" });
+  for (const width of [375, 768, 1440]) {
+    await page.setViewportSize({ width, height: 812 });
+    await filing.scrollIntoViewIfNeeded();
+    const filingBox = await filing.boundingBox();
+    const menuBox = await page.getByRole("button", { name: "帮助目录", exact: true }).boundingBox();
+    expect(filingBox).not.toBeNull();
+    expect(menuBox).not.toBeNull();
+    expect(filingBox!.x + filingBox!.width).toBeLessThanOrEqual(menuBox!.x - 8);
+    await filing.click({ trial: true, position: { x: filingBox!.width - 2, y: filingBox!.height / 2 } });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+});
+
 test("help pages provide an accessible back-to-top control", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.setViewportSize({ width: 375, height: 320 });
