@@ -5,8 +5,6 @@ import { useLocale } from "next-intl";
 import { ArrowDown, ArrowUp, Bot, Check, Download, FileJson, GitBranch, Pencil, Plus, Trash2, Upload, Users } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { SkillFilterRow } from "@/components/skill-query/SkillFilterRow";
-import { SkillRoomTagBar } from "@/components/skill-query/SkillRoomTagBar";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -16,7 +14,6 @@ import { OperatorIdentity, OperatorRarityFilter, OperatorRosterGrid, OperatorSea
 import { StatusCenterHeader, StatusCenterPage } from "@/components/pages/StatusCenterShell";
 import { downloadJson } from "@/download";
 import { cn } from "@/lib/utils";
-import { operatorMatchesRoom, type BuildingRoomPrefix } from "@/building-rooms";
 import { createMowerEditorDocument, MOWER_EDITOR_STORAGE_KEY, MOWER_FIXED_ROOMS, MOWER_PRODUCTION_KEYS, parseMowerEditorDocument, type MowerEditorDocument } from "@/mower-editor";
 import type { MowerFacility } from "@/mower-plan";
 import { OPERATOR_CATALOG, operatorPresentationFor } from "@/operatorPortraits";
@@ -55,17 +52,10 @@ function MowerOperatorPicker({ label, selected, operators, onChange, text }: {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [rarity, setRarity] = useState("all");
-  const [roomFilter, setRoomFilter] = useState<BuildingRoomPrefix | null>(null);
   const selectedSet = new Set(selected);
   const normalizedQuery = query.trim().toLocaleLowerCase("zh-CN");
-  const catalogById = new Map(OPERATOR_CATALOG.map((operator) => [operator.id, operator]));
-  const catalogByName = new Map(OPERATOR_CATALOG.map((operator) => [operator.name, operator]));
   const filtered = operators.filter((operator) => (
     (rarity === "all" || operator.rarity === Number(rarity))
-    && (!roomFilter || operatorMatchesRoom(
-      (catalogById.get(operator.id) ?? catalogByName.get(operator.name))?.buildingSkills.map((skill) => skill.id) ?? [],
-      roomFilter,
-    ))
     && (!normalizedQuery || operator.name.toLocaleLowerCase("zh-CN").includes(normalizedQuery) || operator.id.toLocaleLowerCase("en-US").includes(normalizedQuery))
   ));
   const toggle = (name: string) => onChange(selectedSet.has(name) ? selected.filter((item) => item !== name) : [...selected, name]);
@@ -78,7 +68,7 @@ function MowerOperatorPicker({ label, selected, operators, onChange, text }: {
         <DialogContent className="max-h-[90svh] sm:max-w-[min(860px,calc(100vw-2rem))]">
           <DialogHeader><DialogTitle>{label}</DialogTitle><DialogDescription>{text("从当前 Box 选择，可多选。再次点击已选干员取消选择。", "Select from the current Box. Click a selected operator again to remove it.")}</DialogDescription></DialogHeader>
           <DialogBody className="min-h-0 overflow-auto">
-            <div className="grid gap-3"><OperatorSearch value={query} onChange={setQuery} compact label={text("搜索当前 Box 干员", "Search current Box")} placeholder={text("搜索干员", "Search operators")} /><SkillFilterRow label={text("技能房间", "Skill room")}><SkillRoomTagBar selected={roomFilter} onChange={setRoomFilter} /></SkillFilterRow><OperatorRarityFilter value={rarity} onChange={setRarity} /></div>
+            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]"><OperatorSearch value={query} onChange={setQuery} compact label={text("搜索当前 Box 干员", "Search current Box")} placeholder={text("搜索干员", "Search operators")} /><OperatorRarityFilter value={rarity} onChange={setRarity} /></div>
             <OperatorRosterGrid compact hasMore={false} onLoadMore={() => undefined}>
               {filtered.map((operator) => <button key={operator.id} type="button" className={cn("flex min-w-0 items-center gap-3 rounded-[4px] border p-2 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-[#FFD800]", selectedSet.has(operator.name) ? "border-[#FFD800] bg-[#FFD800]/10" : "border-border/70")} onClick={() => toggle(operator.name)} aria-pressed={selectedSet.has(operator.name)}><OperatorIdentity name={operator.name} portrait={operatorPresentationFor({ name: operator.name }).portrait} compact><span className="font-number text-xs text-muted-foreground">{operator.rarity}★ · E{operator.elite}</span></OperatorIdentity>{selectedSet.has(operator.name) ? <Check className="ml-auto size-4 shrink-0 text-[#B18F00]" /> : null}</button>)}
             </OperatorRosterGrid>
