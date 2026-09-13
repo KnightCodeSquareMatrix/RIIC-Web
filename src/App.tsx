@@ -1984,6 +1984,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       loading,
       canRun,
       runCooldownSeconds: planRetryCountdown,
+      runOutcome: apiError ? "error" as const : planTask.status === "done" ? "success" as const : "idle" as const,
       hasBox,
       hasPersonalBox,
       feedbackDisabledForSampleBox,

@@ -19,6 +19,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PlanResultSummarySkeleton } from "@/components/PlanResultSummarySkeleton";
+import { ScheduleRunButton } from "@/components/ScheduleRunButton";
+import { SkeletonSuspense } from "@/components/ui/skeleton-swap";
 
 import type { FactoryRecipe, TradeOrder } from "@/blueprint";
 import { loadClientFeature } from "@/client-lazy-loader";
@@ -64,45 +66,6 @@ function Panel({ children, className = "", action, title, icon }: {
       ) : null}
       <div>{children}</div>
     </section>
-  );
-}
-
-function RunButton({
-  canRun,
-  hasBox,
-  plannerReady,
-  requiresAccount,
-  runCooldownSeconds,
-  onRun,
-}: {
-  canRun: boolean;
-  hasBox: boolean;
-  plannerReady: boolean;
-  requiresAccount: boolean;
-  runCooldownSeconds: number;
-  onRun: () => void;
-}) {
-  const intl = useTranslations();
-
-  const unavailableLabel = runCooldownSeconds > 0
-    ? intl("components_pages_InfraCalculator.retryInSeconds", { runCooldownSeconds: runCooldownSeconds })
-    : requiresAccount
-    ? intl("components_pages_InfraCalculator.signInFirst")
-    : plannerReady
-      ? intl("components_pages_InfraCalculator.importOperatorDataFirst")
-      : intl("components_pages_InfraCalculator.plannerUnavailable");
-  return (
-    <Button
-      size="sm"
-      className="h-9 min-w-0 max-sm:h-11 max-sm:px-3 max-sm:text-xs"
-      aria-label={runCooldownSeconds > 0 ? unavailableLabel : canRun || hasBox ? (intl("components_pages_InfraCalculator.generateSchedule")) : unavailableLabel}
-      title={runCooldownSeconds > 0 || (!canRun && !(requiresAccount && hasBox && plannerReady)) ? unavailableLabel : undefined}
-      onClick={onRun}
-      disabled={runCooldownSeconds > 0 || (!canRun && !(requiresAccount && hasBox && plannerReady))}
-    >
-      <Play />
-      <span>{runCooldownSeconds > 0 ? intl("components_pages_InfraCalculator.retryInS", { runCooldownSeconds: runCooldownSeconds }) : requiresAccount && hasBox ? intl("components_pages_InfraCalculator.signInToGenerate") : !plannerReady ? intl("components_pages_InfraCalculator.plannerUnavailable2") : canRun ? intl("components_pages_InfraCalculator.generate") : intl("components_pages_InfraCalculator.importToGenerate")}</span>
-    </Button>
   );
 }
 
@@ -326,6 +289,7 @@ export interface InfraCalculatorProps {
   sampleLoading: boolean;
   loading: boolean;
   canRun: boolean;
+  runOutcome?: "idle" | "success" | "error";
   runCooldownSeconds: number;
   hasBox: boolean;
   hasPersonalBox: boolean;
@@ -640,12 +604,11 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                   </Button>
                   {accountControl}
                 </div>
-                {loading ? (
-                  <div className="flex items-center gap-2">
-                    {taskQueue?.error ? (
+                  <div className="flex min-w-0 items-center justify-end gap-2 max-sm:justify-self-end">
+                    {loading && taskQueue?.error ? (
                       <span className="text-xs text-red-300">{taskQueue.error}</span>
                     ) : null}
-                    {taskQueue?.pollStopped ? (
+                    {loading && taskQueue?.pollStopped ? (
                       <div className="relative">
                         <Button
                           type="button"
@@ -669,22 +632,14 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                         ) : null}
                       </div>
                     ) : null}
-                    <Button type="button" variant="destructive" className="h-9 max-sm:h-11" onClick={() => setCancelConfirmOpen(true)} aria-label={intl("components_pages_InfraCalculator.cancelTask")}>
-                      <Loader2 className="animate-spin" />
-                      {intl("components_pages_InfraCalculator.cancelTask")}
-                    </Button>
+                    <ScheduleRunButton canRun={canRun} hasBox={hasBox} plannerReady={plannerReady} requiresAccount={requiresAccount} runCooldownSeconds={runCooldownSeconds} loading={loading} outcome={props.runOutcome} onRun={onRun} onCancel={() => setCancelConfirmOpen(true)} />
                   </div>
-                ) : (
-                  <div className="flex min-w-0 items-center justify-end gap-2 max-sm:justify-self-end">
-                    <RunButton canRun={canRun} hasBox={hasBox} plannerReady={plannerReady} requiresAccount={requiresAccount} runCooldownSeconds={runCooldownSeconds} onRun={onRun} />
-                  </div>
-                )}
               </div>
             ) : null}
           >
             {scheduleResult ? (
               <>
-                <Suspense fallback={<DeferredResultLoading />}>
+                <SkeletonSuspense fallback={<DeferredResultLoading />}>
                   <PlanResultSummary
                     profile={scheduleResult.profile}
                     rotation={scheduleResult.rotation}
@@ -705,7 +660,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                       </Suspense>
                     )}
                   />
-                </Suspense>
+                </SkeletonSuspense>
               </>
             ) : null}
             {imageExportFailed ? (

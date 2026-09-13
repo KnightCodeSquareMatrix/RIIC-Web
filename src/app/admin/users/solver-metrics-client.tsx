@@ -7,13 +7,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { SkeletonSwap, SkeletonRouteBoundary, SkeletonRouteFallback } from "@/components/ui/skeleton-swap";
 import { ADMIN_SOLVER_METRICS_REFRESH_INTERVAL_SECONDS } from "@/solver-metrics-config";
 import type { AdminSolverMetricsData } from "@/types";
 
 function MetricsChartLoading() {
   const intl = useTranslations();
 
-  return <div className="h-[280px] animate-pulse rounded-xl bg-muted/45 sm:h-[320px]" aria-label={intl("app_admin_users_solver_metrics_client.loadingSolverTrendChart")} />;
+  return <SkeletonRouteFallback><Skeleton className="h-[280px] rounded-xl sm:h-[320px]" aria-label={intl("app_admin_users_solver_metrics_client.loadingSolverTrendChart")} /></SkeletonRouteFallback>;
 }
 
 const AdminSolverMetricsChart = dynamic(
@@ -142,6 +144,14 @@ export function AdminSolverMetrics() {
         </Button>
       </header>
 
+      <SkeletonSwap ready={Boolean(metrics) || Boolean(error)} skeleton={(
+        <div className="grid gap-4 px-5 py-5 sm:px-6" aria-hidden="true">
+          <div className="grid gap-3 md:grid-cols-4">
+            {Array.from({ length: 4 }, (_, index) => <Skeleton key={index} className="h-24 rounded-xl" />)}
+          </div>
+          <Skeleton className="h-[280px] rounded-xl" />
+        </div>
+      )}>
       {metrics ? (
         <div>
           <div className="grid divide-y px-5 py-5 md:grid-cols-4 md:divide-x md:divide-y-0 md:px-2 sm:px-6">
@@ -178,7 +188,7 @@ export function AdminSolverMetrics() {
               {!hasTrendData ? <span className="text-xs text-muted-foreground">{intl("app_admin_users_solver_metrics_client.noCompletedSolvesInThisWindow")}</span> : null}
             </div>
             <div className="mt-4">
-              <AdminSolverMetricsChart trend={metrics.solver.trend} />
+              <SkeletonRouteBoundary><AdminSolverMetricsChart trend={metrics.solver.trend} /></SkeletonRouteBoundary>
             </div>
           </div>
 
@@ -217,14 +227,8 @@ export function AdminSolverMetrics() {
             {intl("app_admin_users_solver_metrics_client.theErrorRateCoversRecordedSolverRunsOnlyIt")}
           </p>
         </div>
-      ) : (
-        <div className="grid gap-4 px-5 py-5 sm:px-6" aria-hidden="true">
-          <div className="grid gap-3 md:grid-cols-4">
-            {Array.from({ length: 4 }, (_, index) => <div key={index} className="h-24 animate-pulse rounded-xl bg-muted/45" />)}
-          </div>
-          <div className="h-[280px] animate-pulse rounded-xl bg-muted/45" />
-        </div>
-      )}
+      ) : null}
+      </SkeletonSwap>
 
       {error ? (
         <p className="border-t px-5 py-3 text-sm text-destructive sm:px-6" role="status">

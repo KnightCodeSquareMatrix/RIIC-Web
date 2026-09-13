@@ -49,10 +49,15 @@ export function LanguageSwitch() {
     };
   }, []);
   return (
-    <div className="inline-flex h-7 items-center rounded-[4px] border border-border bg-background p-0.5 text-[11px] font-medium" aria-label={t("language")} aria-busy={pending}>
+    <div className="relative isolate inline-grid h-7 grid-cols-2 items-center rounded-[4px] border border-border bg-background p-0.5 text-[11px] font-medium" aria-label={t("language")} aria-busy={pending}>
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute left-0.5 top-1/2 h-6 w-[calc((100%-4px)/2)] rounded-[3px] bg-foreground transition-transform duration-240 ease-[var(--motion-ease-out)] motion-reduce:transition-none"
+        style={{ transform: `translate(${locale === "en" ? "100%" : "0"}, -50%)` }}
+      />
       {(["zh", "en"] as const).map((value) => (
         <button key={value} type="button" disabled={pending || (value === "en" && !englishEnabled)} aria-pressed={locale === value}
-          className={`h-6 min-w-9 rounded-[3px] px-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${locale === value ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+          className={`relative z-10 h-6 min-w-9 flex-1 rounded-[3px] px-1.5 transition-colors duration-150 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${locale === value ? "text-background" : "text-muted-foreground hover:text-foreground"}`}
           onClick={() => {
             if (value === locale) return;
             saveLocale(value);

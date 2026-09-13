@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
+import { SkeletonSwap } from "@/components/ui/skeleton-swap";
 
 export function RemoteAvatar({
   src,
@@ -32,8 +33,7 @@ export function RemoteAvatar({
       aria-busy={src && !loaded && !failed ? "true" : undefined}
       data-remote-avatar-state={!src || failed ? "fallback" : loaded ? "loaded" : "loading"}
     >
-      {!src || failed ? emptyFallback : loaded ? null : loadingFallback ?? emptyFallback}
-      {src && !failed ? (
+      {!src || failed ? emptyFallback : <SkeletonSwap ready={loaded} skeleton={loadingFallback ?? emptyFallback} className="size-full">
         <img
           src={src}
           alt={alt}
@@ -44,9 +44,9 @@ export function RemoteAvatar({
           referrerPolicy="no-referrer"
           onLoad={() => setLoadedSrc(src)}
           onError={() => setFailedSrc(src)}
-          className={cn("absolute inset-0 size-full object-cover transition-opacity duration-150", loaded ? "opacity-100" : "opacity-0", imageClassName)}
+          className={cn("absolute inset-0 size-full object-cover", imageClassName)}
         />
-      ) : null}
+      </SkeletonSwap>}
     </span>
   );
 }

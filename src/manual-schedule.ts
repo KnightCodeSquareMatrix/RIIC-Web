@@ -159,6 +159,32 @@ export function normalizeManualShiftDurations(durations: readonly number[]): num
   return normalizedDurationMinutes(durations).map((minutes) => minutes / 60);
 }
 
+/** Quantize an explicitly edited timeline, retaining one hour for every shift. */
+export function snapManualShiftDurationsToHours(durations: readonly number[]): number[] {
+  const minutes = normalizedDurationMinutes(durations);
+  let elapsed = 0;
+  let previous = 0;
+  return minutes.map((duration, index) => {
+    elapsed += duration;
+    const boundary = index === minutes.length - 1 ? 24
+      : Math.max(previous + 1, Math.min(24 - (minutes.length - index - 1), Math.round(elapsed / 60)));
+    const hours = boundary - previous;
+    previous = boundary;
+    return hours;
+  });
+}
+
+export function moveManualShiftBoundaryByHour(durations: readonly number[], index: number, hour: number): number[] {
+  if (!Number.isFinite(hour) || !Number.isInteger(index) || index < 0 || index >= durations.length - 1) return [...durations];
+  const next = snapManualShiftDurationsToHours(durations);
+  const previous = next.slice(0, index).reduce((sum, duration) => sum + duration, 0);
+  const end = previous + next[index]! + next[index + 1]!;
+  const boundary = Math.max(previous + 1, Math.min(end - 1, Math.round(hour)));
+  next[index] = boundary - previous;
+  next[index + 1] = end - boundary;
+  return next;
+}
+
 export function manualShiftTimeRanges(
   startTime: string,
   durations: readonly number[],
