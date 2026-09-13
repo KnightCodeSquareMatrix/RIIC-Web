@@ -674,21 +674,11 @@ test("plan completion reveals status, metrics, and schedule once without resetti
   await expect(board).toBeVisible();
   await expect(board).not.toHaveAttribute("data-plan-revision", /.+/);
 
-  if (browserName === "webkit") {
-    await armTransientStyleCapture(page, '[data-activity-phase="running"]', "loading-status");
-  } else {
-    await armMotionCapture(
-      page,
-      '[data-activity-phase="running"]',
-      "loading-status",
-      260,
-    );
-  }
+  await armTransientStyleCapture(page, '[data-activity-phase="running"]', "loading-status");
   await page.getByRole("button", { name: "生成排班" }).click();
   const status = page.locator('[data-slot="live-activity"]');
   await expect(status).toHaveAttribute("data-activity-phase", "running");
-  if (browserName === "webkit") await expectCapturedStyleMotion(page, "loading-status");
-  else await expectCapturedMotion(page, "loading-status", 260);
+  await expectCapturedStyleMotion(page, "loading-status");
 
   if (browserName === "webkit") {
     await armTransientStyleCapture(page, "[data-plan-summary]", "plan-summary");
@@ -1085,7 +1075,7 @@ test("shared action buttons keep their geometry after WebKit interactions", asyn
   await expect(planButton).toBeEnabled();
   await expectButtonGeometryStable(planButton);
   await planButton.click();
-  await expect(page.getByText("排班已生成")).toBeVisible();
+  await expect(page.getByRole("status", { name: "排班已生成", exact: true })).toBeVisible();
   await expectButtonGeometryStable(planButton);
 });
 
@@ -1154,7 +1144,7 @@ test("a stored sample BOX completes generation, shifts, MAA export, and disables
   await expect(page.getByRole("tab", { name: "列表式布局" })).toBeVisible();
   await expect(page.locator("[data-plan-board]")).not.toHaveAttribute("data-plan-revision", /.+/);
   await page.getByRole("button", { name: "生成排班" }).click();
-  await expect(page.getByText("排班已生成")).toBeVisible();
+  await expect(page.getByRole("status", { name: "排班已生成", exact: true })).toBeVisible();
   await page.getByRole("tab", { name: "列表式布局" }).click();
 
   const secondShift = page.getByRole("tab", { name: /第 2 班 · 6h/ });
@@ -1290,7 +1280,7 @@ test("scheduled product changes require destructive confirmation and rerun with 
   await page.goto("/");
 
   await page.getByRole("button", { name: "生成排班" }).click();
-  await expect(page.getByText("排班已生成")).toBeVisible();
+  await expect(page.getByRole("status", { name: "排班已生成", exact: true })).toBeVisible();
   await expect.poll(() => planRequests).toBe(1);
   await page.getByRole("tab", { name: "列表式布局" }).click();
 
@@ -1325,7 +1315,7 @@ test("scheduled product changes require destructive confirmation and rerun with 
   expect(rerunLayout?.rooms?.find((room) => room.id === "trade_1")?.product?.trade?.order).toBe("originium");
   releaseRerun?.();
   await expect(confirmation).toBeHidden();
-  await expect(page.getByText("排班已生成")).toBeVisible();
+  await expect(page.getByRole("status", { name: "排班已生成", exact: true })).toBeVisible();
   await page.getByRole("tab", { name: "列表式布局" }).click();
   const updatedTradeControls = page.getByRole("group", { name: "贸易站 1 订单" });
   await expect(updatedTradeControls.getByRole("button", { name: "开采协力" })).toHaveAttribute("aria-pressed", "true");
