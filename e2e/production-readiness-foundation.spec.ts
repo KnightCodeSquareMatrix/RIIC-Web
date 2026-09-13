@@ -1618,7 +1618,9 @@ for (const viewport of [
     const dialog = page.getByRole("dialog", { name: "启用账号云端工作区" });
     await expect(dialog).toBeVisible();
     await dialog.evaluate(async (element) => {
-      await Promise.all(element.getAnimations({ subtree: true }).map((animation) => animation.finished.catch(() => undefined)));
+      // Wait for the dialog entrance, not the descendant scrollbar's
+      // scroll-driven timeline, whose finished promise intentionally stays pending.
+      await Promise.all(element.getAnimations().map((animation) => animation.finished.catch(() => undefined)));
     });
     const dialogBox = await dialog.boundingBox();
     expect(dialogBox?.width ?? 0).toBeLessThanOrEqual(viewport.width - 16);
