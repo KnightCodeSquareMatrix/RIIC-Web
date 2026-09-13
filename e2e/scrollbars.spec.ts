@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { mockApis, planData, seedV4Session } from "./production-readiness.fixture";
+import { gotoStable, mockApis, planData, seedV4Session } from "./production-readiness.fixture";
 
 async function addSurfaces(page: Page) {
   await page.goto("/help");
@@ -50,7 +50,7 @@ test("nested dialog and dropdown keep keyboard navigation, background locking an
     },
   }));
   await seedV4Session(page, planData);
-  await page.goto("/");
+  await gotoStable(page, "/");
   await expect(page.locator('[data-workbench-hydrated="true"]')).toBeVisible();
   for (let attempt = 0; attempt < 2; attempt++) {
     await page.getByRole("button", { name: /配置\s*Box\s*与布局/ }).filter({ visible: true }).first().click();
@@ -59,6 +59,12 @@ test("nested dialog and dropdown keep keyboard navigation, background locking an
     const scroll = dialog.locator('[data-slot="scroll-area-viewport"]:visible').first();
     await expect(scroll).toHaveAttribute("data-overlayscrollbars-viewport", /scrollbarHidden/);
     await expect(scroll.locator(":scope > .os-scrollbar")).toHaveCount(2);
+    const backgroundThumb = page.locator("body > .os-scrollbar-vertical .os-scrollbar-handle");
+    expect(await backgroundThumb.evaluate(node => {
+      const box = node.getBoundingClientRect();
+      const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+      return hit === node || node.contains(hit);
+    })).toBe(false);
     const before = await page.evaluate(() => window.scrollY);
     await page.mouse.move(5, 5);
     await page.mouse.wheel(0, 500);
