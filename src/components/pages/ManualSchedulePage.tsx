@@ -20,6 +20,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { SkeletonSuspense } from "@/components/ui/skeleton-swap";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { downloadJson } from "@/download";
 import { localizedOperatorName, localizedRoomTitle } from "@/i18n/game-data";
@@ -778,9 +780,22 @@ export function ManualSchedulePage({
             <DialogTitle>{picker?.kind === "fiammetta" ? (intl("components_pages_ManualSchedulePage.fiammettaMoraleTarget")) : (intl("components_pages_ManualSchedulePage.assign", { value1: (en) ? (selectedRoom?.title ?? "room") : "", value2: (en) ? "" : (selectedRoom?.title ?? "设施") }))}</DialogTitle>
             <DialogDescription>{picker?.kind === "fiammetta" ? (intl("components_pages_ManualSchedulePage.thisTargetIsStoredOnlyForTheActiveShift")) : (intl("components_pages_ManualSchedulePage.onlyOwnedOperatorsInTheCurrentBoxAreShown"))}</DialogDescription>
           </DialogHeader>
-          <Suspense fallback={<div className="min-h-64" aria-busy="true" />}>
+          <SkeletonSuspense className="min-h-0 [&>[data-skeleton-swap-content]]:grid [&>[data-skeleton-swap-content]]:min-h-0" fallback={<div className="grid min-h-64 content-start gap-3 px-5 pb-5 sm:px-7"><Skeleton className="h-11" /><Skeleton className="h-24" /><div className="grid grid-cols-4 gap-3">{Array.from({ length: 4 }, (_, index) => <Skeleton key={index} className="h-20" />)}</div></div>}>
           <ScrollArea className="min-h-0" viewportClassName="overflow-x-hidden" viewportProps={{ ref: pickerScrollContainerRef, onScroll: handlePickerScroll }}>
           <DialogBody className="block pt-0 pb-5 sm:pb-6" data-manual-operator-picker>
+            <div className="mb-3">
+              <OperatorSearch
+                autoFocus
+                value={pickerQuery}
+                label={intl("components_pages_ManualSchedulePage.searchSelectableOperatorsAndSkills")}
+                placeholder={intl("components_pages_ManualSchedulePage.searchOperatorSkillOrEffect")}
+                onChange={(value) => {
+                  setPickerQuery(value);
+                  setPickerPage(1);
+                }}
+              />
+            </div>
+
             {picker?.kind === "slot" ? (
               <div className="grid gap-1">
                 <div className="flex min-w-0 items-center gap-2">
@@ -817,19 +832,6 @@ export function ManualSchedulePage({
               </SkillFilterRow>
             </div>
 
-            <div className="mt-3">
-              <OperatorSearch
-                autoFocus
-                value={pickerQuery}
-                label={intl("components_pages_ManualSchedulePage.searchSelectableOperatorsAndSkills")}
-                placeholder={intl("components_pages_ManualSchedulePage.searchOperatorSkillOrEffect")}
-                onChange={(value) => {
-                  setPickerQuery(value);
-                  setPickerPage(1);
-                }}
-              />
-            </div>
-
             <div className="mt-2 flex justify-end">
               <span className="font-number text-xs text-muted-foreground">{intl("components_pages_ManualSchedulePage.operatorCount", { count: filteredOperators.length })}</span>
             </div>
@@ -864,7 +866,7 @@ export function ManualSchedulePage({
             </div>
           </DialogBody>
           </ScrollArea>
-          </Suspense>
+          </SkeletonSuspense>
         </DialogContent>
       </Dialog>
 

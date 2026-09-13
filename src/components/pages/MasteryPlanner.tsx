@@ -14,6 +14,7 @@ import type { OperatorSkillTooltip } from "@/components/OperatorSkillTooltip";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from "@/components/ui/dialog";
 import { localizedOperatorName } from "@/i18n/game-data";
 import { useGameCatalog } from "@/i18n/game-data-client";
 import catalog from "@/generated/arkntools/operator-catalog.json";
@@ -21,6 +22,19 @@ import type { OperBoxEntry } from "@/types";
 
 const TargetPicker = lazy(() => import("@/components/mastery/MasteryTargetPicker").then((m) => ({default:m.MasteryTargetPicker})));
 const TrainerSkillTooltip = lazy(() => import("@/components/OperatorSkillTooltip").then((m) => ({ default: m.OperatorSkillTooltip })));
+
+function TargetPickerLoading({ onClose }: { onClose: () => void }) {
+  const intl = useTranslations("components_mastery_MasteryTargetPicker");
+  return <Dialog open onOpenChange={open => { if (!open) onClose(); }}>
+    <DialogContent aria-busy="true" className="max-h-[90dvh] grid-rows-[auto_minmax(0,1fr)] sm:max-w-[min(880px,calc(100vw-2rem))]">
+      <DialogHeader><DialogTitle>{intl("chooseATrainee")}</DialogTitle></DialogHeader>
+      <DialogBody className="min-h-0 overflow-hidden pb-5">
+        <Skeleton className="h-11" /><Skeleton className="h-9 w-3/4" />
+        <div className="grid grid-cols-2 gap-3">{Array.from({ length: 6 }, (_, index) => <Skeleton key={index} className="h-20" />)}</div>
+      </DialogBody>
+    </DialogContent>
+  </Dialog>;
+}
 
 function MasteryTrainerTooltip(props: ComponentProps<typeof OperatorSkillTooltip>) {
   return <Suspense fallback={props.trigger}><TrainerSkillTooltip {...props} /></Suspense>;
@@ -159,6 +173,6 @@ export function MasteryPlanner({ operbox, sourceName, requiresAccount, pending, 
         </article>)}
       </div>
     </div> : null}
-    {(pickerOpen || pickerRequested) && !pending && !requiresAccount && operbox ? <Suspense fallback={<Skeleton className="h-40" />}><TargetPicker operbox={operbox} selectedId={selectedId} onClose={() => { setPickerOpen(false); onPickerRequestConsumed(); }} onSelect={(id) => { setSelectedId(id); setPickerOpen(false); onPickerRequestConsumed(); setError(null); }} /></Suspense> : null}
+    {(pickerOpen || pickerRequested) && !pending && !requiresAccount && operbox ? <Suspense fallback={<TargetPickerLoading onClose={() => { setPickerOpen(false); onPickerRequestConsumed(); }} />}><TargetPicker operbox={operbox} selectedId={selectedId} onClose={() => { setPickerOpen(false); onPickerRequestConsumed(); }} onSelect={(id) => { setSelectedId(id); setPickerOpen(false); onPickerRequestConsumed(); setError(null); }} /></Suspense> : null}
   </section>;
 }

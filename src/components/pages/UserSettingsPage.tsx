@@ -78,7 +78,7 @@ export function UserSettingsPage({ settings, onSettingsChange }: UserSettingsPag
           </div>
         )}
         actions={(
-          <Button variant="outline" className="h-11 w-full sm:w-auto" render={<Link href="/" />}>
+          <Button nativeButton={false} variant="outline" className="h-11 w-full sm:w-auto" render={<Link href="/" />}>
             <ArrowLeft />{en ? "Back to calculator" : "返回基建计算器"}
           </Button>
         )}

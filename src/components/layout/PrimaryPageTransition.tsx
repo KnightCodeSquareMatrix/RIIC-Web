@@ -4,6 +4,7 @@ import { motion, useReducedMotion } from "motion/react";
 import { useEffect, useState, type ReactNode } from "react";
 
 import { MOTION_DURATION, MOTION_EASE_OUT } from "@/motion";
+import { SkeletonRouteBoundary } from "@/components/ui/skeleton-swap";
 
 export function PrimaryPageTransition({
   pageKey,
@@ -26,7 +27,7 @@ export function PrimaryPageTransition({
       transition={{ duration: shouldReduceMotion ? MOTION_DURATION.feedback : MOTION_DURATION.fast, ease: MOTION_EASE_OUT }}
       data-primary-page={pageKey}
     >
-      {children}
+      <SkeletonRouteBoundary>{children}</SkeletonRouteBoundary>
     </motion.div>
   );
 }

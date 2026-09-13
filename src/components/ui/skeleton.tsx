@@ -4,7 +4,8 @@ function Skeleton({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="skeleton"
-      className={cn("animate-pulse rounded-md bg-muted", className)}
+      aria-hidden="true"
+      className={cn("rounded-[5px] bg-stone-200 dark:bg-white/15", className)}
       {...props}
     />
   )

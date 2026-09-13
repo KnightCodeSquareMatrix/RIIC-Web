@@ -189,13 +189,16 @@ function tradeTargetForRoom(level: number, operators: MaaRoom["operators"]): Dro
   return { kind: "normal", level: normalizedLevel };
 }
 
+/** 裁缝类（Tailoring）贸易站干员；龙舌兰与其中任意一人同站时获得无人机优先级。 */
+const TAILORING_OPERATORS = new Set(["折光", "明椒", "卡夫卡", "柏喙"]);
+
 export function tradeTargetPriority(level: number, operators: MaaRoom["operators"]): number {
   const names = Array.isArray(operators) ? operators.map((operator) => operatorName(operator)).filter(Boolean) : [];
   const has = (name: string) => names.includes(name);
   if (level === 1 && has("但书")) return 600;
   if (level === 2 && has("但书")) return 500;
   if (level === 3 && has("但书") && has("龙舌兰")) return 400;
-  if (level === 3 && has("龙舌兰") && has("柏喙")) return 300;
+  if (level === 3 && has("龙舌兰") && names.some((name) => TAILORING_OPERATORS.has(name))) return 300;
   if (level === 3 && has("但书")) return 200;
   if (has("可露希尔")) return 100;
   return 0;

@@ -54,11 +54,8 @@ export default function AboutPage() {
     <InfoPageLayout title={intl("app_about_page.about")} href="/about" contentId="about-content">
         <article className="flex w-full flex-col gap-6 pt-5" aria-labelledby="about-title">
           <header>
-            <div className="flex items-center gap-2.5">
-              <span className="h-7 w-1.5 shrink-0 bg-[#FFD501]" aria-hidden="true" />
-              <h1 id="about-title" className="text-[21px] font-medium leading-tight">{intl("app_about_page.about")}</h1>
-            </div>
-            <p className="mt-3 max-w-3xl text-sm leading-7 text-muted-foreground">{intl("app_about_page.closureInfrastructureTerminalIsAnUnofficialSchedulingAssistantFor")}</p>
+            <h1 id="about-title" className="sr-only">{intl("app_about_page.about")}</h1>
+            <p className="max-w-3xl text-sm leading-7 text-muted-foreground">{intl("app_about_page.closureInfrastructureTerminalIsAnUnofficialSchedulingAssistantFor")}</p>
           </header>
           <section aria-labelledby="contribution-title">
             <h2 id="contribution-title" className="mb-3 flex items-center gap-2.5 text-sm font-medium"><span className="h-5 w-1 shrink-0 bg-[#FFD501]" aria-hidden="true" />{intl("app_about_page.developmentAndContributions")}</h2>

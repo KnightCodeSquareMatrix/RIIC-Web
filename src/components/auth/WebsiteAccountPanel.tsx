@@ -35,6 +35,7 @@ import {
   InfraTechnicalHeading as AccountTechnicalHeading,
 } from "@/components/InfraTechnicalCard";
 import { StatusCenterHeader, StatusCenterLoading } from "@/components/pages/StatusCenterShell";
+import { SkeletonRouteFallback } from "@/components/ui/skeleton-swap";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -287,7 +288,7 @@ export function WebsiteAccountPanel({
   if (isPending && !busy && !message && !error) {
     return loadingMode === "dialog"
       ? <WebsiteAccountLoadingStatus />
-      : <StatusCenterLoading label={intl("components_auth_WebsiteAccountPanel.restoringWebsiteAccount")} />;
+      : <SkeletonRouteFallback><StatusCenterLoading label={intl("components_auth_WebsiteAccountPanel.restoringWebsiteAccount")} /></SkeletonRouteFallback>;
   }
 
   if (session) {

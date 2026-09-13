@@ -276,6 +276,7 @@ function CompactRoomCard({
         className={`${COMPACT_POWER_CARD_CLASS} ${className}`}
         data-room-group={row.group}
         data-room-title={row.title}
+        data-schedule-room={row.roomId}
         style={{ ...rowStyle, ...style }}
       >
         {backgroundLayers}
@@ -293,6 +294,7 @@ function CompactRoomCard({
       className={`${COMPACT_CARD_CLASS} ${className}`}
       data-room-group={row.group}
       data-room-title={row.title}
+      data-schedule-room={row.roomId}
       style={{ ...rowStyle, ...style }}
     >
       {backgroundLayers}
