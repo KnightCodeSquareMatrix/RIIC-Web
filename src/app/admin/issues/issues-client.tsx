@@ -195,19 +195,19 @@ function ReproductionPanel({ state }: { state: DetailState }) {
       {reproduction.error ? (
         <div>
           <h4 className="text-sm font-medium">{intl("app_admin_issues_issues_client.solverError")}</h4>
-          <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-neutral-950 p-3 text-xs leading-5 text-neutral-100">{reproduction.error}</pre>
+          <div data-yeye-scroll="auto" className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-neutral-950 p-3 text-xs leading-5 text-neutral-100"><pre className="m-0 whitespace-[inherit]">{reproduction.error}</pre></div>
         </div>
       ) : null}
       {reproduction.stderrExcerpt ? (
         <details className="rounded-lg bg-muted/55 px-3 py-2.5 text-sm">
           <summary className="min-h-10 cursor-pointer py-2 font-medium">{intl("app_admin_issues_issues_client.viewStderrTail")}</summary>
-          <pre className="max-h-72 overflow-auto whitespace-pre-wrap pb-2 text-xs leading-5 text-muted-foreground">{reproduction.stderrExcerpt}</pre>
+          <div data-yeye-scroll="auto" className="max-h-72 overflow-auto whitespace-pre-wrap pb-2 text-xs leading-5 text-muted-foreground"><pre className="m-0 whitespace-[inherit]">{reproduction.stderrExcerpt}</pre></div>
         </details>
       ) : null}
       {reproduction.stdoutExcerpt ? (
         <details className="rounded-lg bg-muted/55 px-3 py-2.5 text-sm">
           <summary className="min-h-10 cursor-pointer py-2 font-medium">{intl("app_admin_issues_issues_client.viewStdoutTail")}</summary>
-          <pre className="max-h-72 overflow-auto whitespace-pre-wrap pb-2 text-xs leading-5 text-muted-foreground">{reproduction.stdoutExcerpt}</pre>
+          <div data-yeye-scroll="auto" className="max-h-72 overflow-auto whitespace-pre-wrap pb-2 text-xs leading-5 text-muted-foreground"><pre className="m-0 whitespace-[inherit]">{reproduction.stdoutExcerpt}</pre></div>
         </details>
       ) : null}
     </div>
@@ -587,7 +587,7 @@ export function AdminIssues({ isAdmin = false }: { isAdmin?: boolean }) {
               ))}
             </div>
 
-            <div role="group" className="flex gap-1 overflow-x-auto pb-1" aria-label={intl("app_admin_issues_issues_client.filterByFacility")}>
+            <div data-yeye-scroll="auto" role="group" className="flex gap-1 overflow-x-auto pb-1" aria-label={intl("app_admin_issues_issues_client.filterByFacility")}>
               <Button type="button" size="sm" variant={facilityFilter === "all" ? "secondary" : "ghost"} className="shrink-0" aria-pressed={facilityFilter === "all"} onClick={() => setFacilityFilter("all")}>{intl("app_admin_issues_issues_client.allFacilities")}</Button>
               {FACILITY_FILTERS.map((facility) => (
                 <Button key={facility} type="button" size="sm" variant={facilityFilter === facility ? "secondary" : "ghost"} className="shrink-0" aria-pressed={facilityFilter === facility} onClick={() => setFacilityFilter(facility)}>

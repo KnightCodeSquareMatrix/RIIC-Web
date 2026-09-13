@@ -62,6 +62,6 @@ export function ResultPanel({ result, name, versions }: { result: unknown; name:
       const plan = payload.maa.plans[active];
       return <div key={item.bundleId} className="grid min-w-0 gap-3 border-t pt-4"><h3 className="text-sm font-semibold">{t("排班详情", "Schedule details")} · {versionName(item.bundleId)}</h3><div className="max-w-sm"><Choice label={t("查看班次", "View shift")} value={String(active)} options={payload.maa.plans.map((_, i) => ({ value: String(i), label: t(`第 ${i + 1} 班`, `Shift ${i + 1}`) }))} onChange={setShift} /></div><CompactScheduleView layout={data.input.layout} rows={planToRows(plan, payload.rotation?.shifts?.[active], data.input.layout)} activeShift={active} activePlan={plan} shiftDirection={0} feedbackDisabled /></div>;
     })}
-    <details className="rounded-lg border p-3"><summary className="cursor-pointer text-sm font-medium">{t("完整执行记录（JSON）", "Full execution record (JSON)")}</summary><pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-all text-xs">{JSON.stringify(result, null, 2)}</pre></details>
+    <details className="rounded-lg border p-3"><summary className="cursor-pointer text-sm font-medium">{t("完整执行记录（JSON）", "Full execution record (JSON)")}</summary><div data-yeye-scroll="auto" className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-all text-xs"><pre className="m-0 whitespace-[inherit]">{JSON.stringify(result, null, 2)}</pre></div></details>
   </Panel>;
 }

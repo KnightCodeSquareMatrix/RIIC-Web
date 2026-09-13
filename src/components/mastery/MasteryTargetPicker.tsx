@@ -50,8 +50,8 @@ export function MasteryTargetPicker({ operbox, selectedId, onSelect, onClose }: 
       <DialogBody className="min-h-0 overflow-y-auto pb-5">
         <OperatorSearch value={query} onChange={(value) => { setQuery(value); setLimit(OPERATOR_PAGE_SIZE); }} />
         <div className="flex min-w-0 flex-wrap gap-2">
-          <div className="max-w-full overflow-x-auto"><OperatorRarityFilter value={rarity} rarities={[6,5,4]} onChange={(value) => { setRarity(value); setLimit(OPERATOR_PAGE_SIZE); }} /></div>
-          <div className="max-w-full overflow-x-auto"><OperatorProfessionFilter value={profession} onChange={(value) => { setProfession(value); setLimit(OPERATOR_PAGE_SIZE); }} /></div>
+          <div data-yeye-scroll="auto" className="max-w-full overflow-x-auto"><OperatorRarityFilter value={rarity} rarities={[6,5,4]} onChange={(value) => { setRarity(value); setLimit(OPERATOR_PAGE_SIZE); }} /></div>
+          <div data-yeye-scroll="auto" className="max-w-full overflow-x-auto"><OperatorProfessionFilter value={profession} onChange={(value) => { setProfession(value); setLimit(OPERATOR_PAGE_SIZE); }} /></div>
         </div>
         {filtered.length || unsupportedFiltered.length ? <OperatorRosterGrid hasMore={limit < filtered.length} onLoadMore={() => setLimit((value) => value + OPERATOR_PAGE_SIZE)}>
           {filtered.slice(0,limit).map((o) => <button key={o.id} type="button" aria-label={intl("components_mastery_MasteryTargetPicker.select", { value1: (en) ? (localizedOperatorName(o.name,locale,gameCatalog)) : "", name: (en) ? "" : (o.name) })} aria-pressed={selected === o.id}

@@ -77,6 +77,7 @@ function DialogContent({
     <DialogPortal>
       <DialogOverlay layer={layer} />
       <DialogPrimitive.Popup
+        data-yeye-scroll="auto"
         data-slot="dialog-content"
         data-dialog-layer={layer}
         render={(renderProps, state) => (
@@ -137,6 +138,7 @@ function DialogBody({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="dialog-body"
+      data-yeye-scroll="auto"
       className={cn("relative z-[1] grid gap-4 px-5 py-3 sm:px-7", className)}
       {...props}
     />
