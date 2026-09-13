@@ -263,7 +263,7 @@ export function PlanResultSummary({
               <TabsTrigger value="efficiency" className="min-h-11 flex-none px-3">{intl("components_PlanResultSummary.outputImprovements")}</TabsTrigger>
               {comparison ? <TabsTrigger value="comparison" className="min-h-11 flex-none px-3">{intl("components_PlanResultSummary.currentMatch")}</TabsTrigger> : null}
             </TabsList>
-            <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 pb-6" data-plan-details-section={activeDetailSection}>
+            <div data-yeye-scroll="auto" className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 pb-6" data-plan-details-section={activeDetailSection}>
               <TabsContent value="efficiency" className="m-0">
                 <motion.div initial={{ opacity: 0, x: shouldReduceMotion ? 0 : -12 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: shouldReduceMotion ? 0 : MOTION_DURATION.state, ease: MOTION_EASE_OUT }}>
                   <EfficiencyDetails productGroups={productGroups} en={en} solverProduction={solverDaily} droneProduction={rotation?.daily?.drone_production} />

@@ -56,7 +56,7 @@ export function OperatorRarityFilter({ value, onChange, disabled, rarities = [6,
   const intl = useTranslations();
 
   return <Tabs className="min-w-0 shrink-0" value={value} onValueChange={onChange}>
-    <TabsList aria-label={intl("components_operators_OperatorPickerParts.filterByRarity")} className="max-w-full justify-start overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <TabsList aria-label={intl("components_operators_OperatorPickerParts.filterByRarity")} className="max-w-full justify-start overflow-x-auto overflow-y-hidden">
       <TabsTrigger value="all" disabled={disabled}>{intl("components_operators_OperatorPickerParts.all")}</TabsTrigger>
       {rarities.map((rarity) => <TabsTrigger key={rarity} value={String(rarity)} className="font-number" aria-label={intl("components_operators_OperatorPickerParts.starOperators", { rarity: rarity })} disabled={disabled}>{rarity}★</TabsTrigger>)}
     </TabsList>

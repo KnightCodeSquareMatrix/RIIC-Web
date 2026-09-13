@@ -394,7 +394,7 @@ function AnnotationEditor({
                 <Input id="skill-note-operator" autoFocus value={operatorQuery} onChange={(event) => onOperatorQueryChange(event.target.value)} className="h-11 pl-9" placeholder={localize_app_admin_skills_skill_annotations_client.text(en, "searchOperatorOrSkill")} autoComplete="off" />
               </div>
               {operatorQuery.trim() ? (
-                <div className="grid max-h-72 gap-1 overflow-y-auto rounded-xl border p-1" role="listbox" aria-label={localize_app_admin_skills_skill_annotations_client.text(en, "matchingOperators")}>
+                <div data-yeye-scroll="auto" className="grid max-h-72 gap-1 overflow-y-auto rounded-xl border p-1" role="listbox" aria-label={localize_app_admin_skills_skill_annotations_client.text(en, "matchingOperators")}>
                   {matchingOperators.length ? matchingOperators.map((operator) => (
                     <button
                       key={operator.id}

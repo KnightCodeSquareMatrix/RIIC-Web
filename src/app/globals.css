@@ -1001,21 +1001,34 @@ html.schedule-layout-return::view-transition-new(.schedule-room-entering) {
   background: transparent !important;
 }
 
-.yeye-scrollbar {
+@layer base {
+  :where([data-yeye-scroll]) {
+    position: relative;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .os-theme-yeye,
+  .os-theme-yeye .os-scrollbar-handle {
+    transition: none !important;
+  }
+}
+
+:is(.yeye-scrollbar, textarea) {
   scrollbar-color: rgb(148 163 184 / 0.64) transparent;
   scrollbar-width: thin;
 }
 
-.yeye-scrollbar::-webkit-scrollbar {
+:is(.yeye-scrollbar, textarea)::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
-.yeye-scrollbar::-webkit-scrollbar-track {
+:is(.yeye-scrollbar, textarea)::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.yeye-scrollbar::-webkit-scrollbar-thumb {
+:is(.yeye-scrollbar, textarea)::-webkit-scrollbar-thumb {
   min-height: 36px;
   border: 2px solid transparent;
   border-radius: 999px;
@@ -1023,17 +1036,17 @@ html.schedule-layout-return::view-transition-new(.schedule-room-entering) {
   background-clip: content-box;
 }
 
-.yeye-scrollbar::-webkit-scrollbar-thumb:hover {
+:is(.yeye-scrollbar, textarea)::-webkit-scrollbar-thumb:hover {
   background: rgb(148 163 184 / 0.64);
   background-clip: content-box;
 }
 
-.yeye-scrollbar::-webkit-scrollbar-thumb:active {
+:is(.yeye-scrollbar, textarea)::-webkit-scrollbar-thumb:active {
   background: rgb(100 116 139 / 0.7);
   background-clip: content-box;
 }
 
-.yeye-scrollbar::-webkit-scrollbar-corner {
+:is(.yeye-scrollbar, textarea)::-webkit-scrollbar-corner {
   background: transparent;
 }
 
