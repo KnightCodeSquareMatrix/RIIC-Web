@@ -6,6 +6,7 @@ export interface UserSettings {
   showProgressionRecalculate: boolean;
   showManualScheduleEdit: boolean;
   showMower: boolean;
+  highlightNoLayoutSkill: boolean;
   scheduleViewControl: "tabs" | "select";
   linkShiftViewControl: boolean;
   shiftViewControl: "tabs" | "select";
@@ -22,6 +23,7 @@ export const DEFAULT_USER_SETTINGS: UserSettings = {
   showProgressionRecalculate: true,
   showManualScheduleEdit: true,
   showMower: false,
+  highlightNoLayoutSkill: false,
   scheduleViewControl: "tabs",
   linkShiftViewControl: true,
   shiftViewControl: "tabs",
