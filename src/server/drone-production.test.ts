@@ -21,6 +21,14 @@ test("drone trade targets follow the configured priority chain", () => {
   assert.equal(tradeTargetPriority(1, operators("可露希尔")), 100);
 });
 
+test("level 3 Tequila priority accepts every Tailoring operator", () => {
+  const operators = (...names: string[]) => names;
+  for (const tailoringOperator of ["折光", "明椒", "卡夫卡", "柏喙"]) {
+    assert.equal(tradeTargetPriority(3, operators("龙舌兰", tailoringOperator)), 300);
+  }
+  assert.equal(tradeTargetPriority(3, operators("龙舌兰")), 0);
+});
+
 test("automatic allocation selects the highest-priority trade room", () => {
   const layout = {
     template: "153", drone_cap: 0, scenario: {}, rooms: [

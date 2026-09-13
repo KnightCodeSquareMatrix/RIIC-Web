@@ -5,9 +5,9 @@ import { and, eq, gt, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import { PRIVACY_VERSION, TERMS_VERSION } from "@/legal-policy";
 import { normalizePersistedPlanData } from "@/persistence";
 import type { BaseBlueprint, OperBoxEntry, PublicPlanData, SolverObservation } from "@/types";
-import { isPlanCacheEnabled, PLAN_CACHE_TTL_MS, planCacheHmacKey } from "./business-config";
+import { isBusinessDatabaseEnabled, isPlanCacheEnabled, PLAN_CACHE_TTL_MS, planCacheHmacKey } from "./business-config";
 import { getDatabase } from "./db";
-import { planCache, planCacheReference, policyConsent } from "./db/schema";
+import { planCache, planCacheReference, planRun, policyConsent } from "./db/schema";
 import { stablePlanCacheHmac } from "./plan-cache-key";
 import { normalizeSolverOperbox } from "./plan-solver-input";
 import { waitForPlanCache } from "./plan-cache-wait";
@@ -30,7 +30,8 @@ export type PlanCacheResolution = CacheLease | CacheHit | CacheBypass;
 
 export function createPlanCacheKey(input: PlanCacheKeyInput): string | null {
   if (!isPlanCacheEnabled()) return null;
-  if (input.sourceType === "skland") return null;
+  // Skland shares only solver results for the same complete input. Ownership is
+  // recorded per request; credentials never belong in shared public results.
   const sha = input.solver.solver_executable_sha256;
   const protocol = input.solver.protocol_version;
   const schema = input.solver.plan_schema_version;
@@ -208,4 +209,15 @@ export async function evictPlanCacheKeys(keys: string[]): Promise<void> {
 
 export async function evictUserPlanCaches(userId: string): Promise<void> {
   await evictPlanCacheKeys(await userPlanCacheKeys(userId));
+}
+
+export async function evictSklandPlanCaches(userId: string): Promise<void> {
+  if (!isBusinessDatabaseEnabled()) return;
+  const rows = await getDatabase().selectDistinct({ key: planCacheReference.cacheKeyHmac })
+    .from(planCacheReference)
+    .innerJoin(planRun, eq(planRun.diagnosticId, planCacheReference.diagnosticId))
+    .where(and(eq(planCacheReference.userId, userId), eq(planRun.sourceType, "skland")));
+  // A shared entry is cheap to rebuild; deleting it also removes all references.
+  // Do not leave a copy of the deleted account's derived result in the cache.
+  await evictPlanCacheKeys(rows.map((row) => row.key));
 }

@@ -80,7 +80,10 @@ const {
   updatePlanRunArtifactBestEffort,
 } = await import("./business-records.ts");
 const { getDatabase } = await import("./db/index.ts");
-const { resolvePlanCache, releasePlanCacheLease } = await import("./plan-cache.ts");
+const {
+  createPlanCacheKey, resolvePlanCache, lookupPlanCache, completePlanCache,
+  releasePlanCacheLease, recordPlanCacheReferenceBestEffort, evictSklandPlanCaches,
+} = await import("./plan-cache.ts");
 const {
   resumePendingPlanArtifactFinalizations,
   waitForPlanArtifactFinalizers,
@@ -117,7 +120,7 @@ test("hourly business retention drains multiple telemetry batches without a plan
   }
 });
 
-test("an expired cache lease is replaceable but the previous owner cannot release its replacement", async () => {
+for (const sourceType of ["sample", "skland"]) test(`${sourceType}: an expired cache lease is replaceable but the previous owner cannot release its replacement`, async () => {
   const pool = new Pool({ connectionString: databaseUrl, max: 2 });
   const previousEnabled = process.env.PLAN_CACHE_ENABLED;
   const previousKey = process.env.PLAN_CACHE_HMAC_KEY;
@@ -127,7 +130,7 @@ test("an expired cache lease is replaceable but the previous owner cannot releas
     process.env.PLAN_CACHE_HMAC_KEY = "integration-cache-key-not-a-production-secret";
     const input = {
       layout: { template: "243", rooms: [] }, operbox: [],
-      sourceType: "sample", sourceName: randomUUID(), rotation: "abc_12_6_6", fiammettaEnable: false,
+      sourceType, sourceName: randomUUID(), rotation: "abc_12_6_6", fiammettaEnable: false,
       solver: { solver_executable_sha256: "a".repeat(64), protocol_version: 1, plan_schema_version: 3 },
     };
     const first = await resolvePlanCache(input);
@@ -140,7 +143,6 @@ test("an expired cache lease is replaceable but the previous owner cannot releas
     await releasePlanCacheLease(first);
     const row = await pool.query("SELECT lease_owner FROM app.plan_cache WHERE key_hmac=$1", [keyHmac]);
     assert.equal(row.rows[0].lease_owner, second.leaseOwner);
-    assert.deepEqual(await resolvePlanCache({ ...input, sourceType: "skland" }), { kind: "bypass" });
     await releasePlanCacheLease(second);
     assert.equal((await pool.query("SELECT key_hmac FROM app.plan_cache WHERE key_hmac=$1", [keyHmac])).rowCount, 0);
   } finally {
@@ -149,6 +151,120 @@ test("an expired cache lease is replaceable but the previous owner cannot releas
     if (previousKey === undefined) delete process.env.PLAN_CACHE_HMAC_KEY;
     else process.env.PLAN_CACHE_HMAC_KEY = previousKey;
     if (keyHmac) await pool.query("DELETE FROM app.plan_cache WHERE key_hmac=$1", [keyHmac]).catch(() => undefined);
+    await pool.end();
+  }
+});
+
+test("Skland shared cache reuses results across users, isolates diagnostics, and supports scoped deletion", async () => {
+  const pool = new Pool({ connectionString: databaseUrl, max: 2 });
+  const previousEnabled = process.env.PLAN_CACHE_ENABLED;
+  const previousKey = process.env.PLAN_CACHE_HMAC_KEY;
+  const users = [randomUUID(), randomUUID()];
+  const runIds = [];
+  const cacheKeys = [];
+  try {
+    process.env.PLAN_CACHE_ENABLED = "1";
+    process.env.PLAN_CACHE_HMAC_KEY = "integration-cache-key-not-a-production-secret";
+    await insertIntegrationUsers(pool, users);
+    const input = {
+      layout: { template: "243", drone_cap: 235, scenario: {}, rooms: [] },
+      operbox: [{ id: "char_1", name: "测试干员", own: true, elite: 2, level: 90, potential: 1, rarity: 6 }],
+      sourceType: "skland", sourceName: `森空岛同步-${randomUUID()}`,
+      rotation: "abc_12_6_6", fiammettaEnable: false,
+      solver: { solver_executable_sha256: "a".repeat(64), protocol_version: 1, plan_schema_version: 3 },
+    };
+    const key = createPlanCacheKey(input);
+    assert.match(key, /^[a-f0-9]{64}$/);
+    for (const changed of [
+      { ...input, operbox: [{ ...input.operbox[0], level: 89 }] },
+      { ...input, layout: { ...input.layout, drone_cap: 0 } },
+      { ...input, rotation: "abc_12_12_12" },
+      { ...input, fiammettaEnable: true },
+      { ...input, sourceName: "different source" },
+      { ...input, solver: { ...input.solver, solver_executable_sha256: "b".repeat(64) } },
+      { ...input, solver: { ...input.solver, protocol_version: 2 } },
+      { ...input, solver: { ...input.solver, plan_schema_version: 4 } },
+    ]) assert.notEqual(createPlanCacheKey(changed), key);
+    assert.equal(createPlanCacheKey({ ...input, solver: {} }), null);
+
+    const result = {
+      profile: { schema_version: 4, rotation_profile: input.rotation, layout_label: "243",
+        operbox_label: input.sourceName, baseline_label: "产品推荐基准",
+        summary: { owned: 1, tier_up_owned: 1, trade_pool_ready: 1 },
+        domains: [], rotation: {}, baseline_rotation: {}, actions: [], flags: [], narration_hints: [] },
+      maa: { title: "排班", plans: [] },
+      rotation: { profile: input.rotation, shifts: [], daily: { trade: null, manufacture: null, power: null } },
+      diagnosticId: randomUUID(), durationMs: 700,
+      debug: { command: "private-command", stdout: "private-token" },
+      userId: users[0], dataOwnerTag: "private-owner-tag", credential: "private-credential",
+    };
+    async function reference(leaseOrHit, userId, executionSource, sourceType = "skland") {
+      const diagnosticId = leaseOrHit.result?.diagnosticId ?? randomUUID();
+      runIds.push(diagnosticId);
+      await pool.query(`INSERT INTO app.plan_run
+        (diagnostic_id,user_id,source_type,status,layout_template,room_count,operator_count,rotation,fiammetta_enable,execution_source,expires_at)
+        VALUES ($1,$2,$3,'success','243',0,1,'abc_12_6_6',false,$4,now()+interval '1 day')`,
+        [diagnosticId, userId, sourceType, executionSource]);
+      assert.equal(await recordPlanCacheReferenceBestEffort({ cacheKeyHmac: leaseOrHit.keyHmac, diagnosticId, userId }), true);
+    }
+
+    const before = await queryAdminSolverMetrics();
+    const lease = await resolvePlanCache(input);
+    assert.equal(lease.kind, "lease");
+    cacheKeys.push(lease.keyHmac);
+    await reference(lease, users[0], "solver");
+    await completePlanCache(lease, result);
+    const hit = await lookupPlanCache(globalThis.structuredClone(input));
+    assert.equal(hit.kind, "hit");
+    await reference(hit, users[1], "cache");
+    const workerHit = await resolvePlanCache(input);
+    assert.equal(workerHit.kind, "hit");
+    assert.notEqual(hit.result.diagnosticId, result.diagnosticId);
+    assert.notEqual(workerHit.result.diagnosticId, hit.result.diagnosticId);
+    assert.deepEqual(workerHit.result.maa, hit.result.maa);
+    const stored = (await pool.query("SELECT public_result FROM app.plan_cache WHERE key_hmac=$1", [key])).rows[0].public_result;
+    assert.equal(stored.diagnosticId, "cache-template");
+    for (const value of [stored, hit.result, workerHit.result]) {
+      assert.equal(value.debug, undefined);
+      assert.equal(value.userId, undefined);
+      assert.equal(value.dataOwnerTag, undefined);
+      assert.equal(value.credential, undefined);
+      assert.doesNotMatch(JSON.stringify(value), /private-command|private-token|private-owner-tag|private-credential/);
+    }
+    const after = await queryAdminSolverMetrics();
+    assert.equal(after.cache.hitCount, before.cache.hitCount + 1);
+    assert.equal(after.cache.missCount, before.cache.missCount + 1);
+
+    // Deleting Skland data must not evict this user's unrelated MAA cache.
+    const maaInput = { ...input, sourceType: "maa" };
+    const maaLease = await resolvePlanCache(maaInput);
+    assert.equal(maaLease.kind, "lease");
+    cacheKeys.push(maaLease.keyHmac);
+    await reference(maaLease, users[0], "solver", "maa");
+    await completePlanCache(maaLease, result);
+    await evictSklandPlanCaches(users[0]);
+    assert.equal((await lookupPlanCache(input)).kind, "bypass");
+    assert.equal((await lookupPlanCache(maaInput)).kind, "hit");
+    assert.equal((await pool.query("SELECT id FROM app.plan_cache_reference WHERE cache_key_hmac=$1", [key])).rowCount, 0);
+    await completePlanCache(lease, result); // A deleted lease cannot republish.
+    assert.equal((await lookupPlanCache(input)).kind, "bypass");
+
+    const replacement = await resolvePlanCache(input);
+    assert.equal(replacement.kind, "lease");
+    await completePlanCache(replacement, result);
+    await pool.query("UPDATE app.plan_cache SET expires_at=now()-interval '1 second' WHERE key_hmac=$1", [key]);
+    assert.equal((await lookupPlanCache(input)).kind, "bypass");
+    process.env.PLAN_CACHE_ENABLED = "0";
+    assert.equal(createPlanCacheKey(input), null);
+    assert.equal((await resolvePlanCache(input)).kind, "bypass");
+  } finally {
+    if (previousEnabled === undefined) delete process.env.PLAN_CACHE_ENABLED;
+    else process.env.PLAN_CACHE_ENABLED = previousEnabled;
+    if (previousKey === undefined) delete process.env.PLAN_CACHE_HMAC_KEY;
+    else process.env.PLAN_CACHE_HMAC_KEY = previousKey;
+    await pool.query("DELETE FROM app.plan_cache WHERE key_hmac=ANY($1::text[])", [cacheKeys]);
+    await pool.query("DELETE FROM app.plan_run WHERE diagnostic_id=ANY($1::text[])", [runIds]);
+    await pool.query('DELETE FROM "user" WHERE id=ANY($1::text[])', [users]);
     await pool.end();
   }
 });
