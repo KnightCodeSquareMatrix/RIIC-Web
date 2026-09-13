@@ -782,7 +782,7 @@ export function ManualSchedulePage({
           </DialogHeader>
           <SkeletonSuspense className="min-h-0 [&>[data-skeleton-swap-content]]:grid [&>[data-skeleton-swap-content]]:min-h-0" fallback={<div className="grid min-h-64 content-start gap-3 px-5 pb-5 sm:px-7"><Skeleton className="h-11" /><Skeleton className="h-24" /><div className="grid grid-cols-4 gap-3">{Array.from({ length: 4 }, (_, index) => <Skeleton key={index} className="h-20" />)}</div></div>}>
           <ScrollArea className="min-h-0" viewportClassName="overflow-x-hidden" viewportProps={{ ref: pickerScrollContainerRef, onScroll: handlePickerScroll }}>
-          <DialogBody className="block pt-0 pb-5 sm:pb-6" data-manual-operator-picker>
+          <DialogBody className="block pt-1 pb-5 sm:pb-6" data-manual-operator-picker>
             <div className="mb-3">
               <OperatorSearch
                 autoFocus
