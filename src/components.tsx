@@ -614,7 +614,7 @@ export function ShiftTabs({
           "max-w-full justify-start tracking-[0.01em]",
           wrap
             ? "h-auto flex-wrap overflow-visible"
-            : "overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+            : "overflow-x-auto overflow-y-hidden",
         )}
         data-shift-tabs
         data-ui-number-font

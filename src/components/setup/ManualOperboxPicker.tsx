@@ -467,15 +467,15 @@ export function ManualOperboxPicker({
           className="grid min-w-0 gap-1.5"
           data-upgrade-operbox-filters
         >
-          <div
-            className="flex min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto pb-1 [scrollbar-width:thin]"
+          <div data-yeye-scroll="auto"
+            className="flex min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto pb-1"
             data-upgrade-operbox-schedule-filters
           >
             {rosterScopeTabs}
             {scheduledShiftTabs}
           </div>
-          <div
-            className="flex min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto pb-1 [scrollbar-width:thin]"
+          <div data-yeye-scroll="auto"
+            className="flex min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto pb-1"
             data-upgrade-operbox-operator-filters
           >
             <div className="flex shrink-0 items-center gap-1" data-manual-operbox-rarity-filter>
@@ -492,7 +492,7 @@ export function ManualOperboxPicker({
         </div>
       ) : (
         <>
-          <div className="flex min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto pb-1 [scrollbar-width:thin]">
+          <div data-yeye-scroll="auto" className="flex min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto pb-1">
             <div className="flex shrink-0 items-center gap-1" data-manual-operbox-rarity-filter>
               <div className="shrink-0 text-xs font-medium text-muted-foreground">{intl("components_setup_ManualOperboxPicker.rarity")}</div>
               {rarityTabs}

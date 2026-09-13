@@ -246,7 +246,7 @@ export function Drawer({
           <div className="min-w-0 flex-1"><h2 id={titleId} className="truncate font-heading text-base font-semibold">{title}</h2>{description ? <p className="mt-0.5 truncate text-xs text-[#313131]/58">{description}</p> : null}</div>
           <Button type="button" variant="ghost" size="icon" className="-mr-2 size-10" aria-label={intl("components_ui_drawer.closeDetails")} onPointerDown={(event) => event.stopPropagation()} onClick={close}><XIcon /><span className="sr-only">{intl("components_ui_drawer.closeDetails")}</span></Button>
         </header>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain" data-slot="drawer-body">{children}</div>
+        <div data-yeye-scroll="auto" className="min-h-0 flex-1 overflow-y-auto overscroll-contain" data-slot="drawer-body">{children}</div>
         <span id={hintId} className="sr-only">{intl("components_ui_drawer.pressEscapeToCloseThePanelOrDragThe")}</span>
       </motion.div>
     </div>,

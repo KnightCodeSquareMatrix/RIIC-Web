@@ -42,12 +42,12 @@ export function DiagnosticsPanel() {
       <p className="text-sm text-muted-foreground"><span className="font-number">{time(report.from)}–{time(report.to)}</span> · {t("timezone")} · {t("occurrences")} <span className="font-number">{report.total}</span> · {t("groups")} <span className="font-number">{report.groups.length}</span></p>
       {!report.configured && <p role="alert" className="mt-3 text-sm">{t("unconfigured")}</p>}
       {report.truncated && <p role="alert" className="mt-3 text-sm">{t("truncated")}</p>}
-      <div className="mt-4 max-h-[32rem] overflow-auto rounded-lg border">
+      <div data-yeye-scroll="auto" className="mt-4 max-h-[32rem] overflow-auto rounded-lg border">
         <table className="w-full min-w-[40rem] text-left text-sm"><thead className="sticky top-0 bg-muted"><tr>{(["category","code","route","reason","count"] as const).map(key=><th key={key} scope="col" className="p-3 font-medium">{t(key)}</th>)}</tr></thead>
           <tbody>{groups.map(group=><tr key={group.fingerprint} className="border-t align-top"><td className="p-3">{t(`categories.${group.category}`)}</td><td className="p-3 font-number">{group.code}</td><td className="max-w-52 break-all p-3"><span className="font-mono">{group.method} {group.route}</span></td><td className="max-w-md break-words p-3">{group.reason}</td><td className="p-3 font-number">{group.count}</td></tr>)}</tbody>
         </table>{!groups.length && <p className="p-4 text-sm text-muted-foreground">{t("empty")}</p>}
       </div>
-      <details className="mt-4"><summary className="cursor-pointer text-sm font-medium">{t("recent")}</summary><p className="mt-2 text-sm text-muted-foreground">{t("recentHint")}</p><div className="mt-3 grid max-h-96 gap-3 overflow-auto">{recent.map((row,index)=><article key={`${row.requestId}-${index}`} className="min-w-0 rounded-lg border p-3 text-xs leading-5">
+      <details className="mt-4"><summary className="cursor-pointer text-sm font-medium">{t("recent")}</summary><p className="mt-2 text-sm text-muted-foreground">{t("recentHint")}</p><div data-yeye-scroll="auto" className="mt-3 grid max-h-96 gap-3 overflow-auto">{recent.map((row,index)=><article key={`${row.requestId}-${index}`} className="min-w-0 rounded-lg border p-3 text-xs leading-5">
         <p className="font-number">{time(row.at)} · {row.code} · {row.status} · {row.durationMs} ms</p>
         <p className="break-all font-mono">requestId: {row.requestId}{row.diagnosticId ? ` · diagnosticId: ${row.diagnosticId}` : ""}</p>
         <p className="break-all font-mono">release: {row.release} · client: {row.clientVersion} · schema: {row.clientSchema}</p>

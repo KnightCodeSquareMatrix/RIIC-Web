@@ -56,7 +56,7 @@ export function HelpFloatingNav() {
           sideOffset={12}
           className="isolate z-50"
         >
-          <PopoverPrimitive.Popup
+          <PopoverPrimitive.Popup data-yeye-scroll="auto"
             data-help-floating-panel
             render={(renderProps, state) => (
               <motion.div
