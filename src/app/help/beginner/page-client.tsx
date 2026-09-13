@@ -9,6 +9,18 @@ import { tutorialVideoUrl } from "@/tutorial-videos";
 
 const bilibiliTutorials = [
   {
+    src: tutorialVideoUrl("export-maa.mp4"),
+    duration: "00:44",
+    title: "将排班导出到 MAA",
+    titleEn: "Export a schedule to MAA",
+    category: "MAA 使用",
+    categoryEn: "MAA WORKFLOW",
+    cover: "导出到 MAA",
+    coverEn: "Export to MAA",
+    description: "演示如何将排班导出到 MAA 使用。",
+    descriptionEn: "See how to export a schedule to MAA.",
+  },
+  {
     bvid: "BV1hi4y1e7eD",
     src: tutorialVideoUrl("manual-schedule-audio.mp4"),
     duration: "04:56",
@@ -65,7 +77,7 @@ export default function BeginnerTutorialPage() {
         </article>
 
         {bilibiliTutorials.map((tutorial, index) => (
-          <article key={tutorial.bvid} className="min-w-0">
+          <article key={tutorial.src} className="min-w-0">
             <TutorialVideo
               src={tutorial.src}
               title={en ? tutorial.titleEn : tutorial.title}
@@ -87,9 +99,9 @@ export default function BeginnerTutorialPage() {
               <span className="text-xs text-muted-foreground">{en ? "ON-SITE VIDEO" : "站内播放"} · {tutorial.duration}</span>
               <h2 className="mt-2 text-lg font-semibold">{en ? tutorial.titleEn : tutorial.title}</h2>
               <p className="mt-2 text-sm leading-6 text-muted-foreground">{en ? tutorial.descriptionEn : tutorial.description}</p>
-              <a href={`https://www.bilibili.com/video/${tutorial.bvid}/`} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex min-h-11 items-center gap-2 text-sm underline underline-offset-4 outline-none hover:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring" data-bilibili-tutorial={tutorial.bvid}>
+              {tutorial.bvid ? <a href={`https://www.bilibili.com/video/${tutorial.bvid}/`} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex min-h-11 items-center gap-2 text-sm underline underline-offset-4 outline-none hover:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring" data-bilibili-tutorial={tutorial.bvid}>
                 {en ? "Original video on Bilibili" : "B站原视频"}<ExternalLink className="size-4" aria-hidden="true" />
-              </a>
+              </a> : null}
             </div>
           </article>
         ))}
