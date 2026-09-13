@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
 import type { ShiftDirection } from "@/motion";
 import { onboardingStepStatuses, shouldShowAnonymousSampleTrial } from "@/onboarding";
 import type { RoomRow } from "@/schedule";
+import { buildingSkillPrefixFor, OPERATOR_CATALOG } from "@/operatorPortraits";
 import type {
   BaseBlueprint,
   FeedbackData,
@@ -428,6 +429,9 @@ export function InfraCalculator(props: InfraCalculatorProps) {
   const [imageExportFailed, setImageExportFailed] = useState(false);
   const [sortRoomId, setSortRoomId] = useState<string | null>(null);
   const [sortSelection, setSortSelection] = useState<{ roomId: string; slotIndex: number } | null>(null);
+  const [highlightNoLayoutSkill, setHighlightNoLayoutSkill] = useState(false);
+  const layoutSkillPrefixes = useMemo(() => new Set(layout.rooms.map((room) => ({ control_center: "control", trade_post: "trade", factory: "manu", power_plant: "power", dormitory: "dormitory", office: "hire", meeting_room: "meet", workshop: "workshop", training_room: "train" } as Record<string, string>)[room.kind]).filter(Boolean)), [layout]);
+  const noLayoutSkillOperators = useMemo(() => new Set(OPERATOR_CATALOG.filter((operator) => !operator.buildingSkills.some((skill) => layoutSkillPrefixes.has(buildingSkillPrefixFor(skill.id)))).map((operator) => operator.name)), [layoutSkillPrefixes]);
   const imageExportInFlight = useRef(false);
 
   function toggleSortMode(row: RoomRow) {
@@ -728,7 +732,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                 onOpenSetup={onOpenSetup}
                 onDismissOnboarding={onDismissOnboarding}
               />
-            ) : rows.length > 0 ? <ScheduleBoard
+            ) : rows.length > 0 ? <><div className="mb-3 flex justify-end"><Button type="button" variant={highlightNoLayoutSkill ? "default" : "outline"} size="sm" onClick={() => setHighlightNoLayoutSkill((value) => !value)} aria-pressed={highlightNoLayoutSkill}><SlidersHorizontal />{highlightNoLayoutSkill ? "关闭无布局功能高亮" : "高亮无布局功能干员"}</Button></div><ScheduleBoard
               rows={rows}
               layout={layout}
               planRevision={scheduleResult?.diagnosticId}
@@ -766,9 +770,11 @@ export function InfraCalculator(props: InfraCalculatorProps) {
               onSortSlotClick={allowReplacementOperatorSort && onSwapOperators ? handleSortSlotClick : undefined}
               viewModeControl={scheduleViewControl}
               hideImages={!showImages}
+              highlightNoLayoutSkill={highlightNoLayoutSkill}
+              noLayoutSkillOperators={noLayoutSkillOperators}
               droneTargetRoomId={droneTargetRoomId}
               onDroneTargetChange={manualDroneSelection ? onDroneTargetChange : undefined}
-            /> : (
+            /></> : (
               <div className="flex min-h-[420px] items-center justify-center border-y border-dashed border-border/70 py-6 text-center text-sm text-muted-foreground">
                 {intl("components_pages_InfraCalculator.noLayoutRoomsToDisplay")}
               </div>
