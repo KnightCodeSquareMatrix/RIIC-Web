@@ -1001,6 +1001,12 @@ html.schedule-layout-return::view-transition-new(.schedule-room-entering) {
   background: transparent !important;
 }
 
+/* The library defaults to z-index: 99999. Page decoration must stay below
+   modal backdrops (z-50), so dragging it cannot bypass background scroll locks. */
+body > .os-theme-yeye {
+  z-index: 40;
+}
+
 @layer base {
   :where([data-yeye-scroll]) {
     position: relative;
