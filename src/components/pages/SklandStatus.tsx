@@ -52,6 +52,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { RemoteAvatar } from "@/components/ui/remote-avatar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SkeletonRouteFallback } from "@/components/ui/skeleton-swap";
 import { HoldToConfirm } from "@/components/ui/hold-to-confirm";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LevelDiamonds, OperatorSlot, roomVisualFor } from "@/components";
@@ -1409,9 +1410,9 @@ function LoadingState() {
   const intl = useTranslations();
 
   return (
-    <StatusCenterPage data-skland-page>
+    <SkeletonRouteFallback><StatusCenterPage data-skland-page>
       <StatusCenterLoading label={intl("components_pages_SklandStatus.restoringSklandSession")} />
-    </StatusCenterPage>
+    </StatusCenterPage></SkeletonRouteFallback>
   );
 }
 

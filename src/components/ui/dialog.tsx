@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
-import { motion, type HTMLMotionProps } from "motion/react"
+import { motion, useReducedMotion, type HTMLMotionProps } from "motion/react"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -64,11 +64,15 @@ function DialogContent({
   children,
   showCloseButton = true,
   layer = "base",
+  fromSkeleton = false,
   ...props
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean
   layer?: "base" | "nested"
+  fromSkeleton?: boolean
 }) {
+  const reduced = useReducedMotion()
+  const soften = fromSkeleton && !reduced
   return (
     <DialogPortal>
       <DialogOverlay layer={layer} />
@@ -78,10 +82,11 @@ function DialogContent({
         render={(renderProps, state) => (
           <motion.div
             {...(renderProps as unknown as HTMLMotionProps<"div">)}
-            initial={{ opacity: 0, scale: 0.97 }}
+            initial={{ opacity: 0, scale: soften ? 0.99 : 0.97, ...(soften ? { filter: "blur(4px)" } : {}) }}
             animate={{
               opacity: state.open ? 1 : 0,
               scale: state.open ? 1 : 0.97,
+              ...(soften ? { filter: state.open ? "blur(0px)" : "blur(3px)", transitionEnd: { filter: "none" } } : {}),
             }}
             transition={{
               duration: state.open ? 0.3 : MOTION_DURATION.fast,

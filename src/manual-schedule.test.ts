@@ -20,6 +20,8 @@ import {
   resizeManualShiftDurations,
   setManualDormAutofill,
   updateManualShiftBoundary,
+  moveManualShiftBoundaryByHour,
+  snapManualShiftDurationsToHours,
   setManualDroneTarget,
   swapManualOperators,
 } from "./manual-schedule.ts";
@@ -85,6 +87,31 @@ test("manual shift boundaries use minute precision, stay contiguous and cover on
     { startTime: "02:15", endTime: "08:14", durationMinutes: 360 },
   ]);
   assert.equal(updateManualShiftBoundary("08:15", durations, 0, "02:15"), null);
+});
+
+test("hourly timeline boundaries snap, cannot cross and retain a complete day", () => {
+  const source = [12, 6, 6];
+  assert.deepEqual(moveManualShiftBoundaryByHour(source, 0, 9.4), [9, 9, 6]);
+  assert.deepEqual(moveManualShiftBoundaryByHour(source, 0, 23), [17, 1, 6]);
+  assert.deepEqual(moveManualShiftBoundaryByHour(source, 0, -5), [1, 17, 6]);
+  assert.deepEqual(moveManualShiftBoundaryByHour(source, 1, 22.8), [12, 11, 1]);
+  assert.deepEqual(source, [12, 6, 6]);
+  assert.deepEqual(moveManualShiftBoundaryByHour([24], 0, 5), [24]);
+  assert.deepEqual(moveManualShiftBoundaryByHour(source, 0, NaN), source);
+  for (let count = 1; count <= 12; count++) {
+    const hours = snapManualShiftDurationsToHours(resizeManualShiftDurations(source, count));
+    assert.equal(hours.length, count);
+    assert.equal(hours.reduce((sum, hour) => sum + hour, 0), 24);
+    assert.ok(hours.every(hour => Number.isInteger(hour) && hour >= 1));
+  }
+  const legacy = [11.75, 6.25, 6];
+  assert.deepEqual(snapManualShiftDurationsToHours(legacy), [12, 6, 6]);
+  assert.deepEqual(legacy, [11.75, 6.25, 6]);
+  assert.deepEqual(manualShiftTimeRanges("23:00", moveManualShiftBoundaryByHour(source, 0, 3)), [
+    { startTime: "23:00", endTime: "01:59", durationMinutes: 180 },
+    { startTime: "02:00", endTime: "16:59", durationMinutes: 900 },
+    { startTime: "17:00", endTime: "22:59", durationMinutes: 360 },
+  ]);
 });
 
 test("legacy manual drafts gain a start time and a 24-hour cycle", () => {

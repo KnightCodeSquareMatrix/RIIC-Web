@@ -228,21 +228,42 @@ test("manual scheduling configures independent shifts, moves conflicts and enabl
   await setup.getByRole("button", { name: "继续", exact: true }).click();
   await expect(setup.locator("[data-manual-shift-settings]")).toBeVisible();
   await expect(setup.getByRole("combobox", { name: "换班方式" })).toHaveCount(0);
-  await expect(setup.getByRole("radio", { name: /顺序轮换/ })).toHaveAttribute("aria-checked", "true");
-  await setup.getByRole("radio", { name: /时间区间/ }).click();
-  await expect(setup.getByLabel("班次 1 开始时间")).toHaveValue("08:00");
-  await setup.getByLabel("班次 1 开始时间").fill("08:15");
-  await setup.getByLabel("班次 1 结束时间").fill("19:59");
-  await expect(setup.getByLabel("班次 2 开始时间")).toHaveValue("20:00");
-  await expect(setup.getByLabel("班次 2 开始时间")).toBeDisabled();
+  const modeTabs = setup.getByRole("tablist", { name: "排班模式" });
+  await expect(modeTabs.locator('[data-slot="tabs-indicator"]')).toHaveCount(1);
+  await expect(modeTabs.getByRole("tab", { name: /顺序轮换/ })).toHaveAttribute("aria-selected", "true");
+  await modeTabs.getByRole("tab", { name: /时间区间/ }).click();
+  const shiftCount = setup.getByRole("group", { name: "班次数", exact: true });
+  const decreaseShift = shiftCount.getByRole("button", { name: "减少一个班次" });
+  const increaseShift = shiftCount.getByRole("button", { name: "增加一个班次" });
+  await expect(shiftCount.locator("output")).toHaveText("3");
+  await expect(increaseShift).toBeDisabled();
+  await decreaseShift.click();
+  await decreaseShift.click();
+  await expect(shiftCount.locator("output")).toHaveText("1");
+  await expect(decreaseShift).toBeDisabled();
+  await increaseShift.click();
+  await increaseShift.click();
+  await expect(shiftCount.locator("output")).toHaveText("3");
+  await expect(increaseShift).toBeDisabled();
+  await expect(shiftCount.locator("[data-setup-stepper]")).toHaveCount(1);
+  await expect(setup.getByRole("group", { name: "首班开始", exact: true }).locator("[data-setup-stepper]")).toHaveCount(1);
+  await expect(setup.locator('input[type="time"]')).toHaveCount(0);
+  await expect(setup.getByLabel("班次 1 开始时间")).toHaveText("08:00");
+  await setup.getByRole("button", { name: "首班推迟一小时" }).click();
+  const firstBoundary = setup.getByRole("slider", { name: "班次 1 与班次 2 的分界" });
+  await firstBoundary.focus();
+  await page.keyboard.press("ArrowLeft");
+  await expect(firstBoundary).toHaveAttribute("aria-valuenow", "11");
+  await expect(setup.locator("[data-shift-hour-cells] > span")).toHaveCount(24);
+  await expect(setup.locator("[data-shift-timeline-legend]")).toContainText("20:00");
   await setup.getByRole("button", { name: "减少一个班次" }).click();
-  await expect(setup.getByLabel("班次 2 结束时间")).toHaveValue("08:14");
-  await expect(setup.getByLabel("班次 2 结束时间")).toBeDisabled();
+  await expect(setup.getByRole("slider")).toHaveCount(1);
+  await expect(setup.locator("[data-shift-timeline-legend]")).toContainText("08:59");
   await setup.getByRole("checkbox", { name: /未启用/ }).click();
   await setup.getByRole("button", { name: "继续", exact: true }).click();
   await setup.getByRole("button", { name: "完成", exact: true }).click();
 
-  await expect(page.getByRole("tab", { name: /班次 1.*08:15至19:59.*11小时45分钟/ })).toBeVisible();
+  await expect(page.getByRole("tab", { name: /班次 1.*09:00至19:59.*11小时/ })).toBeVisible();
   await expect(page.locator("[data-manual-shift-actions] [data-shift-tabs]").getByRole("tab")).toHaveCount(2);
   const manualShiftActions = scheduleToolbar;
   const moraleTarget = manualShiftActions.getByRole("button", { name: "选择换心情目标" });
@@ -386,7 +407,7 @@ test("manual scheduling configures independent shifts, moves conflicts and enabl
   await expect(dorm.locator('[data-operator-identity="autofill"]')).toHaveCount(0);
   await expect(dormAutofill).toHaveAttribute("aria-pressed", "false");
 
-  await page.getByRole("tab", { name: /班次 2.*20:00至08:14.*12小时15分钟/ }).click();
+  await page.getByRole("tab", { name: /班次 2.*20:00至08:59.*13小时/ }).click();
   await moraleTarget.click();
   await expect(page.getByRole("dialog").locator("[data-manual-operator-choice]")).toHaveCount(0);
   await page.keyboard.press("Escape");
@@ -400,7 +421,7 @@ test("manual scheduling configures independent shifts, moves conflicts and enabl
   await expect(clearShiftDialog).toContainText("其他班次不会改变");
   await clearShiftDialog.getByRole("button", { name: "清空当前班次" }).click();
   await expect(factory.locator('[data-operator-identity="阿米娅"]')).toHaveCount(0);
-  await page.getByRole("tab", { name: /班次 1.*08:15至19:59.*11小时45分钟/ }).click();
+  await page.getByRole("tab", { name: /班次 1.*09:00至19:59.*11小时/ }).click();
   await expect(trade.locator('[data-operator-identity="锡兰"]')).toBeVisible();
   expect(planRequests).toBe(0);
 
@@ -413,6 +434,8 @@ test("manual scheduling configures independent shifts, moves conflicts and enabl
   for await (const chunk of stream) chunks.push(Buffer.from(chunk));
   const exported = JSON.parse(Buffer.concat(chunks).toString("utf8"));
   expect(exported).toMatchObject({ title: "手动排班 · 243", planTimes: "2班" });
+  expect(exported.plans[0].period).toEqual([["09:00", "19:59"]]);
+  expect(exported.plans[1].period).toEqual([["20:00", "23:59"], ["00:00", "08:59"]]);
   expect(exported.plans[0].drones).toEqual({ enable: true, room: "manufacture", index: 1, rule: "all", order: "pre" });
   expect(exported.plans[1].drones).toBeUndefined();
   for (const plan of exported.plans) {

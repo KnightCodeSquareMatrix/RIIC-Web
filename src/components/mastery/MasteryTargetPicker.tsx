@@ -42,7 +42,7 @@ export function MasteryTargetPicker({ operbox, selectedId, onSelect, onClose }: 
       && (!deferred || [o.name, o.id, localizedOperatorName(o.name, locale, gameCatalog)].some((name) => name.toLocaleLowerCase().includes(deferred)));
   });
   return <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-    <DialogContent className="max-h-[90dvh] grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-[min(880px,calc(100vw-2rem))]" data-mastery-target-picker>
+    <DialogContent fromSkeleton className="max-h-[90dvh] grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-[min(880px,calc(100vw-2rem))]" data-mastery-target-picker>
       <DialogHeader>
         <DialogTitle>{intl("components_mastery_MasteryTargetPicker.chooseATrainee")}</DialogTitle>
         <DialogDescription>{intl("components_mastery_MasteryTargetPicker.ownedE2OperatorsInYourCurrentBoxThisSelection", { length: eligible.length })}</DialogDescription>

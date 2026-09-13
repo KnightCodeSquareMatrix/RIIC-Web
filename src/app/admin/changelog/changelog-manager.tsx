@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SkeletonSwap } from "@/components/ui/skeleton-swap";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AppMotionProvider } from "@/components/MotionProvider";
@@ -122,7 +123,8 @@ export function ChangelogManager() {
               <Input aria-label={t("searchReleases")} placeholder={t("searchPlaceholder")} value={query} onChange={(event) => setQuery(event.target.value)} className="h-11" />
               <Button variant="outline" className="h-11" disabled={loading || busy} onClick={() => { setError(""); void load(); }}>{t("refresh")}</Button>
             </div>
-            {loading && !data ? <Skeleton className="h-52 w-full" /> : <ScrollArea className="h-80 rounded-xl border bg-background lg:h-[640px]">
+            <SkeletonSwap ready={!loading || Boolean(data)} skeleton={<Skeleton className="h-80 w-full lg:h-[640px]" />}>
+            <ScrollArea className="h-80 rounded-xl border bg-background lg:h-[640px]">
               {!filtered.length ? <p className="p-5 text-sm text-muted-foreground">{t("noMatchingReleases")}</p> : filtered.map((record) => (
                 <button key={record.id} disabled={busy} onClick={() => choose(record)} aria-pressed={selected?.id === record.id}
                   className="grid w-full gap-2 border-b border-border/60 p-4 text-left outline-none hover:bg-muted/60 aria-pressed:bg-muted focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
@@ -133,7 +135,8 @@ export function ChangelogManager() {
                   {record.published && JSON.stringify(record.draft) !== JSON.stringify(record.published) ? <span className="text-xs text-muted-foreground">{t("unpublishedChanges")}</span> : null}
                 </button>
               ))}
-            </ScrollArea>}
+            </ScrollArea>
+            </SkeletonSwap>
           </section>
           <form onSubmit={(event) => { event.preventDefault(); void save(); }} className="min-w-0 space-y-6 rounded-xl border bg-background p-4 sm:p-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
