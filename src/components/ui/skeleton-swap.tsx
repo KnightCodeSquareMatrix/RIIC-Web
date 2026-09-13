@@ -96,5 +96,7 @@ export function SkeletonRouteBoundary({ children }: { children: ReactNode }) {
 export function SkeletonRouteFallback({ children }: { children: ReactNode }) {
   const register = useContext(RouteFallbackContext);
   useLayoutEffect(() => register?.(children), [children, register]);
-  return children;
+  // The persistent boundary owns this placeholder while registered. Rendering
+  // it here as well duplicates page landmarks during the crossfade.
+  return register ? null : children;
 }
