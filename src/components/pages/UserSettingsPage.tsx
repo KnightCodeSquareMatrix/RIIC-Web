@@ -268,7 +268,21 @@ export function UserSettingsPage({ settings, onSettingsChange }: UserSettingsPag
                 aria-label={en ? "Show current plan editor" : "显示基于当前方案编辑"}
               />
             </div>
-            <div className="flex items-center justify-between gap-6 border-t border-white/12 pt-4">
+            <div className="flex items-center justify-between gap-6 border-t border-border/60 pt-4">
+              <Label htmlFor="show-mower" className="grid min-w-0 gap-1">
+                <span>{en ? "Show Mower" : "显示 Mower"}</span>
+                <span className="font-normal text-sm text-muted-foreground">
+                  {en ? "Mower schedule import and export in manual scheduling. Off by default." : "在手动排班中显示 Mower 导入导出入口，默认关闭。"}
+                </span>
+              </Label>
+              <Switch
+                id="show-mower"
+                checked={settings.showMower}
+                onCheckedChange={(checked) => onSettingsChange({ ...settings, showMower: checked })}
+                aria-label={en ? "Show Mower" : "显示 Mower"}
+              />
+            </div>
+            <div className="flex items-center justify-between gap-6 border-t border-border/60 pt-4">
               <Label htmlFor="load-english-resources" className="grid min-w-0 gap-1">
                 <span>{en ? "Load English resources" : "加载英文资源"}</span>
                 <span className="font-normal text-sm text-white/64">{en ? "When off, English game data is not requested." : "关闭后不请求英文干员名、房间名和技能数据。"}</span>

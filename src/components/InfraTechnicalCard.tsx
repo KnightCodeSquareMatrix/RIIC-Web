@@ -58,13 +58,15 @@ export function InfraTechnicalHeading({
   icon,
   children,
   titleId,
+  className,
 }: {
   icon: ReactNode;
   children: ReactNode;
   titleId?: string;
+  className?: string;
 }) {
   return (
-    <div className="flex min-h-6 items-center gap-2">
+    <div className={cn("flex min-h-6 items-center gap-2", className)}>
       <span className="h-5 w-1 shrink-0 bg-[var(--room-accent)]" aria-hidden="true" />
       <span className="text-[var(--room-accent)]">{icon}</span>
       <h3 id={titleId} className="text-xs font-medium tracking-wide text-white/66">

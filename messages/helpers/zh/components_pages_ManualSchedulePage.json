@@ -1,4 +1,12 @@
 {
+  "exportMower": "导出 Mower",
+  "chooseMowerOrMaaScheduleFile": "选择 MAA 或 Mower 排班 JSON 文件",
+  "invalidMowerOrMaaSchedule": "无法导入，请选择有效的 MAA 排班或包含入驻设施的 Mower plan.json 文件。",
+  "importMowerScheduleQuestion": "导入这个 Mower 排班？",
+  "importMowerScheduleDetails": "导入主计划的控制中枢、贸易站、制造站、发电站、宿舍、会客室、办公室和加工站入驻干员，保留 Box 以外的干员。Free 转为空位。训练室、活动室、替换组、休息规则和备用计划不会保留。",
+  "mowerExportQuestion": "导出当前班次到 Mower？",
+  "mowerExportDetails": "仅导出第 {shift} 班的基础入驻计划。生产设施按贸易、制造、发电顺序映射到 B101 至 B303；请在 Mower 核对实际房间位置，并配置替换组和休息规则。时间轴、无人机目标、菲亚梅塔和训练室设置不会导出。",
+  "mowerExportFailed": "导出失败：请确认当前班次有效，生产设施不超过 9 间、宿舍不超过 4 间，并为每个制造站指定产物。",
   "portrait": "{displayName}头像",
   "eLv": "精{elite} Lv.{level}",
   "hoverForInfrastructureSkills": "悬浮查看基建技能",
