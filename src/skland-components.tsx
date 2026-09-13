@@ -10,7 +10,6 @@ import {
   ScanLine,
   ShieldCheck,
 } from "lucide-react";
-import { QRCodeSVG } from "qrcode.react";
 
 import { pollSklandQr, startSklandQr, toDisplayError } from "@/api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -24,6 +23,9 @@ import {
   SklandPolicyConsent,
 } from "@/skland-policy-consent";
 import type { SklandSessionData } from "@/types";
+
+// The encoder is only needed after the user requests a login QR code.
+const QRCodeSVG = dynamic(() => import("qrcode.react").then((module) => module.QRCodeSVG), { ssr: false });
 
 const SklandCredentialPanel = dynamic(
   () => import("@/skland-credential-panel").then((module) => module.SklandCredentialPanel),

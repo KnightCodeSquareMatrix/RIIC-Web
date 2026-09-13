@@ -1410,7 +1410,7 @@ function LoadingState() {
   const intl = useTranslations();
 
   return (
-    <SkeletonRouteFallback><StatusCenterPage data-skland-page>
+    <SkeletonRouteFallback><StatusCenterPage data-skland-loading>
       <StatusCenterLoading label={intl("components_pages_SklandStatus.restoringSklandSession")} />
     </StatusCenterPage></SkeletonRouteFallback>
   );
