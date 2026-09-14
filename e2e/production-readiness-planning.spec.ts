@@ -950,7 +950,14 @@ test("live activity survives navigation and calculator search occupies the relea
   await page.setViewportSize({ width: 390, height: 844 });
   const mobileToolbar = await toolbar.evaluate((element) => ({ client: element.clientWidth, scroll: element.scrollWidth }));
   expect(mobileToolbar.scroll).toBeLessThanOrEqual(mobileToolbar.client);
+  await expect(search).toBeHidden();
+  const searchToggle = toolbar.getByRole("button", { name: "搜索排班中的干员或房间", exact: true });
+  await searchToggle.click();
+  await expect(search).toBeFocused();
   await expect(search).toHaveCSS("height", "44px");
+  await page.keyboard.press("Escape");
+  await expect(search).toBeHidden();
+  await expect(searchToggle).toBeFocused();
 });
 
 test("failed plan remains expanded with retry and diagnostic actions", async ({ page }) => {
@@ -1060,7 +1067,7 @@ test("shared action buttons keep their geometry after WebKit interactions", asyn
   await page.goto("/");
 
   const moreTools = page.locator("[data-calculator-more-tools]");
-  await moreTools.getByText("更多工具", { exact: true }).click();
+  await moreTools.getByLabel("更多工具", { exact: true }).click();
   const setupTrigger = moreTools.getByRole("button", { name: "配置Box与布局" });
   await setupTrigger.click();
   const setupDialog = page.getByRole("dialog");
@@ -1069,7 +1076,7 @@ test("shared action buttons keep their geometry after WebKit interactions", asyn
   await expect(setupDialog).toHaveCount(0);
   await expect(setupTrigger).toBeFocused();
   await expectButtonGeometryStable(setupTrigger);
-  await moreTools.getByText("更多工具", { exact: true }).click();
+  await moreTools.getByLabel("更多工具", { exact: true }).click();
 
   const planButton = page.getByRole("button", { name: "生成排班" });
   await expect(planButton).toBeEnabled();
@@ -1424,7 +1431,7 @@ test("the compact mobile navigation stays pinned while the account control belon
   await expect(page.locator("[data-skland-sidebar-account]")).toHaveCount(0);
 
   const mobileBar = topbar.locator(".app-content-track");
-  await expect(mobileBar).toHaveCSS("height", "56px");
+  await expect(mobileBar).toHaveCSS("height", "48px");
 
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
   await expect.poll(async () => (await topbar.boundingBox())?.y ?? -1).toBeCloseTo(0, 0);

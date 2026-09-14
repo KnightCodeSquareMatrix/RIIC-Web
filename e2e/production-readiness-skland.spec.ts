@@ -1554,7 +1554,7 @@ test("settings clears local product data without logging out of Skland", async (
   const telemetrySessionBeforeClear = await page.evaluate(() => window.localStorage.getItem("arknights-infra-telemetry-session"));
 
   await expect(page.locator("[data-plan-board]")).toHaveAttribute("data-plan-revision", diagnosticId);
-  await page.locator("[data-calculator-more-tools]").getByText("更多工具", { exact: true }).click();
+  await page.locator("[data-calculator-more-tools]").getByLabel("更多工具", { exact: true }).click();
   await page.locator("[data-calculator-more-tools]").getByRole("button", { name: "配置Box与布局" }).click();
   await page.getByRole("dialog").getByRole("button", { name: /第 1 步，共 3 步：干员数据/ }).click();
   await page.getByText("数据管理", { exact: true }).click();
