@@ -17,6 +17,7 @@
   "m": "专{level}",
   "targetMastery": "目标专精等级",
   "controlCenter5": "中枢专精加成 +5%",
+  "controlCenterBonus": "中枢专精加成 +{bonus}%",
   "enterTheCurrentMasteryOfTheSkillYouPlan": "填写准备训练的那项技能的当前专精等级。从新阶段开始，不预设已有减半效果；开启中枢加成即表示你会全程安排对应干员进驻。",
   "advancedSettings": "高级设置",
   "handoffBufferMinutes": "换人操作余量（分钟）",

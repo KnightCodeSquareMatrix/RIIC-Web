@@ -509,11 +509,28 @@ html.schedule-layout-return::view-transition-new(.schedule-room-entering) {
 
 .app-content-track {
   box-sizing: border-box;
+  min-width: 0;
   width: 100%;
   max-width: var(--app-content-track-max);
   margin-inline: auto;
   padding-inline-start: max(var(--app-content-gutter), env(safe-area-inset-left));
   padding-inline-end: max(var(--app-content-gutter), env(safe-area-inset-right));
+}
+
+@media (max-width: 767px) {
+  :root {
+    --app-content-gutter: 0.75rem;
+  }
+
+  .workbench-footer {
+    padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+  }
+
+  .workbench-footer [data-filing-links] {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+  }
 }
 
 .infra-technical-canvas {
