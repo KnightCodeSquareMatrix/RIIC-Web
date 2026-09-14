@@ -2085,6 +2085,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       onShiftStartTimeChange: setManualShiftStartTime,
       onScheduleModeChange: setManualScheduleMode,
       onImportedLayoutChange: handleManualImportedLayout,
+      showMower: userSettings.showMower,
       onFiammettaEnabledChange: setManualFiammettaEnabled,
       onOpenSetup: handleManualSetup,
       onFactoryRecipeChange: handleFactoryRecipeChange,
@@ -2190,7 +2191,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       }}
     >
     <SidebarProvider defaultOpen defaultOpenBreakpoint={1280}>
-      <AppSidebar page={page} onPageChange={handleAppPageChange} />
+      <AppSidebar page={page} onPageChange={handleAppPageChange} showMower={userSettings.showMower} />
       <SidebarInset>
         <AppTopBar />
         <LiveActivity
