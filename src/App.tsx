@@ -2069,6 +2069,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       showFeedback: userSettings.showFeedback,
       showImages: userSettings.showImages,
       allowReplacementOperatorSort: userSettings.allowReplacementOperatorSort,
+      highlightNoLayoutSkill: userSettings.highlightNoLayoutSkill,
     },
     manual: {
       layout,
