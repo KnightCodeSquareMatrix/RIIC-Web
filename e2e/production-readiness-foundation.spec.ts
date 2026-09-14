@@ -215,7 +215,7 @@ test("the onboarding cards reuse the Skland technical grid and dismiss into the 
     expect(geometry.panel.right).toBeCloseTo(geometry.inset.right, 0);
     expect(geometry.panel.top).toBeCloseTo(mobile ? geometry.topbarBottom ?? 0 : geometry.inset.top, 0);
     expect(geometry.panel.bottom).toBeGreaterThanOrEqual(viewportHeight - 1);
-    expect(geometry.panel.height).toBeGreaterThanOrEqual(viewportHeight - (mobile ? 56 : 0) - 1);
+    expect(geometry.panel.height).toBeGreaterThanOrEqual(viewportHeight - (mobile ? geometry.topbarBottom ?? 0 : 0) - 1);
     expect(geometry.listCenter).toBeCloseTo(geometry.panelCenter, 0);
     await expect(startPanel).toBeVisible();
     await expect(sidebarInset).toBeVisible();
@@ -355,7 +355,7 @@ test("a 768px solved plan defaults to list layout and stays inside the viewport"
   expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth + 1);
 });
 
-test("filing links and Rainyun cloud services stay grouped at the page footer's right edge", async ({ page }) => {
+test("filing links and Rainyun cloud services align left on mobile and right on desktop", async ({ page }) => {
   await mockApis(page);
   await seedPreferences(page);
   await page.goto("/");
@@ -412,6 +412,9 @@ test("filing links and Rainyun cloud services stay grouped at the page footer's 
         logoCenterY: logoBox ? logoBox.top + logoBox.height / 2 : Number.NaN,
         copyCenterYs: copyBoxes.map((copy) => copy.top + copy.height / 2),
         right: linkBox.right,
+        left: linkBox.left,
+        footerLeft: footerBox?.left ?? Number.NaN,
+        footerPaddingLeft: Number.parseFloat(footerStyle?.paddingLeft ?? "0"),
         footerRight: footerBox?.right ?? Number.NaN,
         footerPaddingRight: Number.parseFloat(footerStyle?.paddingRight ?? "0"),
       };
@@ -421,7 +424,11 @@ test("filing links and Rainyun cloud services stay grouped at the page footer's 
     for (const copyCenterY of geometry.copyCenterYs) {
       expect(copyCenterY - geometry.logoCenterY).toBeCloseTo(2, 0);
     }
-    expect(geometry.right).toBeCloseTo(geometry.footerRight - geometry.footerPaddingRight, 0);
+    if (viewport.width < 768) {
+      expect(geometry.left).toBeCloseTo(geometry.footerLeft + geometry.footerPaddingLeft, 0);
+    } else {
+      expect(geometry.right).toBeCloseTo(geometry.footerRight - geometry.footerPaddingRight, 0);
+    }
   }
 });
 

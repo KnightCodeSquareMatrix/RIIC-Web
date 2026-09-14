@@ -183,7 +183,7 @@ test("setup keeps Box parse errors local and actionable", async ({ page }) => {
 
   await expect(page.locator("[data-plan-board]")).toHaveAttribute("data-plan-revision", diagnosticId);
   const moreTools = page.locator("[data-calculator-more-tools]");
-  await moreTools.getByText("更多工具", { exact: true }).click();
+  await moreTools.getByLabel("更多工具", { exact: true }).click();
   const setupTrigger = moreTools.getByRole("button", { name: "配置Box与布局" });
   await setupTrigger.click();
   const dialog = page.getByRole("dialog");

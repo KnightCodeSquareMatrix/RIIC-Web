@@ -174,7 +174,7 @@ function CalculatorStartPanel({
 
   return (
     <section
-      className="relative isolate flex min-h-[calc(100svh-3.5rem)] items-center overflow-hidden bg-[#f7f5ec] px-4 py-8 sm:px-6 md:min-h-svh lg:px-8"
+      className="relative isolate flex min-h-[calc(100svh-3rem)] items-center overflow-hidden bg-[#f7f5ec] px-4 py-8 sm:px-6 md:min-h-svh lg:px-8"
       aria-label={intl("components_pages_InfraCalculator.scheduleSetup")}
       data-calculator-start-panel
       data-onboarding-active="true"
@@ -571,7 +571,8 @@ export function InfraCalculator(props: InfraCalculatorProps) {
         <section className="min-w-0">
           <Panel
             className={cn(
-              "min-h-[calc(100vh-112px)] max-md:pt-2",
+              "min-h-[calc(100vh-112px)]",
+              !showOnboarding && "max-md:pt-2",
               !scheduleResult && showOnboarding && "py-0",
             )}
             action={!showOnboarding ? (
