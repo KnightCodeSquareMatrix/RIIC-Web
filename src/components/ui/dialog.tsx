@@ -97,7 +97,9 @@ function DialogContent({
           />
         )}
         className={cn(
-          "dialog-acrylic fixed top-1/2 left-1/2 z-50 isolate grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-0 overflow-hidden rounded-[24px] p-0 text-sm text-popover-foreground outline-none sm:max-w-[min(480px,calc(100vw-2rem))] sm:rounded-[32px]",
+          // OverlayScrollbars applies unlayered position: relative to scroll hosts.
+          // A popup must keep its viewport positioning after enhancement.
+          "dialog-acrylic !fixed top-1/2 left-1/2 z-50 isolate grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-0 overflow-hidden rounded-[24px] p-0 text-sm text-popover-foreground outline-none sm:max-w-[min(480px,calc(100vw-2rem))] sm:rounded-[32px]",
           className
         )}
         {...props}
