@@ -76,6 +76,11 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  async rewrites() {
+    return process.env.NODE_ENV === "development"
+      ? [{ source: "/media/tutorials/:path*", destination: "http://127.0.0.1:18900/:path*" }]
+      : [];
+  },
   env: {
     APP_CLIENT_BUILD_ID: process.env.APP_BUILD_ID ?? "local-development",
     APP_CLIENT_ACCOUNT_CLOUD_SYNC_ENABLED: process.env.ACCOUNT_CLOUD_SYNC_ENABLED === "1" ? "1" : "0",

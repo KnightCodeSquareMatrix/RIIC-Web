@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { InfoPageLayout } from "@/components/layout/InfoPageLayout";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SkeletonSwap } from "@/components/ui/skeleton-swap";
 import { AppMotionProvider } from "@/components/MotionProvider";
 import { markBrowserReleaseSeen } from "@/releases/announcement-state";
 import { useReleaseFeed } from "@/releases/use-release-feed";
@@ -44,13 +45,15 @@ export function ChangelogPage() {
               {t("latestUpdate")}
             </Button>
           </header>
-          {loading && !feed ? <div className="space-y-5 py-8" role="status" aria-label={t("loading")}>
+          <SkeletonSwap ready={!loading || Boolean(feed)} skeleton={<div className="space-y-5 py-8" role="status" aria-label={t("loading")}>
             <Skeleton className="h-8 w-40" /><Skeleton className="h-32 w-full" />
-          </div> : error ? <div role="alert" className="space-y-4 py-8">
+          </div>}>
+          {error ? <div role="alert" className="space-y-4 py-8">
             <p>{t("loadError")}</p>
             <Button variant="outline" onClick={() => void refresh()}>{t("retry")}</Button>
           </div> : !releaseHistory.length ? <p className="py-10 text-sm text-muted-foreground">{t("empty")}</p> : null}
           {releaseHistory.map((release, index) => <ReleaseEntry key={release.version} release={release} latest={index === 0} />)}
+          </SkeletonSwap>
           <p className="py-7 text-sm leading-7 text-muted-foreground">
             {t("earlier")}{" "}
             <a className="rounded-sm text-foreground underline underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-ring"

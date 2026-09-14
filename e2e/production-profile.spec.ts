@@ -33,9 +33,12 @@ test("production profile exposes explicitly enabled Skland while preserving secu
   await expect(page.getByText("上传练度 JSON / XLSX", { exact: true })).toHaveCount(0);
 
   await page.goto("/manual");
-  await expect(page.locator("[data-manual-schedule-unavailable]")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "手动排班待开发" })).toBeVisible();
-  await expect(page.locator("[data-manual-schedule-page]")).toHaveCount(0);
+  await expect(page.locator("[data-manual-schedule-empty]")).toBeVisible();
+  await expect(page.locator("[data-manual-schedule-unavailable]")).toHaveCount(0);
+  await page.getByRole("button", { name: "配置 Box 与布局", exact: true }).click();
+  // A fresh manual workspace uses the public sample flow. Personal Box access
+  // still uses the account guard covered by the manual-scheduling suite.
+  await expect(page.getByRole("dialog", { name: "排班设置", exact: true })).toBeVisible();
 
   const sklandPageResponse = await request.get("/skland");
   expect(sklandPageResponse.status()).toBe(200);

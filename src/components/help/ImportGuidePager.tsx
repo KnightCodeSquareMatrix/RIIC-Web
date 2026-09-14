@@ -72,9 +72,16 @@ export function ImportGuidePager({ pages }: ImportGuidePagerProps) {
     const activeStep = stepButtonRefs.current[pageIndex];
     if (!container || !activeStep) return;
 
-    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const left = activeStep.offsetLeft - (container.clientWidth - activeStep.clientWidth) / 2;
-    container.scrollTo({ behavior: reduceMotion ? "auto" : "smooth", left: Math.max(0, left) });
+    const positionActiveStep = (event?: Event) => {
+      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const left = activeStep.offsetLeft - (container.clientWidth - activeStep.clientWidth) / 2;
+      container.scrollTo({ behavior: event || reduceMotion ? "instant" : "smooth", left: Math.max(0, left) });
+    };
+    // Async scrollbar measurement can interrupt a native smooth scroll that
+    // started during hydration. Reapply the current step once it is ready.
+    container.addEventListener("yeye-scrollbar-ready", positionActiveStep);
+    positionActiveStep();
+    return () => container.removeEventListener("yeye-scrollbar-ready", positionActiveStep);
   }, [pageIndex]);
 
   function writeUrl(nextPage: number, mode: "push" | "replace") {
@@ -137,8 +144,8 @@ export function ImportGuidePager({ pages }: ImportGuidePagerProps) {
         <nav aria-label={intl("components_help_ImportGuidePager.tutorialStepNavigation")} className="mt-5" data-help-step-navigation>
           <p className="sr-only">{intl("components_help_ImportGuidePager.selectAStepToJumpDirectlySwipeHorizontallyOn")}</p>
           <p aria-hidden="true" className="mb-2 text-xs font-medium text-muted-foreground lg:hidden">{intl("components_help_ImportGuidePager.swipeToViewAllSteps")}</p>
-          <div
-            className="max-w-full snap-x snap-proximity overflow-x-auto overscroll-x-contain pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          <div data-yeye-scroll="auto"
+            className="max-w-full snap-x snap-proximity overflow-x-auto overscroll-x-contain pb-1"
             data-help-step-navigation-scroll
             ref={stepNavigationRef}
           >

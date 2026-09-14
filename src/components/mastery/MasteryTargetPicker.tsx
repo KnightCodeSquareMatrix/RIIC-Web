@@ -42,7 +42,7 @@ export function MasteryTargetPicker({ operbox, selectedId, onSelect, onClose }: 
       && (!deferred || [o.name, o.id, localizedOperatorName(o.name, locale, gameCatalog)].some((name) => name.toLocaleLowerCase().includes(deferred)));
   });
   return <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-    <DialogContent className="max-h-[90dvh] grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-[min(880px,calc(100vw-2rem))]" data-mastery-target-picker>
+    <DialogContent fromSkeleton className="max-h-[90dvh] grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-[min(880px,calc(100vw-2rem))]" data-mastery-target-picker>
       <DialogHeader>
         <DialogTitle>{intl("components_mastery_MasteryTargetPicker.chooseATrainee")}</DialogTitle>
         <DialogDescription>{intl("components_mastery_MasteryTargetPicker.ownedE2OperatorsInYourCurrentBoxThisSelection", { length: eligible.length })}</DialogDescription>
@@ -50,8 +50,8 @@ export function MasteryTargetPicker({ operbox, selectedId, onSelect, onClose }: 
       <DialogBody className="min-h-0 overflow-y-auto pb-5">
         <OperatorSearch value={query} onChange={(value) => { setQuery(value); setLimit(OPERATOR_PAGE_SIZE); }} />
         <div className="flex min-w-0 flex-wrap gap-2">
-          <div className="max-w-full overflow-x-auto"><OperatorRarityFilter value={rarity} rarities={[6,5,4]} onChange={(value) => { setRarity(value); setLimit(OPERATOR_PAGE_SIZE); }} /></div>
-          <div className="max-w-full overflow-x-auto"><OperatorProfessionFilter value={profession} onChange={(value) => { setProfession(value); setLimit(OPERATOR_PAGE_SIZE); }} /></div>
+          <div data-yeye-scroll="auto" className="max-w-full overflow-x-auto"><OperatorRarityFilter value={rarity} rarities={[6,5,4]} onChange={(value) => { setRarity(value); setLimit(OPERATOR_PAGE_SIZE); }} /></div>
+          <div data-yeye-scroll="auto" className="max-w-full overflow-x-auto"><OperatorProfessionFilter value={profession} onChange={(value) => { setProfession(value); setLimit(OPERATOR_PAGE_SIZE); }} /></div>
         </div>
         {filtered.length || unsupportedFiltered.length ? <OperatorRosterGrid hasMore={limit < filtered.length} onLoadMore={() => setLimit((value) => value + OPERATOR_PAGE_SIZE)}>
           {filtered.slice(0,limit).map((o) => <button key={o.id} type="button" aria-label={intl("components_mastery_MasteryTargetPicker.select", { value1: (en) ? (localizedOperatorName(o.name,locale,gameCatalog)) : "", name: (en) ? "" : (o.name) })} aria-pressed={selected === o.id}

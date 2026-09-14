@@ -52,6 +52,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { RemoteAvatar } from "@/components/ui/remote-avatar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SkeletonRouteFallback } from "@/components/ui/skeleton-swap";
 import { HoldToConfirm } from "@/components/ui/hold-to-confirm";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LevelDiamonds, OperatorSlot, roomVisualFor } from "@/components";
@@ -1194,7 +1195,7 @@ export function OperatorsTab({ snapshot }: { snapshot: SklandStatusSnapshot }) {
       </div>
 
       <Tabs defaultValue="operators">
-        <div className="overflow-x-auto pb-1">
+        <div data-yeye-scroll="auto" className="overflow-x-auto pb-1">
           <TabsList variant="line" className="min-w-max">
             <TabsTrigger value="operators" className="h-10 px-4">
               <UsersRound />干员 <span className="font-number">{filteredOperators.length}</span>
@@ -1409,9 +1410,9 @@ function LoadingState() {
   const intl = useTranslations();
 
   return (
-    <StatusCenterPage data-skland-page>
+    <SkeletonRouteFallback><StatusCenterPage data-skland-loading>
       <StatusCenterLoading label={intl("components_pages_SklandStatus.restoringSklandSession")} />
-    </StatusCenterPage>
+    </StatusCenterPage></SkeletonRouteFallback>
   );
 }
 
@@ -1705,7 +1706,7 @@ export function SklandStatus({
 
       <Tabs defaultValue="overview">
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-3" data-skland-view-header>
-          <div className="-mx-3 min-w-0 overflow-x-auto overflow-y-hidden px-3 pb-1">
+          <div data-yeye-scroll="auto" className="-mx-3 min-w-0 overflow-x-auto overflow-y-hidden px-3 pb-1">
             <TabsList className="min-w-max" data-skland-view-tabs>
               <TabsTrigger value="overview">{intl("components_pages_SklandStatus.overview")}</TabsTrigger>
               <TabsTrigger value="infrastructure">{intl("components_pages_SklandStatus.infrastructure")}</TabsTrigger>

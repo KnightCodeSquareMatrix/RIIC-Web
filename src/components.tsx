@@ -3,8 +3,6 @@ import { useTranslations, useLocale } from "next-intl";
 import {
   Check,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   ArrowLeftRight,
   FileWarning,
   Loader2,
@@ -13,9 +11,11 @@ import {
   Smile,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { CSSProperties, lazy, ReactElement, ReactNode, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { CSSProperties, lazy, ReactElement, ReactNode, Suspense, startTransition, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { AnimatedNumber, AnimatedText } from "@/components/AnimatedText";
+import { CachedScheduleView } from "@/components/CachedScheduleView";
+import { transitionScheduleLayout } from "@/components/schedule-layout-transition";
 import { Accordion, AccordionItem, AccordionPanel, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,16 +25,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Combobox,
-  ComboboxContent,
-  ComboboxInput,
-  ComboboxItem,
-  ComboboxList,
-} from "@/components/ui/combobox";
-import { Input } from "@/components/ui/input";
+import { SetupStepper } from "@/components/setup/SetupStepper";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SkeletonSwap } from "@/components/ui/skeleton-swap";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -369,131 +363,26 @@ function RoomLevelControl({
   level,
   levelMax,
   onChange,
-  surface = "default",
 }: {
   roomId: string;
   level: number;
   levelMax: number;
   onChange: (level: number) => void;
-  surface?: "default" | "room";
 }) {
   const intl = useTranslations();
 
-  const [draft, setDraft] = useState<string | null>(null);
-  const display = draft ?? String(level);
-
-  const commit = (raw: string) => {
-    const n = Number(raw.trim());
-    const next = Number.isInteger(n) ? Math.max(1, Math.min(levelMax, n)) : level;
-    if (next !== level) onChange(next);
-    setDraft(null);
-  };
-
-  const levelOptions = Array.from({ length: levelMax }, (_, i) => String(i + 1));
-
-  return (
-    <>
-      {/* PC：左右箭头 + 中间可输入 */}
-      <div className={cn(
-        "hidden h-10 w-20 items-center overflow-hidden rounded-[4px] border sm:flex",
-        surface === "room" ? "border-white/20 bg-[#3C3C3C]/78" : "border-input"
-      )}>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-label={intl("components.decreaseLevel", { roomId: roomId })}
-          className={cn(
-            "h-full w-7 rounded-none",
-            surface === "room" ? "text-white/62 hover:bg-white/10 hover:text-white disabled:text-white/28" : "text-muted-foreground hover:bg-muted hover:text-foreground"
-          )}
-          disabled={level <= 1}
-          onClick={() => {
-            setDraft(null);
-            onChange(Math.max(1, level - 1));
-          }}
-        >
-          <ChevronLeft className="size-3.5" />
-        </Button>
-        <Input
-          type="text"
-          inputMode="numeric"
-          aria-label={intl("components.level", { roomId: roomId })}
-          value={display}
-          onFocus={() => setDraft(String(level))}
-          onChange={(event) => setDraft(event.target.value)}
-          onBlur={(event) => commit(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              event.currentTarget.blur();
-            }
-          }}
-          className={cn(
-            "h-full w-12 min-w-0 flex-1 rounded-none border-0 bg-transparent px-0 text-center text-sm tabular-nums focus-visible:ring-0",
-            surface === "room" && "text-white caret-white"
-          )}
-        />
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-label={intl("components.increaseLevel", { roomId: roomId })}
-          className={cn(
-            "h-full w-7 rounded-none",
-            surface === "room" ? "text-white/62 hover:bg-white/10 hover:text-white disabled:text-white/28" : "text-muted-foreground hover:bg-muted hover:text-foreground"
-          )}
-          disabled={level >= levelMax}
-          onClick={() => {
-            setDraft(null);
-            onChange(Math.min(levelMax, level + 1));
-          }}
-        >
-          <ChevronRight className="size-3.5" />
-        </Button>
-      </div>
-
-      {/* 移动端：Combobox 选择 + 输入 */}
-      <div className="sm:hidden">
-        <Combobox
-          items={levelOptions}
-          value={String(level)}
-          onValueChange={(value) => {
-            const next = Number(value);
-            if (Number.isInteger(next) && next >= 1 && next <= levelMax && next !== level) onChange(next);
-          }}
-          itemToStringValue={(item) => item}
-        >
-          <ComboboxInput
-            aria-label={intl("components.level", { roomId: roomId })}
-            className={cn(
-              "w-20 rounded-[4px] [&_[data-slot=input-group-control]]:text-center",
-              surface === "room" && "border-white/20 bg-[#3C3C3C]/78 text-white shadow-none [&_[data-slot=input-group-button]]:text-white/62 [&_[data-slot=input-group-control]]:text-white"
-            )}
-            inputMode="numeric"
-            pattern="[0-9]*"
-            onBlur={(event) => {
-              const raw = event.currentTarget.value;
-              if (raw) {
-                const n = Number(raw);
-                const next = Number.isInteger(n) ? Math.max(1, Math.min(levelMax, n)) : level;
-                if (next !== level) onChange(next);
-              }
-            }}
-          />
-          <ComboboxContent align="start">
-            <ComboboxList>
-              {(item) => (
-                <ComboboxItem key={item} value={item} className="font-number justify-center text-center">
-                  {item}
-                </ComboboxItem>
-              )}
-            </ComboboxList>
-          </ComboboxContent>
-        </Combobox>
-      </div>
-    </>
-  );
+  return <SetupStepper
+    compact
+    hideLabel
+    label={intl("components.level", { roomId })}
+    value={level}
+    decreaseLabel={intl("components.decreaseLevel", { roomId })}
+    increaseLabel={intl("components.increaseLevel", { roomId })}
+    decreaseDisabled={level <= 1}
+    increaseDisabled={level >= levelMax}
+    onDecrease={() => onChange(Math.max(1, level - 1))}
+    onIncrease={() => onChange(Math.min(levelMax, level + 1))}
+  />;
 }
 
 function roomVisualGroupForKind(kind: BaseBlueprint["rooms"][number]["kind"]): string {
@@ -725,7 +614,7 @@ export function ShiftTabs({
           "max-w-full justify-start tracking-[0.01em]",
           wrap
             ? "h-auto flex-wrap overflow-visible"
-            : "overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+            : "overflow-x-auto overflow-y-hidden",
         )}
         data-shift-tabs
         data-ui-number-font
@@ -1405,6 +1294,7 @@ export function ScheduleBoard({
   const [supportsCompactLayout, setSupportsCompactLayout] = useState<boolean | null>(null);
   const [CompactScheduleView, setCompactScheduleView] = useState<CompactScheduleComponent | null>(null);
   const [compactScheduleLoadFailed, setCompactScheduleLoadFailed] = useState(false);
+  const [prepareInactiveView, setPrepareInactiveView] = useState(false);
   const preferredViewMode = useRef<ScheduleViewMode | null>(null);
   const scheduleBoardRef = useRef<HTMLDivElement | null>(null);
   const shouldReduceMotion = useReducedMotion();
@@ -1449,7 +1339,18 @@ export function ScheduleBoard({
   }, [editableSchedule, onViewModeChange]);
 
   useEffect(() => {
-    if (viewMode !== "compact" || CompactScheduleView || compactScheduleLoadFailed) return;
+    if (!supportsCompactLayout || !viewMode || prepareInactiveView) return;
+    const prepare = () => startTransition(() => setPrepareInactiveView(true));
+    if (window.requestIdleCallback) {
+      const idle = window.requestIdleCallback(prepare, { timeout: 1500 });
+      return () => window.cancelIdleCallback(idle);
+    }
+    const timer = window.setTimeout(prepare, 500);
+    return () => window.clearTimeout(timer);
+  }, [supportsCompactLayout, viewMode, prepareInactiveView]);
+
+  useEffect(() => {
+    if ((viewMode !== "compact" && !(supportsCompactLayout && prepareInactiveView)) || CompactScheduleView || compactScheduleLoadFailed) return;
 
     let cancelled = false;
     void loadClientFeature("compactScheduleView").then(
@@ -1461,170 +1362,45 @@ export function ScheduleBoard({
       },
     );
     return () => { cancelled = true; };
-  }, [CompactScheduleView, compactScheduleLoadFailed, viewMode]);
+  }, [CompactScheduleView, compactScheduleLoadFailed, viewMode, supportsCompactLayout, prepareInactiveView]);
 
-  if (rows.length === 0) {
-    return (
-      <div className="flex min-h-[420px] items-center justify-center border-y border-dashed border-border/70 py-6 text-center text-sm text-muted-foreground">
-        {intl("components.noRoomsToDisplay")}
-      </div>
-    );
+  async function changeViewMode(nextViewMode: ScheduleViewMode) {
+    if (nextViewMode === preferredViewMode.current && nextViewMode === viewMode) return;
+    preferredViewMode.current = nextViewMode;
+    let compactComponent = CompactScheduleView;
+    if (nextViewMode === "compact" && !compactComponent) {
+      try {
+        compactComponent = (await loadClientFeature("compactScheduleView")).CompactScheduleView;
+      } catch {
+        setCompactScheduleLoadFailed(true);
+      }
+    }
+    // A later click wins if the compact chunk was still loading.
+    if (preferredViewMode.current !== nextViewMode) return;
+    const update = () => {
+      if (compactComponent) setCompactScheduleView(() => compactComponent);
+      setViewMode(nextViewMode);
+      onViewModeChange?.(nextViewMode);
+    };
+    const board = scheduleBoardRef.current;
+    if (board) await transitionScheduleLayout(board, nextViewMode, update);
   }
 
   const normalizedQuery = searchQuery.trim().toLocaleLowerCase("zh-CN");
-  const visibleRows = normalizedQuery
+  const visibleRows = useMemo(() => normalizedQuery
     ? rows.filter((row) => row.title.toLocaleLowerCase("zh-CN").includes(normalizedQuery) || row.operators.some((name) => name.toLocaleLowerCase("zh-CN").includes(normalizedQuery)))
-    : rows;
-  const rowGroups = supportsCompactLayout === false
+    : rows, [normalizedQuery, rows]);
+  const rowGroups = useMemo(() => supportsCompactLayout === false
     ? buildMobileListScheduleGroups(visibleRows)
-    : buildListScheduleGroups(visibleRows);
+    : buildListScheduleGroups(visibleRows), [supportsCompactLayout, visibleRows]);
   const auxiliaryGroups = rowGroups.filter((group) => AUXILIARY_ROOM_GROUPS.has(group.rows[0]?.group ?? ""));
   const hiddenAuxiliaryCount = auxiliaryGroups.filter((group) => hiddenGroups[group.label]).length;
   const allAuxiliaryCollapsed =
     auxiliaryGroups.length > 0 &&
     auxiliaryGroups.every((group) => collapsedGroups[group.label] || hiddenGroups[group.label]);
 
-  function toggleAuxiliaryGroups() {
-    if (allAuxiliaryCollapsed) {
-      setCollapsedGroups((current) => {
-        const next = { ...current };
-        auxiliaryGroups.forEach((group) => {
-          next[group.label] = false;
-        });
-        return next;
-      });
-      setHiddenGroups((current) => {
-        const next = { ...current };
-        auxiliaryGroups.forEach((group) => {
-          next[group.label] = false;
-        });
-        return next;
-      });
-      return;
-    }
-
-    setCollapsedGroups((current) => {
-      const next = { ...current };
-      auxiliaryGroups.forEach((group) => {
-        next[group.label] = true;
-      });
-      return next;
-    });
-  }
-
-  function restoreHiddenAuxiliaryGroups() {
-    setHiddenGroups((current) => {
-      const next = { ...current };
-      auxiliaryGroups.forEach((group) => {
-        next[group.label] = false;
-      });
-      return next;
-    });
-  }
-
-  return (
-    <div ref={scheduleBoardRef} className="flex flex-col gap-7">
-      <div className="flex flex-wrap items-center justify-between gap-3 max-sm:flex-col max-sm:items-stretch" data-schedule-toolbar>
-        <div className="flex flex-wrap items-center gap-2 max-sm:w-full" data-schedule-view-controls>
-          {supportsCompactLayout && viewMode && viewModeControl === "tabs" ? (
-            <Tabs
-              className="hidden lg:block"
-              value={viewMode}
-              onValueChange={(value) => {
-                const nextViewMode = value as ScheduleViewMode;
-                preferredViewMode.current = nextViewMode;
-                setViewMode(nextViewMode);
-                onViewModeChange?.(nextViewMode);
-              }}
-            >
-              <TabsList aria-label={intl("components.scheduleLayout")}>
-                <TabsTrigger value="compact">{intl("components.overview")}</TabsTrigger>
-                <TabsTrigger value="list">{intl("components.list")}</TabsTrigger>
-              </TabsList>
-            </Tabs>
-          ) : null}
-          {supportsCompactLayout && viewMode && viewModeControl === "select" ? (
-            <label className="hidden items-center gap-2 lg:flex">
-              <span className="sr-only">{intl("components.scheduleLayout")}</span>
-              <select
-                value={viewMode}
-                onChange={(event) => {
-                  const nextViewMode = event.target.value as ScheduleViewMode;
-                  preferredViewMode.current = nextViewMode;
-                  setViewMode(nextViewMode);
-                  onViewModeChange?.(nextViewMode);
-                }}
-                className="h-9 rounded-md border border-input bg-background px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                aria-label={intl("components.scheduleLayout")}
-              >
-                <option value="compact">{intl("components.overview")}</option>
-                <option value="list">{intl("components.list")}</option>
-              </select>
-            </label>
-          ) : null}
-          {shiftTabsSlot}
-          {viewControlsSlot}
-          {viewMode === "compact" ? viewModeActionSlot : null}
-          {viewMode === "list" && hiddenAuxiliaryCount ? (
-            <Button type="button" variant="ghost" size="sm" onClick={restoreHiddenAuxiliaryGroups}>
-              {intl("components.restoreHidden")}{intl("components.label3")}<span className="font-number">{hiddenAuxiliaryCount}</span>{intl("components.label4")}
-            </Button>
-          ) : null}
-          {viewMode === "list" && auxiliaryGroups.length ? (
-            <div className="flex flex-wrap justify-end gap-2 max-md:w-full max-md:flex-nowrap max-md:items-center max-md:justify-between">
-              <Button type="button" variant="outline" size="sm" onClick={toggleAuxiliaryGroups}>
-                <motion.span
-                  className="flex size-4 items-center justify-center"
-                  animate={{ rotate: allAuxiliaryCollapsed ? -90 : 0 }}
-                  transition={{ duration: MOTION_DURATION.fast, ease: MOTION_EASE_IN_OUT }}
-                  aria-hidden="true"
-                >
-                  <ChevronDown className="size-4" />
-                </motion.span>
-                {allAuxiliaryCollapsed ? (intl("components.expandAuxiliaryFacilities")) : (intl("components.collapseAuxiliaryFacilities"))}
-              </Button>
-              {viewModeActionSlot}
-              {mobileActionsSlot ? <div className="min-w-0 flex-1 md:hidden">{mobileActionsSlot}</div> : null}
-            </div>
-          ) : (
-            <>
-              {viewMode === "list" ? viewModeActionSlot : null}
-              {mobileActionsSlot ? <div className="w-full md:hidden">{mobileActionsSlot}</div> : null}
-            </>
-          )}
-        </div>
-        {shiftInfoSlot ? <div className="min-w-0 max-sm:w-full">{shiftInfoSlot}</div> : null}
-      </div>
-      <motion.div
-        data-plan-board
-        data-hide-images={hideImages ? "" : undefined}
-        data-plan-revision={planRevision || undefined}
-      >
-          <AnimatePresence initial={animateInitialView && !shouldReduceMotion} mode="wait">
-            <motion.div
-              key={viewMode}
-              data-schedule-view={viewMode || undefined}
-              data-schedule-view-transition={viewMode === "compact" ? "skeleton" : "motion"}
-              initial={viewMode === "compact" ? false : {
-                opacity: 0,
-                y: shouldReduceMotion ? 0 : 8,
-              }}
-              animate={{ opacity: 1, y: 0, pointerEvents: "auto" }}
-              exit={viewMode === "compact" ? undefined : {
-                opacity: 0,
-                y: shouldReduceMotion ? 0 : -6,
-                pointerEvents: "none",
-                transition: {
-                  duration: shouldReduceMotion ? MOTION_DURATION.feedback : MOTION_DURATION.fast,
-                  ease: MOTION_EASE_IN_OUT,
-                },
-              }}
-              transition={{
-                duration: viewMode === "compact" ? 0 : shouldReduceMotion ? MOTION_DURATION.feedback : MOTION_DURATION.content,
-                ease: MOTION_EASE_OUT,
-              }}
-            >
-        {viewMode === "list" ? (
+  // Stable children let React reuse the mounted room trees on layout switches.
+  const listContent = useMemo(() => (
           <>
           {rowGroups.map((group) => {
         const visual = roomVisualFor(group.rows[0]?.group ?? "default");
@@ -1724,6 +1500,7 @@ export function ScheduleBoard({
                     )}
                     data-room-group={row.group}
                     data-room-title={row.title}
+                    data-schedule-room={row.roomId}
                     style={rowStyle}
                   >
                     <div className={cn("relative w-[220px] shrink-0 overflow-hidden", compactInlineRoom && "w-[210px]", narrowLeftPanel && "w-[240px]", row.group === "meeting" && "w-[360px]", "max-[819px]:w-full")}>
@@ -1870,8 +1647,15 @@ export function ScheduleBoard({
         );
       })}
           </>
-        ) : viewMode === "compact" ? (
-          CompactScheduleView ? (
+
+  ), [rowGroups, en, layout, collapsedGroups, hiddenGroups, intl, locale, gameCatalog,
+    onSortToggle, sortRoomId, renderListRoomActions, shiftDirection, onFactoryRecipeChange,
+    onTradeOrderChange, eliteByOperator, levelByOperator, onSlotClick, sortSelection,
+    onSortSlotClick, onIssue, feedbackDisabled, normalizedQuery, onClearRoom]);
+
+  const compactContent = useMemo(() => (
+        <SkeletonSwap ready={Boolean(CompactScheduleView) || compactScheduleLoadFailed} skeleton={<CompactScheduleLoading rows={visibleRows} />}>
+          {CompactScheduleView ? (
             <CompactScheduleView
               rows={visibleRows}
               layout={layout}
@@ -1898,13 +1682,150 @@ export function ScheduleBoard({
               {intl("components.overviewFailedToLoadSwitchToTheListView")}
             </div>
           ) : (
-            <CompactScheduleLoading rows={visibleRows} />
-          )
-        ) : (
-          <div className="min-h-[420px]" data-schedule-view-pending aria-hidden="true" />
-        )}
+            null
+          )}
+        </SkeletonSwap>
+
+  ), [CompactScheduleView, visibleRows, layout, eliteByOperator, levelByOperator,
+    activeShift, activePlan, shiftDirection, onIssue, feedbackDisabled, hideImages,
+    onSlotClick, sortRoomId, sortSelection, onSortToggle, onSortSlotClick, onClearRoom,
+    onDormAutofillChange, droneTargetRoomId, onDroneTargetChange, compactScheduleLoadFailed, intl]);
+
+  if (rows.length === 0) {
+    return (
+      <div className="flex min-h-[420px] items-center justify-center border-y border-dashed border-border/70 py-6 text-center text-sm text-muted-foreground">
+        {intl("components.noRoomsToDisplay")}
+      </div>
+    );
+  }
+
+  function toggleAuxiliaryGroups() {
+    if (allAuxiliaryCollapsed) {
+      setCollapsedGroups((current) => {
+        const next = { ...current };
+        auxiliaryGroups.forEach((group) => {
+          next[group.label] = false;
+        });
+        return next;
+      });
+      setHiddenGroups((current) => {
+        const next = { ...current };
+        auxiliaryGroups.forEach((group) => {
+          next[group.label] = false;
+        });
+        return next;
+      });
+      return;
+    }
+
+    setCollapsedGroups((current) => {
+      const next = { ...current };
+      auxiliaryGroups.forEach((group) => {
+        next[group.label] = true;
+      });
+      return next;
+    });
+  }
+
+  function restoreHiddenAuxiliaryGroups() {
+    setHiddenGroups((current) => {
+      const next = { ...current };
+      auxiliaryGroups.forEach((group) => {
+        next[group.label] = false;
+      });
+      return next;
+    });
+  }
+
+  return (
+    <div ref={scheduleBoardRef} className="flex flex-col gap-7">
+      <div className="flex flex-wrap items-center justify-between gap-3 max-sm:flex-col max-sm:items-stretch" data-schedule-toolbar>
+        <div className="flex flex-wrap items-center gap-2 max-sm:w-full" data-schedule-view-controls>
+          {supportsCompactLayout && viewMode && viewModeControl === "tabs" ? (
+            <Tabs
+              className="hidden lg:block"
+              value={viewMode}
+              onValueChange={(value) => { void changeViewMode(value as ScheduleViewMode); }}
+            >
+              <TabsList aria-label={intl("components.scheduleLayout")}>
+                <TabsTrigger value="compact">{intl("components.overview")}</TabsTrigger>
+                <TabsTrigger value="list">{intl("components.list")}</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          ) : null}
+          {supportsCompactLayout && viewMode && viewModeControl === "select" ? (
+            <label className="hidden items-center gap-2 lg:flex">
+              <span className="sr-only">{intl("components.scheduleLayout")}</span>
+              <select
+                value={viewMode}
+                onChange={(event) => { void changeViewMode(event.target.value as ScheduleViewMode); }}
+                className="h-9 rounded-md border border-input bg-background px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label={intl("components.scheduleLayout")}
+              >
+                <option value="compact">{intl("components.overview")}</option>
+                <option value="list">{intl("components.list")}</option>
+              </select>
+            </label>
+          ) : null}
+          {shiftTabsSlot}
+          {viewControlsSlot}
+          {viewMode === "compact" ? viewModeActionSlot : null}
+          {viewMode === "list" && hiddenAuxiliaryCount ? (
+            <Button type="button" variant="ghost" size="sm" onClick={restoreHiddenAuxiliaryGroups}>
+              {intl("components.restoreHidden")}{intl("components.label3")}<span className="font-number">{hiddenAuxiliaryCount}</span>{intl("components.label4")}
+            </Button>
+          ) : null}
+          {viewMode === "list" && auxiliaryGroups.length ? (
+            <div
+              className="flex flex-wrap justify-end gap-2 max-md:grid max-md:w-full max-md:grid-cols-2 max-md:items-stretch max-md:[&>button]:h-auto max-md:[&>button]:min-h-11 max-md:[&>button]:min-w-0 max-md:[&>button]:whitespace-normal max-md:[&>button]:py-2 max-md:[&_[data-calculator-plan-actions=mobile]]:contents"
+              data-schedule-auxiliary-actions
+            >
+              <Button type="button" variant="outline" size="sm" onClick={toggleAuxiliaryGroups}>
+                <motion.span
+                  className="flex size-4 items-center justify-center"
+                  animate={{ rotate: allAuxiliaryCollapsed ? -90 : 0 }}
+                  transition={{ duration: MOTION_DURATION.fast, ease: MOTION_EASE_IN_OUT }}
+                  aria-hidden="true"
+                >
+                  <ChevronDown className="size-4" />
+                </motion.span>
+                {allAuxiliaryCollapsed ? (intl("components.expandAuxiliaryFacilities")) : (intl("components.collapseAuxiliaryFacilities"))}
+              </Button>
+              {viewModeActionSlot}
+              {mobileActionsSlot ? <div className="min-w-0 flex-1 max-md:contents md:hidden">{mobileActionsSlot}</div> : null}
+            </div>
+          ) : (
+            <>
+              {viewMode === "list" ? viewModeActionSlot : null}
+              {mobileActionsSlot ? <div className="w-full md:hidden">{mobileActionsSlot}</div> : null}
+            </>
+          )}
+        </div>
+        {shiftInfoSlot ? <div className="min-w-0 max-sm:w-full">{shiftInfoSlot}</div> : null}
+      </div>
+      <motion.div
+        data-plan-board
+        data-hide-images={hideImages ? "" : undefined}
+        data-plan-revision={planRevision || undefined}
+      >
+            <motion.div
+              initial={animateInitialView && !shouldReduceMotion ? {
+                opacity: 0,
+              } : false}
+              animate={{ opacity: 1 }}
+              transition={{
+                duration: shouldReduceMotion ? 0 : MOTION_DURATION.content,
+                ease: MOTION_EASE_OUT,
+              }}
+            >
+        {viewMode && (viewMode === "list" || (supportsCompactLayout && prepareInactiveView)) ? (
+          <CachedScheduleView key="list" mode="list" active={viewMode === "list"}>{listContent}</CachedScheduleView>
+        ) : null}
+        {supportsCompactLayout && (viewMode === "compact" || prepareInactiveView) ? (
+          <CachedScheduleView key="compact" mode="compact" active={viewMode === "compact"}>{compactContent}</CachedScheduleView>
+        ) : null}
+        {!viewMode ? <div className="min-h-[420px]" data-schedule-view-pending aria-hidden="true" /> : null}
             </motion.div>
-          </AnimatePresence>
       </motion.div>
     </div>
   );

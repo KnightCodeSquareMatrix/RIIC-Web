@@ -1,7 +1,7 @@
 "use client";
 import { useTranslations, useLocale } from "next-intl";
 
-import { ArrowLeft, Download, Search, Settings2, Sparkles, Trash2, Upload } from "lucide-react";
+import { ArrowLeft, Download, Ellipsis, Search, Settings2, Sparkles, Trash2, Upload, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 
 import type { FactoryRecipe, TradeOrder } from "@/blueprint";
@@ -20,6 +20,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { SkeletonSuspense } from "@/components/ui/skeleton-swap";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { downloadJson } from "@/download";
 import { localizedOperatorName, localizedRoomTitle } from "@/i18n/game-data";
@@ -231,8 +233,12 @@ export function ManualSchedulePage({
   const [pickerPage, setPickerPage] = useState(1);
   const [pendingMove, setPendingMove] = useState<PendingMove | null>(null);
   const [clearShiftConfirmationOpen, setClearShiftConfirmationOpen] = useState(false);
+  const mobileToolsRef = useRef<HTMLDetailsElement>(null);
   const [storageWarning, setStorageWarning] = useState<string | null>(null);
   const [scheduleQuery, setScheduleQuery] = useState("");
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchToggleRef = useRef<HTMLButtonElement>(null);
   const [pickerScrolling, setPickerScrolling] = useState(false);
   const [sortRoomId, setSortRoomId] = useState<string | null>(null);
   const [sortSelection, setSortSelection] = useState<{ roomId: string; slotIndex: number } | null>(null);
@@ -635,21 +641,24 @@ export function ManualSchedulePage({
     : (intl("components_pages_ManualSchedulePage.originalPlan"));
   const previousRoomTitle = pendingMove ? rows.find((row) => row.roomId === pendingMove.conflict.roomId)?.title ?? pendingMove.conflict.roomId : "";
   const nextRoomTitle = pendingMove ? rows.find((row) => row.roomId === pendingMove.target.roomId)?.title ?? pendingMove.target.roomId : "";
+  const closeMobileTools = () => { if (mobileToolsRef.current) mobileToolsRef.current.open = false; };
+  const scheduleTools = (mobile = false) => <>
+    {draft.source ? <Button type="button" variant="ghost" size="sm" onClick={() => { closeMobileTools(); onOpenCalculator(); }}>
+      <ArrowLeft />{intl("components_pages_ManualSchedulePage.backToCalculation")}
+    </Button> : null}
+    <Button type="button" variant={mobile ? "ghost" : "outline"} size="sm" onClick={() => { closeMobileTools(); onOpenSetup(); }}><Settings2 />{intl("components_pages_ManualSchedulePage.configureBoxLayout")}</Button>
+    <Button type="button" variant={mobile ? "ghost" : "outline"} size="sm" onClick={() => { closeMobileTools(); maaImportInputRef.current?.click(); }}><Upload />{intl("components_pages_ManualSchedulePage.importScheduleFile")}</Button>
+  </>;
 
   return (
     <div className="min-h-[calc(100svh-9rem)] py-2" data-manual-schedule-page>
-      <header className="mb-4 flex flex-wrap items-center gap-2">
-        <div className="relative min-w-[240px] flex-1">
+      <header className="mb-3 grid grid-cols-[auto_minmax(0,1fr)] items-start gap-2 md:mb-4 md:flex md:flex-wrap md:items-center">
+        <div className={`relative col-span-2 min-w-0 md:min-w-[240px] md:flex-1 ${!mobileSearchOpen && !scheduleQuery ? "max-md:hidden" : ""}`}>
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-          <Input value={scheduleQuery} onChange={(event) => setScheduleQuery(event.target.value)} className="pl-9" aria-label={intl("components_pages_ManualSchedulePage.searchThisManualSchedule")} placeholder={intl("components_pages_ManualSchedulePage.searchOperatorsOrRooms")} />
+          <Input ref={searchInputRef} value={scheduleQuery} onChange={(event) => setScheduleQuery(event.target.value)} className="pl-9 max-md:h-11 max-md:pr-11" aria-label={intl("components_pages_ManualSchedulePage.searchThisManualSchedule")} placeholder={intl("components_pages_ManualSchedulePage.searchOperatorsOrRooms")} />
+          <Button type="button" size="icon" variant="ghost" className="absolute right-0 top-0 size-11 md:hidden" aria-label={intl("components_pages_InfraCalculator.clearScheduleSearch")} onClick={() => { setScheduleQuery(""); setMobileSearchOpen(false); searchToggleRef.current?.focus(); }}><X /></Button>
         </div>
-        {draft.source ? (
-          <Button type="button" variant="ghost" size="sm" onClick={onOpenCalculator}>
-            <ArrowLeft />{intl("components_pages_ManualSchedulePage.backToCalculation")}
-          </Button>
-        ) : null}
-        <Button type="button" variant="outline" size="sm" onClick={onOpenSetup}><Settings2 />{intl("components_pages_ManualSchedulePage.configureBoxLayout")}</Button>
-        <Button type="button" variant="outline" size="sm" onClick={() => maaImportInputRef.current?.click()}><Upload />{intl("components_pages_ManualSchedulePage.importScheduleFile")}</Button>
+        <div className="hidden md:contents">{scheduleTools()}</div>
         <input
           ref={maaImportInputRef}
           type="file"
@@ -662,7 +671,14 @@ export function ManualSchedulePage({
             event.currentTarget.value = "";
           }}
         />
-        <Button type="button" size="sm" onClick={exportMaa}><Download />{intl("components_pages_ManualSchedulePage.exportMaa")}</Button>
+        <div className="relative flex min-w-0 items-center gap-2 md:hidden">
+          <Button ref={searchToggleRef} type="button" size="icon" variant="outline" className="size-11" aria-label={intl("components_pages_ManualSchedulePage.searchThisManualSchedule")} aria-expanded={mobileSearchOpen || Boolean(scheduleQuery)} onClick={() => { setMobileSearchOpen(true); requestAnimationFrame(() => searchInputRef.current?.focus()); }}><Search /></Button>
+          <details ref={mobileToolsRef} className="shrink-0" data-manual-more-tools>
+            <summary aria-label={intl("components_pages_InfraCalculator.moreTools")} title={intl("components_pages_InfraCalculator.moreTools")} className="flex size-11 cursor-pointer list-none items-center justify-center rounded-lg border border-border bg-background marker:content-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFD800]"><Ellipsis className="size-4" aria-hidden="true" /></summary>
+            <div className="absolute left-0 top-[calc(100%+0.35rem)] z-30 grid w-[min(18rem,calc(100vw-1.5rem))] gap-2 border border-border bg-background p-2 shadow-lg [&_button]:h-auto [&_button]:min-h-11 [&_button]:min-w-0 [&_button]:w-full [&_button]:justify-start [&_button]:whitespace-normal">{scheduleTools(true)}</div>
+          </details>
+        </div>
+        <Button type="button" size="sm" className="min-w-0 max-md:h-auto max-md:min-h-11 max-md:whitespace-normal max-md:px-3 max-md:py-2 max-md:text-xs" onClick={exportMaa}><Download />{intl("components_pages_ManualSchedulePage.exportMaa")}</Button>
       </header>
 
       {maaImportError ? <p className="mb-3 text-sm text-destructive" role="alert">{maaImportError}</p> : null}
@@ -778,9 +794,22 @@ export function ManualSchedulePage({
             <DialogTitle>{picker?.kind === "fiammetta" ? (intl("components_pages_ManualSchedulePage.fiammettaMoraleTarget")) : (intl("components_pages_ManualSchedulePage.assign", { value1: (en) ? (selectedRoom?.title ?? "room") : "", value2: (en) ? "" : (selectedRoom?.title ?? "设施") }))}</DialogTitle>
             <DialogDescription>{picker?.kind === "fiammetta" ? (intl("components_pages_ManualSchedulePage.thisTargetIsStoredOnlyForTheActiveShift")) : (intl("components_pages_ManualSchedulePage.onlyOwnedOperatorsInTheCurrentBoxAreShown"))}</DialogDescription>
           </DialogHeader>
-          <Suspense fallback={<div className="min-h-64" aria-busy="true" />}>
+          <SkeletonSuspense className="min-h-0 [&>[data-skeleton-swap-content]]:grid [&>[data-skeleton-swap-content]]:min-h-0" fallback={<div className="grid min-h-64 content-start gap-3 px-5 pb-5 sm:px-7"><Skeleton className="h-11" /><Skeleton className="h-24" /><div className="grid grid-cols-4 gap-3">{Array.from({ length: 4 }, (_, index) => <Skeleton key={index} className="h-20" />)}</div></div>}>
           <ScrollArea className="min-h-0" viewportClassName="overflow-x-hidden" viewportProps={{ ref: pickerScrollContainerRef, onScroll: handlePickerScroll }}>
-          <DialogBody className="block pt-0 pb-5 sm:pb-6" data-manual-operator-picker>
+          <DialogBody className="block pt-1 pb-5 sm:pb-6" data-manual-operator-picker>
+            <div className="mb-3">
+              <OperatorSearch
+                autoFocus
+                value={pickerQuery}
+                label={intl("components_pages_ManualSchedulePage.searchSelectableOperatorsAndSkills")}
+                placeholder={intl("components_pages_ManualSchedulePage.searchOperatorSkillOrEffect")}
+                onChange={(value) => {
+                  setPickerQuery(value);
+                  setPickerPage(1);
+                }}
+              />
+            </div>
+
             {picker?.kind === "slot" ? (
               <div className="grid gap-1">
                 <div className="flex min-w-0 items-center gap-2">
@@ -817,19 +846,6 @@ export function ManualSchedulePage({
               </SkillFilterRow>
             </div>
 
-            <div className="mt-3">
-              <OperatorSearch
-                autoFocus
-                value={pickerQuery}
-                label={intl("components_pages_ManualSchedulePage.searchSelectableOperatorsAndSkills")}
-                placeholder={intl("components_pages_ManualSchedulePage.searchOperatorSkillOrEffect")}
-                onChange={(value) => {
-                  setPickerQuery(value);
-                  setPickerPage(1);
-                }}
-              />
-            </div>
-
             <div className="mt-2 flex justify-end">
               <span className="font-number text-xs text-muted-foreground">{intl("components_pages_ManualSchedulePage.operatorCount", { count: filteredOperators.length })}</span>
             </div>
@@ -864,7 +880,7 @@ export function ManualSchedulePage({
             </div>
           </DialogBody>
           </ScrollArea>
-          </Suspense>
+          </SkeletonSuspense>
         </DialogContent>
       </Dialog>
 

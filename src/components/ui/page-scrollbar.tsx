@@ -1,62 +1,43 @@
 "use client";
 
 import { useEffect } from "react";
-import type { PartialOptions } from "overlayscrollbars";
-
-const PAGE_SCROLLBAR_OPTIONS = {
-  overflow: { x: "hidden", y: "scroll" },
-  scrollbars: {
-    theme: "os-theme-yeye",
-    autoHide: "leave",
-    autoHideDelay: 600,
-    autoHideSuspend: true,
-    dragScroll: true,
-    clickScroll: false,
-  },
-} satisfies PartialOptions;
+import { isTouchViewport, observeScrollbars, scrollbarOptions } from "./overlay-scrollbars";
 
 export function PageScrollbar() {
   useEffect(() => {
-    if (isTouchViewport()) return;
-
     let cancelled = false;
-    let destroy: (() => void) | undefined;
-    const root = document.documentElement;
-    void import("overlayscrollbars")
-      .then(({ OverlayScrollbars }) => {
-        if (cancelled) return;
-        root.setAttribute("data-overlayscrollbars-initialize", "");
-        document.body.setAttribute("data-overlayscrollbars-initialize", "");
-        const instance = OverlayScrollbars(
-          {
+    let cleanup: (() => void) | undefined;
+    void import("overlayscrollbars").then(({ OverlayScrollbars }) => {
+      if (cancelled) return;
+      let stopObserving = () => { /* Safe until the observer is installed. */ };
+      let page: ReturnType<typeof OverlayScrollbars> | undefined;
+      const coarse = window.matchMedia("(pointer: coarse)");
+      const narrow = window.matchMedia("(max-width: 767px)");
+      cleanup = () => {
+        stopObserving();
+        coarse.removeEventListener("change", refresh);
+        narrow.removeEventListener("change", refresh);
+        page?.destroy();
+      };
+      function refresh() {
+        page?.destroy();
+        page = undefined;
+        if (!isTouchViewport()) {
+          page = OverlayScrollbars({
             target: document.body,
             cancel: { nativeScrollbarsOverlaid: false, body: false },
-          },
-          PAGE_SCROLLBAR_OPTIONS,
-        );
-        destroy = () => instance.destroy();
-      })
-      .catch(() => {
-        root.removeAttribute("data-overlayscrollbars-initialize");
-        document.body.removeAttribute("data-overlayscrollbars-initialize");
-      });
-
-    return () => {
-      cancelled = true;
-      destroy?.();
-      root.removeAttribute("data-overlayscrollbars-initialize");
-      document.body.removeAttribute("data-overlayscrollbars-initialize");
-    };
+          }, scrollbarOptions("y"));
+        }
+      }
+      refresh();
+      stopObserving = observeScrollbars(OverlayScrollbars);
+      coarse.addEventListener("change", refresh);
+      narrow.addEventListener("change", refresh);
+    }).catch(() => {
+      // Import failure leaves the native scrollbars untouched.
+      cleanup?.();
+    });
+    return () => { cancelled = true; cleanup?.(); };
   }, []);
-
   return null;
-}
-
-function isTouchViewport() {
-  const hasCoarsePointer = window.matchMedia?.("(pointer: coarse)").matches === true;
-  const isSmallTouchViewport =
-    window.matchMedia?.("(max-width: 767px)").matches === true &&
-    window.navigator.maxTouchPoints > 0;
-
-  return hasCoarsePointer || isSmallTouchViewport;
 }

@@ -5,6 +5,7 @@ import "overlayscrollbars/overlayscrollbars.css";
 
 import "./globals.css";
 import { TelemetryLoader } from "@/components/telemetry/TelemetryLoader";
+import { PageScrollbar } from "@/components/ui/page-scrollbar";
 import { LocaleProvider } from "@/i18n/client";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getTranslations } from "next-intl/server";
@@ -56,6 +57,7 @@ export default async function RootLayout({
       <body>
         <NextIntlClientProvider><LocaleProvider>{children}</LocaleProvider></NextIntlClientProvider>
         <TelemetryLoader />
+        <PageScrollbar />
       </body>
     </html>
   );

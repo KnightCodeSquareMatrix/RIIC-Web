@@ -4,6 +4,8 @@
   "importOperatorDataFirst": "Import operator data first",
   "plannerUnavailable": "Planner unavailable",
   "generateSchedule": "Generate schedule",
+  "scheduleGenerated": "Generated",
+  "retryGeneration": "Try again",
   "retryInS": "Retry in {runCooldownSeconds}s",
   "signInToGenerate": "Sign in to generate",
   "plannerUnavailable2": "Planner unavailable",

@@ -95,7 +95,10 @@ test("the worker wake signal latches notifications that arrive before wait", asy
   assert.equal(completed, true);
 });
 
-test("a cache hit records ownership before publishing the completed task", async () => {
+for (const sourceType of ["maa", "skland"]) test(`${sourceType}: a cache hit records current ownership without running the solver`, async () => {
+  const task = claimedTask();
+  task.payload.sourceType = sourceType;
+  task.payload.dataOwnerTag = sourceType === "skland" ? "current-skland-owner" : null;
   const cacheResult = { diagnosticId: "cache-result", durationMs: 3 };
   const { calls, dependencies } = executionHarness({
     getCacheSolverIdentity: async () => ({
@@ -104,10 +107,21 @@ test("a cache hit records ownership before publishing the completed task", async
       solver_executable_sha256: "c".repeat(64),
       observed_at: "2026-09-02T00:00:00.000Z",
     }),
-    resolveCache: async () => ({ kind: "hit", keyHmac: "cache-key", result: cacheResult, lookupDurationMs: 1 }),
+    resolveCache: async (input) => {
+      assert.equal(input.sourceType, sourceType);
+      return { kind: "hit", keyHmac: "cache-key", result: cacheResult, lookupDurationMs: 1 };
+    },
+    recordRun: async (input) => {
+      assert.equal(input.userId, task.userId);
+      assert.equal(input.dataOwnerTag, task.payload.dataOwnerTag);
+      assert.equal(input.diagnosticId, cacheResult.diagnosticId);
+      calls.push(`record:${input.status}`);
+      return true;
+    },
+    runPlan: async () => assert.fail("A cache hit must not invoke the solver"),
   });
 
-  assert.equal(await executePlanTask(claimedTask(), 0, dependencies), null);
+  assert.equal(await executePlanTask(task, 0, dependencies), null);
   assert.equal(await waitForPlanExecutionUpdates(1_000), true);
   assert.deepEqual(calls, [
     "start:cache",

@@ -25,7 +25,7 @@ export function SetupDialogSkeleton({
         data-setup-dialog
         data-setup-dialog-skeleton
         aria-busy="true"
-        className="h-[min(660px,calc(100dvh-1rem))] max-w-[calc(100%-1rem)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-[24px] p-0 sm:max-w-[min(880px,calc(100%-2rem))] sm:rounded-[32px]"
+        className="h-[min(720px,calc(100dvh-1rem))] max-w-[calc(100%-1rem)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-[24px] p-0 sm:max-w-[min(960px,calc(100%-2rem))] sm:rounded-[32px]"
       >
         <DialogHeader className="sr-only">
           <DialogTitle>{intl("components_setup_SetupDialogSkeleton.scheduleSettings")}</DialogTitle>

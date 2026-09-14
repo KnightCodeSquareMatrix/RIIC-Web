@@ -4,6 +4,8 @@
   "importOperatorDataFirst": "请先导入干员数据",
   "plannerUnavailable": "排班服务尚未就绪",
   "generateSchedule": "生成排班",
+  "scheduleGenerated": "已生成",
+  "retryGeneration": "重试生成",
   "retryInS": "{runCooldownSeconds} 秒后重试",
   "signInToGenerate": "登录后生成",
   "plannerUnavailable2": "排班服务未就绪",

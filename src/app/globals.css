@@ -99,6 +99,7 @@
     --sidebar-border: oklch(0.922 0 0);
     --sidebar-ring: oklch(0.708 0 0);
     --infra-room-surface-solid: #272a2b;
+    --schedule-success: var(--color-emerald-300);
     --infra-room-edge: oklch(0.94 0.012 220 / 0.14);
     --infra-room-edge-hover: oklch(0.94 0.012 220 / 0.22);
     --infra-room-shadow: oklch(0.12 0.012 220 / 0.24);
@@ -115,6 +116,7 @@
 }
 
 .dark {
+    --schedule-success: var(--color-emerald-800);
     --background: oklch(0.145 0 0);
     --foreground: oklch(0.985 0 0);
     --card: oklch(0.205 0 0);
@@ -170,6 +172,101 @@
   p, li, figcaption {
     text-wrap: pretty;
     }
+}
+
+/* Room snapshots change bounds without scaling their text or portraits. */
+html.schedule-layout-transition {
+  view-transition-name: none;
+}
+
+html.schedule-layout-transition::view-transition {
+  pointer-events: none;
+}
+
+html.schedule-layout-transition::view-transition-group(*) {
+  animation-duration: 360ms;
+  animation-timing-function: cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+html.schedule-layout-transition::view-transition-image-pair(*) {
+  overflow: clip;
+  isolation: isolate;
+}
+
+html.schedule-layout-transition::view-transition-old(*),
+html.schedule-layout-transition::view-transition-new(*) {
+  width: 100%;
+  height: 100%;
+  object-fit: none;
+  object-position: left top;
+  mix-blend-mode: normal;
+  animation-duration: 360ms;
+  animation-timing-function: cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+html.schedule-layout-transition::view-transition-old(*) {
+  animation-name: schedule-room-out;
+}
+
+html.schedule-layout-transition::view-transition-new(*) {
+  animation-name: schedule-room-in;
+}
+
+@keyframes schedule-room-out {
+  50%, to { opacity: 0; }
+}
+
+@keyframes schedule-room-in {
+  from { opacity: 0; }
+}
+
+/* On return, preserve each wide card's surface while its contents change.
+   Only paired rooms get this backdrop; entering rooms must stay transparent. */
+html.schedule-layout-return::view-transition-image-pair(.schedule-room-returning) {
+  background: var(--infra-room-surface-solid);
+}
+
+html.schedule-layout-return::view-transition-old(*) {
+  animation-name: schedule-room-return-out;
+  animation-timing-function: linear;
+}
+
+html.schedule-layout-return::view-transition-new(*) {
+  animation-name: schedule-room-return-in;
+  animation-timing-function: linear;
+}
+
+html.schedule-layout-return::view-transition-new(.schedule-room-entering) {
+  animation-name: schedule-room-return-enter;
+}
+
+@keyframes schedule-room-return-out {
+  from, 10% { opacity: 1; }
+  55%, to { opacity: 0; }
+}
+
+@keyframes schedule-room-return-in {
+  from, 15% { opacity: 0; }
+  65%, to { opacity: 1; }
+}
+
+@keyframes schedule-room-return-enter {
+  from, 30% { opacity: 0; }
+  80%, to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-skeleton-swap-content],
+  [data-skeleton-swap-placeholder],
+  [data-run-face] {
+    transform: none !important;
+    filter: none !important;
+  }
+  html.schedule-layout-transition::view-transition-group(*),
+  html.schedule-layout-transition::view-transition-old(*),
+  html.schedule-layout-transition::view-transition-new(*) {
+    animation-duration: 0s;
+  }
 }
 
 [data-motion-pressable] {
@@ -412,11 +509,28 @@
 
 .app-content-track {
   box-sizing: border-box;
+  min-width: 0;
   width: 100%;
   max-width: var(--app-content-track-max);
   margin-inline: auto;
   padding-inline-start: max(var(--app-content-gutter), env(safe-area-inset-left));
   padding-inline-end: max(var(--app-content-gutter), env(safe-area-inset-right));
+}
+
+@media (max-width: 767px) {
+  :root {
+    --app-content-gutter: 0.75rem;
+  }
+
+  .workbench-footer {
+    padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+  }
+
+  .workbench-footer [data-filing-links] {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+  }
 }
 
 .infra-technical-canvas {
@@ -904,21 +1018,40 @@
   background: transparent !important;
 }
 
-.yeye-scrollbar {
+/* The library defaults to z-index: 99999. Page decoration must stay below
+   modal backdrops (z-50), so dragging it cannot bypass background scroll locks. */
+body > .os-theme-yeye {
+  z-index: 40;
+}
+
+@layer base {
+  :where([data-yeye-scroll]) {
+    position: relative;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .os-theme-yeye,
+  .os-theme-yeye .os-scrollbar-handle {
+    transition: none !important;
+  }
+}
+
+:is(.yeye-scrollbar, textarea) {
   scrollbar-color: rgb(148 163 184 / 0.64) transparent;
   scrollbar-width: thin;
 }
 
-.yeye-scrollbar::-webkit-scrollbar {
+:is(.yeye-scrollbar, textarea)::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
-.yeye-scrollbar::-webkit-scrollbar-track {
+:is(.yeye-scrollbar, textarea)::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.yeye-scrollbar::-webkit-scrollbar-thumb {
+:is(.yeye-scrollbar, textarea)::-webkit-scrollbar-thumb {
   min-height: 36px;
   border: 2px solid transparent;
   border-radius: 999px;
@@ -926,17 +1059,17 @@
   background-clip: content-box;
 }
 
-.yeye-scrollbar::-webkit-scrollbar-thumb:hover {
+:is(.yeye-scrollbar, textarea)::-webkit-scrollbar-thumb:hover {
   background: rgb(148 163 184 / 0.64);
   background-clip: content-box;
 }
 
-.yeye-scrollbar::-webkit-scrollbar-thumb:active {
+:is(.yeye-scrollbar, textarea)::-webkit-scrollbar-thumb:active {
   background: rgb(100 116 139 / 0.7);
   background-clip: content-box;
 }
 
-.yeye-scrollbar::-webkit-scrollbar-corner {
+:is(.yeye-scrollbar, textarea)::-webkit-scrollbar-corner {
   background: transparent;
 }
 

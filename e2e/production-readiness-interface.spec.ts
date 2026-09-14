@@ -183,7 +183,7 @@ test("setup keeps Box parse errors local and actionable", async ({ page }) => {
 
   await expect(page.locator("[data-plan-board]")).toHaveAttribute("data-plan-revision", diagnosticId);
   const moreTools = page.locator("[data-calculator-more-tools]");
-  await moreTools.getByText("更多工具", { exact: true }).click();
+  await moreTools.getByLabel("更多工具", { exact: true }).click();
   const setupTrigger = moreTools.getByRole("button", { name: "配置Box与布局" });
   await setupTrigger.click();
   const dialog = page.getByRole("dialog");
@@ -649,7 +649,7 @@ test("setup exposes and persists only worker-supported rotation profiles", async
   expect(persisted.operbox).toHaveLength(fullOperatorCount);
 });
 
-test("layout level controls clamp edits and expose the power-safe 342 defaults", async ({ page }) => {
+test("layout level steppers respect bounds and expose the power-safe 342 defaults", async ({ page }) => {
   await mockApis(page);
   await seedV4Session(page);
   await page.setViewportSize({ width: 1440, height: 1000 });
@@ -671,13 +671,17 @@ test("layout level controls clamp edits and expose the power-safe 342 defaults",
   await expect(functionGroup.locator('[data-slot="accordion-trigger"]')).toHaveAttribute("aria-expanded", "false");
 
   await functionGroup.locator('[data-slot="accordion-trigger"]').click();
-  const controlLevel = dialog.locator('input[aria-label="control 等级"]:visible');
-  await expect(controlLevel).toHaveValue("5");
+  const controlLevel = dialog.locator('output[aria-label="control 等级"]');
+  await expect(controlLevel).toHaveText("5");
+  await expect(dialog.getByRole("button", { name: "control 等级加一" })).toBeDisabled();
   await dialog.getByRole("button", { name: "control 等级减一" }).click();
-  await expect(controlLevel).toHaveValue("4");
-  await controlLevel.fill("999");
-  await controlLevel.press("Enter");
-  await expect(controlLevel).toHaveValue("5");
+  await expect(controlLevel).toHaveText("4");
+  for (let count = 0; count < 3; count++) await dialog.getByRole("button", { name: "control 等级减一" }).click();
+  await expect(controlLevel).toHaveText("1");
+  await expect(dialog.getByRole("button", { name: "control 等级减一" })).toBeDisabled();
+  for (let count = 0; count < 4; count++) await dialog.getByRole("button", { name: "control 等级加一" }).click();
+  await expect(controlLevel).toHaveText("5");
+  await expect(dialog.getByRole("button", { name: "control 等级加一" })).toBeDisabled();
 
   await dialog.locator('[data-facility-group="power"] [data-slot="accordion-trigger"]').click();
   await dialog.locator('[data-facility-group="dormitory"] [data-slot="accordion-trigger"]').click();
@@ -693,8 +697,8 @@ test("layout level controls clamp edits and expose the power-safe 342 defaults",
   await expect(dialog.locator('[data-slot="setup-room-row"][data-room-group="trading"]')).toHaveCount(3);
   await expect(dialog.locator('[data-slot="setup-room-row"][data-room-group="manufacture"]')).toHaveCount(4);
   await expect(dialog.locator('[data-slot="setup-room-row"][data-room-group="power"]')).toHaveCount(2);
-  await expect(dialog.locator('input[aria-label="trade_2 等级"]:visible')).toHaveValue("2");
-  await expect(dialog.locator('input[aria-label="dorm_1 等级"]:visible')).toHaveValue("2");
+  await expect(dialog.locator('output[aria-label="trade_2 等级"]')).toHaveText("2");
+  await expect(dialog.locator('output[aria-label="dorm_1 等级"]')).toHaveText("2");
   const normalPowerStatus = dialog.getByText("电力正常 · 540/540", { exact: true });
   await expect(normalPowerStatus).toBeVisible();
   await expect(normalPowerStatus).toHaveClass(/text-emerald-700/);
@@ -703,10 +707,8 @@ test("layout level controls clamp edits and expose the power-safe 342 defaults",
   await lowerFactoryRecipe.getByRole("button", { name: "源石碎片" }).click();
   await expect(lowerFactoryRecipe.getByRole("button", { name: "源石碎片" })).toHaveAttribute("aria-pressed", "true");
   for (const roomId of ["manu_1", "manu_2"]) {
-    const level = dialog.locator(`input[aria-label="${roomId} 等级"]:visible`);
-    await level.fill("2");
-    await level.press("Enter");
-    await expect(level).toHaveValue("2");
+    await dialog.getByRole("button", { name: `${roomId} 等级减一` }).click();
+    await expect(dialog.locator(`output[aria-label="${roomId} 等级"]`)).toHaveText("2");
   }
   await expect(lowerFactoryRecipe.getByRole("button", { name: "贵金属" })).toHaveAttribute("aria-pressed", "true");
   await expect(lowerFactoryRecipe.getByRole("button", { name: "源石碎片" })).toBeDisabled();
@@ -723,18 +725,14 @@ test("layout level controls clamp edits and expose the power-safe 342 defaults",
   expect(footerBox?.height ?? Infinity).toBeLessThanOrEqual(68);
   expect((footerBox?.y ?? Infinity) + (footerBox?.height ?? Infinity)).toBeLessThanOrEqual(844);
   expect(await activeTradeOrder.evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
-  const mobileTradeLevel = dialog.locator('input[aria-label="trade_2 等级"]:visible');
-  await mobileTradeLevel.click();
-  const firstLevelOption = page.getByRole("option", { name: "1", exact: true });
-  await waitForOwnAnimations(page.locator('[data-slot="combobox-content"]'));
-  const [levelFieldBox, levelPopupBox] = await Promise.all([
-    mobileTradeLevel.locator("xpath=..").boundingBox(),
-    page.locator('[data-slot="combobox-content"]').boundingBox(),
-  ]);
-  expect(levelPopupBox?.width).toBeCloseTo(levelFieldBox?.width ?? 0, 0);
-  expect(await firstLevelOption.evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
-  await firstLevelOption.click();
-  await expect(mobileTradeLevel).toHaveValue("1");
+  const mobileTradeLevel = dialog.getByRole("group", { name: "trade_2 等级", exact: true });
+  const decreaseTradeLevel = mobileTradeLevel.getByRole("button", { name: "trade_2 等级减一" });
+  await decreaseTradeLevel.scrollIntoViewIfNeeded();
+  expect(await decreaseTradeLevel.evaluate(element => element.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+  expect(await mobileTradeLevel.locator('[data-setup-stepper]').evaluate(element => element.getBoundingClientRect().width)).toBeLessThan(120);
+  await decreaseTradeLevel.click();
+  await expect(mobileTradeLevel.locator("output")).toHaveText("1");
+  await expect(decreaseTradeLevel).toBeDisabled();
 });
 
 test("training recommendation shows readable promotion and current elite stages", async ({ page }, testInfo) => {

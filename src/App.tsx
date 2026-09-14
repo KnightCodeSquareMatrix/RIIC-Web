@@ -1984,6 +1984,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       loading,
       canRun,
       runCooldownSeconds: planRetryCountdown,
+      runOutcome: apiError ? "error" as const : planTask.status === "done" ? "success" as const : "idle" as const,
       hasBox,
       hasPersonalBox,
       feedbackDisabledForSampleBox,
@@ -2217,15 +2218,17 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       </WorkbenchContext.Provider>
       </div>
 
-      <footer className="app-content-track mt-auto flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border/70 py-5 text-xs text-muted-foreground">
-        <LanguageSwitch />
+      <footer className="app-content-track workbench-footer mt-auto flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border/70 py-5 text-xs text-muted-foreground">
+        <div className="w-full md:w-auto max-md:[&>div]:h-12 max-md:[&_button]:h-11 max-md:[&_button]:min-w-12 max-md:[&_span]:h-11"><LanguageSwitch /></div>
+        <div className="flex w-full flex-wrap items-center gap-x-4 md:contents">
         <Link prefetch={false} className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/help" data-help-link>{intl("App.help")}</Link>
         <Link prefetch={false} className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/terms">{intl("App.terms")}</Link>
         <Link prefetch={false} className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/privacy">{intl("App.privacy")}</Link>
         <a className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/about" data-about-link>{intl("App.about")}</a>
-        <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-1 max-sm:ml-0 max-sm:w-full">
+        </div>
+        <div className="flex w-full min-w-0 flex-col items-start gap-x-3 gap-y-1 md:ml-auto md:w-auto md:flex-row md:flex-wrap md:items-center md:justify-end">
           <FilingLinks />
-          <span className="h-4 w-px shrink-0 bg-border max-sm:hidden" aria-hidden="true" />
+          <span className="h-4 w-px shrink-0 bg-border max-md:hidden" aria-hidden="true" />
           <a
             href="https://www.rainyun.com/riic_"
             target="_blank"

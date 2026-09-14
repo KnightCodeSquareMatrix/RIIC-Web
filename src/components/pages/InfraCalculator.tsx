@@ -19,6 +19,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PlanResultSummarySkeleton } from "@/components/PlanResultSummarySkeleton";
+import { ScheduleRunButton } from "@/components/ScheduleRunButton";
+import { SkeletonSuspense } from "@/components/ui/skeleton-swap";
 
 import type { FactoryRecipe, TradeOrder } from "@/blueprint";
 import { loadClientFeature } from "@/client-lazy-loader";
@@ -64,45 +66,6 @@ function Panel({ children, className = "", action, title, icon }: {
       ) : null}
       <div>{children}</div>
     </section>
-  );
-}
-
-function RunButton({
-  canRun,
-  hasBox,
-  plannerReady,
-  requiresAccount,
-  runCooldownSeconds,
-  onRun,
-}: {
-  canRun: boolean;
-  hasBox: boolean;
-  plannerReady: boolean;
-  requiresAccount: boolean;
-  runCooldownSeconds: number;
-  onRun: () => void;
-}) {
-  const intl = useTranslations();
-
-  const unavailableLabel = runCooldownSeconds > 0
-    ? intl("components_pages_InfraCalculator.retryInSeconds", { runCooldownSeconds: runCooldownSeconds })
-    : requiresAccount
-    ? intl("components_pages_InfraCalculator.signInFirst")
-    : plannerReady
-      ? intl("components_pages_InfraCalculator.importOperatorDataFirst")
-      : intl("components_pages_InfraCalculator.plannerUnavailable");
-  return (
-    <Button
-      size="sm"
-      className="h-9 min-w-0 max-sm:h-11 max-sm:px-3 max-sm:text-xs"
-      aria-label={runCooldownSeconds > 0 ? unavailableLabel : canRun || hasBox ? (intl("components_pages_InfraCalculator.generateSchedule")) : unavailableLabel}
-      title={runCooldownSeconds > 0 || (!canRun && !(requiresAccount && hasBox && plannerReady)) ? unavailableLabel : undefined}
-      onClick={onRun}
-      disabled={runCooldownSeconds > 0 || (!canRun && !(requiresAccount && hasBox && plannerReady))}
-    >
-      <Play />
-      <span>{runCooldownSeconds > 0 ? intl("components_pages_InfraCalculator.retryInS", { runCooldownSeconds: runCooldownSeconds }) : requiresAccount && hasBox ? intl("components_pages_InfraCalculator.signInToGenerate") : !plannerReady ? intl("components_pages_InfraCalculator.plannerUnavailable2") : canRun ? intl("components_pages_InfraCalculator.generate") : intl("components_pages_InfraCalculator.importToGenerate")}</span>
-    </Button>
   );
 }
 
@@ -211,7 +174,7 @@ function CalculatorStartPanel({
 
   return (
     <section
-      className="relative isolate flex min-h-[calc(100svh-3.5rem)] items-center overflow-hidden bg-[#f7f5ec] px-4 py-8 sm:px-6 md:min-h-svh lg:px-8"
+      className="relative isolate flex min-h-[calc(100svh-3rem)] items-center overflow-hidden bg-[#f7f5ec] px-4 py-8 sm:px-6 md:min-h-svh lg:px-8"
       aria-label={intl("components_pages_InfraCalculator.scheduleSetup")}
       data-calculator-start-panel
       data-onboarding-active="true"
@@ -326,6 +289,7 @@ export interface InfraCalculatorProps {
   sampleLoading: boolean;
   loading: boolean;
   canRun: boolean;
+  runOutcome?: "idle" | "success" | "error";
   runCooldownSeconds: number;
   hasBox: boolean;
   hasPersonalBox: boolean;
@@ -424,6 +388,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [planActionsOpen, setPlanActionsOpen] = useState(false);
   const [operatorQuery, setOperatorQuery] = useState("");
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [imageExporting, setImageExporting] = useState(false);
   const [imageExportFailed, setImageExportFailed] = useState(false);
   const [sortRoomId, setSortRoomId] = useState<string | null>(null);
@@ -472,6 +437,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
   ) : null;
 
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchToggleRef = useRef<HTMLButtonElement>(null);
   const [shiftDirection, setShiftDirection] = useState<ShiftDirection>(0);
   const [fiammettaPortrait, setFiammettaPortrait] = useState<string | null>(null);
   const fiammettaTarget = activePlan?.Fiammetta?.enable
@@ -526,24 +492,24 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     </div>
   ) : (
     <div
-      className="flex min-w-0 flex-1 items-center justify-end gap-2"
+      className="grid min-w-0 grid-cols-2 items-stretch gap-2"
       data-calculator-export-actions={placement}
       data-calculator-plan-actions={placement}
     >
-      <Button type="button" size="sm" variant="outline" className="min-w-0 flex-1" onClick={() => setPlanActionsOpen(true)}>
+      <Button type="button" size="sm" variant="outline" className="h-auto min-h-11 min-w-0 w-full whitespace-normal py-2" onClick={() => setPlanActionsOpen(true)}>
         <SlidersHorizontal />{intl("components_pages_InfraCalculator.adjustPlan")}
       </Button>
-      <Button type="button" size="sm" variant="outline" className="min-w-0 flex-1" disabled={!result?.maa} onClick={onDownloadMaa}>
+      <Button type="button" size="sm" variant="outline" className="h-auto min-h-11 min-w-0 w-full whitespace-normal py-2" disabled={!result?.maa} onClick={onDownloadMaa}>
         <Download />{intl("components_pages_InfraCalculator.exportMaa")}
       </Button>
-      <div className="flex min-w-0 flex-1 [&>div]:w-full [&_button]:min-w-0 [&_button]:flex-1">
+      <div className="contents [&>div]:contents [&_button]:h-auto [&_button]:min-h-11 [&_button]:min-w-0 [&_button]:w-full [&_button]:whitespace-normal [&_button]:py-2">
         {imageExportAction}
       </div>
     </div>
   );
 
   const renderSearch = () => (
-    <div className="flex min-w-0 items-center gap-2 max-sm:col-span-3">
+    <div className={cn("flex min-w-0 items-center gap-2 max-md:col-span-2", !mobileSearchOpen && !operatorQuery && "max-md:hidden")}>
       <label className="relative block min-w-0 flex-1">
         <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
         <Input
@@ -552,13 +518,13 @@ export function InfraCalculator(props: InfraCalculatorProps) {
           onChange={(event) => setOperatorQuery(event.target.value)}
           placeholder={intl("components_pages_InfraCalculator.searchOperatorsOrRoomsInThisSchedule")}
           aria-label={intl("components_pages_InfraCalculator.searchOperatorsOrRoomsInThisSchedule")}
-          className="h-9 pr-10 pl-9 max-sm:h-11"
+          className="h-9 pr-10 pl-9 max-md:h-11"
         />
-        {operatorQuery ? (
+        {operatorQuery || mobileSearchOpen ? (
           <button
             type="button"
-            onClick={() => { setOperatorQuery(""); searchInputRef.current?.focus(); }}
-            className="absolute top-1/2 right-0 grid size-9 -translate-y-1/2 place-items-center text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#FFD800] max-sm:size-11"
+            onClick={() => { setOperatorQuery(""); setMobileSearchOpen(false); (window.matchMedia("(max-width: 767px)").matches ? searchToggleRef : searchInputRef).current?.focus(); }}
+            className="absolute top-1/2 right-0 grid size-9 -translate-y-1/2 place-items-center text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#FFD800] max-md:size-11"
             aria-label={intl("components_pages_InfraCalculator.clearScheduleSearch")}
           >
             <X className="size-4" aria-hidden="true" />
@@ -569,7 +535,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
         type="button"
         size="icon-lg"
         variant="outline"
-        className="hidden size-9 sm:inline-flex"
+        className="hidden size-9 md:inline-flex"
         aria-label={intl("components_pages_InfraCalculator.keyboardShortcuts")}
         title={intl("components_pages_InfraCalculator.keyboardShortcuts")}
         onClick={() => setShortcutGuideOpen(true)}
@@ -583,10 +549,13 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     const handleShortcut = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase() === "k") {
         event.preventDefault();
-        searchInputRef.current?.focus();
+        setMobileSearchOpen(true);
+        requestAnimationFrame(() => searchInputRef.current?.focus());
       } else if (event.key === "Escape" && document.activeElement === searchInputRef.current) {
         setOperatorQuery("");
+        setMobileSearchOpen(false);
         searchInputRef.current?.blur();
+        if (window.matchMedia("(max-width: 767px)").matches) searchToggleRef.current?.focus();
       }
     };
     window.addEventListener("keydown", handleShortcut);
@@ -603,17 +572,20 @@ export function InfraCalculator(props: InfraCalculatorProps) {
           <Panel
             className={cn(
               "min-h-[calc(100vh-112px)]",
+              !showOnboarding && "max-md:pt-2",
               !scheduleResult && showOnboarding && "py-0",
             )}
             action={!showOnboarding ? (
               <div
-                className="grid w-full grid-cols-[minmax(14rem,1fr)_auto_auto] items-center gap-2 max-sm:grid-cols-[auto_auto_minmax(0,1fr)]"
+                className="grid w-full grid-cols-[auto_minmax(0,1fr)] items-start gap-2 md:grid-cols-[minmax(14rem,1fr)_auto_auto] md:items-center"
                 data-calculator-controls
               >
                 {renderSearch()}
-                <details className="relative min-w-0 sm:hidden" data-calculator-more-tools>
-                  <summary className="flex h-11 cursor-pointer list-none items-center justify-center gap-2 border border-border bg-background px-3 text-sm font-medium marker:content-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFD800]">
-                    <Ellipsis className="size-4" aria-hidden="true" />{intl("components_pages_InfraCalculator.moreTools")}
+                <div className="relative flex min-w-0 items-center gap-2 md:inline-flex md:gap-0" data-calculator-setup-group>
+                <Button ref={searchToggleRef} type="button" size="icon" variant="outline" className="size-11 md:hidden" aria-label={intl("components_pages_InfraCalculator.searchOperatorsOrRoomsInThisSchedule")} aria-expanded={mobileSearchOpen || Boolean(operatorQuery)} onClick={() => { setMobileSearchOpen(true); requestAnimationFrame(() => searchInputRef.current?.focus()); }}><Search /></Button>
+                <details className="shrink-0 md:hidden" data-calculator-more-tools>
+                  <summary aria-label={intl("components_pages_InfraCalculator.moreTools")} title={intl("components_pages_InfraCalculator.moreTools")} className="flex size-11 cursor-pointer list-none items-center justify-center rounded-lg border border-border bg-background marker:content-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFD800]">
+                    <Ellipsis className="size-4" aria-hidden="true" />
                   </summary>
                   <div className="absolute left-0 top-[calc(100%+0.35rem)] z-30 grid w-[min(18rem,calc(100vw-1.5rem))] gap-2 border border-border bg-background p-2 shadow-lg">
                     <Button type="button" variant="ghost" className="h-11 justify-start" onClick={onOpenSetup}>
@@ -624,14 +596,13 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                     </Button>
                   </div>
                 </details>
-                <div className="contents sm:inline-flex sm:min-w-0" data-calculator-setup-group>
                   <Button
                     type="button"
                     size="sm"
                     variant="outline"
                     className={accountControl
-                      ? "h-9 min-w-0 rounded-r-none max-sm:hidden"
-                      : "h-9 min-w-0 max-sm:hidden"}
+                      ? "h-9 min-w-0 rounded-r-none max-md:hidden"
+                      : "h-9 min-w-0 max-md:hidden"}
                     aria-label={intl("components_pages_InfraCalculator.configureBoxAndBase")}
                     onClick={onOpenSetup}
                   >
@@ -640,18 +611,17 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                   </Button>
                   {accountControl}
                 </div>
-                {loading ? (
-                  <div className="flex items-center gap-2">
-                    {taskQueue?.error ? (
-                      <span className="text-xs text-red-300">{taskQueue.error}</span>
+                  <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 md:flex-nowrap">
+                    {loading && taskQueue?.error ? (
+                      <span className="w-full break-words text-xs text-red-300 md:w-auto" role="status">{taskQueue.error}</span>
                     ) : null}
-                    {taskQueue?.pollStopped ? (
-                      <div className="relative">
+                    {loading && taskQueue?.pollStopped ? (
+                      <div className="relative max-md:w-full">
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
-                          className="h-9 max-sm:h-11"
+                          className="h-9 max-md:h-11 max-md:w-full"
                           onClick={taskQueue.onResumePoll}
                           disabled={taskQueue.resumeDisabled}
                           aria-label={intl("components_pages_InfraCalculator.checkProgress")}
@@ -669,22 +639,14 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                         ) : null}
                       </div>
                     ) : null}
-                    <Button type="button" variant="destructive" className="h-9 max-sm:h-11" onClick={() => setCancelConfirmOpen(true)} aria-label={intl("components_pages_InfraCalculator.cancelTask")}>
-                      <Loader2 className="animate-spin" />
-                      {intl("components_pages_InfraCalculator.cancelTask")}
-                    </Button>
+                    <ScheduleRunButton canRun={canRun} hasBox={hasBox} plannerReady={plannerReady} requiresAccount={requiresAccount} runCooldownSeconds={runCooldownSeconds} loading={loading} outcome={props.runOutcome} onRun={onRun} onCancel={() => setCancelConfirmOpen(true)} />
                   </div>
-                ) : (
-                  <div className="flex min-w-0 items-center justify-end gap-2 max-sm:justify-self-end">
-                    <RunButton canRun={canRun} hasBox={hasBox} plannerReady={plannerReady} requiresAccount={requiresAccount} runCooldownSeconds={runCooldownSeconds} onRun={onRun} />
-                  </div>
-                )}
               </div>
             ) : null}
           >
             {scheduleResult ? (
               <>
-                <Suspense fallback={<DeferredResultLoading />}>
+                <SkeletonSuspense fallback={<DeferredResultLoading />}>
                   <PlanResultSummary
                     profile={scheduleResult.profile}
                     rotation={scheduleResult.rotation}
@@ -705,7 +667,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                       </Suspense>
                     )}
                   />
-                </Suspense>
+                </SkeletonSuspense>
               </>
             ) : null}
             {imageExportFailed ? (

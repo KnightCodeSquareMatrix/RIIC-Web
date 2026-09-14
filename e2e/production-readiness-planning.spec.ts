@@ -103,6 +103,18 @@ test("shows the thinking activity and indeterminate progress only while a plan r
   await expect(status.locator(".live-activity-shimmer")).toBeVisible();
   await expect(progress).toBeVisible();
   await expect(progress).toHaveCSS("width", /.+/);
+  await expect(status).toHaveCSS("border-radius", "11px");
+  await expect(status).toHaveAttribute("data-activity-view", "compact");
+  await expect.poll(() => status.evaluate(element => element.getBoundingClientRect().height)).toBeLessThan(40);
+  await status.hover();
+  await expect(status).toHaveAttribute("data-activity-view", "expanded");
+  await expect.poll(() => status.evaluate(element => element.getBoundingClientRect().height)).toBeGreaterThan(70);
+  await page.mouse.move(0, 300);
+  await expect(status).toHaveAttribute("data-activity-view", "compact");
+  await status.focus();
+  await expect(status).toHaveAttribute("data-activity-view", "expanded");
+  await page.keyboard.press("Escape");
+  await expect(status).toHaveAttribute("data-activity-view", "compact");
 
   const successStateAttribute = "data-live-activity-success-state";
   await page.evaluate((attribute) => {
@@ -115,7 +127,7 @@ test("shows the thinking activity and indeterminate progress only while a plan r
       if (!statusElement || !sweepElement) return false;
       const statusBox = statusElement.getBoundingClientRect();
       const sweepBox = sweepElement.getBoundingClientRect();
-      if (sweepBox.left < statusBox.right) return false;
+      if (sweepBox.left < statusBox.right - 2) return false;
 
       const statusStyle = getComputedStyle(statusElement);
       const sweepStyle = getComputedStyle(sweepElement);
@@ -127,9 +139,12 @@ test("shows the thinking activity and indeterminate progress only while a plan r
         svgCount: statusElement.querySelectorAll("svg").length,
         sweepBackgroundImage: sweepStyle.backgroundImage,
         sweepBackgroundColor: sweepStyle.backgroundColor,
-        sweepWidth: sweepStyle.width,
+        sweepWidth: sweepBox.width,
+        sweepHeight: sweepBox.height,
+        statusWidth: statusBox.width,
+        statusHeight: statusBox.height,
         successEmblemCount: statusElement.querySelectorAll('[data-slot="activity-success-emblem"]').length,
-        progressClass: statusElement.querySelector('[data-slot="activity-progress-indicator"]')?.getAttribute("class") ?? "",
+        progressTrackCount: statusElement.querySelectorAll('[data-slot="activity-progress-track"]').length,
         statusRight: statusBox.right,
         sweepLeft: sweepBox.left,
       }));
@@ -160,9 +175,12 @@ test("shows the thinking activity and indeterminate progress only while a plan r
     svgCount: number;
     sweepBackgroundImage: string;
     sweepBackgroundColor: string;
-    sweepWidth: string;
+    sweepWidth: number;
+    sweepHeight: number;
+    statusWidth: number;
+    statusHeight: number;
     successEmblemCount: number;
-    progressClass: string;
+    progressTrackCount: number;
     statusRight: number;
     sweepLeft: number;
   };
@@ -172,11 +190,12 @@ test("shows the thinking activity and indeterminate progress only while a plan r
   expect(successState.liveActivityIconCount).toBe(0);
   expect(successState.svgCount).toBe(0);
   expect(successState.sweepBackgroundImage).toBe("none");
-  expect(successState.sweepBackgroundColor).toBe("rgb(184, 240, 58)");
-  expect(successState.sweepWidth).toBe("360px");
+  expect(successState.sweepBackgroundColor).toBe(await page.locator('[data-run-face="success"]').evaluate(element => getComputedStyle(element).color));
+  expect(successState.sweepWidth).toBeCloseTo(successState.statusWidth - 2, 0);
+  expect(successState.sweepHeight).toBeCloseTo(successState.statusHeight - 2, 0);
   expect(successState.successEmblemCount).toBe(0);
-  expect(successState.progressClass).toContain("bg-emerald-500");
-  expect(successState.sweepLeft).toBeGreaterThanOrEqual(successState.statusRight);
+  expect(successState.progressTrackCount).toBe(0);
+  expect(successState.sweepLeft).toBeGreaterThanOrEqual(successState.statusRight - 2);
 });
 
 test("buffered plans show a quiet candidate-ring state and can be dismissed without resubmitting", async ({ page }) => {
@@ -655,21 +674,11 @@ test("plan completion reveals status, metrics, and schedule once without resetti
   await expect(board).toBeVisible();
   await expect(board).not.toHaveAttribute("data-plan-revision", /.+/);
 
-  if (browserName === "webkit") {
-    await armTransientStyleCapture(page, '[data-activity-phase="running"]', "loading-status");
-  } else {
-    await armMotionCapture(
-      page,
-      '[data-activity-phase="running"]',
-      "loading-status",
-      260,
-    );
-  }
+  await armTransientStyleCapture(page, '[data-activity-phase="running"]', "loading-status");
   await page.getByRole("button", { name: "生成排班" }).click();
   const status = page.locator('[data-slot="live-activity"]');
   await expect(status).toHaveAttribute("data-activity-phase", "running");
-  if (browserName === "webkit") await expectCapturedStyleMotion(page, "loading-status");
-  else await expectCapturedMotion(page, "loading-status", 260);
+  await expectCapturedStyleMotion(page, "loading-status");
 
   if (browserName === "webkit") {
     await armTransientStyleCapture(page, "[data-plan-summary]", "plan-summary");
@@ -941,7 +950,14 @@ test("live activity survives navigation and calculator search occupies the relea
   await page.setViewportSize({ width: 390, height: 844 });
   const mobileToolbar = await toolbar.evaluate((element) => ({ client: element.clientWidth, scroll: element.scrollWidth }));
   expect(mobileToolbar.scroll).toBeLessThanOrEqual(mobileToolbar.client);
+  await expect(search).toBeHidden();
+  const searchToggle = toolbar.getByRole("button", { name: "搜索排班中的干员或房间", exact: true });
+  await searchToggle.click();
+  await expect(search).toBeFocused();
   await expect(search).toHaveCSS("height", "44px");
+  await page.keyboard.press("Escape");
+  await expect(search).toBeHidden();
+  await expect(searchToggle).toBeFocused();
 });
 
 test("failed plan remains expanded with retry and diagnostic actions", async ({ page }) => {
@@ -1051,7 +1067,7 @@ test("shared action buttons keep their geometry after WebKit interactions", asyn
   await page.goto("/");
 
   const moreTools = page.locator("[data-calculator-more-tools]");
-  await moreTools.getByText("更多工具", { exact: true }).click();
+  await moreTools.getByLabel("更多工具", { exact: true }).click();
   const setupTrigger = moreTools.getByRole("button", { name: "配置Box与布局" });
   await setupTrigger.click();
   const setupDialog = page.getByRole("dialog");
@@ -1060,13 +1076,13 @@ test("shared action buttons keep their geometry after WebKit interactions", asyn
   await expect(setupDialog).toHaveCount(0);
   await expect(setupTrigger).toBeFocused();
   await expectButtonGeometryStable(setupTrigger);
-  await moreTools.getByText("更多工具", { exact: true }).click();
+  await moreTools.getByLabel("更多工具", { exact: true }).click();
 
   const planButton = page.getByRole("button", { name: "生成排班" });
   await expect(planButton).toBeEnabled();
   await expectButtonGeometryStable(planButton);
   await planButton.click();
-  await expect(page.getByText("排班已生成")).toBeVisible();
+  await expect(page.getByRole("status", { name: "排班已生成", exact: true })).toBeVisible();
   await expectButtonGeometryStable(planButton);
 });
 
@@ -1135,7 +1151,7 @@ test("a stored sample BOX completes generation, shifts, MAA export, and disables
   await expect(page.getByRole("tab", { name: "列表式布局" })).toBeVisible();
   await expect(page.locator("[data-plan-board]")).not.toHaveAttribute("data-plan-revision", /.+/);
   await page.getByRole("button", { name: "生成排班" }).click();
-  await expect(page.getByText("排班已生成")).toBeVisible();
+  await expect(page.getByRole("status", { name: "排班已生成", exact: true })).toBeVisible();
   await page.getByRole("tab", { name: "列表式布局" }).click();
 
   const secondShift = page.getByRole("tab", { name: /第 2 班 · 6h/ });
@@ -1271,7 +1287,7 @@ test("scheduled product changes require destructive confirmation and rerun with 
   await page.goto("/");
 
   await page.getByRole("button", { name: "生成排班" }).click();
-  await expect(page.getByText("排班已生成")).toBeVisible();
+  await expect(page.getByRole("status", { name: "排班已生成", exact: true })).toBeVisible();
   await expect.poll(() => planRequests).toBe(1);
   await page.getByRole("tab", { name: "列表式布局" }).click();
 
@@ -1306,7 +1322,7 @@ test("scheduled product changes require destructive confirmation and rerun with 
   expect(rerunLayout?.rooms?.find((room) => room.id === "trade_1")?.product?.trade?.order).toBe("originium");
   releaseRerun?.();
   await expect(confirmation).toBeHidden();
-  await expect(page.getByText("排班已生成")).toBeVisible();
+  await expect(page.getByRole("status", { name: "排班已生成", exact: true })).toBeVisible();
   await page.getByRole("tab", { name: "列表式布局" }).click();
   const updatedTradeControls = page.getByRole("group", { name: "贸易站 1 订单" });
   await expect(updatedTradeControls.getByRole("button", { name: "开采协力" })).toHaveAttribute("aria-pressed", "true");
@@ -1415,7 +1431,7 @@ test("the compact mobile navigation stays pinned while the account control belon
   await expect(page.locator("[data-skland-sidebar-account]")).toHaveCount(0);
 
   const mobileBar = topbar.locator(".app-content-track");
-  await expect(mobileBar).toHaveCSS("height", "56px");
+  await expect(mobileBar).toHaveCSS("height", "48px");
 
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
   await expect.poll(async () => (await topbar.boundingBox())?.y ?? -1).toBeCloseTo(0, 0);
