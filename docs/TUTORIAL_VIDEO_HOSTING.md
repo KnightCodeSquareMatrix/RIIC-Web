@@ -1,12 +1,13 @@
 # 教程视频独立托管
 
-三个教程视频单独放在网站服务器，由 Nginx 提供 `/media/tutorials/`。GitHub 仓库和应用发布包只包含播放器、封面与来源说明。
+教程视频单独放在网站服务器，由 Nginx 提供 `/media/tutorials/`。GitHub 仓库和应用发布包只包含播放器、封面与来源说明。
 
 | 文件 | 网页地址 |
 | --- | --- |
 | `maa-box.mp4` | `/media/tutorials/maa-box.mp4` |
 | `manual-schedule-audio.mp4` | `/media/tutorials/manual-schedule-audio.mp4` |
 | `shifts-orundum-audio.mp4` | `/media/tutorials/shifts-orundum-audio.mp4` |
+| `export-maa.mp4` | `/media/tutorials/export-maa.mp4` |
 
 生产媒体目录使用 `/opt/arknights-infra/shared/tutorial-videos/`，位于版本目录之外。视频单独上传或从服务器已有副本复制，校验 SHA-256 后发布；应用发布不上传、覆盖或删除这个目录。
 
