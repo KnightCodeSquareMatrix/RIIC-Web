@@ -17,6 +17,7 @@
   "m": "M{level}",
   "targetMastery": "Target mastery",
   "controlCenter5": "Control center +5%",
+  "controlCenterBonus": "Control center +{bonus}%",
   "enterTheCurrentMasteryOfTheSkillYouPlan": "Enter the current mastery of the skill you plan to train. Start a new stage; no saved halving is assumed. The control bonus assumes a suitable operator remains stationed throughout.",
   "advancedSettings": "Advanced settings",
   "handoffBufferMinutes": "Handoff buffer (minutes)",

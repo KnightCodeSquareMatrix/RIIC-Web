@@ -18,7 +18,7 @@ export function AppTopBar() {
       data-app-topbar
     >
       <h1 className="sr-only">{intl("components_layout_AppTopBar.closureInfrastructureTerminal")}</h1>
-      <div className="app-content-track flex h-14 items-center">
+      <div className="app-content-track flex h-12 items-center">
         <SidebarTrigger className="size-11 shrink-0" />
       </div>
     </header>
@@ -49,7 +49,7 @@ export function SklandAccountControl({
       type="button"
       size="icon-lg"
       variant="outline"
-      className="relative -ms-px size-9 overflow-hidden rounded-l-none rounded-r-lg bg-background p-0 hover:bg-muted max-sm:size-11 max-sm:rounded-lg"
+      className="relative -ms-px size-9 overflow-hidden rounded-l-none rounded-r-lg bg-background p-0 hover:bg-muted max-md:ms-0 max-md:size-11 max-md:rounded-lg"
       onClick={onOpenSkland}
       aria-label={accountLabel}
       title={nickname ?? (intl("components_layout_AppTopBar.sklandStatus"))}
