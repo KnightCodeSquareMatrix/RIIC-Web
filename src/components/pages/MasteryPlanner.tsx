@@ -4,7 +4,7 @@ import { localize as localize_components_pages_MasteryPlanner } from "../../i18n
 import { useTranslations, useLocale } from "next-intl";
 
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
-import { Timer } from "lucide-react";
+import { Settings2, Timer } from "lucide-react";
 import { calculateMastery, eligibleMasteryTargets, normalizeMasteryBox, availableMasteryEnvironments, formatMasteryTime, MASTERY_ENVIRONMENTS, type MasteryInput, type MasteryResult } from "@/mastery";
 import { masteryClipboard, masteryInstructions } from "@/mastery-presentation";
 import { InfraTechnicalCard, InfraTechnicalHeading } from "@/components/InfraTechnicalCard";
@@ -101,43 +101,44 @@ export function MasteryPlanner({ operbox, sourceName, requiresAccount, pending, 
     } catch { setError(intl("components_pages_MasteryPlanner.couldNotCopyPleaseCheckBrowserClipboardPermissions")); }
   }
 
-  return <section className="grid min-w-0 gap-5 pt-5 pb-8" aria-labelledby="mastery-heading" data-mastery-planner>
-    <header className="flex flex-wrap items-center justify-between gap-3">
-      <div><h1 id="mastery-heading" className="flex items-center gap-2.5 text-lg font-semibold"><span className="h-6 w-1.5 bg-[#FFD501]" />{intl("components_pages_MasteryPlanner.masteryPlanner")}</h1>
-        <p className="mt-2 text-sm text-muted-foreground">{intl("components_pages_MasteryPlanner.chooseAnOperatorGetAStageByStageTrainer")}</p></div>
-      <SetupActionButton variant="outline" onClick={onOpenSetup} disabled={pending}>{intl("components_pages_MasteryPlanner.configureBox")}</SetupActionButton>
+  return <section className="grid min-w-0 gap-3 pt-2 pb-8 md:gap-5 md:pt-5" aria-labelledby="mastery-heading" data-mastery-planner>
+    <header className="flex items-start justify-between gap-3">
+      <div className="min-w-0"><h1 id="mastery-heading" className="flex items-center gap-2.5 text-lg font-semibold"><span className="h-6 w-1.5 shrink-0 bg-[#FFD501]" />{intl("components_pages_MasteryPlanner.masteryPlanner")}</h1>
+        <p className="mt-1 text-xs leading-5 text-muted-foreground md:mt-2 md:text-sm">{intl("components_pages_MasteryPlanner.chooseAnOperatorGetAStageByStageTrainer")}</p></div>
+      <SetupActionButton className="max-md:!h-11 max-md:w-11 max-md:!min-w-0 max-md:!px-0" variant="outline" onClick={onOpenSetup} disabled={pending} aria-label={intl("components_pages_MasteryPlanner.configureBox")} title={intl("components_pages_MasteryPlanner.configureBox")}><Settings2 className="size-4 md:hidden" /><span className="max-md:hidden">{intl("components_pages_MasteryPlanner.configureBox")}</span></SetupActionButton>
     </header>
 
-    <div className="grid gap-5 rounded-[4px] border border-border bg-card p-4 sm:p-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+    <div className="grid gap-3 rounded-[4px] border border-border bg-card p-3 md:gap-5 md:p-6">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 md:flex md:flex-wrap md:justify-between md:gap-4">
         <div className="min-w-0"><p className="text-xs text-muted-foreground">{intl("components_pages_MasteryPlanner.currentBox")}</p><p className="mt-1 break-words text-sm">{requiresAccount ? (intl("components_pages_MasteryPlanner.signInToUseYourBox")) : sourceName ?? (intl("components_pages_MasteryPlanner.noBoxConfigured"))}</p>
           {selected && meta ? <div className="mt-4 flex items-center gap-3"><OperatorIdentity name={selected.name} portrait={meta.portrait}><span className="text-xs text-muted-foreground">{selected.rarity}★ · {intl("components_pages_MasteryPlanner.elite2")}</span></OperatorIdentity></div> : null}
         </div>
-        <SetupActionButton disabled={pending || (!requiresAccount && !eligible.length)} onClick={() => { if (requiresAccount) onRequestAccount(); else setPickerOpen(true); }}>
+        <SetupActionButton className="max-md:!h-auto max-md:min-h-11 max-md:!min-w-0 max-md:max-w-36 max-md:whitespace-normal max-md:!px-3 max-md:py-2" disabled={pending || (!requiresAccount && !eligible.length)} onClick={() => { if (requiresAccount) onRequestAccount(); else setPickerOpen(true); }}>
           {localize_components_pages_MasteryPlanner.text(en, "additional1", { choice1: ((en)) && (selected) ? "yes" : "no", choice2: (!(en)) && (selected) ? "yes" : "no" })}
         </SetupActionButton>
       </div>
       {!requiresAccount && !pending && !eligible.length ? <p className="text-sm text-muted-foreground">{intl("components_pages_MasteryPlanner.yourBoxHasNoOwnedE2OperatorsImportOr")}</p> : null}
-      <div className="flex flex-wrap items-end gap-x-8 gap-y-4">
-        <div className="grid gap-2"><span className="text-xs text-muted-foreground">{intl("components_pages_MasteryPlanner.currentMastery")}</span><Tabs value={String(current)} onValueChange={(value) => { const next = Number(value) as 0|1|2; setCurrent(next); if (target <= next) setTarget((next+1) as 1|2|3); }}><TabsList aria-label={intl("components_pages_MasteryPlanner.currentMastery")}>
+      <div className="grid gap-2 md:flex md:flex-wrap md:items-end md:gap-x-8 md:gap-y-4 max-md:[&_[data-slot=tabs-list]]:w-full max-md:[&_[data-slot=tabs-trigger]]:min-h-11 max-md:[&_[data-slot=tabs-trigger]]:min-w-0 max-md:[&_[data-slot=tabs-trigger]]:px-1 max-md:[&_[data-slot=tabs-trigger]]:text-xs">
+        <div className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] items-center gap-2 md:grid-cols-1"><span className="text-xs text-muted-foreground">{intl("components_pages_MasteryPlanner.currentMastery")}</span><Tabs value={String(current)} onValueChange={(value) => { const next = Number(value) as 0|1|2; setCurrent(next); if (target <= next) setTarget((next+1) as 1|2|3); }}><TabsList aria-label={intl("components_pages_MasteryPlanner.currentMastery")}>
           {[0,1,2].map((level) => <TabsTrigger key={level} value={String(level)}>{level === 0 ? (intl("components_pages_MasteryPlanner.untrained")) : (intl("components_pages_MasteryPlanner.m", { level: level }))}</TabsTrigger>)}
         </TabsList></Tabs></div>
-        <div className="grid gap-2"><span className="text-xs text-muted-foreground">{intl("components_pages_MasteryPlanner.targetMastery")}</span><Tabs value={String(target)} onValueChange={(value) => setTarget(Number(value) as 1|2|3)}><TabsList aria-label={intl("components_pages_MasteryPlanner.targetMastery")}>
+        <div className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] items-center gap-2 md:grid-cols-1"><span className="text-xs text-muted-foreground">{intl("components_pages_MasteryPlanner.targetMastery")}</span><Tabs value={String(target)} onValueChange={(value) => setTarget(Number(value) as 1|2|3)}><TabsList aria-label={intl("components_pages_MasteryPlanner.targetMastery")}>
           {[1,2,3].map((level) => <TabsTrigger key={level} value={String(level)} disabled={level <= current}>{intl("components_pages_MasteryPlanner.m", { level: level })}</TabsTrigger>)}
         </TabsList></Tabs></div>
-        <SetupActionButton variant={controlBonus ? "default" : "outline"} aria-pressed={controlBonus} onClick={() => setControlBonus((value) => !value)}>{intl("components_pages_MasteryPlanner.controlCenter5")}</SetupActionButton>
+        <SetupActionButton className="max-md:hidden" variant={controlBonus ? "default" : "outline"} aria-pressed={controlBonus} onClick={() => setControlBonus((value) => !value)}>{intl("components_pages_MasteryPlanner.controlCenter5")}</SetupActionButton>
       </div>
       <p className="text-xs leading-5 text-muted-foreground">{intl("components_pages_MasteryPlanner.enterTheCurrentMasteryOfTheSkillYouPlan")}</p>
-      <details className="min-w-0 border-t border-border pt-4">
-        <summary className="cursor-pointer text-sm font-medium">{intl("components_pages_MasteryPlanner.advancedSettings")}</summary>
+      <details className="min-w-0 border-t border-border pt-1 md:pt-4">
+        <summary className="min-h-11 cursor-pointer content-center text-sm font-medium md:min-h-0">{intl("components_pages_MasteryPlanner.advancedSettings")}</summary>
+        <SetupActionButton className="mt-2 md:hidden" variant={controlBonus ? "default" : "outline"} aria-pressed={controlBonus} onClick={() => setControlBonus((value) => !value)}>{intl("components_pages_MasteryPlanner.controlCenterBonus", { bonus: controlBonus ? 5 : 0 })}</SetupActionButton>
         <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <label className="grid gap-2 text-xs">{intl("components_pages_MasteryPlanner.handoffBufferMinutes")}<Input type="number" min={0} step={0.5} value={Number.isFinite(bufferMinutes) ? bufferMinutes : ""} onChange={(e) => setBufferMinutes(e.target.valueAsNumber)} /></label>
           {environmentKeys.map((key) => <label key={key} className="grid gap-2 text-xs">{en ? MASTERY_ENVIRONMENTS[key]!.english : MASTERY_ENVIRONMENTS[key]!.label}<Input type="number" min={0} max={MASTERY_ENVIRONMENTS[key]!.max ?? 10000} step={1} value={Number.isFinite(environment[key] ?? 0) ? environment[key] ?? 0 : ""} onChange={(e) => setEnvironment((previous) => ({...previous,[key]:e.target.valueAsNumber}))} /></label>)}
         </div>
         <p className="mt-3 text-xs leading-5 text-muted-foreground">{intl("components_pages_MasteryPlanner.environmentCountsReferToOperatorsActuallyStationedInThe")}</p>
       </details>
-      <div className="flex flex-wrap items-center gap-4">
-        <SetupActionButton disabled={pending || requiresAccount || !selected} onClick={() => {
+      <div className="flex flex-wrap items-center gap-2 md:gap-4">
+        <SetupActionButton className="max-md:min-h-11 max-md:w-full max-md:!min-w-0" disabled={pending || requiresAccount || !selected} onClick={() => {
           setCopied(false); setError(null);
           try { setCalculation({ signature, result: calculateMastery(input) }); } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
         }}>{intl("components_pages_MasteryPlanner.generatePlans")}</SetupActionButton>
