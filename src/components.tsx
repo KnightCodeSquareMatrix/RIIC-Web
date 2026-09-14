@@ -1776,7 +1776,10 @@ export function ScheduleBoard({
             </Button>
           ) : null}
           {viewMode === "list" && auxiliaryGroups.length ? (
-            <div className="flex flex-wrap justify-end gap-2 max-md:w-full max-md:flex-nowrap max-md:items-center max-md:justify-between">
+            <div
+              className="flex flex-wrap justify-end gap-2 max-md:grid max-md:w-full max-md:grid-cols-2 max-md:items-stretch max-md:[&>button]:h-auto max-md:[&>button]:min-h-11 max-md:[&>button]:min-w-0 max-md:[&>button]:whitespace-normal max-md:[&>button]:py-2 max-md:[&_[data-calculator-plan-actions=mobile]]:contents"
+              data-schedule-auxiliary-actions
+            >
               <Button type="button" variant="outline" size="sm" onClick={toggleAuxiliaryGroups}>
                 <motion.span
                   className="flex size-4 items-center justify-center"
@@ -1789,7 +1792,7 @@ export function ScheduleBoard({
                 {allAuxiliaryCollapsed ? (intl("components.expandAuxiliaryFacilities")) : (intl("components.collapseAuxiliaryFacilities"))}
               </Button>
               {viewModeActionSlot}
-              {mobileActionsSlot ? <div className="min-w-0 flex-1 md:hidden">{mobileActionsSlot}</div> : null}
+              {mobileActionsSlot ? <div className="min-w-0 flex-1 max-md:contents md:hidden">{mobileActionsSlot}</div> : null}
             </div>
           ) : (
             <>

@@ -66,7 +66,7 @@ export function ScheduleRunButton({ canRun, hasBox, plannerReady, requiresAccoun
     <Button
       type="button"
       size="sm"
-      className="relative h-9 min-w-0 overflow-hidden max-sm:h-11 max-sm:px-3 max-sm:text-xs"
+      className="relative h-9 min-w-0 overflow-hidden max-md:h-auto max-md:min-h-11 max-md:w-full max-md:shrink max-md:px-3 max-md:py-2 max-md:text-xs"
       data-schedule-run-button
       data-run-phase={phase}
       aria-busy={loading || undefined}
@@ -75,14 +75,14 @@ export function ScheduleRunButton({ canRun, hasBox, plannerReady, requiresAccoun
       onClick={loading ? onCancel : onRun}
       disabled={!loading && (runCooldownSeconds > 0 || (!canRun && !(requiresAccount && hasBox && plannerReady)))}
     >
-      <span aria-hidden="true" className="grid place-items-center">
+      <span aria-hidden="true" className="grid min-w-0 place-items-center">
         {faces.map(({ key, label, Icon }) => <motion.span
           key={key}
           data-run-face={key}
           initial={false}
           animate={key === phase ? { opacity: 1, y: 0, filter: "blur(0px)" } : { opacity: 0, y: reduced ? 0 : 3, filter: reduced ? "blur(0px)" : "blur(3px)" }}
           transition={reduced ? { duration: 0 } : { type: "spring", stiffness: 260, damping: 34, mass: 0.8 }}
-          className={cn("col-start-1 row-start-1 flex items-center justify-center gap-1.5 whitespace-nowrap", key === "success" && "text-[var(--schedule-success)]", key === "error" && "text-red-300 dark:text-red-800")}
+          className={cn("col-start-1 row-start-1 flex min-w-0 items-center justify-center gap-1.5 whitespace-nowrap max-md:whitespace-normal", key === "success" && "text-[var(--schedule-success)]", key === "error" && "text-red-300 dark:text-red-800")}
         >
           <Icon className={cn("size-3.5 motion-reduce:animate-none", key === "pending" && loading && !reduced && "animate-spin")} />
           {label}
