@@ -25,7 +25,10 @@ for (const mobile of [false,true]) {
       });
       const beforeBox = await page.evaluate(() => Object.entries(localStorage).filter(([key]) => /session-v[45]$/.test(key)).map(([,value]) => JSON.parse(value)).find((value) => value.operbox?.some((o: {name:string}) => o.name === "阿米娅"))?.operbox);
       await expect(page.getByRole("heading",{name:"专精规划",exact:true})).toBeVisible();
-      await expect(page.locator("[data-mastery-planner] [data-setup-action] svg")).toHaveCount(0);
+      const setupIcon = page.locator("[data-mastery-planner] [data-setup-action] svg");
+      await expect(setupIcon).toHaveCount(1);
+      if (mobile) await expect(setupIcon).toBeVisible();
+      else await expect(setupIcon).toBeHidden();
       await page.getByRole("button",{name:"选择干员",exact:true}).click();
       const dialog = page.getByRole("dialog",{name:"选择专精干员"});
       await expect(dialog).toBeVisible();
@@ -76,7 +79,9 @@ for (const mobile of [false,true]) {
       await page.screenshot({path:testInfo.outputPath("mastery-results.png"),fullPage:true});
       const geometry = await page.evaluate(() => ({width:document.documentElement.clientWidth,scroll:document.documentElement.scrollWidth}));
       expect(geometry.scroll).toBeLessThanOrEqual(geometry.width);
+      if (mobile) await page.locator("[data-mastery-planner] summary").click();
       await page.getByRole("button",{name:"中枢专精加成 +5%",exact:true}).click();
+      if (mobile) await expect(page.getByRole("button",{name:"中枢专精加成 +0%",exact:true})).toHaveAttribute("aria-pressed","false");
       await expect(result).toHaveCount(0);
       await expect(page.getByText("输入或 Box 已变化，请重新生成方案。",{exact:true})).toBeVisible();
       await page.getByRole("button",{name:"生成方案",exact:true}).click();
@@ -100,7 +105,10 @@ test("mastery guest login lock and empty Box state",async ({page}) => {
   await mockApis(page);
   await gotoStable(page,"/mastery");
   await expect(page.getByText("登录后使用自己的 Box",{exact:true})).toBeVisible();
-  await expect(page.locator("[data-mastery-planner] [data-setup-action] svg")).toHaveCount(0);
+  const setupIcon = page.locator("[data-mastery-planner] [data-setup-action] svg");
+  await expect(setupIcon).toHaveCount(1);
+  if ((page.viewportSize()?.width ?? 1440) < 768) await expect(setupIcon).toBeVisible();
+  else await expect(setupIcon).toBeHidden();
   await page.getByRole("button",{name:"选择干员",exact:true}).click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await expect(page.locator("[data-mastery-target-picker]")).toHaveCount(0);
