@@ -18,6 +18,7 @@ const uncachedDocumentRoutes = [
   "/admin/users",
   "/manual",
   "/mastery",
+  "/recruitment",
   "/privacy",
   "/skills",
   "/skland",
