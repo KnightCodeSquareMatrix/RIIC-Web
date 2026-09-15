@@ -23,7 +23,7 @@
   "handoffBufferMinutes": "Handoff buffer (minutes)",
   "environmentCountsReferToOperatorsActuallyStationedInThe": "Environment counts refer to operators actually stationed in the base, not simply owned. Reserve extra time for the 5-hour halving trigger.",
   "generatePlans": "Generate plans",
-  "computedLocallyNoBaseScheduleRequired": "Computed locally. No base schedule required.",
+  "computedLocallyNoBaseScheduleRequired": "Plans appear automatically after selecting an operator and update as settings change. No base schedule required.",
   "inputsOrBoxChangedGeneratePlansAgainToSee": "Inputs or Box changed. Generate plans again to see updated results.",
   "planStyle": "Plan style",
   "simple": "Simple",

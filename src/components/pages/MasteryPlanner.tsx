@@ -64,41 +64,51 @@ export function MasteryPlanner({ operbox, sourceName, requiresAccount, pending, 
   const [bufferMinutes, setBufferMinutes] = useState(1);
   const [environment, setEnvironment] = useState<Record<string,number>>({});
   const [mode, setMode] = useState<"simple" | "fast">("simple");
-  const [calculation, setCalculation] = useState<{ signature: string; result: MasteryResult } | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [copyFeedback, setCopyFeedback] = useState<{ text: string; error: string | null } | null>(null);
+  const [scrollRequested, setScrollRequested] = useState(false);
   const resultsRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!calculation) return;
-    const frame = requestAnimationFrame(() => {
-      resultsRef.current?.scrollIntoView({
-        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",
-        block: "start",
-      });
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [calculation]);
   const normalizedBox = useMemo(() => normalizeMasteryBox(operbox ?? []),[operbox]);
   const eligible = useMemo(() => eligibleMasteryTargets(normalizedBox),[normalizedBox]);
   const selected = eligible.find((o) => o.id === selectedId) ?? null;
   if (selectedId && !selected) setSelectedId(null);
   const meta = selected ? catalog.find((o) => o.id === selected.id) : null;
-  const environmentKeys = availableMasteryEnvironments(operbox ?? [],selected?.id);
-  const input: MasteryInput = { operbox: operbox ?? [], targetId: selected?.id ?? "", current, target, controlBonus, bufferMinutes, environment: Object.fromEntries(environmentKeys.map((key) => [key, environment[key] ?? 0])) };
-  const signature = JSON.stringify(input);
-  const stale = !!calculation && calculation.signature !== signature;
-  const plan = !stale ? calculation?.result[mode] : null;
+  const environmentKeys = useMemo(() => availableMasteryEnvironments(operbox ?? [], selectedId ?? undefined), [operbox, selectedId]);
+  const input = useMemo<MasteryInput>(() => ({
+    operbox: operbox ?? [], targetId: selectedId ?? "", current, target, controlBonus, bufferMinutes,
+    environment: Object.fromEntries(environmentKeys.map((key) => [key, environment[key] ?? 0])),
+  }), [operbox, selectedId, current, target, controlBonus, bufferMinutes, environmentKeys, environment]);
+  const calculation = useMemo<{ result: MasteryResult | null; error: string | null }>(() => {
+    if (pending || requiresAccount || !input.targetId) return { result: null, error: null };
+    try { return { result: calculateMastery(input), error: null }; }
+    catch (cause) { return { result: null, error: cause instanceof Error ? cause.message : String(cause) }; }
+  }, [input, pending, requiresAccount]);
+  const plan = calculation.result?.[mode];
+  useEffect(() => {
+    if (!scrollRequested || !calculation.result || pickerOpen || pickerRequested) return;
+    const frame = requestAnimationFrame(() => {
+      resultsRef.current?.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",
+        block: "start",
+      });
+      setScrollRequested(false);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [scrollRequested, calculation.result, pickerOpen, pickerRequested]);
   const displayName = (name: string) => localizedOperatorName(name,locale,gameCatalog);
   const conditions = intl("components_pages_MasteryPlanner.assumesSufficientMoraleMaterialsAndTrainingRoomLevelEnvironment");
   const activeEnvironment = environmentKeys.map((key) => `${en ? MASTERY_ENVIRONMENTS[key]!.english : MASTERY_ENVIRONMENTS[key]!.label} ${input.environment[key]}`).join(" · ");
   const settingsSummary = `${intl("components_pages_MasteryPlanner.controlBonus")} ${controlBonus ? "+5%" : "0%"} · ${intl("components_pages_MasteryPlanner.buffer")} ${bufferMinutes} ${intl("components_pages_MasteryPlanner.min")}${activeEnvironment ? ` · ${activeEnvironment}` : ""}`;
+  const clipboardText = plan && selected ? [masteryClipboard(plan,displayName(selected.name),en,displayName),settingsSummary,conditions].join("\n") : null;
+  const currentCopyFeedback = clipboardText !== null && copyFeedback?.text === clipboardText ? copyFeedback : null;
+  const copied = currentCopyFeedback !== null && currentCopyFeedback.error === null;
+  const error = calculation.error ?? currentCopyFeedback?.error;
 
   async function copyPlan() {
-    if (!plan || !selected) return;
+    if (clipboardText === null) return;
     try {
-      await navigator.clipboard.writeText([masteryClipboard(plan,displayName(selected.name),en,displayName),settingsSummary,conditions].join("\n"));
-      setCopied(true);
-    } catch { setError(intl("components_pages_MasteryPlanner.couldNotCopyPleaseCheckBrowserClipboardPermissions")); }
+      await navigator.clipboard.writeText(clipboardText);
+      setCopyFeedback({ text: clipboardText, error: null });
+    } catch { setCopyFeedback({ text: clipboardText, error: intl("components_pages_MasteryPlanner.couldNotCopyPleaseCheckBrowserClipboardPermissions") }); }
   }
 
   return <section className="grid min-w-0 gap-3 pt-2 pb-8 md:gap-5 md:pt-5" aria-labelledby="mastery-heading" data-mastery-planner>
@@ -137,43 +147,49 @@ export function MasteryPlanner({ operbox, sourceName, requiresAccount, pending, 
         </div>
         <p className="mt-3 text-xs leading-5 text-muted-foreground">{intl("components_pages_MasteryPlanner.environmentCountsReferToOperatorsActuallyStationedInThe")}</p>
       </details>
-      <div className="flex flex-wrap items-center gap-2 md:gap-4">
-        <SetupActionButton className="max-md:min-h-11 max-md:w-full max-md:!min-w-0" disabled={pending || requiresAccount || !selected} onClick={() => {
-          setCopied(false); setError(null);
-          try { setCalculation({ signature, result: calculateMastery(input) }); } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
-        }}>{intl("components_pages_MasteryPlanner.generatePlans")}</SetupActionButton>
-        <span className="text-xs text-muted-foreground">{intl("components_pages_MasteryPlanner.computedLocallyNoBaseScheduleRequired")}</span>
-      </div>
+      <p className="text-xs leading-5 text-muted-foreground">{intl("components_pages_MasteryPlanner.computedLocallyNoBaseScheduleRequired")}</p>
       {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
     </div>
 
     <p className="text-xs leading-5 text-muted-foreground">{conditions}</p>
-    {stale ? <p role="status" className="rounded-[4px] border border-border p-4 text-sm">{intl("components_pages_MasteryPlanner.inputsOrBoxChangedGeneratePlansAgainToSee")}</p> : null}
-    {plan && calculation ? <div ref={resultsRef} className="grid min-w-0 scroll-mt-[calc(5rem+env(safe-area-inset-top))] gap-4 md:scroll-mt-6" data-mastery-results>
+    {plan && calculation.result ? <div ref={resultsRef} className="grid min-w-0 scroll-mt-[calc(5rem+env(safe-area-inset-top))] gap-4 md:scroll-mt-6" data-mastery-results>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Tabs value={mode} onValueChange={(value) => { setMode(value as "simple"|"fast"); setCopied(false); }}><TabsList aria-label={intl("components_pages_MasteryPlanner.planStyle")}><TabsTrigger value="simple">{intl("components_pages_MasteryPlanner.simple")}</TabsTrigger><TabsTrigger value="fast">{intl("components_pages_MasteryPlanner.fast")}</TabsTrigger></TabsList></Tabs>
+        <Tabs value={mode} onValueChange={(value) => { setMode(value as "simple"|"fast"); setCopyFeedback(null); }}><TabsList aria-label={intl("components_pages_MasteryPlanner.planStyle")}><TabsTrigger value="simple">{intl("components_pages_MasteryPlanner.simple")}</TabsTrigger><TabsTrigger value="fast">{intl("components_pages_MasteryPlanner.fast")}</TabsTrigger></TabsList></Tabs>
         <SetupActionButton variant="outline" onClick={() => void copyPlan()}>{copied ? (intl("components_pages_MasteryPlanner.copied")) : (intl("components_pages_MasteryPlanner.copyInstructions"))}</SetupActionButton>
       </div>
       <InfraTechnicalCard group="training" className="p-5 sm:p-6">
         <InfraTechnicalHeading icon={<Timer className="size-4" />}>{intl("components_pages_MasteryPlanner.estimatedCompletionTime")}</InfraTechnicalHeading>
-        <div className="mt-4 flex flex-wrap items-baseline gap-x-6 gap-y-2"><strong className="font-number text-3xl">{formatMasteryTime(plan.totalSeconds)}</strong><span className="text-sm text-white/75">{intl("components_pages_MasteryPlanner.trainerChanges", { switches: plan.switches })}</span>
-          {mode === "fast" ? <span className="text-sm text-white/75">{intl("components_pages_MasteryPlanner.timeSaved")} {formatMasteryTime(Math.max(0,calculation.result.simple.totalSeconds-plan.totalSeconds))}</span> : null}</div>
-        <p className="mt-3 text-xs leading-5 text-white/65">{settingsSummary}</p>
+        <strong className="font-number mt-3 block text-3xl leading-tight">{formatMasteryTime(plan.totalSeconds)}</strong>
+        <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
+          <span className="inline-flex h-6 shrink-0 items-center whitespace-nowrap text-white/60">{intl("components_pages_MasteryPlanner.trainerChanges", { switches: plan.switches })}</span>
+          {mode === "fast" ? <span className="inline-flex min-h-6 items-center gap-1 border border-l-2 border-amber-200/15 border-l-amber-300/70 bg-amber-200/5 px-2 text-amber-100/80"><span>{intl("components_pages_MasteryPlanner.timeSaved")}</span><span className="font-number whitespace-nowrap font-semibold tabular-nums text-amber-200">{formatMasteryTime(Math.max(0,calculation.result.simple.totalSeconds-plan.totalSeconds))}</span></span> : null}
+        </div>
+        <p className="mt-3 border-t border-white/10 pt-3 text-xs leading-5 text-white/50">{settingsSummary}</p>
       </InfraTechnicalCard>
       <p className="text-xs text-muted-foreground">{intl("components_pages_MasteryPlanner.timesAreRelativeToTheStartFinishAndStart")}</p>
       <div className="grid gap-4">
-        {masteryInstructions(plan,en,displayName).map((steps,index) => <article key={plan.stages[index]!.level} className="rounded-[4px] border border-border bg-card p-4 sm:p-5">
-          <h2 className="mb-4 flex flex-wrap items-center gap-3 text-base font-semibold">{intl("components_pages_MasteryPlanner.mastery", { value1: plan.stages[index]!.level })}<span className="font-number text-sm font-normal text-muted-foreground">{formatMasteryTime(plan.stages[index]!.seconds)}</span>{plan.stages[index]!.activateWith ? <span className="text-xs font-normal">{intl("components_pages_MasteryPlanner.50Reduction")}</span> : null}</h2>
-          <div className="mb-4 flex flex-wrap gap-3">{plan.stages[index]!.segments.filter((s) => s.trainerId).map((segment,i) => {
+        {masteryInstructions(plan,en,displayName).map((steps,index) => <InfraTechnicalCard key={plan.stages[index]!.level} group="training" showEmblem={false} dataSlot="mastery-stage-card">
+          <header className="grid min-w-0 gap-2.5">
+            <h2 className="text-base font-semibold leading-6 text-white/95">{intl("components_pages_MasteryPlanner.mastery", { value1: plan.stages[index]!.level })}</h2>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
+              <span className="font-number inline-flex h-6 shrink-0 items-center whitespace-nowrap border border-white/15 bg-white/8 px-2 font-medium tabular-nums text-white/85">{formatMasteryTime(plan.stages[index]!.seconds)}</span>
+              {plan.stages[index]!.activateWith ? <span className="inline-flex h-6 shrink-0 items-center whitespace-nowrap border border-l-2 border-amber-200/15 border-l-amber-300/70 bg-amber-200/5 px-2 text-amber-100/80">{intl("components_pages_MasteryPlanner.50Reduction")}</span> : null}
+            </div>
+          </header>
+          <div className="mt-3 flex flex-wrap gap-2 border-t border-white/10 pt-3">{plan.stages[index]!.segments.filter((s) => s.trainerId).map((segment,i) => {
             const operator = normalizedBox.find((o) => o.id === segment.trainerId);
             const portrait = catalog.find((o) => o.id === segment.trainerId)?.portrait;
             return <MasteryTrainerTooltip key={`${segment.trainerId}:${i}`} name={segment.trainerName} currentElite={operator?.elite} currentLevel={operator?.level} highlightedSkillIds={segment.skillIds}
-              trigger={<button type="button" className="flex min-w-0 items-center gap-2 rounded-[4px] border border-border p-2 text-left" aria-label={intl("components_pages_MasteryPlanner.showInfrastructureSkills", { value1: (en) ? (displayName(segment.trainerName)) : "", trainerName: (en) ? "" : (segment.trainerName) })}><OperatorIdentity compact name={segment.trainerName} portrait={portrait}><span className="text-xs text-muted-foreground">{intl("components_pages_MasteryPlanner.trainer")}</span></OperatorIdentity></button>} />;
+              trigger={<button type="button" className="flex min-h-11 min-w-0 max-w-full items-center gap-2.5 border border-white/10 bg-white/10 p-2 text-left outline-none transition-colors hover:bg-white/15 focus-visible:ring-2 focus-visible:ring-[#FFD800] motion-reduce:transition-none" aria-label={intl("components_pages_MasteryPlanner.showInfrastructureSkills", { value1: (en) ? (displayName(segment.trainerName)) : "", trainerName: (en) ? "" : (segment.trainerName) })}>
+                <span className="size-12 shrink-0 overflow-hidden border border-white/10 bg-[#272A2B]">{portrait ? <img src={portrait} alt="" className="size-full object-cover" loading="lazy" decoding="async" /> : null}</span>
+                <span className="min-w-0 truncate text-sm text-white/85">{displayName(segment.trainerName)}</span>
+                <span className="shrink-0 border border-white/10 bg-white/5 px-1.5 py-0.5 text-xs text-white/65">{intl("components_pages_MasteryPlanner.trainer")}</span>
+              </button>} />;
           })}</div>
-          <ol className="grid gap-3">{steps.map((step,i) => <li key={i} className="grid grid-cols-[5.75rem_minmax(0,1fr)] items-start gap-3 text-sm"><span className="font-number pt-0.5 text-xs text-muted-foreground">+{formatMasteryTime(step.elapsed)}</span><span className={step.kind === "notice" ? "text-muted-foreground" : "font-medium"}>{step.text}</span></li>)}</ol>
-        </article>)}
+          <ol className="mt-4 grid gap-3 border-t border-white/10 pt-3">{steps.map((step,i) => <li key={i} className="grid grid-cols-[5.75rem_minmax(0,1fr)] items-start gap-3 text-sm"><span className="font-number pt-0.5 text-xs text-white/50">+{formatMasteryTime(step.elapsed)}</span><span className={step.kind === "notice" ? "text-white/60" : "font-medium text-white/85"}>{step.text}</span></li>)}</ol>
+        </InfraTechnicalCard>)}
       </div>
     </div> : null}
-    {(pickerOpen || pickerRequested) && !pending && !requiresAccount && operbox ? <Suspense fallback={<TargetPickerLoading onClose={() => { setPickerOpen(false); onPickerRequestConsumed(); }} />}><TargetPicker operbox={operbox} selectedId={selectedId} onClose={() => { setPickerOpen(false); onPickerRequestConsumed(); }} onSelect={(id) => { setSelectedId(id); setPickerOpen(false); onPickerRequestConsumed(); setError(null); }} /></Suspense> : null}
+    {(pickerOpen || pickerRequested) && !pending && !requiresAccount && operbox ? <Suspense fallback={<TargetPickerLoading onClose={() => { setPickerOpen(false); onPickerRequestConsumed(); }} />}><TargetPicker operbox={operbox} selectedId={selectedId} onClose={() => { setPickerOpen(false); onPickerRequestConsumed(); }} onSelect={(id) => { setSelectedId(id); setPickerOpen(false); onPickerRequestConsumed(); setCopyFeedback(null); setScrollRequested(true); }} /></Suspense> : null}
   </section>;
 }

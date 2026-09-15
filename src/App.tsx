@@ -2104,6 +2104,12 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       requiresAccount: !accountCanUseCurrentBox,
       onOpenCalculator: () => navigateToPage("calculator"),
     },
+    recruitment: {
+      operbox: accountCanUseCurrentBox && boxSource !== "sample" ? operbox : null,
+      sourceName: accountCanUseCurrentBox && boxSource !== "sample" ? fileName : null,
+      pending: websiteSessionPending || !hasRestoredSession,
+      onOpenSetup: () => { if (!websiteSession) requestWebsiteAccount("setup"); else handleProtectedSetup(); },
+    },
     mastery: {
       operbox: accountCanUseCurrentBox ? operbox : null,
       sourceName: accountCanUseCurrentBox ? fileName : null,
