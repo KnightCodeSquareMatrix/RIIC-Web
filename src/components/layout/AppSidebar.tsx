@@ -11,6 +11,7 @@ import {
   Settings2,
   SquarePen,
   UserRound,
+  UserRoundPlus,
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
@@ -100,6 +101,7 @@ export function AppSidebar({ page, onPageChange }: AppSidebarProps) {
           <SidebarGroupLabel>{labels.progressionGroup}</SidebarGroupLabel>
           <SidebarMenu>
             <AppNavigationItem page={page} target="mastery" label={labels.mastery} icon={BookOpen} onPageChange={onPageChange} />
+            <AppNavigationItem page={page} target="recruitment" label={labels.recruitment} icon={UserRoundPlus} onPageChange={onPageChange} />
           </SidebarMenu>
         </SidebarGroup>
         <SidebarGroup>

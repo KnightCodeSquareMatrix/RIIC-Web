@@ -8,6 +8,7 @@ import type { InfraCalculatorProps } from "@/components/pages/InfraCalculator";
 import type { ManualSchedulePageProps } from "@/components/pages/ManualSchedulePage";
 import type { TrainingAdviceProps } from "@/components/pages/TrainingAdvice";
 import type { MasteryPlannerProps } from "@/components/pages/MasteryPlanner";
+import type { RecruitmentCalculatorProps } from "@/components/pages/RecruitmentCalculator";
 import type { UserSettings } from "@/user-settings";
 
 export interface WorkbenchContextValue {
@@ -15,6 +16,7 @@ export interface WorkbenchContextValue {
   manual: ManualSchedulePageProps;
   training: TrainingAdviceProps;
   mastery: MasteryPlannerProps;
+  recruitment: RecruitmentCalculatorProps;
   account: AccountStatusCenterProps & {
     authenticated: boolean;
     pending: boolean;

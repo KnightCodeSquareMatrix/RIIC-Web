@@ -48,16 +48,13 @@ for (const mobile of [false,true]) {
       await expect(dialog.getByRole("button",{name:"选择埃癸斯",exact:true})).toHaveAttribute("aria-pressed","true");
       await page.screenshot({path:testInfo.outputPath("mastery-picker.png")});
       await dialog.getByRole("button",{name:"选择这名干员",exact:true}).click();
-      await page.getByRole("button",{name:"生成方案",exact:true}).click();
+      await expect(page.getByRole("button",{name:"生成方案",exact:true})).toHaveCount(0);
       const result = page.locator("[data-mastery-results]");
       await expect(result).toContainText("17:16:57");
       const expectResultsAtTop = async () => {
         await expect.poll(async () => Math.round((await result.boundingBox())?.y ?? -1)).toBe(mobile ? 80 : 24);
         await expect(result.getByRole("tab",{name:"省操作",exact:true})).toBeInViewport();
       };
-      await expectResultsAtTop();
-      // Re-generating unchanged inputs must also return to the results.
-      await page.getByRole("button",{name:"生成方案",exact:true}).click();
       await expectResultsAtTop();
       await expect(result.locator("[data-setup-action] svg")).toHaveCount(0);
       await expect(result).toContainText("保留艾丽妮，先开启专3，确认减半效果生效。");
@@ -80,17 +77,27 @@ for (const mobile of [false,true]) {
       const geometry = await page.evaluate(() => ({width:document.documentElement.clientWidth,scroll:document.documentElement.scrollWidth}));
       expect(geometry.scroll).toBeLessThanOrEqual(geometry.width);
       if (mobile) await page.locator("[data-mastery-planner] summary").click();
-      await page.getByRole("button",{name:"中枢专精加成 +5%",exact:true}).click();
+      const previousTime = await result.locator("strong").first().textContent();
+      const controlBonus = page.getByRole("button",{name:"中枢专精加成 +5%",exact:true});
+      await controlBonus.click();
       if (mobile) await expect(page.getByRole("button",{name:"中枢专精加成 +0%",exact:true})).toHaveAttribute("aria-pressed","false");
-      await expect(result).toHaveCount(0);
-      await expect(page.getByText("输入或 Box 已变化，请重新生成方案。",{exact:true})).toBeVisible();
-      await page.getByRole("button",{name:"生成方案",exact:true}).click();
       await expect(result).toBeVisible();
-      await expectResultsAtTop();
+      await expect(result.locator("strong").first()).not.toHaveText(previousTime!);
+      await expect(page.locator("[data-mastery-planner]").getByRole("alert")).toHaveCount(0);
+      await expect(page.getByText("输入或 Box 已变化，请重新生成方案。",{exact:true})).toHaveCount(0);
+      await expect(page.getByRole("button",{name:mobile ? "中枢专精加成 +0%" : "中枢专精加成 +5%",exact:true})).toBeInViewport();
       await page.getByRole("tablist",{name:"当前专精等级",exact:true}).getByRole("tab",{name:"专2",exact:true}).click();
       await expect(page.getByRole("tablist",{name:"目标专精等级",exact:true}).getByRole("tab",{name:"专1",exact:true})).toBeDisabled();
-      await page.getByRole("button",{name:"生成方案",exact:true}).click();
       await expect(result.getByRole("heading",{name:/^专1/})).toHaveCount(0);
+      await expect(result.getByRole("heading",{name:/^专3/})).toHaveCount(1);
+      if (!mobile) await page.locator("[data-mastery-planner] summary").click();
+      const buffer = page.getByRole("spinbutton",{name:"换人操作余量（分钟）",exact:true});
+      await buffer.fill("-1");
+      await expect(page.locator("[data-mastery-planner]").getByRole("alert")).toContainText("操作余量必须是非负数");
+      await expect(result).toHaveCount(0);
+      await buffer.fill("1");
+      await expect(result).toBeVisible();
+      await expect(page.locator("[data-mastery-planner]").getByRole("alert")).toHaveCount(0);
       // The calculation never invokes the solver or writes the operator Box.
       const stored = await page.evaluate(() => Object.entries(localStorage).filter(([key]) => /session-v[45]$/.test(key)).map(([,value]) => JSON.parse(value)));
       const saved = stored.find((value) => value.operbox?.some((o: {name:string}) => o.name === "阿米娅"));
@@ -105,6 +112,8 @@ test("mastery guest login lock and empty Box state",async ({page}) => {
   await mockApis(page);
   await gotoStable(page,"/mastery");
   await expect(page.getByText("登录后使用自己的 Box",{exact:true})).toBeVisible();
+  await expect(page.locator("[data-mastery-results]")).toHaveCount(0);
+  await expect(page.getByRole("button",{name:"生成方案",exact:true})).toHaveCount(0);
   const setupIcon = page.locator("[data-mastery-planner] [data-setup-action] svg");
   await expect(setupIcon).toHaveCount(1);
   if ((page.viewportSize()?.width ?? 1440) < 768) await expect(setupIcon).toBeVisible();
