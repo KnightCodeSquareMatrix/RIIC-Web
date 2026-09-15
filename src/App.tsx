@@ -76,6 +76,8 @@ import {
   MANUAL_SCHEDULE_STORAGE_KEY,
 } from "./manual-schedule-config";
 import type { ManualScheduleDraft, ManualScheduleMode } from "./manual-schedule";
+import type { ManualScheduleEvaluation } from "./manual-schedule-evaluator";
+import { clearManualEvaluationCache, persistManualEvaluationCache } from "./manual-evaluation-cache";
 import { DEFAULT_USER_SETTINGS, loadUserSettings, persistUserSettings, USER_SETTINGS_CHANGED_EVENT, type UserSettings } from "./user-settings";
 import { effectiveFiammettaSetting, resolvePlanPresentationLayout } from "./plan-presentation";
 import {
@@ -303,6 +305,9 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   const [manualShiftStartTime, setManualShiftStartTime] = useState(DEFAULT_MANUAL_SHIFT_START_TIME);
   const [manualScheduleMode, setManualScheduleMode] = useState<ManualScheduleMode>("sequential");
   const [manualDraftHandoff, setManualDraftHandoff] = useState<ManualScheduleDraft | null>(null);
+  const [manualEvaluation, setManualEvaluation] = useState<ManualScheduleEvaluation | null>(null);
+  const [manualEvaluationFingerprint, setManualEvaluationFingerprint] = useState<string | null>(null);
+  const [manualEvaluationPending, setManualEvaluationPending] = useState(false);
   const [pendingManualDraftReplacement, setPendingManualDraftReplacement] = useState<ManualScheduleDraft | null>(null);
   const [inputMode, setInputMode] = useState<"skland" | "maa" | "manual">(CLIENT_SKLAND_ENABLED ? "skland" : "maa");
   const [maaPaste, setMaaPaste] = useState("");
@@ -1215,8 +1220,47 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     await downloadScheduleImage(board, `arknights-infra-schedule-shift-${activeShift + 1}.png`);
   }
 
+  async function evaluateManualScheduleFromPage(input: {
+    draft: ManualScheduleDraft;
+    operbox: OperBoxEntry[];
+    fingerprint: string;
+  }) {
+    if (manualEvaluationPending) return;
+    setManualEvaluationPending(true);
+    try {
+      const { evaluateManualSchedule } = await import("./manual-schedule-evaluator");
+      const evaluation = evaluateManualSchedule({ draft: input.draft, layout, operbox: input.operbox });
+      setManualEvaluation(evaluation);
+      setManualEvaluationFingerprint(input.fingerprint);
+      try {
+        persistManualEvaluationCache(window.localStorage, input.fingerprint, evaluation);
+      } catch {
+        // The in-memory result remains available for the current workbench session.
+      }
+    } finally {
+      setManualEvaluationPending(false);
+    }
+  }
+
+  function restoreManualEvaluation(evaluation: ManualScheduleEvaluation, fingerprint: string) {
+    setManualEvaluation(evaluation);
+    setManualEvaluationFingerprint(fingerprint);
+  }
+
+  function clearManualEvaluation() {
+    setManualEvaluation(null);
+    setManualEvaluationFingerprint(null);
+    setManualEvaluationPending(false);
+    try {
+      clearManualEvaluationCache(window.localStorage);
+    } catch {
+      // Local storage can be unavailable while the in-memory state is still cleared.
+    }
+  }
+
   function openManualScheduleDraft(draft: ManualScheduleDraft) {
     setPendingManualDraftReplacement(null);
+    clearManualEvaluation();
     setManualShiftDurations(draft.shifts.map((shift) => shift.durationHours));
     setManualShiftStartTime(draft.startTime);
     setManualScheduleMode(draft.scheduleMode);
@@ -1872,6 +1916,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       setManualScheduleMode("sequential");
       setManualFiammettaEnabled(false);
       setManualDraftHandoff(null);
+      clearManualEvaluation();
       setLayoutDirty(false);
       setLayoutSource("local");
       setLocalLayoutBackup(null);
@@ -2079,7 +2124,13 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       scheduleMode: manualScheduleMode,
       fiammettaEnabled: effectiveManualFiammettaEnabled,
       initialDraft: accountCanUseCurrentBox ? manualDraftHandoff : null,
+      restorationReady: hasRestoredSession,
       onInitialDraftConsumed: () => setManualDraftHandoff(null),
+      evaluation: manualEvaluation,
+      evaluationFingerprint: manualEvaluationFingerprint,
+      evaluationPending: manualEvaluationPending,
+      onEvaluate: evaluateManualScheduleFromPage,
+      onRestoreEvaluation: restoreManualEvaluation,
       onOpenCalculator: () => navigateToPage("calculator"),
       onShiftDurationsChange: setManualShiftDurations,
       onShiftStartTimeChange: setManualShiftStartTime,
