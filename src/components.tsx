@@ -1248,6 +1248,7 @@ export function ScheduleBoard({
   droneTargetRoomId,
   onDroneTargetChange,
   renderListRoomActions,
+  onManualSkillEfficiencyChange,
 }: {
   rows: RoomRow[];
   layout: BaseBlueprint;
@@ -1283,6 +1284,7 @@ export function ScheduleBoard({
   droneTargetRoomId?: string | null;
   onDroneTargetChange?: (row: RoomRow) => void;
   renderListRoomActions?: (row: RoomRow, position: "header" | "clear") => ReactNode;
+  onManualSkillEfficiencyChange?: (row: RoomRow, value: number | null) => void;
 }) {
   const intl = useTranslations();
   const locale = useLocale();
@@ -1554,10 +1556,28 @@ export function ScheduleBoard({
                           onFactoryRecipeChange={onFactoryRecipeChange}
                           onTradeOrderChange={onTradeOrderChange}
                         />
-                        {onClearRoom && row.group === "power" && !efficiency ? (
+                        {!efficiency && (row.group === "trading" || row.group === "manufacture" || row.group === "power") ? (
                           <div className="font-technical text-xs tracking-[0.01em] text-white/38">
                             {intl("components_CompactScheduleView.awaitingSchedule")}
                           </div>
+                        ) : null}
+                        {onManualSkillEfficiencyChange && (row.group === "trading" || row.group === "manufacture" || row.group === "power") ? (
+                          <label className="flex items-center gap-1 text-xs text-white/70">
+                            <span>纸面技能效率</span>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              pattern="[0-9]*[.,]?[0-9]*"
+                              value={row.manualSkillEfficiencyPct ?? ""}
+                              placeholder="0"
+                              className="h-7 w-16 rounded border border-white/25 bg-black/25 px-1 text-right font-number text-xs text-white outline-none focus:border-[#FFD800]"
+                              onChange={(event) => {
+                                const raw = event.currentTarget.value;
+                                onManualSkillEfficiencyChange(row, raw === "" ? null : Number(raw));
+                              }}
+                            />
+                            <span>%</span>
+                          </label>
                         ) : null}
                       </div>
                     </div>
@@ -1651,7 +1671,7 @@ export function ScheduleBoard({
   ), [rowGroups, en, layout, collapsedGroups, hiddenGroups, intl, locale, gameCatalog,
     onSortToggle, sortRoomId, renderListRoomActions, shiftDirection, onFactoryRecipeChange,
     onTradeOrderChange, eliteByOperator, levelByOperator, onSlotClick, sortSelection,
-    onSortSlotClick, onIssue, feedbackDisabled, normalizedQuery, onClearRoom]);
+    onSortSlotClick, onIssue, feedbackDisabled, normalizedQuery, onClearRoom, onManualSkillEfficiencyChange]);
 
   const compactContent = useMemo(() => (
         <SkeletonSwap ready={Boolean(CompactScheduleView) || compactScheduleLoadFailed} skeleton={<CompactScheduleLoading rows={visibleRows} />}>
@@ -1676,6 +1696,7 @@ export function ScheduleBoard({
               onDormAutofillChange={onDormAutofillChange}
               droneTargetRoomId={droneTargetRoomId}
               onDroneTargetChange={onDroneTargetChange}
+              onManualSkillEfficiencyChange={onManualSkillEfficiencyChange}
             />
           ) : compactScheduleLoadFailed ? (
             <div className="grid min-h-[420px] place-items-center border-y border-destructive/35 text-sm text-destructive" role="alert">
@@ -1689,7 +1710,7 @@ export function ScheduleBoard({
   ), [CompactScheduleView, visibleRows, layout, eliteByOperator, levelByOperator,
     activeShift, activePlan, shiftDirection, onIssue, feedbackDisabled, hideImages,
     onSlotClick, sortRoomId, sortSelection, onSortToggle, onSortSlotClick, onClearRoom,
-    onDormAutofillChange, droneTargetRoomId, onDroneTargetChange, compactScheduleLoadFailed, intl]);
+    onDormAutofillChange, droneTargetRoomId, onDroneTargetChange, onManualSkillEfficiencyChange, compactScheduleLoadFailed, intl]);
 
   if (rows.length === 0) {
     return (

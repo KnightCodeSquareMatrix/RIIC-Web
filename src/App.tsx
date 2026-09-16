@@ -75,7 +75,7 @@ import {
   DEFAULT_MANUAL_SHIFT_START_TIME,
   MANUAL_SCHEDULE_STORAGE_KEY,
 } from "./manual-schedule-config";
-import type { ManualScheduleDraft, ManualScheduleMode } from "./manual-schedule";
+import { manualScheduleToMaa, type ManualScheduleDraft, type ManualScheduleMode } from "./manual-schedule";
 import type { ManualScheduleEvaluation } from "./manual-schedule-evaluator";
 import { clearManualEvaluationCache, persistManualEvaluationCache } from "./manual-evaluation-cache";
 import { DEFAULT_USER_SETTINGS, loadUserSettings, persistUserSettings, USER_SETTINGS_CHANGED_EVENT, type UserSettings } from "./user-settings";
@@ -1222,14 +1222,15 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
 
   async function evaluateManualScheduleFromPage(input: {
     draft: ManualScheduleDraft;
-    operbox: OperBoxEntry[];
     fingerprint: string;
   }) {
     if (manualEvaluationPending) return;
     setManualEvaluationPending(true);
     try {
       const { evaluateManualSchedule } = await import("./manual-schedule-evaluator");
-      const evaluation = evaluateManualSchedule({ draft: input.draft, layout, operbox: input.operbox });
+      const evaluation = evaluateManualSchedule({ draft: input.draft, layout });
+      evaluation.maa = manualScheduleToMaa(input.draft, layout, input.draft.fiammettaEnabled);
+      evaluation.layout = structuredClone(layout);
       setManualEvaluation(evaluation);
       setManualEvaluationFingerprint(input.fingerprint);
       try {
