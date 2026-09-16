@@ -23,7 +23,7 @@
   "handoffBufferMinutes": "换人操作余量（分钟）",
   "environmentCountsReferToOperatorsActuallyStationedInThe": "人数指基建内实际进驻人数，不是 Box 持有数量。操作余量用于让减半教官连续工作超过 5 小时，降低错过换人时间的风险。",
   "generatePlans": "生成方案",
-  "computedLocallyNoBaseScheduleRequired": "本地计算，无需先生成基建排班。",
+  "computedLocallyNoBaseScheduleRequired": "选择干员后自动计算，修改设置时实时更新。无需先生成基建排班。",
   "inputsOrBoxChangedGeneratePlansAgainToSee": "输入或 Box 已变化，请重新生成方案。",
   "planStyle": "专精方案类型",
   "simple": "省操作",
