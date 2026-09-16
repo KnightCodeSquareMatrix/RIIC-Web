@@ -1,10 +1,10 @@
 import type { ManualScheduleDraft } from "./manual-schedule.ts";
 import type { ManualScheduleEvaluation } from "./manual-schedule-evaluator.ts";
-import type { BaseBlueprint, OperBoxEntry } from "./types.ts";
+import type { BaseBlueprint } from "./types.ts";
 
 export const MANUAL_EVALUATION_CACHE_STORAGE_KEY = "arknights-infra-manual-evaluation-v1";
-const CACHE_VERSION = 1;
-const EVALUATOR_VERSION = 1;
+const CACHE_VERSION = 3;
+const EVALUATOR_VERSION = 3;
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
@@ -21,15 +21,11 @@ type CachedEvaluation = {
 export function createManualEvaluationFingerprint(input: {
   draft: ManualScheduleDraft;
   layout: BaseBlueprint;
-  operbox: readonly OperBoxEntry[];
 }): string {
-  const operators = input.operbox
-    .filter((entry) => entry.own)
-    .map(({ id, name, elite, level, own }) => ({ id, name, elite, level, own }))
-    .sort((left, right) => left.id.localeCompare(right.id));
-  const evaluationDraft = { ...input.draft };
-  delete evaluationDraft.activeShift;
-  return JSON.stringify({ evaluatorVersion: EVALUATOR_VERSION, draft: evaluationDraft, layout: input.layout, operators });
+  const evaluationDraft = Object.fromEntries(
+    Object.entries(input.draft).filter(([key]) => key !== "activeShift"),
+  );
+  return JSON.stringify({ evaluatorVersion: EVALUATOR_VERSION, draft: evaluationDraft, layout: input.layout });
 }
 
 function validEvaluation(value: unknown): value is ManualScheduleEvaluation {

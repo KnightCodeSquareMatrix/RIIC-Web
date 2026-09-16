@@ -51,6 +51,7 @@ import {
   resizeManualScheduleDraft,
   setManualDormAutofill,
   setManualDroneTarget,
+  setManualRoomSkillEfficiency,
   swapManualOperators,
   type ManualOperatorConflict,
   type ManualScheduleDraft,
@@ -98,7 +99,7 @@ export interface ManualSchedulePageProps {
   evaluation: ManualScheduleEvaluation | null;
   evaluationFingerprint: string | null;
   evaluationPending: boolean;
-  onEvaluate: (input: { draft: ManualScheduleDraft; operbox: OperBoxEntry[]; fingerprint: string }) => Promise<void>;
+  onEvaluate: (input: { draft: ManualScheduleDraft; fingerprint: string }) => Promise<void>;
   onRestoreEvaluation: (evaluation: ManualScheduleEvaluation, fingerprint: string) => void;
   onOpenCalculator: () => void;
   onShiftDurationsChange: (durations: number[]) => void;
@@ -292,7 +293,7 @@ export function ManualSchedulePage({
         onShiftStartTimeChange(reconciled.startTime);
         onScheduleModeChange(reconciled.scheduleMode);
         onFiammettaEnabledChange(reconciled.fiammettaEnabled);
-        const fingerprint = createManualEvaluationFingerprint({ draft: reconciled, layout, operbox: ownedOperators });
+        const fingerprint = createManualEvaluationFingerprint({ draft: reconciled, layout });
         const cachedEvaluation = loadManualEvaluationCache(window.localStorage, fingerprint);
         if (cachedEvaluation) onRestoreEvaluation(cachedEvaluation, fingerprint);
       }
@@ -335,7 +336,7 @@ export function ManualSchedulePage({
   }, [intl, canPersistDraft, draft, en, restored]);
 
   const activeShift = Math.min(draft.activeShift, Math.max(0, draft.shifts.length - 1));
-  const evaluationInputFingerprint = createManualEvaluationFingerprint({ draft, layout, operbox: ownedOperators });
+  const evaluationInputFingerprint = createManualEvaluationFingerprint({ draft, layout });
   const evaluationIsCurrent = evaluation !== null && evaluationFingerprint === evaluationInputFingerprint;
   const shiftRanges = manualShiftTimeRanges(draft.startTime, draft.shifts.map((shift) => shift.durationHours));
   const maa = useMemo(() => manualScheduleToMaa(draft, layout, fiammettaEnabled), [draft, fiammettaEnabled, layout]);
@@ -346,9 +347,8 @@ export function ManualSchedulePage({
     trainee: trainingAssignment?.operators[0] ?? null,
     trainer: trainingAssignment?.operators[1] ?? null,
   } : undefined, [trainingAssignment?.operators, trainingRoom]);
-  const activeEvaluationShift = evaluationIsCurrent
-    ? evaluation.rotation.shifts[activeShift]
-    : undefined;
+  const evaluationIsStale = evaluation !== null && !evaluationIsCurrent;
+  const activeEvaluationShift = evaluation?.rotation.shifts[activeShift];
   const rows = useMemo(
     () => addOperatorPresentations(planToRows(activePlan, activeEvaluationShift, layout, activeTrainingRoomShift).map((row) => {
       const assignment = draft.shifts[activeShift]?.rooms[row.roomId];
@@ -368,6 +368,9 @@ export function ManualSchedulePage({
           unavailableSlotIndices: Array.from({ length: Math.max(0, visibleSlots - capacity) }, (_, index) => capacity + index),
         }),
         ...(row.group === "dormitory" ? { autofill: Boolean(assignment?.autofill) } : {}),
+        ...(room?.kind === "trade_post" || room?.kind === "factory" || room?.kind === "power_plant"
+          ? { manualSkillEfficiencyPct: assignment?.manualSkillEfficiencyPct }
+          : {}),
       };
     })),
     [activeEvaluationShift, activePlan, activeShift, activeTrainingRoomShift, draft.shifts, layout],
@@ -580,6 +583,10 @@ export function ManualSchedulePage({
     ));
   }
 
+  function setRoomSkillEfficiency(row: RoomRow, value: number | null) {
+    setDraft((current) => setManualRoomSkillEfficiency(current, layout, activeShift, row.roomId, value));
+  }
+
   function toggleDroneTarget(row: RoomRow) {
     setDraft((current) => setManualDroneTarget(
       current,
@@ -590,7 +597,7 @@ export function ManualSchedulePage({
   }
 
   function runEvaluation() {
-    void onEvaluate({ draft, operbox: ownedOperators, fingerprint: evaluationInputFingerprint });
+    void onEvaluate({ draft, fingerprint: evaluationInputFingerprint });
   }
 
   function exportMaa() {
@@ -677,6 +684,8 @@ export function ManualSchedulePage({
       <ArrowLeft />{intl("components_pages_ManualSchedulePage.backToCalculation")}
     </Button> : null}
     <Button type="button" variant={mobile ? "ghost" : "outline"} size="sm" onClick={() => { closeMobileTools(); onOpenSetup(); }}><Settings2 />{intl("components_pages_ManualSchedulePage.configureBoxLayout")}</Button>
+    <Button type="button" variant={mobile ? "ghost" : "outline"} size="sm" disabled title="按当前排班评估暂未接入"><Sparkles />根据排班计算</Button>
+    <Button type="button" variant={mobile ? "ghost" : "outline"} size="sm" onClick={() => { closeMobileTools(); runEvaluation(); }} disabled={evaluationPending}><Sparkles />根据效率计算</Button>
     <Button type="button" variant={mobile ? "ghost" : "outline"} size="sm" onClick={() => { closeMobileTools(); maaImportInputRef.current?.click(); }}><Upload />{intl("components_pages_ManualSchedulePage.importScheduleFile")}</Button>
   </>;
 
@@ -708,9 +717,6 @@ export function ManualSchedulePage({
             <div className="absolute left-0 top-[calc(100%+0.35rem)] z-30 grid w-[min(18rem,calc(100vw-1.5rem))] gap-2 border border-border bg-background p-2 shadow-lg [&_button]:h-auto [&_button]:min-h-11 [&_button]:min-w-0 [&_button]:w-full [&_button]:justify-start [&_button]:whitespace-normal">{scheduleTools(true)}</div>
           </details>
         </div>
-        <Button type="button" size="sm" variant="outline" className="min-w-0 max-md:h-auto max-md:min-h-11 max-md:whitespace-normal max-md:px-3 max-md:py-2 max-md:text-xs" onClick={runEvaluation} disabled={evaluationPending} data-manual-evaluate>
-          <Sparkles />计算效率
-        </Button>
         <Button type="button" size="sm" className="min-w-0 max-md:h-auto max-md:min-h-11 max-md:whitespace-normal max-md:px-3 max-md:py-2 max-md:text-xs" onClick={exportMaa}><Download />{intl("components_pages_ManualSchedulePage.exportMaa")}</Button>
       </header>
 
@@ -722,15 +728,15 @@ export function ManualSchedulePage({
           <p className="mt-1 truncate text-xs text-muted-foreground" data-manual-draft-source={draft.source?.variant ?? "standalone"}>
             {draft.source ? (intl("components_pages_ManualSchedulePage.basedOn", { sourceVariantLabel: sourceVariantLabel })) : null}
             {draft.source ? " · " : null}
-            {sourceName ?? (intl("components_pages_ManualSchedulePage.currentOperatorBox"))} · {ownedOperators.length} {intl("components_pages_ManualSchedulePage.owned")}
+            {sourceName ?? (intl("components_pages_ManualSchedulePage.currentOperatorBox"))} · {ownedOperators.length} {intl("components_pages_ManualSchedulePage.owned")}{evaluationIsStale ? <span className="ml-1 whitespace-nowrap text-red-600">· 排班已编辑，请重新获取效率</span> : null}
           </p>
         </div>
       </div>
 
       <ManualProductionSummary
-        layout={layout}
-        maa={maa}
-        computed={evaluationIsCurrent}
+        layout={evaluation?.layout ?? layout}
+        maa={evaluation?.maa ?? maa}
+        computed={evaluation !== null}
         evaluation={evaluation}
         activeShift={activeShift}
         controlsSlot={(
@@ -744,25 +750,6 @@ export function ManualSchedulePage({
           />
         )}
       />
-
-      {evaluation && evaluationIsCurrent ? <section className="mb-4 border border-border/70 bg-muted/25 px-3 py-3" data-manual-evaluation>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <p className="text-sm font-medium">本地编制评估</p>
-              <p className="mt-1 text-xs text-muted-foreground">结果与当前草稿一致 · {evaluation.elapsedMs.toFixed(1)} ms</p>
-            </div>
-            <p className="font-number text-xs text-muted-foreground">
-              当前班：贸易 {evaluation.rotation.shifts[activeShift]?.scores.trade_score.toFixed(3) ?? "0"} · 制造 {evaluation.rotation.shifts[activeShift]?.scores.manu_prod_sum.toFixed(3) ?? "0"} · 发电 {evaluation.rotation.shifts[activeShift]?.scores.power_charge_sum.toFixed(3) ?? "0"}
-            </p>
-          </div>
-          {evaluation.warnings.length > 0 ? <details className="mt-3 text-xs text-amber-800">
-            <summary className="cursor-pointer">评估提示（{evaluation.warnings.length}）</summary>
-            <ul className="mt-2 list-disc space-y-1 pl-5">{evaluation.warnings.map((warning, index) => <li key={`${warning.code}-${warning.roomId ?? "base"}-${warning.operator ?? ""}-${index}`}>{warning.message}</li>)}</ul>
-          </details> : null}
-        </section> : evaluation ? <section className="mb-4 border border-border/70 bg-muted/25 px-3 py-3" data-manual-evaluation>
-        <p className="text-sm font-medium">本地编制评估</p>
-        <p className="mt-1 text-xs text-muted-foreground">草稿已变更，请重新计算。</p>
-      </section> : null}
 
       {storageWarning ? <p className="mb-3 text-sm text-amber-700" role="status">{storageWarning}</p> : null}
 
@@ -839,6 +826,7 @@ export function ManualSchedulePage({
         onDormAutofillChange={setDormAutofill}
         droneTargetRoomId={draft.shifts[activeShift]?.droneTargetRoomId}
         onDroneTargetChange={toggleDroneTarget}
+        onManualSkillEfficiencyChange={setRoomSkillEfficiency}
         onFactoryRecipeChange={onFactoryRecipeChange}
         onTradeOrderChange={onTradeOrderChange}
       />

@@ -1,28 +1,10 @@
-import staticRulesJson from "./generated/infra-eval/static-self-rules.json" with { type: "json" };
 import { factoryRecipeFor, tradeOrderFor } from "./blueprint.ts";
 import { manualRoomCapacity, type ManualScheduleDraft } from "./manual-schedule.ts";
-import type { BaseBlueprint, OperBoxEntry, RotationJson, RotationRoomLine, RotationShift } from "./types.ts";
+import { resolveManualManufactureRoom, resolveManualPowerRoom, resolveManualTradeRoom } from "./manual-room-efficiency-resolvers.ts";
+import type { BaseBlueprint, MaaJson, RotationJson, RotationRoomLine, RotationShift } from "./types.ts";
 
 type Facility = "manufacture" | "trade" | "power";
 type Recipe = "all" | "gold" | "battle_record" | "originium";
-
-type StaticRule = {
-  operator: string;
-  skillId: string;
-  unlock: string;
-  facility: Facility;
-  recipe: Recipe;
-  value: number;
-  rampPerHour: number | null;
-  rampCap: number | null;
-  rampStyle: string | null;
-};
-
-const STATIC_RULES = staticRulesJson as StaticRule[];
-const RULES_BY_OPERATOR = new Map<string, StaticRule[]>();
-for (const rule of STATIC_RULES) {
-  RULES_BY_OPERATOR.set(rule.operator, [...(RULES_BY_OPERATOR.get(rule.operator) ?? []), rule]);
-}
 
 const TRADE_BASE_DAILY: Record<number, number> = { 1: 10_000, 2: 10_141, 3: 10_265 };
 const FACTORY_BASE_DAILY: Record<Exclude<Recipe, "all">, number> = {
@@ -49,26 +31,16 @@ export type ManualRoomEvaluation = {
   finalEfficiency: number;
   dailyOutput: number | null;
   outputKind?: "lmd" | "pure_gold" | "battle_records" | "originium_shards" | "power";
-  appliedRules: Array<{ operator: string; skillId: string; value: number }>;
 };
 
 export type ManualScheduleEvaluation = {
   rotation: RotationJson;
+  maa?: MaaJson;
+  layout?: BaseBlueprint;
   roomsByShift: ManualRoomEvaluation[][];
   warnings: ManualEvaluationWarning[];
   elapsedMs: number;
 };
-
-function unlocked(entry: OperBoxEntry, unlock: string): boolean {
-  if (unlock.includes("精英 2")) return entry.elite >= 2;
-  if (unlock.includes("精英 1")) return entry.elite >= 1;
-  const level = /等级\s+(\d+)/.exec(unlock);
-  return !level || entry.level >= Number(level[1]);
-}
-
-function recipeMatches(rule: StaticRule, recipe: Recipe): boolean {
-  return rule.recipe === "all" || rule.recipe === recipe;
-}
 
 function rounded(value: number): number {
   return Math.round(value * 1_000) / 1_000;
@@ -80,40 +52,18 @@ function roomEvaluation(input: {
   recipe: Recipe;
   level: number;
   operatorNames: readonly string[];
-  operboxByName: ReadonlyMap<string, OperBoxEntry>;
-  durationHours: number;
+  manualSkillEfficiencyPct?: number;
   warnings: ManualEvaluationWarning[];
 }): ManualRoomEvaluation {
-  const { roomId, facility, recipe, level, operatorNames, operboxByName, durationHours, warnings } = input;
-  let skillPct = 0;
-  const appliedRules: ManualRoomEvaluation["appliedRules"] = [];
-
-  for (const operator of operatorNames) {
-    const entry = operboxByName.get(operator);
-    if (!entry) {
-      warnings.push({
-        code: "unknown-operator",
-        roomId,
-        operator,
-        message: `${operator} 不在当前干员箱中，未计算其基建技能。`,
-      });
-      continue;
-    }
-    for (const rule of RULES_BY_OPERATOR.get(operator) ?? []) {
-      if (rule.facility !== facility || !unlocked(entry, rule.unlock) || !recipeMatches(rule, recipe)) continue;
-      let value = rule.value;
-      if (rule.rampStyle === "first_hour_then_hourly" && rule.rampPerHour !== null && rule.rampCap !== null) {
-        value = Math.min(rule.rampCap, value + Math.max(0, durationHours - 1) * rule.rampPerHour);
-      }
-      skillPct += value;
-      appliedRules.push({ operator, skillId: rule.skillId, value });
-    }
-  }
-
-  const occupancyPct = operatorNames.length;
-  const total = 1 + (occupancyPct + skillPct) / 100;
-  const orderMultiplier = 1;
-  const final = total * orderMultiplier;
+  const { roomId, facility, recipe, level, operatorNames, manualSkillEfficiencyPct } = input;
+  const resolution = facility === "trade"
+    ? resolveManualTradeRoom({ activeMemberCount: operatorNames.length, manualSkillEfficiencyPct })
+    : facility === "manufacture"
+      ? resolveManualManufactureRoom({ activeMemberCount: operatorNames.length, manualSkillEfficiencyPct })
+      : resolveManualPowerRoom({ manualSkillEfficiencyPct });
+  const total = resolution.totalEfficiency;
+  const orderMultiplier = resolution.orderMultiplier;
+  const final = resolution.finalEfficiency;
   const dailyOutput = facility === "trade"
     ? (recipe === "originium" ? 240 : (TRADE_BASE_DAILY[level] ?? TRADE_BASE_DAILY[3])) * final
     : facility === "manufacture" && recipe !== "all"
@@ -132,23 +82,21 @@ function roomEvaluation(input: {
   return {
     roomId,
     members: [...operatorNames],
-    baseEfficiency: 1 + occupancyPct / 100,
-    skillEfficiency: skillPct / 100,
-    globalEfficiency: 0,
-    totalEfficiency: rounded(total),
+    baseEfficiency: resolution.baseEfficiency,
+    skillEfficiency: resolution.skillEfficiency,
+    globalEfficiency: resolution.globalEfficiency,
+    totalEfficiency: total,
     orderMultiplier,
-    finalEfficiency: rounded(final),
+    finalEfficiency: final,
     dailyOutput: dailyOutput === null ? null : rounded(dailyOutput),
     outputKind,
-    appliedRules,
   };
 }
 
 function lineForEvaluation(room: ManualRoomEvaluation, facility: Facility): RotationRoomLine {
-  const base = room.baseEfficiency;
   const line: RotationRoomLine = {
     room_id: room.roomId,
-    base_efficiency: base,
+    ...(facility === "power" ? {} : { base_efficiency: room.baseEfficiency }),
     equivalent_efficiency: room.skillEfficiency,
     global_efficiency: room.globalEfficiency,
     total_efficiency: room.totalEfficiency,
@@ -164,9 +112,10 @@ function lineForEvaluation(room: ManualRoomEvaluation, facility: Facility): Rota
     line.manu_prod_skill = room.skillEfficiency * 100;
     line.manu_display_pct = (room.skillEfficiency + room.globalEfficiency) * 100;
   } else {
-    line.power_score = room.finalEfficiency * 100;
+    line.power_score = room.finalEfficiency;
     line.power_skill_pct = room.skillEfficiency * 100;
-    line.power_display_pct = (room.skillEfficiency + room.globalEfficiency) * 100;
+    line.power_display_pct = room.skillEfficiency * 100;
+    line.power_charge_speed_pct = room.skillEfficiency * 100;
   }
   return line;
 }
@@ -174,11 +123,9 @@ function lineForEvaluation(room: ManualRoomEvaluation, facility: Facility): Rota
 export function evaluateManualSchedule(input: {
   draft: ManualScheduleDraft;
   layout: BaseBlueprint;
-  operbox: readonly OperBoxEntry[];
 }): ManualScheduleEvaluation {
   const startedAt = performance.now();
   const warnings: ManualEvaluationWarning[] = [];
-  const operboxByName = new Map(input.operbox.filter((entry) => entry.own).map((entry) => [entry.name, entry]));
   const shiftTotals: Array<{ trade: number; manufacture: number; power: number; production: Record<string, number> }> = [];
   const roomsByShift: ManualRoomEvaluation[][] = [];
 
@@ -192,7 +139,8 @@ export function evaluateManualSchedule(input: {
 
     for (const room of input.layout.rooms) {
       if (room.kind !== "trade_post" && room.kind !== "factory" && room.kind !== "power_plant") continue;
-      const operatorNames = (shift.rooms[room.id]?.operators ?? [])
+      const assignment = shift.rooms[room.id];
+      const operatorNames = (assignment?.operators ?? [])
         .slice(0, manualRoomCapacity(room))
         .filter((name): name is string => Boolean(name));
       const facility: Facility = room.kind === "trade_post" ? "trade" : room.kind === "factory" ? "manufacture" : "power";
@@ -210,8 +158,7 @@ export function evaluateManualSchedule(input: {
         recipe,
         level: room.level,
         operatorNames,
-        operboxByName,
-        durationHours: shift.durationHours,
+        manualSkillEfficiencyPct: assignment?.manualSkillEfficiencyPct,
         warnings,
       });
       rooms.push(evaluation);
@@ -255,7 +202,7 @@ export function evaluateManualSchedule(input: {
 
   warnings.push({
     code: "unsupported-rule",
-    message: "当前本地评估已覆盖同源静态技能和基础房间结算；中枢、跨设施投影、动态制造、订单上限及特殊贸易组合仍待按 Rust eval 规则逐项迁移。",
+    message: "当前本地评估只按手填纸面技能效率和基础房间结算；未填写的纸面技能效率按 0 计算。中枢、跨设施投影、动态制造、订单倍率及特殊贸易组合尚未结算。",
   });
 
   return {
