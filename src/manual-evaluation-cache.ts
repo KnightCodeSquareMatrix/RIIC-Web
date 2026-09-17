@@ -1,10 +1,10 @@
 import type { ManualScheduleDraft } from "./manual-schedule.ts";
-import type { ManualScheduleEvaluation } from "./manual-schedule-evaluator.ts";
+import type { ManualPlanResult } from "./manual-plan-result.ts";
 import type { BaseBlueprint } from "./types.ts";
 
 export const MANUAL_EVALUATION_CACHE_STORAGE_KEY = "arknights-infra-manual-evaluation-v1";
-const CACHE_VERSION = 3;
-const EVALUATOR_VERSION = 3;
+const CACHE_VERSION = 4;
+const EVALUATOR_VERSION = 4;
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
@@ -13,7 +13,7 @@ type CachedEvaluation = {
   version: number;
   evaluatorVersion: number;
   fingerprint: string;
-  evaluation: ManualScheduleEvaluation;
+  evaluation: ManualPlanResult;
   savedAt: string;
   expiresAt: string;
 };
@@ -28,18 +28,23 @@ export function createManualEvaluationFingerprint(input: {
   return JSON.stringify({ evaluatorVersion: EVALUATOR_VERSION, draft: evaluationDraft, layout: input.layout });
 }
 
-function validEvaluation(value: unknown): value is ManualScheduleEvaluation {
+function validEvaluation(value: unknown): value is ManualPlanResult {
   if (!value || typeof value !== "object") return false;
-  const candidate = value as Partial<ManualScheduleEvaluation>;
+  const candidate = value as Partial<ManualPlanResult>;
   return typeof candidate.elapsedMs === "number"
     && Number.isFinite(candidate.elapsedMs)
     && Array.isArray(candidate.roomsByShift)
     && Array.isArray(candidate.warnings)
+    && candidate.kind === "manual"
+    && candidate.revision === 1
+    && typeof candidate.fingerprint === "string"
+    && candidate.layout !== undefined
+    && candidate.maa !== undefined
     && candidate.rotation !== undefined
     && Array.isArray(candidate.rotation.shifts);
 }
 
-export function loadManualEvaluationCache(storage: StorageLike, fingerprint: string): ManualScheduleEvaluation | null {
+export function loadManualEvaluationCache(storage: StorageLike, fingerprint: string): ManualPlanResult | null {
   try {
     const raw = storage.getItem(MANUAL_EVALUATION_CACHE_STORAGE_KEY);
     if (!raw) return null;
@@ -62,7 +67,7 @@ export function loadManualEvaluationCache(storage: StorageLike, fingerprint: str
   }
 }
 
-export function persistManualEvaluationCache(storage: StorageLike, fingerprint: string, evaluation: ManualScheduleEvaluation): void {
+export function persistManualEvaluationCache(storage: StorageLike, fingerprint: string, evaluation: ManualPlanResult): void {
   const savedAt = Date.now();
   const cache: CachedEvaluation = {
     version: CACHE_VERSION,

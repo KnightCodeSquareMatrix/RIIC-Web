@@ -75,8 +75,8 @@ import {
   DEFAULT_MANUAL_SHIFT_START_TIME,
   MANUAL_SCHEDULE_STORAGE_KEY,
 } from "./manual-schedule-config";
-import { manualScheduleToMaa, type ManualScheduleDraft, type ManualScheduleMode } from "./manual-schedule";
-import type { ManualScheduleEvaluation } from "./manual-schedule-evaluator";
+import { type ManualScheduleDraft, type ManualScheduleMode } from "./manual-schedule";
+import type { ManualPlanResult } from "./manual-plan-result";
 import { clearManualEvaluationCache, persistManualEvaluationCache } from "./manual-evaluation-cache";
 import { DEFAULT_USER_SETTINGS, loadUserSettings, persistUserSettings, USER_SETTINGS_CHANGED_EVENT, type UserSettings } from "./user-settings";
 import { effectiveFiammettaSetting, resolvePlanPresentationLayout } from "./plan-presentation";
@@ -305,8 +305,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   const [manualShiftStartTime, setManualShiftStartTime] = useState(DEFAULT_MANUAL_SHIFT_START_TIME);
   const [manualScheduleMode, setManualScheduleMode] = useState<ManualScheduleMode>("sequential");
   const [manualDraftHandoff, setManualDraftHandoff] = useState<ManualScheduleDraft | null>(null);
-  const [manualEvaluation, setManualEvaluation] = useState<ManualScheduleEvaluation | null>(null);
-  const [manualEvaluationFingerprint, setManualEvaluationFingerprint] = useState<string | null>(null);
+  const [manualPlanResult, setManualPlanResult] = useState<ManualPlanResult | null>(null);
   const [manualEvaluationPending, setManualEvaluationPending] = useState(false);
   const [pendingManualDraftReplacement, setPendingManualDraftReplacement] = useState<ManualScheduleDraft | null>(null);
   const [inputMode, setInputMode] = useState<"skland" | "maa" | "manual">(CLIENT_SKLAND_ENABLED ? "skland" : "maa");
@@ -1227,14 +1226,11 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     if (manualEvaluationPending) return;
     setManualEvaluationPending(true);
     try {
-      const { evaluateManualSchedule } = await import("./manual-schedule-evaluator");
-      const evaluation = evaluateManualSchedule({ draft: input.draft, layout });
-      evaluation.maa = manualScheduleToMaa(input.draft, layout, input.draft.fiammettaEnabled);
-      evaluation.layout = structuredClone(layout);
-      setManualEvaluation(evaluation);
-      setManualEvaluationFingerprint(input.fingerprint);
+      const { assemblePaperManualPlanResult } = await import("./manual-plan-result");
+      const result = assemblePaperManualPlanResult({ draft: input.draft, layout, operbox, fingerprint: input.fingerprint });
+      setManualPlanResult(result);
       try {
-        persistManualEvaluationCache(window.localStorage, input.fingerprint, evaluation);
+        persistManualEvaluationCache(window.localStorage, input.fingerprint, result);
       } catch {
         // The in-memory result remains available for the current workbench session.
       }
@@ -1243,14 +1239,12 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     }
   }
 
-  function restoreManualEvaluation(evaluation: ManualScheduleEvaluation, fingerprint: string) {
-    setManualEvaluation(evaluation);
-    setManualEvaluationFingerprint(fingerprint);
+  function restoreManualEvaluation(result: ManualPlanResult) {
+    setManualPlanResult(result);
   }
 
   function clearManualEvaluation() {
-    setManualEvaluation(null);
-    setManualEvaluationFingerprint(null);
+    setManualPlanResult(null);
     setManualEvaluationPending(false);
     try {
       clearManualEvaluationCache(window.localStorage);
@@ -2127,8 +2121,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       initialDraft: accountCanUseCurrentBox ? manualDraftHandoff : null,
       restorationReady: hasRestoredSession,
       onInitialDraftConsumed: () => setManualDraftHandoff(null),
-      evaluation: manualEvaluation,
-      evaluationFingerprint: manualEvaluationFingerprint,
+      result: manualPlanResult,
       evaluationPending: manualEvaluationPending,
       onEvaluate: evaluateManualScheduleFromPage,
       onRestoreEvaluation: restoreManualEvaluation,

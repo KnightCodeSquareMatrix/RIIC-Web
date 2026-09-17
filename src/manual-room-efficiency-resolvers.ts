@@ -1,3 +1,5 @@
+import { resolveGoldEquivalentEfficiency, resolveManualSpecialTradeOutput, type ManualTradeMember } from "./manual-trade-special-rules.ts";
+
 export type ManualRoomEfficiencyResolution = {
   baseEfficiency: number;
   skillEfficiency: number;
@@ -19,20 +21,23 @@ function paperSkill(value: number | undefined): number {
 export function resolveManualTradeRoom(input: {
   activeMemberCount: number;
   manualSkillEfficiencyPct?: number;
+  level: number;
+  order: "gold" | "originium";
+  members: readonly ManualTradeMember[];
 }): ManualRoomEfficiencyResolution {
   const baseEfficiency = 1 + Math.max(0, input.activeMemberCount) / 100;
   const skillEfficiency = paperSkill(input.manualSkillEfficiencyPct);
-  const globalEfficiency = 0;
-  const orderMultiplier = 1;
+  const globalEfficiency = 0.05;
   const totalEfficiency = rounded(baseEfficiency + skillEfficiency + globalEfficiency);
+  const special = resolveManualSpecialTradeOutput({ level: input.level, order: input.order, members: input.members });
   return {
     baseEfficiency,
     skillEfficiency,
     globalEfficiency,
-    orderMultiplier,
+    orderMultiplier: special.orderMultiplier,
     totalEfficiency,
-    finalEfficiency: rounded(totalEfficiency * orderMultiplier),
-    goldEquivalentEfficiency: 0,
+    finalEfficiency: rounded(totalEfficiency * special.orderMultiplier),
+    goldEquivalentEfficiency: resolveGoldEquivalentEfficiency(totalEfficiency, special.goldUnitOutputPerDay),
   };
 }
 
@@ -42,7 +47,7 @@ export function resolveManualManufactureRoom(input: {
 }): ManualRoomEfficiencyResolution {
   const baseEfficiency = 1 + Math.max(0, input.activeMemberCount) / 100;
   const skillEfficiency = paperSkill(input.manualSkillEfficiencyPct);
-  const globalEfficiency = 0;
+  const globalEfficiency = 0.05;
   const totalEfficiency = rounded(baseEfficiency + skillEfficiency + globalEfficiency);
   return {
     baseEfficiency,

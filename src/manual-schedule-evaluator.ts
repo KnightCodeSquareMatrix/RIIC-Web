@@ -1,7 +1,7 @@
 import { factoryRecipeFor, tradeOrderFor } from "./blueprint.ts";
 import { manualRoomCapacity, type ManualScheduleDraft } from "./manual-schedule.ts";
 import { resolveManualManufactureRoom, resolveManualPowerRoom, resolveManualTradeRoom } from "./manual-room-efficiency-resolvers.ts";
-import type { BaseBlueprint, MaaJson, RotationJson, RotationRoomLine, RotationShift } from "./types.ts";
+import type { BaseBlueprint, MaaJson, OperBoxEntry, RotationJson, RotationRoomLine, RotationShift } from "./types.ts";
 
 type Facility = "manufacture" | "trade" | "power";
 type Recipe = "all" | "gold" | "battle_record" | "originium";
@@ -29,6 +29,7 @@ export type ManualRoomEvaluation = {
   totalEfficiency: number;
   orderMultiplier: number;
   finalEfficiency: number;
+  goldEquivalentEfficiency: number;
   dailyOutput: number | null;
   outputKind?: "lmd" | "pure_gold" | "battle_records" | "originium_shards" | "power";
 };
@@ -53,11 +54,12 @@ function roomEvaluation(input: {
   level: number;
   operatorNames: readonly string[];
   manualSkillEfficiencyPct?: number;
+  tradeMembers?: Array<{ id?: string; name: string; elite?: number }>;
   warnings: ManualEvaluationWarning[];
 }): ManualRoomEvaluation {
-  const { roomId, facility, recipe, level, operatorNames, manualSkillEfficiencyPct } = input;
+  const { roomId, facility, recipe, level, operatorNames, manualSkillEfficiencyPct, tradeMembers } = input;
   const resolution = facility === "trade"
-    ? resolveManualTradeRoom({ activeMemberCount: operatorNames.length, manualSkillEfficiencyPct })
+    ? resolveManualTradeRoom({ activeMemberCount: operatorNames.length, manualSkillEfficiencyPct, level, order: recipe === "originium" ? "originium" : "gold", members: tradeMembers ?? [] })
     : facility === "manufacture"
       ? resolveManualManufactureRoom({ activeMemberCount: operatorNames.length, manualSkillEfficiencyPct })
       : resolveManualPowerRoom({ manualSkillEfficiencyPct });
@@ -88,16 +90,20 @@ function roomEvaluation(input: {
     totalEfficiency: total,
     orderMultiplier,
     finalEfficiency: final,
+    goldEquivalentEfficiency: resolution.goldEquivalentEfficiency,
     dailyOutput: dailyOutput === null ? null : rounded(dailyOutput),
     outputKind,
   };
 }
 
 function lineForEvaluation(room: ManualRoomEvaluation, facility: Facility): RotationRoomLine {
+  const tradeEquivalentEfficiency = facility === "trade"
+    ? room.finalEfficiency - room.baseEfficiency - room.globalEfficiency
+    : room.skillEfficiency;
   const line: RotationRoomLine = {
     room_id: room.roomId,
     ...(facility === "power" ? {} : { base_efficiency: room.baseEfficiency }),
-    equivalent_efficiency: room.skillEfficiency,
+    equivalent_efficiency: tradeEquivalentEfficiency,
     global_efficiency: room.globalEfficiency,
     total_efficiency: room.totalEfficiency,
     final_efficiency: room.finalEfficiency,
@@ -107,6 +113,8 @@ function lineForEvaluation(room: ManualRoomEvaluation, facility: Facility): Rota
     line.trade_score = room.finalEfficiency;
     line.trade_skill_pct = room.skillEfficiency * 100;
     line.trade_display_pct = (room.skillEfficiency + room.globalEfficiency) * 100;
+    line.trade_equivalent_efficiency = tradeEquivalentEfficiency;
+    line.gold_equivalent_efficiency = room.goldEquivalentEfficiency;
   } else if (facility === "manufacture") {
     line.manu_score = room.finalEfficiency * 100;
     line.manu_prod_skill = room.skillEfficiency * 100;
@@ -123,9 +131,11 @@ function lineForEvaluation(room: ManualRoomEvaluation, facility: Facility): Rota
 export function evaluateManualSchedule(input: {
   draft: ManualScheduleDraft;
   layout: BaseBlueprint;
+  operbox?: readonly OperBoxEntry[] | null;
 }): ManualScheduleEvaluation {
   const startedAt = performance.now();
   const warnings: ManualEvaluationWarning[] = [];
+  const operboxByName = new Map((input.operbox ?? []).filter((entry) => entry.own).map((entry) => [entry.name, entry]));
   const shiftTotals: Array<{ trade: number; manufacture: number; power: number; production: Record<string, number> }> = [];
   const roomsByShift: ManualRoomEvaluation[][] = [];
 
@@ -152,6 +162,10 @@ export function evaluateManualSchedule(input: {
       if (recipe === "all" && room.kind === "factory") {
         warnings.push({ code: "ambiguous-recipe", roomId: room.id, message: `${room.id} 的制造配方为“由求解器选择”，无法计算日产量。` });
       }
+      const tradeMembers = facility === "trade" ? operatorNames.map((name) => {
+        const entry = operboxByName.get(name);
+        return { name, ...(entry ? { id: entry.id, elite: entry.elite } : {}) };
+      }) : undefined;
       const evaluation = roomEvaluation({
         roomId: room.id,
         facility,
@@ -159,6 +173,7 @@ export function evaluateManualSchedule(input: {
         level: room.level,
         operatorNames,
         manualSkillEfficiencyPct: assignment?.manualSkillEfficiencyPct,
+        tradeMembers,
         warnings,
       });
       rooms.push(evaluation);
@@ -166,6 +181,9 @@ export function evaluateManualSchedule(input: {
       if (facility === "trade") trade += evaluation.finalEfficiency;
       if (facility === "manufacture") manufacture += evaluation.finalEfficiency;
       if (facility === "power") power += evaluation.finalEfficiency - 1;
+      if (facility === "trade") {
+        production.equivalent_gold += evaluation.goldEquivalentEfficiency * 10_000;
+      }
       if (evaluation.dailyOutput !== null && evaluation.outputKind && evaluation.outputKind !== "power") {
         production[evaluation.outputKind] += evaluation.dailyOutput;
       }
