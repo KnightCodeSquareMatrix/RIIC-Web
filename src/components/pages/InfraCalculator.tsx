@@ -28,6 +28,7 @@ import { cn } from "@/lib/utils";
 import type { ShiftDirection } from "@/motion";
 import { onboardingStepStatuses, shouldShowAnonymousSampleTrial } from "@/onboarding";
 import type { RoomRow } from "@/schedule";
+import { buildingSkillPrefixFor, OPERATOR_CATALOG } from "@/operatorPortraits";
 import type {
   BaseBlueprint,
   FeedbackData,
@@ -347,6 +348,7 @@ export interface InfraCalculatorProps {
   showFeedback?: boolean;
   showImages?: boolean;
   allowReplacementOperatorSort?: boolean;
+  highlightNoLayoutSkill?: boolean;
   onClearResultNotice: () => void;
   onDismissResultClearWarning: () => void;
 }
@@ -367,7 +369,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     onFactoryRecipeChange, onTradeOrderChange, droneTargetRoomId, onDroneTargetChange,
     onSwapOperators,
     onEditManualSchedule, onDownloadMaa, onDownloadImage, showProgressionRecalculate = true, showManualScheduleEdit = true, scheduleViewControl = "tabs", shiftViewControl = "tabs", imageExportScope = "single", showFeedback = true, showImages = true,
-    onClearResultNotice, onDismissResultClearWarning, allowReplacementOperatorSort = false,
+    onClearResultNotice, onDismissResultClearWarning, allowReplacementOperatorSort = false, highlightNoLayoutSkill = false,
   } = props;
 
   const eliteByOperator = useMemo(() => {
@@ -393,6 +395,8 @@ export function InfraCalculator(props: InfraCalculatorProps) {
   const [imageExportFailed, setImageExportFailed] = useState(false);
   const [sortRoomId, setSortRoomId] = useState<string | null>(null);
   const [sortSelection, setSortSelection] = useState<{ roomId: string; slotIndex: number } | null>(null);
+  const layoutSkillPrefixes = useMemo(() => new Set(layout.rooms.map((room) => ({ control_center: "control", trade_post: "trade", factory: "manu", power_plant: "power", dormitory: "dormitory", office: "hire", meeting_room: "meet", workshop: "workshop", training_room: "train" } as Record<string, string>)[room.kind]).filter(Boolean)), [layout]);
+  const noLayoutSkillOperators = useMemo(() => new Set(OPERATOR_CATALOG.filter((operator) => !operator.buildingSkills.some((skill) => layoutSkillPrefixes.has(buildingSkillPrefixFor(skill.id)))).map((operator) => operator.name)), [layoutSkillPrefixes]);
   const imageExportInFlight = useRef(false);
 
   function toggleSortMode(row: RoomRow) {
@@ -728,6 +732,8 @@ export function InfraCalculator(props: InfraCalculatorProps) {
               onSortSlotClick={allowReplacementOperatorSort && onSwapOperators ? handleSortSlotClick : undefined}
               viewModeControl={scheduleViewControl}
               hideImages={!showImages}
+              highlightNoLayoutSkill={highlightNoLayoutSkill}
+              noLayoutSkillOperators={noLayoutSkillOperators}
               droneTargetRoomId={droneTargetRoomId}
               onDroneTargetChange={manualDroneSelection ? onDroneTargetChange : undefined}
             /> : (
