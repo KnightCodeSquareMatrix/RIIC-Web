@@ -27,7 +27,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { SkeletonSuspense } from "@/components/ui/skeleton-swap";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { downloadJson } from "@/download";
-import type { ManualScheduleEvaluation } from "@/manual-schedule-evaluator";
+import type { ManualPlanResult } from "@/manual-plan-result";
 import { createManualEvaluationFingerprint, loadManualEvaluationCache } from "@/manual-evaluation-cache";
 import { localizedOperatorName, localizedRoomTitle } from "@/i18n/game-data";
 import { useGameCatalog } from "@/i18n/game-data-client";
@@ -96,11 +96,10 @@ export interface ManualSchedulePageProps {
   initialDraft: ManualScheduleDraft | null;
   restorationReady: boolean;
   onInitialDraftConsumed: () => void;
-  evaluation: ManualScheduleEvaluation | null;
-  evaluationFingerprint: string | null;
+  result: ManualPlanResult | null;
   evaluationPending: boolean;
   onEvaluate: (input: { draft: ManualScheduleDraft; fingerprint: string }) => Promise<void>;
-  onRestoreEvaluation: (evaluation: ManualScheduleEvaluation, fingerprint: string) => void;
+  onRestoreEvaluation: (result: ManualPlanResult, fingerprint: string) => void;
   onOpenCalculator: () => void;
   onShiftDurationsChange: (durations: number[]) => void;
   onShiftStartTimeChange: (startTime: string) => void;
@@ -214,8 +213,7 @@ export function ManualSchedulePage({
   initialDraft,
   restorationReady,
   onInitialDraftConsumed,
-  evaluation,
-  evaluationFingerprint,
+  result,
   evaluationPending,
   onEvaluate,
   onRestoreEvaluation,
@@ -337,7 +335,7 @@ export function ManualSchedulePage({
 
   const activeShift = Math.min(draft.activeShift, Math.max(0, draft.shifts.length - 1));
   const evaluationInputFingerprint = createManualEvaluationFingerprint({ draft, layout });
-  const evaluationIsCurrent = evaluation !== null && evaluationFingerprint === evaluationInputFingerprint;
+  const evaluationIsCurrent = result !== null && result.fingerprint === evaluationInputFingerprint;
   const shiftRanges = manualShiftTimeRanges(draft.startTime, draft.shifts.map((shift) => shift.durationHours));
   const maa = useMemo(() => manualScheduleToMaa(draft, layout, fiammettaEnabled), [draft, fiammettaEnabled, layout]);
   const activePlan = maa.plans[activeShift];
@@ -347,8 +345,8 @@ export function ManualSchedulePage({
     trainee: trainingAssignment?.operators[0] ?? null,
     trainer: trainingAssignment?.operators[1] ?? null,
   } : undefined, [trainingAssignment?.operators, trainingRoom]);
-  const evaluationIsStale = evaluation !== null && !evaluationIsCurrent;
-  const activeEvaluationShift = evaluation?.rotation.shifts[activeShift];
+  const evaluationIsStale = result !== null && !evaluationIsCurrent;
+  const activeEvaluationShift = evaluationIsCurrent ? result.rotation.shifts[activeShift] : undefined;
   const rows = useMemo(
     () => addOperatorPresentations(planToRows(activePlan, activeEvaluationShift, layout, activeTrainingRoomShift).map((row) => {
       const assignment = draft.shifts[activeShift]?.rooms[row.roomId];
@@ -734,10 +732,8 @@ export function ManualSchedulePage({
       </div>
 
       <ManualProductionSummary
-        layout={evaluation?.layout ?? layout}
-        maa={evaluation?.maa ?? maa}
-        computed={evaluation !== null}
-        evaluation={evaluation}
+        result={result}
+        isStale={evaluationIsStale}
         activeShift={activeShift}
         controlsSlot={(
           <PlanSupportSummary

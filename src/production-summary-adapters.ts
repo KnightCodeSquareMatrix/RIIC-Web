@@ -1,6 +1,6 @@
 import { estimateDailyProduction } from "./daily-production.ts";
 import { dailyProductionGroups, type DailyProductionGroup } from "./daily-production-presentation.ts";
-import type { ManualScheduleEvaluation } from "./manual-schedule-evaluator.ts";
+import type { ManualPlanResult } from "./manual-plan-result.ts";
 import { PRODUCT_ICON_URLS } from "./product-assets.ts";
 import type { BaseBlueprint, MaaJson, RotationJson } from "./types.ts";
 
@@ -40,13 +40,33 @@ function pendingGroups(): DailyProductionGroup[] {
   ];
 }
 
-export function createManualProductionPresentation(input: {
+export function createManualProductionPresentation(input: ManualPlanResult | null | {
   computed: boolean;
   layout: BaseBlueprint;
   maa: MaaJson;
-  evaluation: ManualScheduleEvaluation | null;
+  evaluation: ({ rotation: RotationJson } & Record<string, unknown>) | null;
 }): ProductionSummaryPresentation {
-  if (!input.computed || !input.evaluation) {
+  if (input && "computed" in input) {
+    if (!input.computed || !input.evaluation) {
+      return {
+        source: "pending",
+        groups: pendingGroups(),
+        detailsAvailable: false,
+        solverProduction: null,
+        droneProduction: undefined,
+      };
+    }
+    const estimate = estimateDailyProduction({ layout: input.layout, maa: input.maa, rotation: input.evaluation.rotation });
+    return {
+      source: "estimate",
+      groups: dailyProductionGroups(estimate, null),
+      detailsAvailable: true,
+      solverProduction: null,
+      droneProduction: undefined,
+    };
+  }
+  const result = input;
+  if (!result) {
     return {
       source: "pending",
       groups: pendingGroups(),
@@ -56,15 +76,18 @@ export function createManualProductionPresentation(input: {
     };
   }
   const estimate = estimateDailyProduction({
-    layout: input.layout,
-    maa: input.maa,
-    rotation: input.evaluation.rotation,
+    layout: result.layout,
+    maa: result.maa,
+    rotation: result.rotation,
   });
+  const production = result.rotation.daily.production ?? null;
+  const droneProduction = result.rotation.daily.drone_production;
+  const groups = dailyProductionGroups(estimate, production, droneProduction);
   return {
-    source: "estimate",
-    groups: dailyProductionGroups(estimate, null),
+    source: groups[0]?.source ?? "estimate",
+    groups,
     detailsAvailable: true,
-    solverProduction: null,
-    droneProduction: undefined,
+    solverProduction: production,
+    droneProduction,
   };
 }

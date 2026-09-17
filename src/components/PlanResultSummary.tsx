@@ -281,7 +281,7 @@ export function PlanResultSummary({
             <div data-yeye-scroll="auto" className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 pb-6" data-plan-details-section={activeDetailSection}>
               <TabsContent value="efficiency" className="m-0">
                 <motion.div initial={{ opacity: 0, x: shouldReduceMotion ? 0 : -12 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: shouldReduceMotion ? 0 : MOTION_DURATION.state, ease: MOTION_EASE_OUT }}>
-                  <EfficiencyDetails productGroups={productGroups} en={en} solverProduction={solverDaily} droneProduction={rotation?.daily?.drone_production} />
+                  <EfficiencyDetails productGroups={productGroups} en={en} solverProduction={solverDaily} droneProduction={activePresentation.droneProduction} />
                 </motion.div>
               </TabsContent>
               {comparison ? (

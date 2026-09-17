@@ -4,29 +4,28 @@ import type { ReactNode } from "react";
 
 import { PlanResultSummary } from "@/components/PlanResultSummary";
 import { createManualProductionPresentation } from "@/production-summary-adapters";
-import type { ManualScheduleEvaluation } from "@/manual-schedule-evaluator";
-import type { BaseBlueprint, MaaJson } from "@/types";
+import type { ManualPlanResult } from "@/manual-plan-result";
 
 type ManualProductionSummaryProps = {
-  layout: BaseBlueprint;
-  maa: MaaJson;
-  computed: boolean;
-  evaluation: ManualScheduleEvaluation | null;
+  result: ManualPlanResult | null;
+  isStale: boolean;
   activeShift: number;
   controlsSlot?: ReactNode;
 };
 
-export function ManualProductionSummary({ layout, maa, computed, evaluation, activeShift, controlsSlot }: ManualProductionSummaryProps) {
-  const presentation = createManualProductionPresentation({ computed, layout, maa, evaluation });
+export function ManualProductionSummary({ result, isStale, activeShift, controlsSlot }: ManualProductionSummaryProps) {
+  const presentation = createManualProductionPresentation(result);
   return <PlanResultSummary
-    layout={layout}
-    maa={maa}
+    layout={result?.layout ?? { template: "—", drone_cap: 0, scenario: {}, rooms: [] }}
+    maa={result?.maa ?? { title: "手动排班", description: "", plans: [] }}
     activeShift={activeShift}
     comparison={null}
-    durationMs={evaluation?.elapsedMs ?? 0}
+    durationMs={result?.elapsedMs ?? 0}
     productionPresentation={presentation}
-    presentationTitle={<><span className="font-number">{layout.template}</span> 手动基建方案</>}
-    presentationSubtitle={computed ? <>本地评估耗时 <span className="font-number">{evaluation?.elapsedMs.toFixed(1) ?? "0.0"} ms</span> · 点击查看详情</> : "点击“计算效率”后显示日产量"}
+    presentationTitle={<><span className="font-number">{result?.layout.template ?? "—"}</span> 手动基建方案</>}
+    presentationSubtitle={result
+      ? <>{isStale ? "显示的是编辑前排班的评估结果 · " : ""}本地评估耗时 <span className="font-number">{result.elapsedMs.toFixed(1)} ms</span> · 点击查看详情</>
+      : "点击“根据效率计算”后显示日产量"}
     mode="manual"
     animateEntrance={false}
     controlsSlot={controlsSlot}
