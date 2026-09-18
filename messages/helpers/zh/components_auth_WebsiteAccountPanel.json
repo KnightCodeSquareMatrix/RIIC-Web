@@ -26,7 +26,7 @@
   "shownOnThisWebsite": "用于网站内显示",
   "email": "邮箱",
   "password": "密码",
-  "10128Characters": "10–128 位",
+  "8128Characters": "8–128 位",
   "showPassword": "显示密码",
   "confirmPassword": "确认密码",
   "enterThePasswordAgain": "再次输入密码",

@@ -101,12 +101,12 @@ export function ResetPassword() {
     <main className="mx-auto grid min-h-dvh max-w-md place-content-center gap-4 p-5">
       <div className="flex items-center justify-between gap-4"><a href="/" className="inline-flex min-h-11 items-center text-sm underline underline-offset-4">{intl("app_account_reset_password_reset_client.backToScheduler")}</a><LanguageSwitch /></div>
       <h1 className="text-2xl font-semibold">{intl("app_account_reset_password_reset_client.resetPassword")}</h1>
-      <p className="text-sm leading-6 text-muted-foreground">{intl("app_account_reset_password_reset_client.theNewPasswordMustContain10128CharactersAnd")}</p>
+      <p className="text-sm leading-6 text-muted-foreground">{intl("app_account_reset_password_reset_client.theNewPasswordMustContain8128CharactersAnd")}</p>
       <div className="grid gap-1.5">
         <Label htmlFor="reset-password">{intl("app_account_reset_password_reset_client.newPassword")}</Label>
         <PasswordInput
           id="reset-password"
-          minLength={10}
+          minLength={8}
           maxLength={128}
           value={password}
           onChange={(event) => {
@@ -126,7 +126,7 @@ export function ResetPassword() {
             }
           }}
           autoComplete="new-password"
-          placeholder={intl("app_account_reset_password_reset_client.newPassword10128Characters")}
+          placeholder={intl("app_account_reset_password_reset_client.newPassword8128Characters")}
           revealLabel={intl("app_account_reset_password_reset_client.showNewPassword")}
           aria-invalid={Boolean(passwordStrengthError)}
           aria-describedby="reset-password-strength"
@@ -140,7 +140,7 @@ export function ResetPassword() {
         <Label htmlFor="reset-confirm-password">{intl("app_account_reset_password_reset_client.confirmNewPassword")}</Label>
         <PasswordInput
           id="reset-confirm-password"
-          minLength={10}
+          minLength={8}
           maxLength={128}
           value={confirmPassword}
           onChange={(event) => {
@@ -171,7 +171,7 @@ export function ResetPassword() {
       </div>
       <Button
         type="button"
-        disabled={busy || !token || password.length < 10 || confirmPassword.length < 10}
+        disabled={busy || !token || password.length < 8 || confirmPassword.length < 8}
         onClick={() => void resetPassword()}
       >
         {busy ? (intl("app_account_reset_password_reset_client.resetting")) : (intl("app_account_reset_password_reset_client.resetPassword2"))}
