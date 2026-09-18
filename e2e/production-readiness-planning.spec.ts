@@ -63,7 +63,7 @@ test("the legacy beta query is inert and never opts plan requests into debug dat
   await expect(page).toHaveURL(/\/training$/, { timeout: 45_000 });
 });
 
-test("shows the thinking activity and indeterminate progress only while a plan request is running", async ({ page }) => {
+test("shows the status mark through a plan request lifecycle", async ({ page }) => {
   await mockApis(page);
   let releasePlan!: () => void;
   const planGate = new Promise<void>((resolve) => {
@@ -83,23 +83,27 @@ test("shows the thinking activity and indeterminate progress only while a plan r
   await page.getByRole("button", { name: "生成排班" }).click();
 
   const status = page.locator('[data-slot="live-activity"]');
-  const solvingOrb = status.locator('[data-slot="solving-orb"]');
-  const orbRail = status.locator('[data-slot="solving-orb-rail"]');
+  const expandedMark = status.locator('[data-slot="status-mark-rail"] [data-live-activity-icon]');
+  const markRail = status.locator('[data-slot="status-mark-rail"]');
   const body = status.locator('[data-slot="live-activity-body"]');
   const progress = status.locator('[data-slot="activity-progress-indicator"]');
   await expect(status).toContainText("正在生成排班");
   await expect(status).toHaveCSS("background-color", "rgb(250, 250, 248)");
-  await expect(solvingOrb).toBeVisible();
-  await expect(status.locator("[data-live-activity-icon]")).toHaveCount(1);
-  await expect(status.locator("svg")).toHaveCount(0);
-  await expect(orbRail).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await expect(expandedMark).toBeVisible();
+  await expect(expandedMark).toHaveAttribute("data-status", "running");
+  const runningRing = expandedMark.locator(".status-mark__ring");
+  const startingOffset = await runningRing.getAttribute("stroke-dashoffset");
+  await expect.poll(() => runningRing.getAttribute("stroke-dashoffset")).not.toBe(startingOffset);
+  await expect(status.locator("[data-live-activity-icon]")).toHaveCount(2);
+  await expect(status.locator("svg")).toHaveCount(2);
+  await expect(markRail).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   const [bodyBox, railBox, runningLabelBox] = await Promise.all([
     body.boundingBox(),
-    orbRail.boundingBox(),
+    markRail.boundingBox(),
     status.locator("strong").first().boundingBox(),
   ]);
   expect(railBox?.height).toBeCloseTo(bodyBox?.height ?? 0, 0);
-  expect((runningLabelBox?.x ?? 0) - ((railBox?.x ?? 0) + (railBox?.width ?? 0))).toBeGreaterThanOrEqual(18);
+  expect((runningLabelBox?.x ?? 0) - ((railBox?.x ?? 0) + (railBox?.width ?? 0))).toBeGreaterThanOrEqual(3);
   await expect(status.locator(".live-activity-shimmer")).toBeVisible();
   await expect(progress).toBeVisible();
   await expect(progress).toHaveCSS("width", /.+/);
@@ -134,7 +138,8 @@ test("shows the thinking activity and indeterminate progress only while a plan r
       root.setAttribute(attribute, JSON.stringify({
         text: statusElement.textContent,
         backgroundColor: statusStyle.backgroundColor,
-        solvingOrbCount: statusElement.querySelectorAll('[data-slot="solving-orb"]').length,
+        statusMarkRailCount: statusElement.querySelectorAll('[data-slot="status-mark-rail"]').length,
+        statusMarkStatus: statusElement.querySelector('[data-slot="status-mark-rail"] [data-live-activity-icon]')?.getAttribute("data-status"),
         liveActivityIconCount: statusElement.querySelectorAll("[data-live-activity-icon]").length,
         svgCount: statusElement.querySelectorAll("svg").length,
         sweepBackgroundImage: sweepStyle.backgroundImage,
@@ -170,7 +175,8 @@ test("shows the thinking activity and indeterminate progress only while a plan r
   ) as {
     text: string;
     backgroundColor: string;
-    solvingOrbCount: number;
+    statusMarkRailCount: number;
+    statusMarkStatus: string | null;
     liveActivityIconCount: number;
     svgCount: number;
     sweepBackgroundImage: string;
@@ -186,9 +192,10 @@ test("shows the thinking activity and indeterminate progress only while a plan r
   };
   expect(successState.text).toContain("排班已生成");
   expect(successState.backgroundColor).toBe("rgb(250, 250, 248)");
-  expect(successState.solvingOrbCount).toBe(0);
-  expect(successState.liveActivityIconCount).toBe(0);
-  expect(successState.svgCount).toBe(0);
+  expect(successState.statusMarkRailCount).toBe(1);
+  expect(successState.statusMarkStatus).toBe("done");
+  expect(successState.liveActivityIconCount).toBe(2);
+  expect(successState.svgCount).toBe(2);
   expect(successState.sweepBackgroundImage).toBe("none");
   expect(successState.sweepBackgroundColor).toBe(await page.locator('[data-run-face="success"]').evaluate(element => getComputedStyle(element).color));
   expect(successState.sweepWidth).toBeCloseTo(successState.statusWidth - 2, 0);
@@ -224,7 +231,8 @@ test("buffered plans show a quiet candidate-ring state and can be dismissed with
   const activity = page.locator('[data-slot="live-activity"]');
   await expect(activity).toHaveAttribute("data-activity-phase", "queued");
   await expect(activity).toContainText("当前进入候选环，名额释放后随机抽取。");
-  await expect(activity.locator("[data-live-activity-icon], svg")).toHaveCount(0);
+  await expect(activity.locator('[data-slot="status-mark-rail"] [data-live-activity-icon]')).toHaveAttribute("data-status", "pending");
+  await expect(activity.locator("[data-live-activity-icon]")).toHaveCount(2);
   await expect.poll(() => taskSubmissions).toBe(1);
 
   await activity.getByRole("button", { name: "关闭提示" }).click();
@@ -839,6 +847,10 @@ test("reduced motion keeps feedback timing while removing movement, clipping, an
   await page.getByRole("button", { name: "生成排班" }).click();
   await expect(page.locator('[data-slot="live-activity"]')).toHaveAttribute("data-activity-phase", "running");
   await expect(page.locator('[data-slot="live-activity"] .animate-spin')).toHaveCount(0);
+  const reducedRing = page.locator('[data-slot="status-mark-rail"] .status-mark__ring');
+  const reducedOffset = await reducedRing.getAttribute("stroke-dashoffset");
+  await page.waitForTimeout(160);
+  await expect(reducedRing).toHaveAttribute("stroke-dashoffset", reducedOffset ?? "0");
 
   const board = page.locator("[data-plan-board]");
   await expect(board).toBeVisible();
@@ -990,7 +1002,7 @@ test("failed plan remains expanded with retry and diagnostic actions", async ({ 
   const activity = page.locator('[data-slot="live-activity"]');
   await expect(activity).toHaveAttribute("data-activity-phase", "error");
   await expect(activity).toHaveAttribute("data-activity-view", "expanded");
-  await expect(activity.locator("svg")).toHaveCount(0);
+  await expect(activity.locator('[data-slot="status-mark-rail"] [data-live-activity-icon]')).toHaveAttribute("data-status", "failed");
   await page.waitForTimeout(2_800);
   await expect(activity).toHaveAttribute("data-activity-view", "expanded");
   await activity.hover();
