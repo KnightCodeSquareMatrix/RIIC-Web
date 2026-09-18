@@ -21,10 +21,6 @@ export function ManualProductionSummary({ result, activeShift, controlsSlot }: M
     comparison={null}
     durationMs={result?.elapsedMs ?? 0}
     productionPresentation={presentation}
-    presentationTitle={<><span className="font-number">{result?.layout.template ?? "—"}</span> 手动基建方案</>}
-    presentationSubtitle={result
-      ? <>本地评估耗时 <span className="font-number">{result.elapsedMs.toFixed(1)} ms</span> · 点击查看详情</>
-      : "点击“根据效率计算”后显示日产量"}
     mode="manual"
     animateEntrance={false}
     controlsSlot={controlsSlot}

@@ -1,3 +1,5 @@
+import { localize as localizeEfficiency } from "./i18n/helpers/efficiency.ts";
+import type { AppLocale } from "./i18n/config.ts";
 import type { RoomEfficiency, RotationRoomLine, UserProfileComboSnapshot, UserProfileSummary } from "./types";
 
 export interface EfficiencyDetail {
@@ -82,6 +84,7 @@ function formulaTerm(label: string, value: number, kind?: EfficiencyDetail["kind
 function structuredEfficiency(
   efficiency: RoomEfficiency,
   includeTradeEquivalent: boolean,
+  locale: AppLocale,
 ): RoomEfficiencyPresentation | null {
   const base = efficiency.base_efficiency;
   const equivalent = efficiency.equivalent_efficiency;
@@ -90,12 +93,12 @@ function structuredEfficiency(
   const includesCrossStation = Math.abs(global ?? 0) >= 0.000_5;
   const details: EfficiencyDetail[] = [
     { label: "", value: percent(base * 100), operator: "=" },
-    formulaTerm("技能效率", equivalent * 100),
-    ...(includesCrossStation ? [formulaTerm("跨设施", global! * 100, "cross-station")] : []),
+    formulaTerm(localizeEfficiency.text(locale, "skillEfficiency"), equivalent * 100),
+    ...(includesCrossStation ? [formulaTerm(localizeEfficiency.text(locale, "crossFacility"), global! * 100, "cross-station")] : []),
   ];
   const tradeEquivalent = efficiency.trade_equivalent_efficiency;
   if (includeTradeEquivalent && Math.abs((tradeEquivalent ?? 1) - 1) >= 0.000_5) {
-    details.push({ label: "", value: `等效 ${formatNumber(tradeEquivalent! * 100, 0)}% 技能效率` });
+    details.push({ label: "", value: localizeEfficiency.text(locale, "equivalentSkillEfficiency", { value: formatNumber(tradeEquivalent! * 100, 0) }) });
   }
   return {
     primaryValue: percent((base + equivalent + (global ?? 0)) * 100),
@@ -106,13 +109,14 @@ function structuredEfficiency(
 
 export function presentRoomEfficiency(
   group: string,
-  efficiency: RoomEfficiency | undefined
+  efficiency: RoomEfficiency | undefined,
+  locale: AppLocale = "zh",
 ): RoomEfficiencyPresentation | null {
   if (!efficiency) return null;
 
   if (group === "trading") {
     // 新 serve 输出优先：总效率 = 基础 + 等效 + 全局；有等效倍率时标注"等效 × 倍率"。
-    const structured = structuredEfficiency(efficiency, true);
+    const structured = structuredEfficiency(efficiency, true, locale);
     if (structured) return structured;
     const skill = efficiency.trade_skill_pct;
     const display = efficiency.trade_display_pct;
@@ -133,8 +137,8 @@ export function presentRoomEfficiency(
     const residentAndGlobal = crossStation === undefined ? additive : (skill ?? additive);
     const details: EfficiencyDetail[] = [
       { label: "", value: "100%", operator: "=" },
-      formulaTerm("综合加成", residentAndGlobal),
-      ...(crossStation === undefined ? [] : [formulaTerm("跨设施", crossStation, "cross-station")]),
+      formulaTerm(localizeEfficiency.text(locale, "combinedBonus"), residentAndGlobal),
+      ...(crossStation === undefined ? [] : [formulaTerm(localizeEfficiency.text(locale, "crossFacility"), crossStation, "cross-station")]),
     ];
     const mechanic = final !== undefined && ordinary > 0
       ? final / (ordinary / 100)
@@ -142,7 +146,7 @@ export function presentRoomEfficiency(
         ? 1 + efficiency.trade_gold_pct / 100
         : undefined;
     if (mechanic !== undefined && Math.abs(mechanic - 1) >= 0.000_5) {
-      details.push({ label: "订单机制", value: formatNumber(mechanic, 2), operator: "×" });
+      details.push({ label: localizeEfficiency.text(locale, "orderMechanic"), value: formatNumber(mechanic, 2), operator: "×" });
     }
     return {
       primaryValue: percent((final ?? ordinary / 100) * 100),
@@ -153,7 +157,7 @@ export function presentRoomEfficiency(
 
   if (group === "manufacture") {
     // 新 serve 输出优先：制造站无等效倍率，总效率 = 基础 + 等效 + 全局。
-    const structured = structuredEfficiency(efficiency, false);
+    const structured = structuredEfficiency(efficiency, false, locale);
     if (structured) return structured;
     const skill = efficiency.manu_prod_skill;
     const display = efficiency.manu_display_pct;
@@ -178,13 +182,13 @@ export function presentRoomEfficiency(
     const remainder = totalBonus - knownBonus;
     const details: EfficiencyDetail[] = [
       { label: "", value: "100%", operator: "=" },
-      ...(provenSkill === undefined ? [] : [formulaTerm("纯技能", provenSkill)]),
-      ...(crossStation === undefined ? [] : [formulaTerm("跨设施", crossStation, "cross-station")]),
-      ...(different(remainder, 0) ? [formulaTerm("综合加成", remainder)] : []),
+      ...(provenSkill === undefined ? [] : [formulaTerm(localizeEfficiency.text(locale, "skill"), provenSkill)]),
+      ...(crossStation === undefined ? [] : [formulaTerm(localizeEfficiency.text(locale, "crossFacility"), crossStation, "cross-station")]),
+      ...(different(remainder, 0) ? [formulaTerm(localizeEfficiency.text(locale, "combinedBonus"), remainder)] : []),
     ];
-    if (details.length === 1 && different(totalBonus, 0)) details.push(formulaTerm("综合加成", totalBonus));
+    if (details.length === 1 && different(totalBonus, 0)) details.push(formulaTerm(localizeEfficiency.text(locale, "combinedBonus"), totalBonus));
     if (efficiency.manu_storage_limit !== undefined) {
-      details.push({ label: "仓储上限", value: formatNumber(efficiency.manu_storage_limit) });
+      details.push({ label: localizeEfficiency.text(locale, "capacity"), value: formatNumber(efficiency.manu_storage_limit) });
     }
     return {
       primaryValue: percent(final),
@@ -199,7 +203,7 @@ export function presentRoomEfficiency(
     const total = efficiency.final_efficiency ?? efficiency.total_efficiency;
     if (total !== undefined) {
       return {
-        primaryLabel: "总效率",
+        primaryLabel: localizeEfficiency.text(locale, "totalEfficiency"),
         primaryValue: percent(total * 100),
         details: [],
       };
@@ -213,14 +217,14 @@ export function presentRoomEfficiency(
       ? display - skill
       : undefined;
     const details: EfficiencyDetail[] = [
-      ...(skill === undefined ? [] : [{ label: "纯技能", value: percent(skill) }]),
-      ...(crossStation === undefined ? [] : [formulaTerm("跨设施", crossStation, "cross-station")]),
+      ...(skill === undefined ? [] : [{ label: localizeEfficiency.text(locale, "skill"), value: percent(skill) }]),
+      ...(crossStation === undefined ? [] : [formulaTerm(localizeEfficiency.text(locale, "crossFacility"), crossStation, "cross-station")]),
     ];
     if (efficiency.power_score !== undefined && different(efficiency.power_score, primary)) {
-      details.push({ label: "总充能", value: percent(efficiency.power_score) });
+      details.push({ label: localizeEfficiency.text(locale, "totalCharge"), value: percent(efficiency.power_score) });
     }
     return {
-      primaryLabel: display !== undefined ? "展示效率" : "充能效率",
+      primaryLabel: localizeEfficiency.text(locale, display !== undefined ? "displayEfficiency" : "chargingEfficiency"),
       primaryValue: percent(primary),
       details,
     };
