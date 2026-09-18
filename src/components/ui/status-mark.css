@@ -1,0 +1,90 @@
+/* Adapted from React Bits Status Mark. License: ./status-mark.LICENSE.txt */
+.status-mark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
+}
+
+.status-mark svg {
+  display: block;
+  overflow: visible;
+  transition: color 200ms ease;
+}
+
+.status-mark[data-status="done"] svg {
+  color: var(--schedule-success);
+}
+
+.status-mark[data-status="failed"] svg {
+  color: #ef4444;
+}
+
+.status-mark__track {
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 2;
+  fill-opacity: 0;
+  stroke-opacity: 0;
+  transition: fill-opacity 180ms ease, stroke-opacity 200ms ease;
+}
+
+.status-mark[data-status="running"] .status-mark__track {
+  stroke-opacity: 0.2;
+}
+
+.status-mark[data-status="done"] .status-mark__track,
+.status-mark[data-status="failed"] .status-mark__track {
+  fill-opacity: 0.06;
+}
+
+.status-mark__ring {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  opacity: 0.55;
+  transition: opacity 200ms ease;
+}
+
+.status-mark[data-status="running"] .status-mark__ring,
+.status-mark[data-status="done"] .status-mark__ring,
+.status-mark[data-status="failed"] .status-mark__ring {
+  opacity: 1;
+}
+
+.status-mark__check,
+.status-mark__cross {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 1 2;
+  stroke-dashoffset: 1.05;
+  opacity: 0;
+  transition: stroke-dashoffset 160ms cubic-bezier(0.23, 1, 0.32, 1), opacity 0ms linear 160ms;
+}
+
+.status-mark[data-status="done"] .status-mark__check,
+.status-mark[data-status="failed"] .status-mark__cross {
+  stroke-dashoffset: 0;
+  opacity: 1;
+  transition: stroke-dashoffset 240ms cubic-bezier(0.23, 1, 0.32, 1) 120ms, opacity 0ms linear 120ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-mark svg,
+  .status-mark__track,
+  .status-mark__ring,
+  .status-mark__check,
+  .status-mark__cross {
+    transition: none;
+  }
+
+  .status-mark__check,
+  .status-mark__cross {
+    stroke-dashoffset: 0;
+  }
+}
