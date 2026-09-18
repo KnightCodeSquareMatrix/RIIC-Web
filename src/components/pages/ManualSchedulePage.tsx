@@ -28,7 +28,7 @@ import { SkeletonSuspense } from "@/components/ui/skeleton-swap";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { downloadJson } from "@/download";
 import type { ManualPlanResult } from "@/manual-plan-result";
-import { createManualEvaluationFingerprint, loadManualEvaluationCache } from "@/manual-evaluation-cache";
+import { loadManualEvaluationCache } from "@/manual-evaluation-cache";
 import { localizedOperatorName, localizedRoomTitle } from "@/i18n/game-data";
 import { useGameCatalog } from "@/i18n/game-data-client";
 import { prepareMaaForExport } from "@/maa-safety";
@@ -98,8 +98,8 @@ export interface ManualSchedulePageProps {
   onInitialDraftConsumed: () => void;
   result: ManualPlanResult | null;
   evaluationPending: boolean;
-  onEvaluate: (input: { draft: ManualScheduleDraft; fingerprint: string }) => Promise<void>;
-  onRestoreEvaluation: (result: ManualPlanResult, fingerprint: string) => void;
+  onEvaluate: (input: { draft: ManualScheduleDraft }) => Promise<void>;
+  onRestoreEvaluation: (result: ManualPlanResult) => void;
   onOpenCalculator: () => void;
   onShiftDurationsChange: (durations: number[]) => void;
   onShiftStartTimeChange: (startTime: string) => void;
@@ -291,9 +291,8 @@ export function ManualSchedulePage({
         onShiftStartTimeChange(reconciled.startTime);
         onScheduleModeChange(reconciled.scheduleMode);
         onFiammettaEnabledChange(reconciled.fiammettaEnabled);
-        const fingerprint = createManualEvaluationFingerprint({ draft: reconciled, layout });
-        const cachedEvaluation = loadManualEvaluationCache(window.localStorage, fingerprint);
-        if (cachedEvaluation) onRestoreEvaluation(cachedEvaluation, fingerprint);
+        const cachedEvaluation = loadManualEvaluationCache(window.localStorage);
+        if (cachedEvaluation) onRestoreEvaluation(cachedEvaluation);
       }
     } catch {
       setStorageWarning(intl("components_pages_ManualSchedulePage.theManualDraftCouldNotBeRestored"));
@@ -334,8 +333,6 @@ export function ManualSchedulePage({
   }, [intl, canPersistDraft, draft, en, restored]);
 
   const activeShift = Math.min(draft.activeShift, Math.max(0, draft.shifts.length - 1));
-  const evaluationInputFingerprint = createManualEvaluationFingerprint({ draft, layout });
-  const evaluationIsCurrent = result !== null && result.fingerprint === evaluationInputFingerprint;
   const shiftRanges = manualShiftTimeRanges(draft.startTime, draft.shifts.map((shift) => shift.durationHours));
   const maa = useMemo(() => manualScheduleToMaa(draft, layout, fiammettaEnabled), [draft, fiammettaEnabled, layout]);
   const activePlan = maa.plans[activeShift];
@@ -345,8 +342,7 @@ export function ManualSchedulePage({
     trainee: trainingAssignment?.operators[0] ?? null,
     trainer: trainingAssignment?.operators[1] ?? null,
   } : undefined, [trainingAssignment?.operators, trainingRoom]);
-  const evaluationIsStale = result !== null && !evaluationIsCurrent;
-  const activeEvaluationShift = evaluationIsCurrent ? result.rotation.shifts[activeShift] : undefined;
+  const activeEvaluationShift = result?.rotation.shifts[activeShift];
   const rows = useMemo(
     () => addOperatorPresentations(planToRows(activePlan, activeEvaluationShift, layout, activeTrainingRoomShift).map((row) => {
       const assignment = draft.shifts[activeShift]?.rooms[row.roomId];
@@ -595,7 +591,7 @@ export function ManualSchedulePage({
   }
 
   function runEvaluation() {
-    void onEvaluate({ draft, fingerprint: evaluationInputFingerprint });
+    void onEvaluate({ draft });
   }
 
   function exportMaa() {
@@ -726,14 +722,13 @@ export function ManualSchedulePage({
           <p className="mt-1 truncate text-xs text-muted-foreground" data-manual-draft-source={draft.source?.variant ?? "standalone"}>
             {draft.source ? (intl("components_pages_ManualSchedulePage.basedOn", { sourceVariantLabel: sourceVariantLabel })) : null}
             {draft.source ? " · " : null}
-            {sourceName ?? (intl("components_pages_ManualSchedulePage.currentOperatorBox"))} · {ownedOperators.length} {intl("components_pages_ManualSchedulePage.owned")}{evaluationIsStale ? <span className="ml-1 whitespace-nowrap text-red-600">· 排班已编辑，请重新获取效率</span> : null}
+            {sourceName ?? (intl("components_pages_ManualSchedulePage.currentOperatorBox"))} · {ownedOperators.length} {intl("components_pages_ManualSchedulePage.owned")}
           </p>
         </div>
       </div>
 
       <ManualProductionSummary
         result={result}
-        isStale={evaluationIsStale}
         activeShift={activeShift}
         controlsSlot={(
           <PlanSupportSummary
