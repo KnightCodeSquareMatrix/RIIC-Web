@@ -261,8 +261,10 @@ export function ManualOperboxPicker({
   const [visibleLimit, setVisibleLimit] = useState(PAGE_SIZE);
   const [stages, setStages] = useState<Record<string, ManualOperboxStage>>(() => initialStages(operbox));
   const [allMaximumStages, setAllMaximumStages] = useState(false);
+  const [ownedMaximumStages, setOwnedMaximumStages] = useState(false);
   const stagesBeforeAllMaximum = useRef<Record<string, ManualOperboxStage> | null>(null);
   const [maximumStagesBackup, setMaximumStagesBackup] = useState<Record<string, ManualOperboxStage> | null>(null);
+  const stagesBeforeOwnedMaximum = useRef<Record<string, ManualOperboxStage> | null>(null);
   const deferredQuery = useDeferredValue(query.trim().toLocaleLowerCase((locale === "en" ? "en-US" : "zh-CN")));
   const scheduledNames = useMemo(() => new Set([
     ...(scheduledOperatorNames ?? []),
@@ -280,6 +282,8 @@ export function ManualOperboxPicker({
     stagesBeforeAllMaximum.current = null;
     setMaximumStagesBackup(null);
     setAllMaximumStages(false);
+    stagesBeforeOwnedMaximum.current = null;
+    setOwnedMaximumStages(false);
     setStages((current) => ({ ...current, [id]: stage }));
   }, []);
 
@@ -338,6 +342,7 @@ export function ManualOperboxPicker({
     ));
     setAllMaximumStages(true);
     setOnlyOwned(false);
+    setOwnedMaximumStages(false);
     resetListView();
   }
 
@@ -350,10 +355,22 @@ export function ManualOperboxPicker({
       if (previousStages) setStages(previousStages);
     }
     setOnlyOwned((current) => !current);
+    stagesBeforeOwnedMaximum.current = null;
+    setOwnedMaximumStages(false);
     resetListView();
   }
 
-  function applyOwnedMaximumStages() {
+  function toggleOwnedMaximumStages() {
+    if (ownedMaximumStages) {
+      const previousStages = stagesBeforeOwnedMaximum.current;
+      stagesBeforeOwnedMaximum.current = null;
+      setOwnedMaximumStages(false);
+      if (previousStages) setStages(previousStages);
+      resetListView();
+      return;
+    }
+
+    stagesBeforeOwnedMaximum.current = stages;
     stagesBeforeAllMaximum.current = null;
     setMaximumStagesBackup(null);
     setAllMaximumStages(false);
@@ -364,6 +381,7 @@ export function ManualOperboxPicker({
         return [operator.id, currentStage === "none" ? "none" : maximumStageForRarity(operator.rarity)];
       }),
     ));
+    setOwnedMaximumStages(true);
     resetListView();
   }
 
@@ -477,10 +495,11 @@ export function ManualOperboxPicker({
           </SetupActionButton>
           <SetupActionButton
             type="button"
-            variant="outline"
+            variant={ownedMaximumStages ? "default" : "outline"}
             className="min-w-[104px] px-2 text-[11px] font-normal max-sm:min-w-[104px] sm:min-w-[116px] sm:px-2 sm:text-xs"
+            aria-pressed={ownedMaximumStages}
             disabled={!ownedCount}
-            onClick={applyOwnedMaximumStages}
+            onClick={toggleOwnedMaximumStages}
           >
             {intl("components_setup_ManualOperboxPicker.ownedAtMaxElite")}
           </SetupActionButton>
