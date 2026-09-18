@@ -262,6 +262,7 @@ export function ManualOperboxPicker({
   const [stages, setStages] = useState<Record<string, ManualOperboxStage>>(() => initialStages(operbox));
   const [allMaximumStages, setAllMaximumStages] = useState(false);
   const stagesBeforeAllMaximum = useRef<Record<string, ManualOperboxStage> | null>(null);
+  const [maximumStagesBackup, setMaximumStagesBackup] = useState<Record<string, ManualOperboxStage> | null>(null);
   const deferredQuery = useDeferredValue(query.trim().toLocaleLowerCase((locale === "en" ? "en-US" : "zh-CN")));
   const scheduledNames = useMemo(() => new Set([
     ...(scheduledOperatorNames ?? []),
@@ -277,6 +278,7 @@ export function ManualOperboxPicker({
 
   const handleStageChange = useCallback((id: string, stage: ManualOperboxStage) => {
     stagesBeforeAllMaximum.current = null;
+    setMaximumStagesBackup(null);
     setAllMaximumStages(false);
     setStages((current) => ({ ...current, [id]: stage }));
   }, []);
@@ -293,9 +295,10 @@ export function ManualOperboxPicker({
 
   const filteredOperators = useMemo(() => MANUAL_ROSTER.filter((operator) => {
     const stage = stages[operator.id] ?? "none";
+    const ownershipStage = allMaximumStages ? (maximumStagesBackup?.[operator.id] ?? stage) : stage;
     if (hasScheduledOperators && (rosterScope === "scheduled") !== scheduledNames.has(operator.name)) return false;
     if (rosterScope === "scheduled" && scheduledShift !== "all" && !scheduledOperatorShifts?.[operator.name]?.includes(scheduledShift)) return false;
-    if (onlyOwned && stage === "none") return false;
+    if (onlyOwned && ownershipStage === "none") return false;
     if (rarity !== "all" && operator.rarity !== Number(rarity)) return false;
     if (showProfessionFilter && profession !== "all" && operator.profession !== Number(profession)) return false;
     if (!deferredQuery) return true;
@@ -303,7 +306,7 @@ export function ManualOperboxPicker({
     return operator.name.toLocaleLowerCase("zh-CN").includes(deferredQuery)
       || displayName.includes(deferredQuery)
       || operator.id.toLocaleLowerCase("en-US").includes(deferredQuery);
-  }), [deferredQuery, gameCatalog, hasScheduledOperators, locale, onlyOwned, profession, rarity, rosterScope, scheduledNames, scheduledOperatorShifts, scheduledShift, showProfessionFilter, stages]);
+  }), [allMaximumStages, deferredQuery, gameCatalog, hasScheduledOperators, locale, maximumStagesBackup, onlyOwned, profession, rarity, rosterScope, scheduledNames, scheduledOperatorShifts, scheduledShift, showProfessionFilter, stages]);
 
   function resetListView() {
     setVisibleLimit(PAGE_SIZE);
@@ -318,6 +321,7 @@ export function ManualOperboxPicker({
     if (allMaximumStages) {
       const previousStages = stagesBeforeAllMaximum.current;
       stagesBeforeAllMaximum.current = null;
+      setMaximumStagesBackup(null);
       setAllMaximumStages(false);
       if (previousStages) setStages(previousStages);
       resetListView();
@@ -325,6 +329,7 @@ export function ManualOperboxPicker({
     }
 
     stagesBeforeAllMaximum.current = stages;
+    setMaximumStagesBackup(stages);
     setStages(Object.fromEntries(
       MANUAL_ROSTER.map((operator) => {
         const currentStage = stages[operator.id] ?? "none";
@@ -337,6 +342,7 @@ export function ManualOperboxPicker({
 
   function applyOwnedMaximumStages() {
     stagesBeforeAllMaximum.current = null;
+    setMaximumStagesBackup(null);
     setAllMaximumStages(false);
     setStages(Object.fromEntries(
       MANUAL_ROSTER.map((operator) => {
@@ -474,6 +480,7 @@ export function ManualOperboxPicker({
             disabled={!ownedCount}
             onClick={() => {
               stagesBeforeAllMaximum.current = null;
+              setMaximumStagesBackup(null);
               setAllMaximumStages(false);
               setStages(Object.fromEntries(MANUAL_ROSTER.map((operator) => [operator.id, "none"])));
               setOnlyOwned(false);
