@@ -337,6 +337,19 @@ export function ManualOperboxPicker({
       }),
     ));
     setAllMaximumStages(true);
+    setOnlyOwned(false);
+    resetListView();
+  }
+
+  function toggleOwnedFilter() {
+    if (!onlyOwned && allMaximumStages) {
+      const previousStages = stagesBeforeAllMaximum.current;
+      stagesBeforeAllMaximum.current = null;
+      setMaximumStagesBackup(null);
+      setAllMaximumStages(false);
+      if (previousStages) setStages(previousStages);
+    }
+    setOnlyOwned((current) => !current);
     resetListView();
   }
 
@@ -344,6 +357,7 @@ export function ManualOperboxPicker({
     stagesBeforeAllMaximum.current = null;
     setMaximumStagesBackup(null);
     setAllMaximumStages(false);
+    setOnlyOwned(false);
     setStages(Object.fromEntries(
       MANUAL_ROSTER.map((operator) => {
         const currentStage = stages[operator.id] ?? "none";
@@ -450,10 +464,7 @@ export function ManualOperboxPicker({
         <div className={cn("flex flex-nowrap items-center", compact ? "gap-1.5" : "gap-2")} data-manual-operbox-actions>
           <OwnedOperatorFilter
             value={onlyOwned}
-            onChange={(value) => {
-              setOnlyOwned(value);
-              resetListView();
-            }}
+            onChange={toggleOwnedFilter}
           />
           <SetupActionButton
             type="button"
