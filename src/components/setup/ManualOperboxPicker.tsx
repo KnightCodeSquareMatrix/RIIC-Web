@@ -329,7 +329,6 @@ export function ManualOperboxPicker({
       MANUAL_ROSTER.map((operator) => [operator.id, maximumStageForRarity(operator.rarity)]),
     ));
     setAllMaximumStages(true);
-    setOnlyOwned(false);
     resetListView();
   }
 
