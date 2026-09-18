@@ -1,10 +1,8 @@
 {
   "preparingOverview": "正在准备一图流布局",
-  "dropOrSelectAnOperatorDataFile": "拖放或选择干员数据文件",
-  "dropToImport": "松开即可导入",
   "uploadRosterJsonXlsx": "上传练度 JSON / XLSX",
   "supportedMaaJsonLanguages": "支持的 MAA JSON 语言",
-  "dropAFileOrChooseOneNamesAreConverted": "可直接拖入文件；MAA JSON 会在本地统一转换为简中后提交排班，也支持一图流 XLSX",
+  "dropAFileOrChooseOneNamesAreConverted": "在此弹窗内拖入或选择文件；MAA JSON 会在本地统一转换为简中后提交排班，也支持一图流 XLSX / XLS。",
   "layoutPresets": "布局预设",
   "trade": "贸",
   "factory": "制",

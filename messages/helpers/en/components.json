@@ -1,10 +1,8 @@
 {
   "preparingOverview": "Preparing overview",
-  "dropOrSelectAnOperatorDataFile": "Drop or select an operator data file",
-  "dropToImport": "Drop to import",
   "uploadRosterJsonXlsx": "Upload roster JSON / XLSX",
   "supportedMaaJsonLanguages": "Supported MAA JSON languages",
-  "dropAFileOrChooseOneNamesAreConverted": "Drop a file or choose one. Names are converted locally to Simplified Chinese before scheduling · XLSX imports are also supported",
+  "dropAFileOrChooseOneNamesAreConverted": "Drop or choose a file in this dialog. Names are converted locally to Simplified Chinese before scheduling. XLSX / XLS imports are also supported.",
   "layoutPresets": "Layout presets",
   "trade": "trade",
   "factory": "factory",

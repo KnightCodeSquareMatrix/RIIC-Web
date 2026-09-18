@@ -182,7 +182,7 @@
   "components_help_ImportMethodChoice_content2": {
     "value": [
       "MAA",
-      "从 MAA 导出干员 Box 文件后上传。"
+      "从 MAA 导出干员 Box 文件，点击上传入口后，在弹窗内拖入文件或点击“选择文件”。"
     ]
   },
   "components_interior_password_strength_labels": [
@@ -384,7 +384,7 @@
   "app_help_owned_operators_page_content4": {
     "value": [
       "导入你自己的 Box",
-      "选择森空岛同步，或上传 MAA 导出的 Arknights_OperBox_Export.json。两种方式选一种即可。"
+      "选择森空岛同步，或点击上传入口，在弹窗内拖入或选择 MAA 导出的 Arknights_OperBox_Export.json。两种方式选一种即可。"
     ]
   },
   "app_help_owned_operators_page_content5": {

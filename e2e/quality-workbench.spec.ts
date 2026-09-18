@@ -18,6 +18,7 @@ test("reviewer previews imports, saves changes and follows a named batch without
   let submitted = false;
   let reads = 0;
   let edits = 0;
+  let previews = 0;
   const personalWrites: string[] = [];
   const batch = { id: "batch-ui", label: "贸易站复查", status: "queued", createdAt: timestamp, expiresAt: expiry, bundleIds: ["latest"], cases: [{ id: "case-ui", status: "queued", sources: draft.sources, attempts: [] as { id: string; status: string; startedAt: string; finishedAt: string; summary: unknown }[] }] };
   try {
@@ -52,6 +53,7 @@ test("reviewer previews imports, saves changes and follows a named batch without
       const url = new URL(route.request().url());
       let data: unknown;
       if (url.pathname.endsWith("/import")) {
+        previews++;
         data = { token: "preview-ui", entries: [{ id: "valid", name: "贸易站复现.json", error: null }, { id: "invalid", name: "broken.json", error: "JSON 无法解析，请检查文件是否完整。" }] };
       } else if (route.request().method() === "POST") {
         const body = route.request().postDataJSON();
@@ -74,12 +76,64 @@ test("reviewer previews imports, saves changes and follows a named batch without
     await expect(page.getByText("管理求解器版本", { exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "开始测试", exact: true })).toBeDisabled();
     await expect(page.getByText("测试服务就绪", { exact: true })).toBeVisible();
-    const chooser = page.waitForEvent("filechooser");
     await page.getByRole("button", { name: "选择文件", exact: true }).click();
+    const upload = page.locator("[data-file-upload-dialog]");
+    await expect(upload).toHaveAccessibleName("选择 JSON 或 ZIP 文件");
+    await expect(upload.locator('input[type="file"]')).toHaveAttribute("accept", ".json,.zip");
+    const chooser = page.waitForEvent("filechooser");
+    await upload.getByRole("button", { name: "选择文件", exact: true }).click();
+    expect((await chooser).isMultiple()).toBe(true);
     await (await chooser).setFiles([{ name: "valid.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(input)) }, { name: "broken.json", mimeType: "application/json", buffer: Buffer.from("{") }]);
+    await expect(upload).toHaveCount(0);
+    await expect(page.getByText(/已选择 2 个文件/)).toBeVisible();
+    await page.getByRole("button", { name: "选择文件", exact: true }).click();
+    await expect(upload).toBeVisible();
+    await upload.locator("[data-file-dropzone]").drop({ files: [
+      { name: "valid.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(input)) },
+      // The API is mocked here; ZIP parsing is covered by server/quality/import.test.ts.
+      { name: "cases.zip", mimeType: "application/zip", buffer: Buffer.from("PK") },
+    ] });
+    await expect(upload).toHaveCount(0);
+    await expect(page.getByText(/已选择 2 个文件.*cases.zip/)).toBeVisible();
     await expect(page.getByRole("button", { name: /预览导入内容/ })).toBeEnabled();
     await page.getByRole("button", { name: /预览导入内容/ }).click();
     await expect(page.getByRole("button", { name: "导入 2 项并选中" })).toBeDisabled();
+    await page.getByRole("listitem").filter({ hasText: "broken.json" }).getByRole("checkbox").check();
+    await page.getByRole("button", { name: "选择文件", exact: true }).click();
+    const cancelledChooser = page.waitForEvent("filechooser");
+    await upload.getByRole("button", { name: "选择文件", exact: true }).click();
+    await (await cancelledChooser).setFiles([]);
+    await expect(upload.getByRole("alert")).toHaveCount(0);
+    await upload.locator("[data-file-dropzone]").drop({ files: [
+      { name: "valid.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(input)) },
+      { name: "unsupported.txt", mimeType: "text/plain", buffer: Buffer.from("invalid") },
+    ] });
+    await expect(upload.getByRole("alert")).toContainText("unsupported.txt");
+    const manyFiles = Array.from({ length: 501 }, (_, index) => ({ name: `${index}.json`, mimeType: "", buffer: Buffer.from("{}") }));
+    await upload.locator("[data-file-dropzone]").drop({ files: manyFiles });
+    await expect(upload.getByRole("alert")).toContainText("最多选择 500 个文件");
+    await page.keyboard.press("Escape");
+    await expect(upload).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "选择文件", exact: true })).toBeFocused();
+    await expect(page.getByText(/已选择 2 个文件.*cases.zip/)).toBeVisible();
+    await expect(page.getByRole("listitem").filter({ hasText: "broken.json" }).getByRole("checkbox")).toBeChecked();
+    await expect(page.getByRole("button", { name: "导入 1 项并选中" })).toBeEnabled();
+    expect(imported).toBe(false);
+    expect(previews).toBe(1);
+
+    await page.getByRole("button", { name: "选择文件", exact: true }).click();
+    await upload.locator("[data-file-dropzone]").drop({ files: manyFiles.slice(0, 500) });
+    await expect(upload).toHaveCount(0);
+    await expect(page.getByText(/已选择 500 个文件/)).toBeVisible();
+    await expect(page.getByRole("button", { name: "导入 1 项并选中" })).toHaveCount(0);
+    expect(previews).toBe(1);
+    await page.getByRole("button", { name: "选择文件", exact: true }).click();
+    await upload.locator("[data-file-dropzone]").drop({ files: { name: "replacement.JSON", mimeType: "", buffer: Buffer.from(JSON.stringify(input)) } });
+    await expect(upload).toHaveCount(0);
+    await expect(page.getByText(/已选择 1 个文件：replacement.JSON/)).toBeVisible();
+    expect(imported).toBe(false);
+    await page.getByRole("button", { name: /预览导入内容/ }).click();
+    await expect(page.getByRole("listitem").filter({ hasText: "broken.json" }).getByRole("checkbox")).not.toBeChecked();
     await page.getByRole("listitem").filter({ hasText: "broken.json" }).getByRole("checkbox").check();
     await page.getByRole("button", { name: "导入 1 项并选中" }).click();
     await page.getByRole("button", { name: "贸易站复现.json", exact: true }).click();

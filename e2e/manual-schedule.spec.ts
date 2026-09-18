@@ -473,12 +473,18 @@ test("manual scheduling previews and imports an external MAA schedule file", asy
     ],
   };
   await expect(page.getByRole("button", { name: "导入排班文件" })).toBeVisible();
-  await page.getByLabel("选择 MAA 排班 JSON 文件").setInputFiles({
+  await page.getByRole("button", { name: "导入排班文件" }).click();
+  const upload = page.locator("[data-file-upload-dialog]");
+  await expect(upload).toHaveAccessibleName("导入排班文件");
+  const chooser = page.waitForEvent("filechooser");
+  await upload.getByRole("button", { name: "选择文件", exact: true }).click();
+  await (await chooser).setFiles({
     name: "external-schedule.json",
     mimeType: "application/json",
     buffer: Buffer.from(JSON.stringify(importedSchedule)),
   });
 
+  await expect(upload).toHaveCount(0);
   const preview = page.getByRole("dialog", { name: "导入这个 MAA 排班？" });
   await expect(preview).toContainText("external-schedule.json");
   await expect(preview).toContainText("干员位置：2 / 2");
