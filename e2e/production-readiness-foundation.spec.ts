@@ -803,7 +803,7 @@ test("password reset requires matching password confirmation before making a req
   await page.route("**/api/auth/reset-password", async (route) => {
     resetRequests += 1;
     expect(route.request().postDataJSON()).toMatchObject({
-      newPassword: "Strong-password-1",
+      newPassword: "Axy123!?",
       token: "valid-reset-token",
     });
     return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ status: true }) });
@@ -813,12 +813,12 @@ test("password reset requires matching password confirmation before making a req
   await page.getByLabel("新密码", { exact: true }).fill("weakpassword1");
   await page.getByLabel("确认新密码", { exact: true }).fill("weakpassword1");
   await page.getByRole("button", { name: "确认重置" }).click();
-  await expect(page.getByText(/密码强度不足：请满足全部强度规则/)).toBeVisible();
+  await expect(page.getByText(/密码强度不足：至少 8 位/)).toBeVisible();
   expect(resetRequests).toBe(0);
 
-  await page.getByLabel("新密码", { exact: true }).fill("Strong-password-1");
+  await page.getByLabel("新密码", { exact: true }).fill("Axy123!?");
   await page.getByLabel("确认新密码", { exact: true }).fill("Different-password-1");
-  await expect(page.getByText(/密码强度不足：请满足全部强度规则/)).toHaveCount(0);
+  await expect(page.getByText(/密码强度不足：至少 8 位/)).toHaveCount(0);
   await expect(page.getByLabel("新密码", { exact: true })).toHaveAttribute("type", "password");
   await page.getByRole("button", { name: "显示新密码" }).click();
   await expect(page.getByLabel("新密码", { exact: true })).toHaveAttribute("type", "text");
@@ -828,7 +828,7 @@ test("password reset requires matching password confirmation before making a req
   await expect(page.getByText("两次输入的密码不一致。", { exact: true })).toBeVisible();
   expect(resetRequests).toBe(0);
 
-  await page.getByLabel("确认新密码", { exact: true }).fill("Strong-password-1");
+  await page.getByLabel("确认新密码", { exact: true }).fill("Axy123!?");
   await expect(page.getByText("两次输入的密码不一致。", { exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "确认重置" }).click();
   await expect.poll(() => resetRequests).toBe(1);
@@ -1366,7 +1366,7 @@ for (const viewport of [
       signUpRequests += 1;
       const body = route.request().postDataJSON() as { email?: string; password?: string };
       expect(body.email).toBe(`account-${viewport.width}@example.test`);
-      expect(body.password).toBe("secure-password-1");
+      expect(body.password).toBe("Axy123!?");
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -1420,16 +1420,16 @@ for (const viewport of [
     await page.getByLabel("昵称").fill("测试用户");
     await expect(accountPanel.getByRole("meter", { name: "密码强度" })).toHaveAttribute("aria-valuetext", "良好");
     await page.getByRole("button", { name: "创建账号并发送验证码" }).click();
-    await expect(accountPanel.getByText(/密码强度不足：请满足全部强度规则/)).toBeVisible();
+    await expect(accountPanel.getByText(/密码强度不足：至少 8 位/)).toBeVisible();
     expect(signUpRequests).toBe(0);
-    await page.getByLabel("密码", { exact: true }).fill("secure-password-1");
+    await page.getByLabel("密码", { exact: true }).fill("Axy123!?");
     await page.getByLabel("确认密码", { exact: true }).fill("different-password-1");
-    await expect(accountPanel.getByText(/密码强度不足：请满足全部强度规则/)).toHaveCount(0);
+    await expect(accountPanel.getByText(/密码强度不足：至少 8 位/)).toHaveCount(0);
     await expect(accountPanel.getByRole("meter", { name: "密码强度" })).toHaveAttribute("aria-valuetext", "强");
     await page.getByRole("button", { name: "创建账号并发送验证码" }).click();
     await expect(accountPanel.getByText("两次输入的密码不一致。", { exact: true })).toBeVisible();
     expect(signUpRequests).toBe(0);
-    await page.getByLabel("确认密码", { exact: true }).fill("secure-password-1");
+    await page.getByLabel("确认密码", { exact: true }).fill("Axy123!?");
     await expect(accountPanel.getByText("两次输入的密码不一致。", { exact: true })).toHaveCount(0);
     await page.getByRole("button", { name: "创建账号并发送验证码" }).click();
     expect(signUpRequests).toBe(1);
