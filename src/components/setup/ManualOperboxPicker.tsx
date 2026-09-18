@@ -261,8 +261,10 @@ export function ManualOperboxPicker({
   const [visibleLimit, setVisibleLimit] = useState(PAGE_SIZE);
   const [stages, setStages] = useState<Record<string, ManualOperboxStage>>(() => initialStages(operbox));
   const [allMaximumStages, setAllMaximumStages] = useState(false);
+  const [ownedMaximumStages, setOwnedMaximumStages] = useState(false);
   const stagesBeforeAllMaximum = useRef<Record<string, ManualOperboxStage> | null>(null);
   const [maximumStagesBackup, setMaximumStagesBackup] = useState<Record<string, ManualOperboxStage> | null>(null);
+  const stagesBeforeOwnedMaximum = useRef<Record<string, ManualOperboxStage> | null>(null);
   const deferredQuery = useDeferredValue(query.trim().toLocaleLowerCase((locale === "en" ? "en-US" : "zh-CN")));
   const scheduledNames = useMemo(() => new Set([
     ...(scheduledOperatorNames ?? []),
@@ -280,6 +282,8 @@ export function ManualOperboxPicker({
     stagesBeforeAllMaximum.current = null;
     setMaximumStagesBackup(null);
     setAllMaximumStages(false);
+    stagesBeforeOwnedMaximum.current = null;
+    setOwnedMaximumStages(false);
     setStages((current) => ({ ...current, [id]: stage }));
   }, []);
 
@@ -328,28 +332,64 @@ export function ManualOperboxPicker({
       return;
     }
 
-    stagesBeforeAllMaximum.current = stages;
-    setMaximumStagesBackup(stages);
+    const sourceStages = ownedMaximumStages
+      ? stagesBeforeOwnedMaximum.current ?? stages
+      : stages;
+    stagesBeforeOwnedMaximum.current = null;
+    setOwnedMaximumStages(false);
+    stagesBeforeAllMaximum.current = sourceStages;
+    setMaximumStagesBackup(sourceStages);
+    setOnlyOwned(false);
     setStages(Object.fromEntries(
-      MANUAL_ROSTER.map((operator) => {
-        const currentStage = stages[operator.id] ?? "none";
-        return [operator.id, onlyOwned && currentStage === "none" ? "none" : maximumStageForRarity(operator.rarity)];
-      }),
+      MANUAL_ROSTER.map((operator) => [operator.id, maximumStageForRarity(operator.rarity)]),
     ));
     setAllMaximumStages(true);
     resetListView();
   }
 
-  function applyOwnedMaximumStages() {
+  function toggleOwnedFilter() {
+    if (!onlyOwned) {
+      const sourceStages = allMaximumStages
+        ? stagesBeforeAllMaximum.current ?? stages
+        : ownedMaximumStages
+          ? stagesBeforeOwnedMaximum.current ?? stages
+          : stages;
+      stagesBeforeAllMaximum.current = null;
+      setMaximumStagesBackup(null);
+      setAllMaximumStages(false);
+      stagesBeforeOwnedMaximum.current = null;
+      setOwnedMaximumStages(false);
+      if (sourceStages !== stages) setStages(sourceStages);
+    }
+    setOnlyOwned((current) => !current);
+    resetListView();
+  }
+
+  function toggleOwnedMaximumStages() {
+    if (ownedMaximumStages) {
+      const previousStages = stagesBeforeOwnedMaximum.current;
+      stagesBeforeOwnedMaximum.current = null;
+      setOwnedMaximumStages(false);
+      if (previousStages) setStages(previousStages);
+      resetListView();
+      return;
+    }
+
+    const sourceStages = allMaximumStages
+      ? stagesBeforeAllMaximum.current ?? stages
+      : stages;
     stagesBeforeAllMaximum.current = null;
     setMaximumStagesBackup(null);
     setAllMaximumStages(false);
+    setOnlyOwned(false);
+    stagesBeforeOwnedMaximum.current = sourceStages;
     setStages(Object.fromEntries(
       MANUAL_ROSTER.map((operator) => {
-        const currentStage = stages[operator.id] ?? "none";
+        const currentStage = sourceStages[operator.id] ?? "none";
         return [operator.id, currentStage === "none" ? "none" : maximumStageForRarity(operator.rarity)];
       }),
     ));
+    setOwnedMaximumStages(true);
     resetListView();
   }
 
@@ -450,10 +490,7 @@ export function ManualOperboxPicker({
         <div className={cn("flex flex-nowrap items-center", compact ? "gap-1.5" : "gap-2")} data-manual-operbox-actions>
           <OwnedOperatorFilter
             value={onlyOwned}
-            onChange={(value) => {
-              setOnlyOwned(value);
-              resetListView();
-            }}
+            onChange={toggleOwnedFilter}
           />
           <SetupActionButton
             type="button"
@@ -466,10 +503,11 @@ export function ManualOperboxPicker({
           </SetupActionButton>
           <SetupActionButton
             type="button"
-            variant="outline"
+            variant={ownedMaximumStages ? "default" : "outline"}
             className="min-w-[104px] px-2 text-[11px] font-normal max-sm:min-w-[104px] sm:min-w-[116px] sm:px-2 sm:text-xs"
+            aria-pressed={ownedMaximumStages}
             disabled={!ownedCount}
-            onClick={applyOwnedMaximumStages}
+            onClick={toggleOwnedMaximumStages}
           >
             {intl("components_setup_ManualOperboxPicker.ownedAtMaxElite")}
           </SetupActionButton>
@@ -482,6 +520,8 @@ export function ManualOperboxPicker({
               stagesBeforeAllMaximum.current = null;
               setMaximumStagesBackup(null);
               setAllMaximumStages(false);
+              stagesBeforeOwnedMaximum.current = null;
+              setOwnedMaximumStages(false);
               setStages(Object.fromEntries(MANUAL_ROSTER.map((operator) => [operator.id, "none"])));
               setOnlyOwned(false);
               resetListView();
