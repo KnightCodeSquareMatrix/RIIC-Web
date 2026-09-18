@@ -326,7 +326,10 @@ export function ManualOperboxPicker({
 
     stagesBeforeAllMaximum.current = stages;
     setStages(Object.fromEntries(
-      MANUAL_ROSTER.map((operator) => [operator.id, maximumStageForRarity(operator.rarity)]),
+      MANUAL_ROSTER.map((operator) => {
+        const currentStage = stages[operator.id] ?? "none";
+        return [operator.id, onlyOwned && currentStage === "none" ? "none" : maximumStageForRarity(operator.rarity)];
+      }),
     ));
     setAllMaximumStages(true);
     resetListView();
