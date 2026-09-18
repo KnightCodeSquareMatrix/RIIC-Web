@@ -332,6 +332,18 @@ export function ManualOperboxPicker({
     resetListView();
   }
 
+  function applyOwnedMaximumStages() {
+    stagesBeforeAllMaximum.current = null;
+    setAllMaximumStages(false);
+    setStages(Object.fromEntries(
+      MANUAL_ROSTER.map((operator) => {
+        const currentStage = stages[operator.id] ?? "none";
+        return [operator.id, currentStage === "none" ? "none" : maximumStageForRarity(operator.rarity)];
+      }),
+    ));
+    resetListView();
+  }
+
   const rarityTabs = <OperatorRarityFilter value={rarity} disabled={applyDisabled} onChange={(value) => { setRarity(value); resetListView(); }} />;
 
   const rosterScopeTabs = hasScheduledOperators ? (
@@ -442,6 +454,15 @@ export function ManualOperboxPicker({
             onClick={toggleAllMaximumStages}
           >
             {intl("components_setup_ManualOperboxPicker.selectAllAtMaxElite")}
+          </SetupActionButton>
+          <SetupActionButton
+            type="button"
+            variant="outline"
+            className="min-w-[104px] px-2 text-[11px] font-normal max-sm:min-w-[104px] sm:min-w-[116px] sm:px-2 sm:text-xs"
+            disabled={!ownedCount}
+            onClick={applyOwnedMaximumStages}
+          >
+            {intl("components_setup_ManualOperboxPicker.ownedAtMaxElite")}
           </SetupActionButton>
           <Button
             type="button"
