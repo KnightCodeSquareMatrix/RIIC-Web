@@ -4,10 +4,10 @@ import { useTranslations, useLocale } from "next-intl";
 
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ThinkingOrb } from "thinking-orbs";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { StatusMark, type StatusMarkStatus } from "@/components/ui/status-mark";
 import { cn } from "@/lib/utils";
 import { MOTION_DURATION, MOTION_EASE_OUT } from "@/motion";
 import type { DisplayError } from "@/types";
@@ -113,6 +113,7 @@ export function LiveActivity({ activity, onRetry, onCopyDiagnostic, retryCountdo
   const activityId = activity?.id;
   const phase = activity?.phase;
   const expanded = peek || hovered || focused || phase === "error" || phase === "success";
+  const markStatus: StatusMarkStatus = phase === "queued" ? "pending" : phase === "running" ? "running" : phase === "success" ? "done" : "failed";
 
   // Queue position updates should not restart the initial expanded preview.
   useEffect(() => {
@@ -258,7 +259,9 @@ export function LiveActivity({ activity, onRetry, onCopyDiagnostic, retryCountdo
             animate={{ opacity: expanded ? 0 : 1, filter: !reduceMotion && expanded ? "blur(3px)" : "blur(0px)" }}
             transition={reduceMotion ? { duration: 0 } : FACE}
           >
-            <span className={cn("size-2 shrink-0 rounded-full", phase === "success" ? "bg-[var(--schedule-success)]" : phase === "error" ? "bg-red-400" : "bg-[#FFD800]")} />
+            <span className="shrink-0 text-amber-600 dark:text-[#FFD800]" data-slot="status-mark-compact">
+              <StatusMark status={markStatus} size={16} active={!expanded} />
+            </span>
             <span className="truncate text-xs font-medium">{label}</span>
           </motion.div>
           <motion.div
@@ -272,24 +275,15 @@ export function LiveActivity({ activity, onRetry, onCopyDiagnostic, retryCountdo
             style={{ pointerEvents: expanded ? undefined : "none" }}
           >
           <div className="relative flex min-h-[4.5rem] items-stretch overflow-hidden" data-slot="live-activity-body">
-            {activity.phase === "running" ? (
-              <span
-                className="relative z-10 grid w-[4.5rem] shrink-0 self-stretch place-items-center bg-transparent"
-                aria-hidden="true"
-                data-slot="solving-orb-rail"
-              >
-                <ThinkingOrb
-                  state="solving"
-                  size={64}
-                  theme="light"
-                  className="shrink-0"
-                  data-live-activity-icon
-                  data-slot="solving-orb"
-                />
-              </span>
-            ) : null}
+            <span
+              className="relative z-10 grid w-12 shrink-0 self-stretch place-items-center text-amber-600 dark:text-[#FFD800]"
+              aria-hidden="true"
+              data-slot="status-mark-rail"
+            >
+              <StatusMark status={markStatus} size={28} active={expanded} />
+            </span>
             <div className={cn(
-              "relative z-10 flex min-w-0 flex-1 flex-wrap items-center gap-3 py-3 pr-3 pl-5 max-sm:gap-y-1.5",
+              "relative z-10 flex min-w-0 flex-1 flex-wrap items-center gap-3 py-3 pr-3 pl-1 max-sm:gap-y-1.5",
             )}>
               <div className="min-w-0 flex-1 max-sm:basis-full">
               <strong className={cn("block truncate font-medium", activity.phase === "running" && "live-activity-shimmer")} data-text={activity.phase === "running" ? label : undefined}>{label}</strong>
