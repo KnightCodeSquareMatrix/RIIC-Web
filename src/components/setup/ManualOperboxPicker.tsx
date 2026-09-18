@@ -332,31 +332,36 @@ export function ManualOperboxPicker({
       return;
     }
 
-    stagesBeforeAllMaximum.current = stages;
-    setMaximumStagesBackup(stages);
+    const sourceStages = ownedMaximumStages
+      ? stagesBeforeOwnedMaximum.current ?? stages
+      : stages;
+    stagesBeforeOwnedMaximum.current = null;
+    setOwnedMaximumStages(false);
+    stagesBeforeAllMaximum.current = sourceStages;
+    setMaximumStagesBackup(sourceStages);
+    setOnlyOwned(false);
     setStages(Object.fromEntries(
-      MANUAL_ROSTER.map((operator) => {
-        const currentStage = stages[operator.id] ?? "none";
-        return [operator.id, onlyOwned && currentStage === "none" ? "none" : maximumStageForRarity(operator.rarity)];
-      }),
+      MANUAL_ROSTER.map((operator) => [operator.id, maximumStageForRarity(operator.rarity)]),
     ));
     setAllMaximumStages(true);
-    setOnlyOwned(false);
-    setOwnedMaximumStages(false);
     resetListView();
   }
 
   function toggleOwnedFilter() {
-    if (!onlyOwned && allMaximumStages) {
-      const previousStages = stagesBeforeAllMaximum.current;
+    if (!onlyOwned) {
+      const sourceStages = allMaximumStages
+        ? stagesBeforeAllMaximum.current ?? stages
+        : ownedMaximumStages
+          ? stagesBeforeOwnedMaximum.current ?? stages
+          : stages;
       stagesBeforeAllMaximum.current = null;
       setMaximumStagesBackup(null);
       setAllMaximumStages(false);
-      if (previousStages) setStages(previousStages);
+      stagesBeforeOwnedMaximum.current = null;
+      setOwnedMaximumStages(false);
+      if (sourceStages !== stages) setStages(sourceStages);
     }
     setOnlyOwned((current) => !current);
-    stagesBeforeOwnedMaximum.current = null;
-    setOwnedMaximumStages(false);
     resetListView();
   }
 
@@ -370,14 +375,17 @@ export function ManualOperboxPicker({
       return;
     }
 
-    stagesBeforeOwnedMaximum.current = stages;
+    const sourceStages = allMaximumStages
+      ? stagesBeforeAllMaximum.current ?? stages
+      : stages;
     stagesBeforeAllMaximum.current = null;
     setMaximumStagesBackup(null);
     setAllMaximumStages(false);
     setOnlyOwned(false);
+    stagesBeforeOwnedMaximum.current = sourceStages;
     setStages(Object.fromEntries(
       MANUAL_ROSTER.map((operator) => {
-        const currentStage = stages[operator.id] ?? "none";
+        const currentStage = sourceStages[operator.id] ?? "none";
         return [operator.id, currentStage === "none" ? "none" : maximumStageForRarity(operator.rarity)];
       }),
     ));
@@ -512,6 +520,8 @@ export function ManualOperboxPicker({
               stagesBeforeAllMaximum.current = null;
               setMaximumStagesBackup(null);
               setAllMaximumStages(false);
+              stagesBeforeOwnedMaximum.current = null;
+              setOwnedMaximumStages(false);
               setStages(Object.fromEntries(MANUAL_ROSTER.map((operator) => [operator.id, "none"])));
               setOnlyOwned(false);
               resetListView();
