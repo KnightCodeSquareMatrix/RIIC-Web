@@ -709,10 +709,8 @@ export function RoomEfficiencyReadout({
   details?: boolean;
   trend?: ShiftDirection;
 }) {
-  const locale = useLocale();
-  const efficiencyLabel = (label?: string) => locale === "en" && label ? ({ "纯技能": "Skill", "技能效率": "Skill efficiency", "跨设施": "Cross-facility", "综合加成": "Combined bonus", "仓储上限": "Capacity", "订单机制": "Order mechanic", "总充能": "Total charge" }[label] ?? label) : label;
   return (
-    <div className="min-w-0" title={value.details.map((detail) => detail.label ? `${efficiencyLabel(detail.label)} ${detail.value}` : detail.value).join(" · ")}>
+    <div className="min-w-0" title={value.details.map((detail) => detail.label ? `${detail.label} ${detail.value}` : detail.value).join(" · ")}>
       <div className="flex min-w-0 items-center gap-1.5">
         <strong
           className="infra-room-value font-technical shrink-0 text-base font-semibold tabular-nums tracking-[0.01em] text-[var(--room-accent)] max-sm:text-xs"
@@ -722,7 +720,7 @@ export function RoomEfficiencyReadout({
         </strong>
         {value.primaryLabel ? (
           <span className="truncate text-xs font-medium text-white/68">
-            <AnimatedText value={efficiencyLabel(value.primaryLabel) ?? value.primaryLabel} trend={trend} />
+            <AnimatedText value={value.primaryLabel} trend={trend} />
           </span>
         ) : null}
       </div>
@@ -730,7 +728,7 @@ export function RoomEfficiencyReadout({
         <div className="font-technical mt-1 flex max-h-9 flex-wrap gap-x-2 gap-y-0.5 overflow-hidden text-xs leading-4 tracking-[0.01em] text-white/60 max-sm:max-h-none">
           {value.details.map((detail, index) => (
             <span key={`${detail.kind ?? ""}-${detail.label ?? ""}-${index}`} className={detail.kind === "cross-station" ? "font-semibold text-[#C8F75A]" : undefined}>
-              {value.formula ? <>{detail.operator ? `${detail.operator} ` : ""}<span className="font-number"><AnimatedText value={detail.value} trend={trend} /></span>{detail.label ? ` ${efficiencyLabel(detail.label)}` : ""}</> : <>{efficiencyLabel(detail.label)} <span className="font-number"><AnimatedText value={detail.value} trend={trend} /></span></>}
+              {value.formula ? <>{detail.operator ? `${detail.operator} ` : ""}<span className="font-number"><AnimatedText value={detail.value} trend={trend} /></span>{detail.label ? ` ${detail.label}` : ""}</> : <>{detail.label} <span className="font-number"><AnimatedText value={detail.value} trend={trend} /></span></>}
             </span>
           ))}
         </div>
@@ -746,8 +744,6 @@ function RoomEfficiencyDetails({
   value: RoomEfficiencyPresentation | null;
   trend?: ShiftDirection;
 }) {
-  const locale = useLocale();
-  const efficiencyLabel = (label?: string) => locale === "en" && label ? ({ "纯技能": "Skill", "技能效率": "Skill efficiency", "跨设施": "Cross-facility", "综合加成": "Combined bonus", "仓储上限": "Capacity", "订单机制": "Order mechanic", "总充能": "Total charge" }[label] ?? label) : label;
   if (!value?.details.length) return null;
 
   return (
@@ -756,7 +752,7 @@ function RoomEfficiencyDetails({
         "font-technical grid min-w-[160px] max-w-[240px] gap-1 text-sm leading-tight tracking-[0.01em] text-white/68 max-sm:hidden max-[819px]:min-w-0 max-[819px]:max-w-none max-[819px]:grid-cols-3 max-[819px]:text-xs max-[819px]:leading-normal",
         value.formula && "max-w-[340px] max-[819px]:grid max-[819px]:grid-cols-3"
       )}
-      title={value.details.map((detail) => detail.label ? `${efficiencyLabel(detail.label)} ${detail.value}` : detail.value).join(" · ")}
+      title={value.details.map((detail) => detail.label ? `${detail.label} ${detail.value}` : detail.value).join(" · ")}
     >
       {value.formula ? (
         <>
@@ -766,13 +762,13 @@ function RoomEfficiencyDetails({
                 key={`${detail.kind ?? ""}-${detail.label ?? ""}-${index}`}
                 className={cn(detail.kind === "cross-station" && "font-semibold text-[#C8F75A]")}
               >
-                {detail.operator ? `${detail.operator} ` : ""}<span className="font-number"><AnimatedText value={detail.value} trend={trend} /></span>{detail.label ? ` ${efficiencyLabel(detail.label)}` : ""}
+                {detail.operator ? `${detail.operator} ` : ""}<span className="font-number"><AnimatedText value={detail.value} trend={trend} /></span>{detail.label ? ` ${detail.label}` : ""}
               </span>
             ))}
           </div>
           {value.details.slice(3).map((detail, index) => (
             <span key={`${detail.kind ?? ""}-${detail.label ?? ""}-${index + 3}`} className="mt-1 block whitespace-nowrap">
-              {detail.operator ? `${detail.operator} ` : ""}<span className="font-number"><AnimatedText value={detail.value} trend={trend} /></span>{detail.label ? ` ${efficiencyLabel(detail.label)}` : ""}
+              {detail.operator ? `${detail.operator} ` : ""}<span className="font-number"><AnimatedText value={detail.value} trend={trend} /></span>{detail.label ? ` ${detail.label}` : ""}
             </span>
           ))}
         </>
@@ -784,7 +780,7 @@ function RoomEfficiencyDetails({
             detail.kind === "cross-station" && "font-semibold text-[#C8F75A]"
           )}
         >
-          {efficiencyLabel(detail.label)} <span className="font-number"><AnimatedText value={detail.value} trend={trend} /></span>
+          {detail.label} <span className="font-number"><AnimatedText value={detail.value} trend={trend} /></span>
         </span>
       ))}
     </div>
@@ -1481,7 +1477,7 @@ export function ScheduleBoard({
               {group.rows.map((row) => {
                 const layoutRoom = layout.rooms.find((room) => room.id === row.roomId);
                 const rowVisual = roomVisualFor(row.group);
-                const efficiency = presentRoomEfficiency(row.group, row.efficiency);
+                const efficiency = presentRoomEfficiency(row.group, row.efficiency, locale);
                 const compactInlineRoom = isListFunctionalFacilityRoom(row.group);
                 const narrowLeftPanel = listRoomUsesAlignedOperatorOrigin(row.group);
                 const compactFactoryRoom = row.group === "manufacture";
@@ -1579,7 +1575,7 @@ export function ScheduleBoard({
                         {renderListRoomActions?.(row, "secondary")}
                         {onManualSkillEfficiencyChange && row.group === "power" ? (
                           <label className="flex items-center gap-1 text-xs text-white/70">
-                            <span>纸面技能效率</span>
+                            <span>{intl("components.paperSkillEfficiency")}</span>
                             <input
                               type="text"
                               inputMode="decimal"
@@ -1646,7 +1642,7 @@ export function ScheduleBoard({
                           <RoomEfficiencyDetails value={efficiency} trend={shiftDirection} />
                           {onManualSkillEfficiencyChange && (row.group === "trading" || row.group === "manufacture") ? (
                             <label className="mt-2 flex items-center gap-1 text-xs text-white/70">
-                              <span>纸面技能效率</span>
+                              <span>{intl("components.paperSkillEfficiency")}</span>
                               <input
                                 type="text"
                                 inputMode="decimal"

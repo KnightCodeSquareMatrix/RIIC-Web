@@ -129,7 +129,6 @@ function CompactRoomCard({
   const locale = useLocale();
   const gameCatalog = useGameCatalog();
   const en = locale === "en";
-  const efficiencyLabel = (label?: string) => en && label ? ({ "纯技能": "Skill", "技能效率": "Skill efficiency", "跨设施": "Cross-facility", "综合加成": "Combined bonus", "仓储上限": "Capacity", "订单机制": "Order mechanic", "总充能": "Total charge" }[label] ?? label) : label;
   const isTrade = layoutRoom?.kind === "trade_post";
   const isFactory = layoutRoom?.kind === "factory";
   const isPower = row.group === "power";
@@ -212,7 +211,7 @@ function CompactRoomCard({
           </span>
           {efficiency.details.map((detail, index) => (
             <span key={`${detail.label ?? ""}-${index}`} className={`font-number ${detail.kind === "cross-station" ? "text-[#C8F75A]" : ""}`}>
-              {efficiency.formula ? <>{detail.operator ? `${detail.operator} ` : ""}<AnimatedText value={detail.value} trend={shiftDirection} /> {efficiencyLabel(detail.label)}</> : <>/ {efficiencyLabel(detail.label)} <AnimatedText value={detail.value} trend={shiftDirection} /></>}
+              {efficiency.formula ? <>{detail.operator ? `${detail.operator} ` : ""}<AnimatedText value={detail.value} trend={shiftDirection} /> {detail.label}</> : <>/ {detail.label} <AnimatedText value={detail.value} trend={shiftDirection} /></>}
             </span>
           ))}
         </div>
@@ -231,7 +230,7 @@ function CompactRoomCard({
   ) : null;
   const paperSkillInput = productionRoom && onManualSkillEfficiencyChange ? (
     <label className="mt-1 flex items-center gap-1 text-[10px] text-white/58">
-      <span>纸面技能效率</span>
+      <span>{intl("components.paperSkillEfficiency")}</span>
       <input
         type="text"
         inputMode="decimal"
@@ -434,6 +433,7 @@ function CompactFeedbackButton({ row, disabled, offset, onIssue }: { row: RoomRo
 
 export function CompactScheduleView(props: CompactScheduleViewProps) {
   const intl = useTranslations();
+  const locale = useLocale();
   const { rows, layout, eliteByOperator, levelByOperator, shiftDirection, onIssue, feedbackDisabled = false, hideImages = false, onSlotClick, sortRoomId, sortSelection, onSortToggle, onSortSlotClick, onClearRoom, onDormAutofillChange, droneTargetRoomId, onDroneTargetChange, onManualSkillEfficiencyChange } = props;
 
   if (rows.length === 0) {
@@ -462,7 +462,7 @@ export function CompactScheduleView(props: CompactScheduleViewProps) {
   function makeCard(row: RoomRow, widthPercent?: number) {
     const layoutRoom = layoutRooms.get(row.roomId);
     const visual = roomVisualFor(row.group);
-    const efficiency = presentRoomEfficiency(row.group, row.efficiency);
+    const efficiency = presentRoomEfficiency(row.group, row.efficiency, locale);
     const slotCount = roomSlotCountFor(row.group);
     const slots = row.positionSlots
       ? row.positionSlots.map(({ slot, positionLabel }) => ({ slot, positionLabel }))
