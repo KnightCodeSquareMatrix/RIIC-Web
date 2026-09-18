@@ -9,7 +9,7 @@ import type { RoomRow } from "@/schedule";
 
 export function ManualScheduleRoomActions({ row, position, roomTitle, onClearRoom, onDormAutofillChange, droneTargetRoomId, onDroneTargetChange, sortMode, onSortToggle }: {
   row: RoomRow;
-  position: "header" | "clear";
+  position: "header" | "secondary" | "clear";
   roomTitle: string;
   onClearRoom: (row: RoomRow) => void;
   onDormAutofillChange: (row: RoomRow, enabled: boolean) => void;
@@ -19,23 +19,41 @@ export function ManualScheduleRoomActions({ row, position, roomTitle, onClearRoo
   onSortToggle?: (row: RoomRow) => void;
 }) {
   const intl = useTranslations();
+  if (position === "secondary") {
+    return row.group === "dormitory" && onDormAutofillChange ? (
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        aria-pressed={row.autofill}
+        aria-label={`${roomTitle}${intl("components.label")}${intl("components.autoFill")}`}
+        className={cn(
+          "hidden h-7 w-full max-w-[220px] border px-2 text-xs text-white hover:text-white sm:inline-flex",
+          row.autofill ? "border-[#FFD800]/70 bg-[#FFD800]/18 hover:bg-[#FFD800]/28" : "border-white/15 bg-[#3C3C3C]/55 hover:bg-[#4B4B4B]",
+        )}
+        onClick={() => onDormAutofillChange(row, !row.autofill)}
+      >
+        {intl("components.autoFill")}
+      </Button>
+    ) : null;
+  }
   return position === "header" ? (
     <>
       {row.group === "dormitory" && onDormAutofillChange ? (
-      <Button
-      type="button"
-      variant="ghost"
-      size="sm"
-      aria-pressed={row.autofill}
-      aria-label={`${roomTitle}${intl("components.label")}${intl("components.autoFill")}`}
-      className={cn(
-      "ml-1 h-7 border px-2 text-xs text-white hover:text-white",
-      row.autofill ? "border-[#FFD800]/70 bg-[#FFD800]/18 hover:bg-[#FFD800]/28" : "border-white/15 bg-[#3C3C3C]/55 hover:bg-[#4B4B4B]",
-      )}
-      onClick={() => onDormAutofillChange(row, !row.autofill)}
-      >
-      {intl("components.autoFill")}
-      </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          aria-pressed={row.autofill}
+          aria-label={`${roomTitle}${intl("components.label")}${intl("components.autoFill")}`}
+          className={cn(
+            "h-7 w-auto border px-2 text-xs text-white hover:text-white sm:hidden",
+            row.autofill ? "border-[#FFD800]/70 bg-[#FFD800]/18 hover:bg-[#FFD800]/28" : "border-white/15 bg-[#3C3C3C]/55 hover:bg-[#4B4B4B]",
+          )}
+          onClick={() => onDormAutofillChange(row, !row.autofill)}
+        >
+          {intl("components.autoFill")}
+        </Button>
       ) : null}
       {(row.group === "trading" || row.group === "manufacture") && onDroneTargetChange ? (
       <Tooltip>
