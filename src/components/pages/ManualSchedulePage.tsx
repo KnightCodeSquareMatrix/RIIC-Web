@@ -678,8 +678,8 @@ export function ManualSchedulePage({
       <ArrowLeft />{intl("components_pages_ManualSchedulePage.backToCalculation")}
     </Button> : null}
     <Button type="button" variant={mobile ? "ghost" : "outline"} size="sm" onClick={() => { closeMobileTools(); onOpenSetup(); }}><Settings2 />{intl("components_pages_ManualSchedulePage.configureBoxLayout")}</Button>
-    <Button type="button" variant={mobile ? "ghost" : "outline"} size="sm" disabled title="按当前排班评估暂未接入"><Sparkles />根据排班计算</Button>
-    <Button type="button" variant={mobile ? "ghost" : "outline"} size="sm" onClick={() => { closeMobileTools(); runEvaluation(); }} disabled={evaluationPending}><Sparkles />根据效率计算</Button>
+    <Button type="button" variant={mobile ? "ghost" : "outline"} size="sm" disabled title={intl("components_pages_ManualSchedulePage.evaluateBasedOnCurrentScheduleUnavailable")}><Sparkles />{intl("components_pages_ManualSchedulePage.calculateBasedOnSchedule")}</Button>
+    <Button type="button" variant={mobile ? "ghost" : "outline"} size="sm" onClick={() => { closeMobileTools(); runEvaluation(); }} disabled={evaluationPending}><Sparkles />{intl("components_pages_ManualSchedulePage.calculateBasedOnEfficiency")}</Button>
     <Button type="button" variant={mobile ? "ghost" : "outline"} size="sm" onClick={() => { closeMobileTools(); maaImportInputRef.current?.click(); }}><Upload />{intl("components_pages_ManualSchedulePage.importScheduleFile")}</Button>
   </>;
 
