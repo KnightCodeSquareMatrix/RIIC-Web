@@ -741,11 +741,9 @@ export function RoomEfficiencyReadout({
 
 function RoomEfficiencyDetails({
   value,
-  compactFactory = false,
   trend = 0,
 }: {
   value: RoomEfficiencyPresentation | null;
-  compactFactory?: boolean;
   trend?: ShiftDirection;
 }) {
   const locale = useLocale();
@@ -755,13 +753,30 @@ function RoomEfficiencyDetails({
   return (
     <div
       className={cn(
-        "font-technical ml-6 grid min-w-[160px] max-w-[240px] gap-1 text-sm leading-tight tracking-[0.01em] text-white/68 max-sm:hidden max-[819px]:ml-0 max-[819px]:min-w-0 max-[819px]:max-w-none max-[819px]:grid-cols-3 max-[819px]:text-xs max-[819px]:leading-normal",
-        compactFactory && "min-[1800px]:z-10 min-[1800px]:col-start-1 min-[1800px]:row-start-2 min-[1800px]:ml-0 min-[1800px]:flex min-[1800px]:min-w-0 min-[1800px]:max-w-none min-[1800px]:gap-3 min-[1800px]:text-xs",
-        value.formula && "flex max-w-[340px] flex-wrap items-baseline gap-x-1.5 gap-y-1 max-[819px]:grid max-[819px]:grid-cols-3"
+        "font-technical grid min-w-[160px] max-w-[240px] gap-1 text-sm leading-tight tracking-[0.01em] text-white/68 max-sm:hidden max-[819px]:min-w-0 max-[819px]:max-w-none max-[819px]:grid-cols-3 max-[819px]:text-xs max-[819px]:leading-normal",
+        value.formula && "max-w-[340px] max-[819px]:grid max-[819px]:grid-cols-3"
       )}
       title={value.details.map((detail) => detail.label ? `${efficiencyLabel(detail.label)} ${detail.value}` : detail.value).join(" · ")}
     >
-      {value.details.map((detail, index) => (
+      {value.formula ? (
+        <>
+          <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-1 whitespace-nowrap">
+            {value.details.slice(0, 3).map((detail, index) => (
+              <span
+                key={`${detail.kind ?? ""}-${detail.label ?? ""}-${index}`}
+                className={cn(detail.kind === "cross-station" && "font-semibold text-[#C8F75A]")}
+              >
+                {detail.operator ? `${detail.operator} ` : ""}<span className="font-number"><AnimatedText value={detail.value} trend={trend} /></span>{detail.label ? ` ${efficiencyLabel(detail.label)}` : ""}
+              </span>
+            ))}
+          </div>
+          {value.details.slice(3).map((detail, index) => (
+            <span key={`${detail.kind ?? ""}-${detail.label ?? ""}-${index + 3}`} className="mt-1 block whitespace-nowrap">
+              {detail.operator ? `${detail.operator} ` : ""}<span className="font-number"><AnimatedText value={detail.value} trend={trend} /></span>{detail.label ? ` ${efficiencyLabel(detail.label)}` : ""}
+            </span>
+          ))}
+        </>
+      ) : value.details.map((detail, index) => (
         <span
           key={`${detail.kind ?? ""}-${detail.label ?? ""}-${index}`}
           className={cn(
@@ -769,7 +784,7 @@ function RoomEfficiencyDetails({
             detail.kind === "cross-station" && "font-semibold text-[#C8F75A]"
           )}
         >
-          {value.formula ? <>{detail.operator ? `${detail.operator} ` : ""}<span className="font-number"><AnimatedText value={detail.value} trend={trend} /></span>{detail.label ? ` ${efficiencyLabel(detail.label)}` : ""}</> : <>{efficiencyLabel(detail.label)} <span className="font-number"><AnimatedText value={detail.value} trend={trend} /></span></>}
+          {efficiencyLabel(detail.label)} <span className="font-number"><AnimatedText value={detail.value} trend={trend} /></span>
         </span>
       ))}
     </div>
@@ -1283,7 +1298,7 @@ export function ScheduleBoard({
   onDormAutofillChange?: (row: RoomRow, enabled: boolean) => void;
   droneTargetRoomId?: string | null;
   onDroneTargetChange?: (row: RoomRow) => void;
-  renderListRoomActions?: (row: RoomRow, position: "header" | "clear") => ReactNode;
+  renderListRoomActions?: (row: RoomRow, position: "header" | "secondary" | "clear") => ReactNode;
   onManualSkillEfficiencyChange?: (row: RoomRow, value: number | null) => void;
 }) {
   const intl = useTranslations();
@@ -1561,7 +1576,8 @@ export function ScheduleBoard({
                             {intl("components_CompactScheduleView.awaitingSchedule")}
                           </div>
                         ) : null}
-                        {onManualSkillEfficiencyChange && (row.group === "trading" || row.group === "manufacture" || row.group === "power") ? (
+                        {renderListRoomActions?.(row, "secondary")}
+                        {onManualSkillEfficiencyChange && row.group === "power" ? (
                           <label className="flex items-center gap-1 text-xs text-white/70">
                             <span>纸面技能效率</span>
                             <input
@@ -1586,7 +1602,6 @@ export function ScheduleBoard({
                       className={cn(
                         "flex min-w-0 flex-1 items-center gap-5 py-2 pl-2 pr-3 min-[820px]:h-full max-[819px]:flex-col max-[819px]:items-stretch max-[819px]:gap-3 max-[819px]:px-3 max-[819px]:pb-4 max-[819px]:pt-1",
                         compactInlineRoom && "justify-center pl-4 pr-8",
-                        compactFactoryRoom && "min-[1800px]:grid min-[1800px]:grid-cols-1 min-[1800px]:grid-rows-[1fr_auto] min-[1800px]:items-stretch min-[1800px]:gap-1 min-[1800px]:pr-3"
                       )}
                     >
                       <div
@@ -1594,8 +1609,7 @@ export function ScheduleBoard({
                           "infra-list-operator-grid grid min-w-0 items-center justify-start [column-gap:var(--operator-column-gap-desktop)] min-[820px]:h-full",
                           listMobileOperatorGridClass(),
                           compactInlineRoom ? "min-[820px]:flex-none" : "min-[820px]:flex-1 min-[820px]:grid-flow-col min-[820px]:auto-cols-max",
-                          compactFactoryRoom && "min-[1800px]:col-start-1 min-[1800px]:row-span-2 min-[1800px]:row-start-1",
-                          compactInlineRoom && (slotCount === 2 ? "grid-cols-2" : "grid-cols-1"),
+                            compactInlineRoom && (slotCount === 2 ? "grid-cols-2" : "grid-cols-1"),
                           functionalOperatorPlacementClass
                         )}
                         style={{
@@ -1628,7 +1642,27 @@ export function ScheduleBoard({
                         ))}
                       </div>
                       {compactInlineRoom ? null : (
-                        <RoomEfficiencyDetails value={efficiency} compactFactory={compactFactoryRoom} trend={shiftDirection} />
+                        <div className="w-[340px] shrink-0 max-[819px]:w-auto max-[819px]:min-w-0">
+                          <RoomEfficiencyDetails value={efficiency} trend={shiftDirection} />
+                          {onManualSkillEfficiencyChange && (row.group === "trading" || row.group === "manufacture") ? (
+                            <label className="mt-2 flex items-center gap-1 text-xs text-white/70">
+                              <span>纸面技能效率</span>
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                pattern="[0-9]*[.,]?[0-9]*"
+                                value={row.manualSkillEfficiencyPct ?? ""}
+                                placeholder="0"
+                                className="h-7 w-16 rounded border border-white/25 bg-black/25 px-1 text-right font-number text-xs text-white outline-none focus:border-[#FFD800]"
+                                onChange={(event) => {
+                                  const raw = event.currentTarget.value;
+                                  onManualSkillEfficiencyChange(row, raw === "" ? null : Number(raw));
+                                }}
+                              />
+                              <span>%</span>
+                            </label>
+                          ) : null}
+                        </div>
                       )}
                     </div>
 

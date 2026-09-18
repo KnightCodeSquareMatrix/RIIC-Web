@@ -1221,16 +1221,15 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
 
   async function evaluateManualScheduleFromPage(input: {
     draft: ManualScheduleDraft;
-    fingerprint: string;
   }) {
     if (manualEvaluationPending) return;
     setManualEvaluationPending(true);
     try {
       const { assemblePaperManualPlanResult } = await import("./manual-plan-result");
-      const result = assemblePaperManualPlanResult({ draft: input.draft, layout, operbox, fingerprint: input.fingerprint });
+      const result = assemblePaperManualPlanResult({ draft: input.draft, layout, operbox });
       setManualPlanResult(result);
       try {
-        persistManualEvaluationCache(window.localStorage, input.fingerprint, result);
+        persistManualEvaluationCache(window.localStorage, result);
       } catch {
         // The in-memory result remains available for the current workbench session.
       }

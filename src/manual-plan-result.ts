@@ -6,7 +6,6 @@ import type { BaseBlueprint, MaaJson, OperBoxEntry, RotationJson } from "./types
 export type ManualPlanResult = {
   kind: "manual";
   revision: 1;
-  fingerprint: string;
   layout: BaseBlueprint;
   maa: MaaJson;
   rotation: RotationJson;
@@ -19,7 +18,6 @@ export function assemblePaperManualPlanResult(input: {
   draft: ManualScheduleDraft;
   layout: BaseBlueprint;
   operbox: readonly OperBoxEntry[] | null;
-  fingerprint: string;
 }): ManualPlanResult {
   const layout = structuredClone(input.layout);
   const draft = structuredClone(input.draft);
@@ -33,7 +31,6 @@ export function assemblePaperManualPlanResult(input: {
   return {
     kind: "manual",
     revision: 1,
-    fingerprint: input.fingerprint,
     layout,
     maa,
     rotation,
