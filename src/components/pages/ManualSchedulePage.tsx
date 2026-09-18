@@ -8,6 +8,9 @@ import type { FactoryRecipe, TradeOrder } from "@/blueprint";
 import { filterOperators, ROOM_SKILL_TAGS, type BuildingRoomPrefix } from "@/building-rooms";
 import { OperatorSlot, ScheduleBoard, ShiftTabs } from "@/components";
 import { FiammettaTargetChip } from "@/components/FiammettaTargetChip";
+import { ManualProductionSummary } from "@/components/ManualProductionSummary";
+import { PlanSupportSummary } from "@/components/PlanSupportSummary";
+import { DroneTargetPicker } from "@/components/DroneTargetPicker";
 import { ManualScheduleRoomActions } from "@/components/ManualScheduleRoomActions";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,6 +27,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { SkeletonSuspense } from "@/components/ui/skeleton-swap";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { downloadJson } from "@/download";
+import type { ManualPlanResult } from "@/manual-plan-result";
+import { loadManualEvaluationCache } from "@/manual-evaluation-cache";
 import { localizedOperatorName, localizedRoomTitle } from "@/i18n/game-data";
 import { useGameCatalog } from "@/i18n/game-data-client";
 import { prepareMaaForExport } from "@/maa-safety";
@@ -46,6 +51,7 @@ import {
   resizeManualScheduleDraft,
   setManualDormAutofill,
   setManualDroneTarget,
+  setManualRoomSkillEfficiency,
   swapManualOperators,
   type ManualOperatorConflict,
   type ManualScheduleDraft,
@@ -88,7 +94,12 @@ export interface ManualSchedulePageProps {
   scheduleMode: ManualScheduleMode;
   fiammettaEnabled: boolean;
   initialDraft: ManualScheduleDraft | null;
+  restorationReady: boolean;
   onInitialDraftConsumed: () => void;
+  result: ManualPlanResult | null;
+  evaluationPending: boolean;
+  onEvaluate: (input: { draft: ManualScheduleDraft }) => Promise<void>;
+  onRestoreEvaluation: (result: ManualPlanResult) => void;
   onOpenCalculator: () => void;
   onShiftDurationsChange: (durations: number[]) => void;
   onShiftStartTimeChange: (startTime: string) => void;
@@ -200,7 +211,12 @@ export function ManualSchedulePage({
   scheduleMode,
   fiammettaEnabled,
   initialDraft,
+  restorationReady,
   onInitialDraftConsumed,
+  result,
+  evaluationPending,
+  onEvaluate,
+  onRestoreEvaluation,
   onOpenCalculator,
   onShiftDurationsChange,
   onShiftStartTimeChange,
@@ -242,6 +258,7 @@ export function ManualSchedulePage({
   const [pickerScrolling, setPickerScrolling] = useState(false);
   const [sortRoomId, setSortRoomId] = useState<string | null>(null);
   const [sortSelection, setSortSelection] = useState<{ roomId: string; slotIndex: number } | null>(null);
+  const [dronePickerOpen, setDronePickerOpen] = useState(false);
   const pickerScrollTimer = useRef<number | null>(null);
   const maaImportInputRef = useRef<HTMLInputElement>(null);
   const pickerScrollContainerRef = useRef<HTMLDivElement>(null);
@@ -264,7 +281,7 @@ export function ManualSchedulePage({
   ), [ownedOperators]);
 
   useEffect(() => {
-    if (restored) return;
+    if (restored || !restorationReady || ownedOperators.length === 0) return;
     try {
       const saved = initialDraft ?? loadManualScheduleDraft(window.localStorage);
       if (saved) {
@@ -274,13 +291,15 @@ export function ManualSchedulePage({
         onShiftStartTimeChange(reconciled.startTime);
         onScheduleModeChange(reconciled.scheduleMode);
         onFiammettaEnabledChange(reconciled.fiammettaEnabled);
+        const cachedEvaluation = loadManualEvaluationCache(window.localStorage);
+        if (cachedEvaluation) onRestoreEvaluation(cachedEvaluation);
       }
     } catch {
       setStorageWarning(intl("components_pages_ManualSchedulePage.theManualDraftCouldNotBeRestored"));
     }
     if (initialDraft) onInitialDraftConsumed();
     setRestored(true);
-  }, [intl, initialDraft, layout, onFiammettaEnabledChange, onInitialDraftConsumed, onScheduleModeChange, onShiftDurationsChange, onShiftStartTimeChange, operbox, restored]);
+  }, [intl, initialDraft, layout, onFiammettaEnabledChange, onInitialDraftConsumed, onRestoreEvaluation, onScheduleModeChange, onShiftDurationsChange, onShiftStartTimeChange, operbox, ownedOperators, restored, restorationReady]);
 
   useEffect(() => {
     if (!restored) return;
@@ -323,8 +342,9 @@ export function ManualSchedulePage({
     trainee: trainingAssignment?.operators[0] ?? null,
     trainer: trainingAssignment?.operators[1] ?? null,
   } : undefined, [trainingAssignment?.operators, trainingRoom]);
+  const activeEvaluationShift = result?.rotation.shifts[activeShift];
   const rows = useMemo(
-    () => addOperatorPresentations(planToRows(activePlan, undefined, layout, activeTrainingRoomShift).map((row) => {
+    () => addOperatorPresentations(planToRows(activePlan, activeEvaluationShift, layout, activeTrainingRoomShift).map((row) => {
       const assignment = draft.shifts[activeShift]?.rooms[row.roomId];
       const room = layout.rooms.find((candidate) => candidate.id === row.roomId);
       const capacity = room ? manualRoomCapacity(room) : 0;
@@ -342,9 +362,12 @@ export function ManualSchedulePage({
           unavailableSlotIndices: Array.from({ length: Math.max(0, visibleSlots - capacity) }, (_, index) => capacity + index),
         }),
         ...(row.group === "dormitory" ? { autofill: Boolean(assignment?.autofill) } : {}),
+        ...(room?.kind === "trade_post" || room?.kind === "factory" || room?.kind === "power_plant"
+          ? { manualSkillEfficiencyPct: assignment?.manualSkillEfficiencyPct }
+          : {}),
       };
     })),
-    [activePlan, activeShift, activeTrainingRoomShift, draft.shifts, layout],
+    [activeEvaluationShift, activePlan, activeShift, activeTrainingRoomShift, draft.shifts, layout],
   );
   const selectedRoom = picker?.kind === "slot" ? rows.find((row) => row.roomId === picker.roomId) : undefined;
   const selectedAssignment = picker?.kind === "slot" ? draft.shifts[activeShift]?.rooms[picker.roomId] : undefined;
@@ -554,6 +577,10 @@ export function ManualSchedulePage({
     ));
   }
 
+  function setRoomSkillEfficiency(row: RoomRow, value: number | null) {
+    setDraft((current) => setManualRoomSkillEfficiency(current, layout, activeShift, row.roomId, value));
+  }
+
   function toggleDroneTarget(row: RoomRow) {
     setDraft((current) => setManualDroneTarget(
       current,
@@ -561,6 +588,10 @@ export function ManualSchedulePage({
       activeShift,
       current.shifts[activeShift]?.droneTargetRoomId === row.roomId ? null : row.roomId,
     ));
+  }
+
+  function runEvaluation() {
+    void onEvaluate({ draft });
   }
 
   function exportMaa() {
@@ -647,6 +678,8 @@ export function ManualSchedulePage({
       <ArrowLeft />{intl("components_pages_ManualSchedulePage.backToCalculation")}
     </Button> : null}
     <Button type="button" variant={mobile ? "ghost" : "outline"} size="sm" onClick={() => { closeMobileTools(); onOpenSetup(); }}><Settings2 />{intl("components_pages_ManualSchedulePage.configureBoxLayout")}</Button>
+    <Button type="button" variant={mobile ? "ghost" : "outline"} size="sm" disabled title={intl("components_pages_ManualSchedulePage.evaluateBasedOnCurrentScheduleUnavailable")}><Sparkles />{intl("components_pages_ManualSchedulePage.calculateBasedOnSchedule")}</Button>
+    <Button type="button" variant={mobile ? "ghost" : "outline"} size="sm" onClick={() => { closeMobileTools(); runEvaluation(); }} disabled={evaluationPending}><Sparkles />{intl("components_pages_ManualSchedulePage.calculateBasedOnEfficiency")}</Button>
     <Button type="button" variant={mobile ? "ghost" : "outline"} size="sm" onClick={() => { closeMobileTools(); maaImportInputRef.current?.click(); }}><Upload />{intl("components_pages_ManualSchedulePage.importScheduleFile")}</Button>
   </>;
 
@@ -693,6 +726,21 @@ export function ManualSchedulePage({
           </p>
         </div>
       </div>
+
+      <ManualProductionSummary
+        result={result}
+        activeShift={activeShift}
+        controlsSlot={(
+          <PlanSupportSummary
+            drones={activePlan?.drones}
+            target={fiammettaEnabled ? fiammettaTarget : null}
+            portrait={fiammettaEnabled ? fiammettaPortrait : null}
+            automatic={false}
+            automaticDisabled
+            onChooseFacility={() => setDronePickerOpen(true)}
+          />
+        )}
+      />
 
       {storageWarning ? <p className="mb-3 text-sm text-amber-700" role="status">{storageWarning}</p> : null}
 
@@ -769,9 +817,18 @@ export function ManualSchedulePage({
         onDormAutofillChange={setDormAutofill}
         droneTargetRoomId={draft.shifts[activeShift]?.droneTargetRoomId}
         onDroneTargetChange={toggleDroneTarget}
+        onManualSkillEfficiencyChange={setRoomSkillEfficiency}
         onFactoryRecipeChange={onFactoryRecipeChange}
         onTradeOrderChange={onTradeOrderChange}
       />
+
+      {dronePickerOpen ? <DroneTargetPicker
+        rows={rows}
+        targetRoomId={draft.shifts[activeShift]?.droneTargetRoomId}
+        manualSelection={false}
+        onTargetChange={toggleDroneTarget}
+        onOpenChange={setDronePickerOpen}
+      /> : null}
 
       <Dialog open={clearShiftConfirmationOpen} onOpenChange={setClearShiftConfirmationOpen}>
         <DialogContent>

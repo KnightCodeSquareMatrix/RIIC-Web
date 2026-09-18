@@ -30,6 +30,8 @@ export {
 export interface ManualRoomAssignment {
   operators: Array<string | null>;
   autofill?: boolean;
+  /** User-entered paper skill efficiency in percentage points, per shift and room. */
+  manualSkillEfficiencyPct?: number;
 }
 
 export interface ManualShift {
@@ -565,10 +567,14 @@ export function loadManualScheduleDraft(storage: StorageLike): ManualScheduleDra
       const rooms = candidate.rooms && typeof candidate.rooms === "object" && !Array.isArray(candidate.rooms)
         ? Object.fromEntries(Object.entries(candidate.rooms).flatMap(([roomId, assignment]) => {
           if (!assignment || typeof assignment !== "object" || !Array.isArray((assignment as ManualRoomAssignment).operators)) return [];
+          const manualSkillEfficiencyPct = Number((assignment as ManualRoomAssignment).manualSkillEfficiencyPct);
           return [[roomId, {
             operators: (assignment as ManualRoomAssignment).operators.map((name) => typeof name === "string" ? name : null),
             ...(typeof (assignment as ManualRoomAssignment).autofill === "boolean"
               ? { autofill: (assignment as ManualRoomAssignment).autofill }
+              : {}),
+            ...(Number.isFinite(manualSkillEfficiencyPct) && manualSkillEfficiencyPct >= 0
+              ? { manualSkillEfficiencyPct: Math.round(manualSkillEfficiencyPct * 100) / 100 }
               : {}),
           }]];
         }))
@@ -681,9 +687,14 @@ export function reconcileManualScheduleDraft(
               return name;
             },
           );
+          const manualSkillEfficiencyPct = Number(assignment?.manualSkillEfficiencyPct);
+          const isProductionRoom = room.kind === "trade_post" || room.kind === "factory" || room.kind === "power_plant";
           return [room.id, {
             operators,
             ...(room.kind === "dormitory" ? { autofill: assignment?.autofill ?? true } : {}),
+            ...(isProductionRoom && Number.isFinite(manualSkillEfficiencyPct) && manualSkillEfficiencyPct >= 0
+              ? { manualSkillEfficiencyPct: Math.round(manualSkillEfficiencyPct * 100) / 100 }
+              : {}),
           } satisfies ManualRoomAssignment];
         })),
       };
@@ -793,6 +804,29 @@ export function swapManualOperators(
   const next = structuredClone(draft);
   const operators = next.shifts[shiftIndex]!.rooms[roomId]!.operators;
   [operators[firstSlotIndex], operators[secondSlotIndex]] = [operators[secondSlotIndex], operators[firstSlotIndex]];
+  return next;
+}
+
+export function setManualRoomSkillEfficiency(
+  draft: ManualScheduleDraft,
+  layout: BaseBlueprint,
+  shiftIndex: number,
+  roomId: string,
+  value: number | null,
+): ManualScheduleDraft {
+  const room = layout.rooms.find((candidate) => candidate.id === roomId);
+  if (!room || !draft.shifts[shiftIndex] || (room.kind !== "trade_post" && room.kind !== "factory" && room.kind !== "power_plant")) return draft;
+  const next = structuredClone(draft);
+  const shift = next.shifts[shiftIndex]!;
+  const assignment = shift.rooms[roomId] ?? {
+    operators: Array.from({ length: manualRoomCapacity(room) }, () => null),
+  };
+  if (value === null || !Number.isFinite(value) || value < 0) {
+    delete assignment.manualSkillEfficiencyPct;
+  } else {
+    assignment.manualSkillEfficiencyPct = Math.round(value * 100) / 100;
+  }
+  shift.rooms[roomId] = assignment;
   return next;
 }
 
