@@ -589,9 +589,15 @@ test("setup exposes and persists only worker-supported rotation profiles", async
   await expectSetupAction(importLayoutButton);
   await expect(dialog.getByRole("button", { name: "导入布局", exact: true })).toHaveCount(1);
   await expectSetupAction(dialog.getByRole("button", { name: "导出布局", exact: true }));
-  const fileChooserEvent = page.waitForEvent("filechooser");
   await importLayoutButton.click();
-  await fileChooserEvent;
+  const upload = page.locator("[data-file-upload-dialog]");
+  await expect(upload).toHaveAccessibleName("导入布局");
+  const fileChooserEvent = page.waitForEvent("filechooser");
+  await upload.getByRole("button", { name: "选择文件", exact: true }).click();
+  expect((await fileChooserEvent).isMultiple()).toBe(false);
+  await upload.getByRole("button", { name: "取消", exact: true }).click();
+  await expect(upload).toHaveCount(0);
+  await expect(importLayoutButton).toBeFocused();
 
   const selectedPreset = dialog.getByRole("button", { name: /^243/ });
   await expect(selectedPreset).toHaveAttribute("aria-pressed", "true");

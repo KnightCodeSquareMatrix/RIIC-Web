@@ -1,19 +1,21 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import type { RefObject } from "react";
 import { Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
-export function MaaImportDialog({ maaImportPreview, confirmMaaImport, onCancel }: {
+export function MaaImportDialog({ maaImportPreview, confirmMaaImport, onCancel, finalFocus }: {
   maaImportPreview: { fileName: string; sourceShiftCount: number; importedShiftCount: number; sourceAssignmentCount: number; importedAssignmentCount: number };
   confirmMaaImport: () => void;
   onCancel: () => void;
+  finalFocus: RefObject<HTMLElement | null>;
 }) {
   const intl = useTranslations();
   return (
       <Dialog open onOpenChange={open => { if (!open) onCancel(); }}>
-        <DialogContent className="max-w-[min(520px,calc(100vw-2rem))]">
+        <DialogContent className="max-w-[min(520px,calc(100vw-2rem))]" finalFocus={finalFocus}>
           <DialogHeader>
             <DialogTitle>{intl("components_pages_ManualSchedulePage.importMaaScheduleQuestion")}</DialogTitle>
             <DialogDescription>

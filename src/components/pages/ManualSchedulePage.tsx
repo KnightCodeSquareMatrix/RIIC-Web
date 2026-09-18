@@ -8,9 +8,10 @@ import type { FactoryRecipe, TradeOrder } from "@/blueprint";
 import { filterOperators, ROOM_SKILL_TAGS, type BuildingRoomPrefix } from "@/building-rooms";
 import { OperatorSlot, ScheduleBoard, ShiftTabs } from "@/components";
 import { FiammettaTargetChip } from "@/components/FiammettaTargetChip";
+import { DroneTargetPicker } from "@/components/DroneTargetPicker";
+import { FileUploadDialog } from "@/components/FileUploadDialog";
 import { ManualProductionSummary } from "@/components/ManualProductionSummary";
 import { PlanSupportSummary } from "@/components/PlanSupportSummary";
-import { DroneTargetPicker } from "@/components/DroneTargetPicker";
 import { ManualScheduleRoomActions } from "@/components/ManualScheduleRoomActions";
 import { Button } from "@/components/ui/button";
 import {
@@ -242,7 +243,6 @@ export function ManualSchedulePage({
   const [picker, setPicker] = useState<PickerTarget | null>(null);
   const [pickerQuery, setPickerQuery] = useState("");
   const [maaImportPreview, setMaaImportPreview] = useState<MaaImportPreview | null>(null);
-  const [maaImportError, setMaaImportError] = useState<string | null>(null);
   const [pickerRoomFilter, setPickerRoomFilter] = useState<BuildingRoomPrefix | null>(null);
   const [pickerSkillTag, setPickerSkillTag] = useState<string | null>(null);
   const [pickerRarity, setPickerRarity] = useState<number | null>(null);
@@ -260,7 +260,7 @@ export function ManualSchedulePage({
   const [sortSelection, setSortSelection] = useState<{ roomId: string; slotIndex: number } | null>(null);
   const [dronePickerOpen, setDronePickerOpen] = useState(false);
   const pickerScrollTimer = useRef<number | null>(null);
-  const maaImportInputRef = useRef<HTMLInputElement>(null);
+  const maaImportReturnFocus = useRef<HTMLElement | null>(null);
   const pickerScrollContainerRef = useRef<HTMLDivElement>(null);
   const pickerResultsRef = useRef<HTMLDivElement>(null);
 
@@ -602,14 +602,14 @@ export function ManualSchedulePage({
     ));
   }
 
-  async function prepareMaaImport(file: File) {
-    setMaaImportError(null);
+  async function prepareMaaImport(file: File, signal: AbortSignal) {
     if (file.size > 5 * 1024 * 1024) {
-      setMaaImportError(intl("components_pages_ManualSchedulePage.scheduleFileTooLarge"));
-      return;
+      throw new Error(intl("components_pages_ManualSchedulePage.scheduleFileTooLarge"));
     }
     try {
-      const sourceMaa = parseMaaScheduleText(await file.text());
+      const text = await file.text();
+      signal.throwIfAborted();
+      const sourceMaa = parseMaaScheduleText(text);
       const importedMaa = normalizeMaaScheduleForManualImport(sourceMaa);
       const importedLayout = layoutFromMaaSchedule(importedMaa, layout);
       const fiammettaImported = importedMaa.plans.some((plan) => plan.Fiammetta?.enable === true);
@@ -632,9 +632,10 @@ export function ManualSchedulePage({
         importedAssignmentCount: countDraftAssignments(reconciled),
       });
     } catch (error) {
-      setMaaImportError(en
+      signal.throwIfAborted();
+      throw new Error(en
         ? intl("components_pages_ManualSchedulePage.invalidMaaSchedule")
-        : error instanceof Error ? error.message : intl("components_pages_ManualSchedulePage.invalidMaaSchedule"));
+        : error instanceof Error ? error.message : intl("components_pages_ManualSchedulePage.invalidMaaSchedule"), { cause: error });
     }
   }
 
@@ -648,7 +649,6 @@ export function ManualSchedulePage({
     onScheduleModeChange(imported.scheduleMode);
     onFiammettaEnabledChange(imported.fiammettaEnabled);
     setMaaImportPreview(null);
-    setMaaImportError(null);
   }
 
   if (!operbox?.some((operator) => operator.own)) {
@@ -680,7 +680,18 @@ export function ManualSchedulePage({
     <Button type="button" variant={mobile ? "ghost" : "outline"} size="sm" onClick={() => { closeMobileTools(); onOpenSetup(); }}><Settings2 />{intl("components_pages_ManualSchedulePage.configureBoxLayout")}</Button>
     <Button type="button" variant={mobile ? "ghost" : "outline"} size="sm" disabled title={intl("components_pages_ManualSchedulePage.evaluateBasedOnCurrentScheduleUnavailable")}><Sparkles />{intl("components_pages_ManualSchedulePage.calculateBasedOnSchedule")}</Button>
     <Button type="button" variant={mobile ? "ghost" : "outline"} size="sm" onClick={() => { closeMobileTools(); runEvaluation(); }} disabled={evaluationPending}><Sparkles />{intl("components_pages_ManualSchedulePage.calculateBasedOnEfficiency")}</Button>
-    <Button type="button" variant={mobile ? "ghost" : "outline"} size="sm" onClick={() => { closeMobileTools(); maaImportInputRef.current?.click(); }}><Upload />{intl("components_pages_ManualSchedulePage.importScheduleFile")}</Button>
+    <FileUploadDialog
+      title={intl("components_pages_ManualSchedulePage.importScheduleFile")}
+      description={intl("FileUpload.scheduleDescription")}
+      extensions={[".json"]}
+      successFocus={() => false}
+      returnFocus={() => maaImportReturnFocus.current}
+      onFiles={([file], signal) => prepareMaaImport(file, signal)}
+      trigger={<Button type="button" variant={mobile ? "ghost" : "outline"} size="sm" onClick={event => {
+        maaImportReturnFocus.current = mobile ? mobileToolsRef.current?.querySelector("summary") ?? null : event.currentTarget;
+        closeMobileTools();
+      }}><Upload />{intl("components_pages_ManualSchedulePage.importScheduleFile")}</Button>}
+    />
   </>;
 
   return (
@@ -692,18 +703,6 @@ export function ManualSchedulePage({
           <Button type="button" size="icon" variant="ghost" className="absolute right-0 top-0 size-11 md:hidden" aria-label={intl("components_pages_InfraCalculator.clearScheduleSearch")} onClick={() => { setScheduleQuery(""); setMobileSearchOpen(false); searchToggleRef.current?.focus(); }}><X /></Button>
         </div>
         <div className="hidden md:contents">{scheduleTools()}</div>
-        <input
-          ref={maaImportInputRef}
-          type="file"
-          accept="application/json,.json"
-          className="sr-only"
-          aria-label={intl("components_pages_ManualSchedulePage.chooseMaaScheduleFile")}
-          onChange={(event) => {
-            const file = event.currentTarget.files?.[0];
-            if (file) void prepareMaaImport(file);
-            event.currentTarget.value = "";
-          }}
-        />
         <div className="relative flex min-w-0 items-center gap-2 md:hidden">
           <Button ref={searchToggleRef} type="button" size="icon" variant="outline" className="size-11" aria-label={intl("components_pages_ManualSchedulePage.searchThisManualSchedule")} aria-expanded={mobileSearchOpen || Boolean(scheduleQuery)} onClick={() => { setMobileSearchOpen(true); requestAnimationFrame(() => searchInputRef.current?.focus()); }}><Search /></Button>
           <details ref={mobileToolsRef} className="shrink-0" data-manual-more-tools>
@@ -713,8 +712,6 @@ export function ManualSchedulePage({
         </div>
         <Button type="button" size="sm" className="min-w-0 max-md:h-auto max-md:min-h-11 max-md:whitespace-normal max-md:px-3 max-md:py-2 max-md:text-xs" onClick={exportMaa}><Download />{intl("components_pages_ManualSchedulePage.exportMaa")}</Button>
       </header>
-
-      {maaImportError ? <p className="mb-3 text-sm text-destructive" role="alert">{maaImportError}</p> : null}
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-y border-border/70 bg-muted/25 px-3 py-3">
         <div className="min-w-0">
@@ -941,7 +938,7 @@ export function ManualSchedulePage({
         </DialogContent>
       </Dialog>
 
-      {maaImportPreview && <Suspense fallback={null}><MaaImportDialog maaImportPreview={maaImportPreview} confirmMaaImport={confirmMaaImport} onCancel={() => setMaaImportPreview(null)} /></Suspense>}
+      {maaImportPreview && <Suspense fallback={null}><MaaImportDialog maaImportPreview={maaImportPreview} confirmMaaImport={confirmMaaImport} onCancel={() => setMaaImportPreview(null)} finalFocus={maaImportReturnFocus} /></Suspense>}
 
       <Dialog open={Boolean(pendingMove)} onOpenChange={(open) => { if (!open) setPendingMove(null); }}>
         <DialogContent className="max-w-[min(480px,calc(100vw-2rem))]">

@@ -1,0 +1,17 @@
+{
+  "chooseFiles": "选择文件",
+  "dropNow": "松开以选择文件",
+  "dropOrChoose": "拖拽文件到此处，或点击选择",
+  "singleFile": "支持 {formats}，每次选择一个文件",
+  "multipleFiles": "支持 {formats}，可一次选择多个文件",
+  "singleFileOnly": "每次只能导入一个文件，请重新选择。",
+  "tooManyFiles": "每次最多选择 {count} 个文件，请重新选择。",
+  "unsupportedFile": "不支持文件“{name}”，请选择 {formats} 文件。",
+  "readFailed": "无法读取文件，请重新选择。",
+  "processing": "正在读取并校验文件…",
+  "cancel": "取消",
+  "rosterTitle": "导入干员数据",
+  "rosterDescription": "选择 MAA 干员 JSON 或兼容的一图流 Excel 文件。",
+  "layoutDescription": "选择导出的基建布局 JSON 文件。导入成功后将更新当前布局。",
+  "scheduleDescription": "选择 MAA 排班 JSON 文件，最大 5 MiB。替换草稿前会显示导入预览。"
+}
