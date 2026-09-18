@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { AlertCircle, CheckCircle2, FlaskConical, Loader2, Play, RefreshCw, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { FileUploadDialog } from "@/components/FileUploadDialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -12,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { PRESETS } from "@/blueprint";
 import { ROTATION_OPTIONS, rotationDescription } from "@/rotation-settings";
 import { parseReproductionPackage, reproductionInputKey, type ReproductionPackage } from "@/reproduction-package";
-import type { QualityDraftData, QualityBatchData, QualityVersion } from "@/quality";
+import { QUALITY_CASE_LIMIT, type QualityDraftData, type QualityBatchData, type QualityVersion } from "@/quality";
 import type { ApiResponse } from "@/types";
 import { DraftEditor } from "./draft-editor";
 import { BatchDetails, ResultPanel } from "./quality-results";
@@ -51,7 +52,6 @@ export function QualityWorkbench() {
   const [notice, setNotice] = useState("");
   const [checkedAt, setCheckedAt] = useState(0);
   const versionsInitialized = useRef(false);
-  const fileInput = useRef<HTMLInputElement>(null);
   const historySection = useRef<HTMLDivElement>(null);
   const batchSection = useRef<HTMLDivElement>(null);
   const resultSection = useRef<HTMLDivElement>(null);
@@ -115,7 +115,6 @@ export function QualityWorkbench() {
   async function acceptPreview() {
     const ids = (await api<{ id: string }[]>("", { action: "acceptImport", token: previewToken, excluded })).map(draft => draft.id);
     await refresh(); setSelected(ids); clearPreview(); setFiles([]);
-    if (fileInput.current) fileInput.current.value = "";
     setNotice(t(`已导入并选中 ${ids.length} 份草稿。选择测试版本后即可开始。`, `Imported and selected ${ids.length} drafts. Choose a test version to run them.`));
   }
   const included = preview.filter(entry => !excluded.includes(entry.id));
@@ -134,9 +133,21 @@ export function QualityWorkbench() {
       <div className="grid min-w-0 gap-6">
         <Panel title={t("1. 准备复现用例", "1. Prepare reproductions")} description={t("支持完整复现包、box JSON 和 ZIP。完整复现包会保留文件中的设置。", "Upload reproduction packages, box JSON files or ZIP archives. Complete packages retain their own settings.")}>
           <fieldset disabled={busy || !overview} className="grid min-w-0 gap-3">
-            <Label htmlFor="reproduction-files">{t("选择 JSON 或 ZIP 文件", "Choose JSON or ZIP files")}</Label>
-            <Input ref={fileInput} id="reproduction-files" className="hidden" tabIndex={-1} type="file" accept=".json,.zip" multiple onChange={e => { setFiles(Array.from(e.target.files ?? [])); clearPreview(); }} aria-describedby="import-limits" />
-            <div className="flex min-w-0 flex-wrap items-center gap-3 rounded-lg border border-dashed p-4"><Button variant="outline" onClick={() => fileInput.current?.click()}><Upload aria-hidden="true" />{t("选择文件", "Choose files")}</Button><span className="min-w-0 flex-1 break-words text-sm text-muted-foreground">{files.length ? t(`已选择 ${files.length} 个文件：${files.map(file => file.name).join("、")}`, `${files.length} files selected: ${files.map(file => file.name).join(", ")}`) : t("可一次选择多个 JSON 或 ZIP 文件", "Select one or more JSON or ZIP files")}</span></div>
+            <div className="flex min-w-0 flex-wrap items-center gap-3 rounded-lg border border-dashed p-4">
+              <FileUploadDialog
+                title={t("选择 JSON 或 ZIP 文件", "Choose JSON or ZIP files")}
+                description={t("选择后可在工作台预览导入内容。新的一批文件会替换当前选择。", "After choosing files, preview them in the workbench. A new batch replaces your current selection.")}
+                extensions={[".json", ".zip"]}
+                multiple
+                maxFiles={QUALITY_CASE_LIMIT}
+                disabled={busy || !overview}
+                onFiles={nextFiles => { setFiles(nextFiles); clearPreview(); }}
+                trigger={<Button type="button" variant="outline"><Upload aria-hidden="true" />{t("选择文件", "Choose files")}</Button>}
+              >
+                <p className="text-xs text-muted-foreground">{t("每批最多 500 个用例；每个 JSON 不超过 2 MiB，解压后合计不超过 100 MiB。", "Up to 500 cases per batch; each JSON up to 2 MiB, with 100 MiB total after extraction.")}</p>
+              </FileUploadDialog>
+              <span className="min-w-0 flex-1 break-words text-sm text-muted-foreground [overflow-wrap:anywhere]">{files.length ? t(`已选择 ${files.length} 个文件：${files.map(file => file.name).join("、")}`, `${files.length} files selected: ${files.map(file => file.name).join(", ")}`) : t("可一次选择多个 JSON 或 ZIP 文件", "Select one or more JSON or ZIP files")}</span>
+            </div>
             <p id="import-limits" className="text-xs text-muted-foreground">{t("每批最多 500 个用例；每个 JSON 不超过 2 MiB，解压后合计不超过 100 MiB。", "Up to 500 cases per batch; each JSON up to 2 MiB, with 100 MiB total after extraction.")}</p>
             <details className="rounded-lg border p-3"><summary className="cursor-pointer text-sm font-medium">{t("只有 box？先补充复现设置", "Box-only file? Set up the reproduction first")}</summary><p className="mt-2 text-xs text-muted-foreground">{t("以下设置仅用于纯 box 文件。修改后请重新预览文件。", "These settings apply only to box arrays. Preview again after changing them.")}</p>
               <div className="mt-4 grid gap-4 sm:grid-cols-2"><Choice label={t("布局", "Layout")} value={preset} options={[{ value: "", label: t("请选择布局", "Choose a layout") }, ...PRESETS.map(p => ({ value: p.label, label: p.label }))]} onChange={value => { setPreset(value); clearPreview(); }} />

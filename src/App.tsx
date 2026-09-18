@@ -907,21 +907,21 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     };
   }, [intl, activeSklandAccount, locale, page, sklandError, sklandSessionLoading, sklandStatusReloadKey, sklandStatusSnapshot]);
 
-  async function handleFile(file: File): Promise<boolean> {
-    setInputError(null);
-    setResult(null);
-    clearIssueState();
+  async function handleFile(file: File, signal?: AbortSignal): Promise<void> {
     try {
       const { readOperboxFile } = await import("./operbox");
       const entries = await readOperboxFile(file);
+      signal?.throwIfAborted();
       setOperbox(entries);
       setFileName(file.name);
       setBoxSource("maa");
-      return true;
+      setInputError(null);
+      setResult(null);
+      clearIssueState();
     } catch (error) {
-      setInputError(localize_App.text(locale, "additional1", { choice1: (!(locale === "en")) && (error instanceof Error) ? "yes" : "no", value2: (!(locale === "en") && (error instanceof Error)) ? String(error.message) : "" }));
+      if (signal?.aborted) throw error;
       setInputErrorCode("AIC-BOX-1101");
-      return false;
+      throw new Error(localize_App.text(locale, "additional1", { choice1: (!(locale === "en")) && (error instanceof Error) ? "yes" : "no", value2: (!(locale === "en") && (error instanceof Error)) ? String(error.message) : "" }), { cause: error });
     }
   }
 
@@ -1603,10 +1603,11 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     applyPartialLocalLayoutEdit((current) => updateRoomLevel(current, roomId, level));
   }
 
-  async function handleLayoutFile(file: File) {
+  async function handleLayoutFile(file: File, signal?: AbortSignal) {
     try {
       const parsed = parseLayoutJson(JSON.parse(await file.text()));
       if (!parsed) throw new Error(intl("App.invalidLayoutFileCheckRoomNamesTypesAndFacility"));
+      signal?.throwIfAborted();
       setLayout(parsed);
       setLayoutDirty(true);
       setLayoutSource("local");
@@ -1614,8 +1615,9 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       clearPlanResult();
       setInputError(null);
     } catch (error) {
-      setInputError(localize_App.text(locale, "additional4", { choice1: ((locale === "en")) && (error instanceof Error) ? "yes" : "no", value2: ((locale === "en") && (error instanceof Error)) ? String(error.message) : "", choice3: (!(locale === "en")) && (error instanceof Error) ? "yes" : "no", value4: (!(locale === "en") && (error instanceof Error)) ? String(error.message) : "" }));
+      if (signal?.aborted) throw error;
       setInputErrorCode("AIC-LAYOUT-1201");
+      throw new Error(localize_App.text(locale, "additional4", { choice1: ((locale === "en")) && (error instanceof Error) ? "yes" : "no", value2: ((locale === "en") && (error instanceof Error)) ? String(error.message) : "", choice3: (!(locale === "en")) && (error instanceof Error) ? "yes" : "no", value4: (!(locale === "en") && (error instanceof Error)) ? String(error.message) : "" }), { cause: error });
     }
   }
 

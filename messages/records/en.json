@@ -182,7 +182,7 @@
   "components_help_ImportMethodChoice_content2": {
     "value": [
       "MAA",
-      "Export an Operator Box file from MAA, then upload it."
+      "Export an Operator Box file from MAA, open the upload dialog, then drag in the file or click Choose files."
     ]
   },
   "components_interior_password_strength_labels": [
@@ -384,7 +384,7 @@
   "app_help_owned_operators_page_content4": {
     "value": [
       "Import your own Box",
-      "Either sync with Skland or upload Arknights_OperBox_Export.json exported by MAA."
+      "Either sync with Skland or open the upload dialog to drag in or choose Arknights_OperBox_Export.json exported by MAA."
     ]
   },
   "app_help_owned_operators_page_content5": {
