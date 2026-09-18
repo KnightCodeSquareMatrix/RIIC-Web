@@ -376,7 +376,7 @@ export function WebsiteAccountPanel({
                   className="border-white/22 bg-white text-[#242424] shadow-none placeholder:text-[#737373]"
                   value={deletePassword}
                   onChange={(event) => setDeletePassword(event.target.value)}
-                  minLength={10}
+                  minLength={8}
                   maxLength={128}
                   autoComplete="current-password"
                   revealLabel={intl("components_auth_WebsiteAccountPanel.showCurrentPassword")}
@@ -397,7 +397,7 @@ export function WebsiteAccountPanel({
                   type="button"
                   variant="destructive"
                   size="dialog"
-                  disabled={deletePassword.length < 10 || busyAction !== null}
+                  disabled={deletePassword.length < 8 || busyAction !== null}
                   onClick={() => void runAccountAction("delete")}
                 >
                   {busyAction === "delete" ? (intl("components_auth_WebsiteAccountPanel.deleting")) : (intl("components_auth_WebsiteAccountPanel.deleteAccountPermanently"))}
@@ -501,9 +501,9 @@ export function WebsiteAccountPanel({
                         }
                       }}
                       required
-                      minLength={10}
+                      minLength={8}
                       maxLength={128}
-                      placeholder={intl("components_auth_WebsiteAccountPanel.10128Characters")}
+                      placeholder={intl("components_auth_WebsiteAccountPanel.8128Characters")}
                       autoComplete={mode === "signup" ? "new-password" : "current-password"}
                       revealLabel={intl("components_auth_WebsiteAccountPanel.showPassword")}
                       toggleClassName={AUTH_PASSWORD_TOGGLE_CLASS}
@@ -536,7 +536,7 @@ export function WebsiteAccountPanel({
                       }}
                       onBlur={() => setConfirmPasswordError(localizedPasswordConfirmationError(password, confirmPassword, en))}
                       required
-                      minLength={10}
+                      minLength={8}
                       maxLength={128}
                       placeholder={intl("components_auth_WebsiteAccountPanel.enterThePasswordAgain")}
                       autoComplete="new-password"

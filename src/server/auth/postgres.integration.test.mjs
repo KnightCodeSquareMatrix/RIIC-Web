@@ -43,7 +43,7 @@ test("Better Auth completes the PostgreSQL account lifecycle", async () => {
     hooks: { before: passwordStrengthHook },
     emailAndPassword: {
       enabled: true,
-      minPasswordLength: 10,
+      minPasswordLength: 8,
       maxPasswordLength: 128,
       requireEmailVerification: true,
       resetPasswordTokenExpiresIn: 60 * 60,
