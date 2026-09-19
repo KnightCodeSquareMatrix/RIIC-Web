@@ -9,8 +9,8 @@ import "./status-mark.css";
 
 export type StatusMarkStatus = "pending" | "running" | "done" | "failed";
 
-const MORPH = { duration: 0.3, ease: [0.77, 0, 0.175, 1] as [number, number, number, number] };
-const SETTLE = { type: "spring" as const, duration: 0.3, bounce: 0 };
+const MORPH = { duration: 0.36, ease: [0.77, 0, 0.175, 1] as [number, number, number, number] };
+const SETTLE = { duration: 0.36, ease: [0.23, 1, 0.32, 1] as [number, number, number, number] };
 const RADIUS = 9;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 const DASH_PITCH = CIRCUMFERENCE / 8;
@@ -67,7 +67,7 @@ export function StatusMark({ status, size, active = true }: {
     animate(arc, targetArc, SETTLE);
     if (running) {
       const start = travel.get();
-      animate(travel, [start, start - CIRCUMFERENCE], { duration: 1.1, ease: "linear", repeat: Infinity });
+      animate(travel, [start, start - CIRCUMFERENCE], { duration: 1.4, ease: "linear", repeat: Infinity });
       return;
     }
 
