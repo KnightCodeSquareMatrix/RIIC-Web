@@ -436,8 +436,8 @@ test("manual scheduling configures independent shifts, moves conflicts and enabl
   expect(exported).toMatchObject({ title: "手动排班 · 243", planTimes: "2班" });
   expect(exported.plans[0].period).toEqual([["09:00", "19:59"]]);
   expect(exported.plans[1].period).toEqual([["20:00", "23:59"], ["00:00", "08:59"]]);
-  expect(exported.plans[0].drones).toEqual({ enable: true, room: "manufacture", index: 1, rule: "all", order: "pre" });
-  expect(exported.plans[1].drones).toBeUndefined();
+  expect(exported.plans[0].drones).toBeUndefined();
+  expect(exported.plans[1].drones).toEqual({ enable: true, room: "manufacture", index: 1, rule: "all", order: "pre" });
   for (const plan of exported.plans) {
     for (const rooms of Object.values(plan.rooms) as Array<Array<{ operators: unknown[] }>>) {
       for (const room of rooms) expect(room.operators.every((operator) => typeof operator === "string")).toBe(true);

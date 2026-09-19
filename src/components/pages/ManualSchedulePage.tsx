@@ -28,6 +28,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { SkeletonSuspense } from "@/components/ui/skeleton-swap";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { downloadJson } from "@/download";
+import { droneStoragePlanIndex } from "@/drone-plan-mapping";
 import type { ManualPlanResult } from "@/manual-plan-result";
 import { loadManualEvaluationCache } from "@/manual-evaluation-cache";
 import { localizedOperatorName, localizedRoomTitle } from "@/i18n/game-data";
@@ -336,6 +337,7 @@ export function ManualSchedulePage({
   const shiftRanges = manualShiftTimeRanges(draft.startTime, draft.shifts.map((shift) => shift.durationHours));
   const maa = useMemo(() => manualScheduleToMaa(draft, layout, fiammettaEnabled), [draft, fiammettaEnabled, layout]);
   const activePlan = maa.plans[activeShift];
+  const activeDronePlan = maa.plans[droneStoragePlanIndex(activeShift, maa.plans.length)];
   const trainingRoom = layout.rooms.find((room) => room.kind === "training_room");
   const trainingAssignment = trainingRoom ? draft.shifts[activeShift]?.rooms[trainingRoom.id] : undefined;
   const activeTrainingRoomShift = useMemo(() => trainingRoom ? {
@@ -729,7 +731,7 @@ export function ManualSchedulePage({
         activeShift={activeShift}
         controlsSlot={(
           <PlanSupportSummary
-            drones={activePlan?.drones}
+            drones={activeDronePlan?.drones}
             target={fiammettaEnabled ? fiammettaTarget : null}
             portrait={fiammettaEnabled ? fiammettaPortrait : null}
             automatic={false}

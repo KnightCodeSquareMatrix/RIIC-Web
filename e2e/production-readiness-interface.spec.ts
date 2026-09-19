@@ -38,7 +38,7 @@ test("drone selection updates exports and restores automatic allocation without 
     const stream = await (await pending).createReadStream();
     const chunks: Buffer[] = [];
     for await (const chunk of stream) chunks.push(Buffer.from(chunk));
-    return JSON.parse(Buffer.concat(chunks).toString("utf8")).plans[0].drones;
+    return JSON.parse(Buffer.concat(chunks).toString("utf8")).plans[1].drones;
   }
   const automatic = await exportedDrones();
   const automaticSwitch = page.getByRole("switch", { name: "自动分配无人机", exact: true });
@@ -64,6 +64,7 @@ test("drone selection updates exports and restores automatic allocation without 
   await picker.getByRole("button", { name: "贸易站 1", exact: true }).click();
   await expect(picker).toHaveCount(0);
   expect(await exportedDrones()).toMatchObject({ room: "trading", index: 1, enable: true });
+  await expect(page.locator('[data-plan-support="drones"]')).toContainText("贸易站 1");
   const selectedDrone = page.getByRole("button", { name: /贸易站 1.*无人机加速/ });
   await expect(selectedDrone).toHaveAttribute("aria-pressed", "true");
   await selectedDrone.hover();
