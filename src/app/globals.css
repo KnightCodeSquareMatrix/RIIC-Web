@@ -279,42 +279,6 @@ html.schedule-layout-return::view-transition-new(.schedule-room-entering) {
     transform var(--motion-duration-press) var(--motion-ease-out);
 }
 
-.live-activity-shimmer {
-  position: relative;
-  color: rgb(29 78 216 / 0.56);
-}
-
-.live-activity-shimmer::before {
-  content: attr(data-text);
-  pointer-events: none;
-  position: absolute;
-  inset: 0;
-  color: transparent;
-  -webkit-text-fill-color: transparent;
-  background-image: linear-gradient(90deg, transparent 0%, transparent 38%, rgb(29 78 216) 50%, transparent 62%, transparent 100%);
-  background-size: 400% 100%;
-  background-repeat: no-repeat;
-  background-clip: text;
-  -webkit-background-clip: text;
-  animation: live-activity-shimmer 2000ms linear infinite;
-}
-
-@keyframes live-activity-shimmer {
-  from { background-position: 100% 0; }
-  to { background-position: 0 0; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .live-activity-shimmer {
-    color: rgb(29 78 216);
-  }
-
-  .live-activity-shimmer::before {
-    content: none;
-    animation: none;
-  }
-}
-
 [data-motion-pressable]:not([aria-haspopup]):active {
   transform: scale(0.97);
 }
