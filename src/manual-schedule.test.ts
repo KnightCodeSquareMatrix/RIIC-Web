@@ -222,6 +222,8 @@ test("MAA export includes contiguous minute periods, per-shift Fiammetta targets
   draft.shifts[0]!.fiammettaTarget = "但书";
   draft = setManualDormAutofill(draft, layout, 0, "dorm_1", true);
   draft = setManualDroneTarget(draft, layout, 0, "manu_1");
+  draft = setManualDroneTarget(draft, layout, 1, "trade_1");
+  draft = setManualDroneTarget(draft, layout, 2, "manu_1");
   const maa = manualScheduleToMaa(draft, layout, true);
   assert.equal(maa.planTimes, "3班");
   assert.deepEqual(maa.plans.map((plan) => plan.duration), [720, 360, 360]);
@@ -231,8 +233,11 @@ test("MAA export includes contiguous minute periods, per-shift Fiammetta targets
     [["02:15", "08:14"]],
   ]);
   assert.deepEqual(maa.plans[0]?.Fiammetta, { enable: true, target: "但书", order: "pre" });
-  assert.deepEqual(maa.plans[0]?.drones, { enable: true, room: "manufacture", index: 1, rule: "all", order: "pre" });
-  assert.equal(maa.plans[1]?.drones, undefined);
+  assert.deepEqual(maa.plans.map((plan) => plan.drones), [
+    { enable: true, room: "manufacture", index: 1, rule: "all", order: "pre" },
+    { enable: true, room: "manufacture", index: 1, rule: "all", order: "pre" },
+    { enable: true, room: "trading", index: 1, rule: "all", order: "pre" },
+  ]);
   assert.deepEqual(maa.plans[1]?.Fiammetta, { enable: false, target: "", order: "pre" });
   assert.equal(maa.plans[0]?.rooms.dormitory?.[0]?.autofill, true);
   assert.deepEqual(maa.plans[0]?.rooms.dormitory?.[0]?.operators, []);
@@ -275,7 +280,8 @@ test("calculator results become an editable manual draft with room order, shifts
   assert.deepEqual(draft.shifts[0]?.rooms.trade_1?.operators, ["但书", null, "巫恋"]);
   assert.equal(draft.shifts[0]?.rooms.dorm_1?.autofill, false);
   assert.equal(draft.shifts[0]?.fiammettaTarget, "但书");
-  assert.equal(draft.shifts[0]?.droneTargetRoomId, "trade_1");
+  assert.equal(draft.shifts[0]?.droneTargetRoomId, null);
+  assert.equal(draft.shifts[1]?.droneTargetRoomId, "trade_1");
   assert.deepEqual(draft.shifts[0]?.rooms.training_room?.operators, ["巫恋", "菲亚梅塔"]);
   assert.deepEqual(draft.shifts[1]?.rooms.manu_1?.operators, ["巫恋", null, null]);
 });

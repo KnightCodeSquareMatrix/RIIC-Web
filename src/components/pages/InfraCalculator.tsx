@@ -282,6 +282,7 @@ export interface InfraCalculatorProps {
   activeShift: number;
   rows: RoomRow[];
   activePlan: MaaPlan | undefined;
+  activeDronePlan: MaaPlan | undefined;
   closestComparison: ShiftComparison | null;
   resultClearNotice: string | null;
   feedbackResult: FeedbackData | null;
@@ -357,7 +358,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
   const {
     layout,
     result, scheduleResult, activeShift, rows,
-    activePlan, closestComparison,
+    activePlan, activeDronePlan, closestComparison,
     resultClearNotice,
     feedbackResult,
     operbox,
@@ -663,7 +664,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
                     feedbackDisabled={feedbackDisabledForSampleBox}
                     controlsSlot={(
                       <Suspense fallback={null}>
-                      <PlanSupportSummary drones={activePlan?.drones} target={fiammettaTarget} portrait={fiammettaPortrait} automatic={!manualDroneSelection} onAutomaticChange={onDroneTargetChange ? (checked) => { if (checked) onAutoDroneAllocation(); else onManualDroneAllocation(); } : undefined} onChooseFacility={() => setDronePickerOpen(true)} />
+                      <PlanSupportSummary drones={activeDronePlan?.drones} target={fiammettaTarget} portrait={fiammettaPortrait} automatic={!manualDroneSelection} onAutomaticChange={onDroneTargetChange ? (checked) => { if (checked) onAutoDroneAllocation(); else onManualDroneAllocation(); } : undefined} onChooseFacility={() => setDronePickerOpen(true)} />
                       </Suspense>
                     )}
                   />

@@ -68,6 +68,7 @@ import {
   type OnboardingPreference,
 } from "./onboarding";
 import { normalizeOperboxEntries } from "./operbox-normalization";
+import { droneStoragePlanIndex } from "./drone-plan-mapping";
 import { prepareMaaForExport } from "./maa-safety";
 import { upgradeSimulationBoxSource } from "./upgrade-simulation";
 import {
@@ -460,6 +461,10 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     }
   }, [result, upgradeComparison]);
   const activePlan = scheduleResult?.maa.plans?.[activeShift];
+  const activeDronePlan = (() => {
+    const plans = scheduleResult?.maa.plans ?? [];
+    return plans[droneStoragePlanIndex(activeShift, plans.length)];
+  })();
   const activeRotationShift = scheduleResult?.rotation.shifts?.[activeShift];
   const activeTrainingRoomShift = scheduleResult?.trainingRoom?.shifts[activeShift];
   const [baseRows, setBaseRows] = useState<RoomRow[]>([]);
@@ -1574,11 +1579,11 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       const group = room.kind === "trade_post" ? "trading" : "manufacture";
       const index = layout.rooms.filter((candidate) => candidate.kind === room.kind).findIndex((candidate) => candidate.id === room.id) + 1;
       const next = structuredClone(current);
-      const plan = next.maa.plans[activeShift];
+      const plan = next.maa.plans[droneStoragePlanIndex(activeShift, next.maa.plans.length)];
       if (!plan) return current;
       plan.drones = plan.drones?.room === group && plan.drones.index === index
         ? undefined
-        : { enable: true, room: group, index, rule: "all", order: plan.drones?.order ?? "pre" };
+        : { enable: true, room: group, index, rule: "all", order: "pre" };
       return next;
     });
   }
@@ -1592,9 +1597,11 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     setResult((current) => {
       if (!current || automaticMaaRef.current?.diagnosticId !== current.diagnosticId) return current;
       const next = structuredClone(current);
-      const plan = next.maa.plans[activeShift];
+      const automaticPlans = automaticMaaRef.current.maa.plans;
+      const planIndex = droneStoragePlanIndex(activeShift, next.maa.plans.length);
+      const plan = next.maa.plans[planIndex];
       if (!plan) return current;
-      plan.drones = structuredClone(automaticMaaRef.current.maa.plans[activeShift]?.drones);
+      plan.drones = structuredClone(automaticPlans[planIndex]?.drones);
       return next;
     });
   }
@@ -2017,6 +2024,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       activeShift,
       rows,
       activePlan,
+      activeDronePlan,
       closestComparison,
       resultClearNotice,
       feedbackResult,
@@ -2092,9 +2100,9 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       onFactoryRecipeChange: handleScheduleFactoryRecipeChange,
       onTradeOrderChange: handleScheduleTradeOrderChange,
       onSwapOperators: handleSwapCalculatorOperators,
-      droneTargetRoomId: activePlan?.drones?.enable ? (() => {
-        const kind = activePlan.drones.room === "trading" ? "trade_post" : "factory";
-        return layout.rooms.filter((room) => room.kind === kind)[activePlan.drones.index - 1]?.id ?? null;
+      droneTargetRoomId: activeDronePlan?.drones?.enable ? (() => {
+        const kind = activeDronePlan.drones.room === "trading" ? "trade_post" : "factory";
+        return layout.rooms.filter((room) => room.kind === kind)[activeDronePlan.drones.index - 1]?.id ?? null;
       })() : null,
       onDroneTargetChange: handleScheduleDroneTargetChange,
       onEditManualSchedule: handleProtectedEditManualSchedule,
