@@ -1185,6 +1185,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       scheduleResult.maa,
       userSettings.strictMaaOperatorOrder,
       userSettings.allowReplacementOperatorSort,
+      userSettings.usePreMaaExecutionOrder,
     ));
   }
 
@@ -2110,6 +2111,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       showFeedback: userSettings.showFeedback,
       showImages: userSettings.showImages,
       allowReplacementOperatorSort: userSettings.allowReplacementOperatorSort,
+      usePreMaaExecutionOrder: userSettings.usePreMaaExecutionOrder,
     },
     manual: {
       layout,
