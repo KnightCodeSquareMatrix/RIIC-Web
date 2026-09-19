@@ -1,5 +1,6 @@
 "use client";
 
+import "@/legacy-browser-polyfills";
 import { useEffect, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { NextIntlClientProvider, useLocale, useMessages, useTranslations } from "next-intl";
