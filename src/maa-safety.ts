@@ -1,5 +1,5 @@
 import { stripInternalFields } from "./internal-field-safety.ts";
-import type { MaaJson, MaaRoom, MaaRooms } from "./types.ts";
+import type { MaaExecutionOrder, MaaJson, MaaRoom, MaaRooms } from "./types.ts";
 
 const MAA_ROOM_KINDS = [
   "trading",
@@ -58,10 +58,14 @@ export function prepareMaaForExport<T extends MaaJson>(
   maa: T,
   strictOperatorOrder = true,
   allowReplacementOperatorSort = false,
+  usePreExecutionOrder = false,
 ): T {
   const exported = sanitizeMaaJson(maa);
 
   for (const plan of exported.plans) {
+    const executionOrder: MaaExecutionOrder = usePreExecutionOrder ? "pre" : "post";
+    if (plan.Fiammetta) plan.Fiammetta.order = executionOrder;
+    if (plan.drones) plan.drones.order = executionOrder;
     for (const rooms of Object.values(plan.rooms)) {
       if (!rooms) continue;
       for (const room of rooms) {

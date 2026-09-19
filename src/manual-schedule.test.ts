@@ -230,10 +230,10 @@ test("MAA export includes contiguous minute periods, per-shift Fiammetta targets
     [["20:15", "23:59"], ["00:00", "02:14"]],
     [["02:15", "08:14"]],
   ]);
-  assert.deepEqual(maa.plans[0]?.Fiammetta, { enable: true, target: "但书", order: "pre" });
-  assert.deepEqual(maa.plans[0]?.drones, { enable: true, room: "manufacture", index: 1, rule: "all", order: "pre" });
+  assert.deepEqual(maa.plans[0]?.Fiammetta, { enable: true, target: "但书", order: "post" });
+  assert.deepEqual(maa.plans[0]?.drones, { enable: true, room: "manufacture", index: 1, rule: "all", order: "post" });
   assert.equal(maa.plans[1]?.drones, undefined);
-  assert.deepEqual(maa.plans[1]?.Fiammetta, { enable: false, target: "", order: "pre" });
+  assert.deepEqual(maa.plans[1]?.Fiammetta, { enable: false, target: "", order: "post" });
   assert.equal(maa.plans[0]?.rooms.dormitory?.[0]?.autofill, true);
   assert.deepEqual(maa.plans[0]?.rooms.dormitory?.[0]?.operators, []);
   assert.deepEqual(maa.plans[0]?.rooms.control?.[0], { operators: [], sort: true, skip: false, autofill: false });
