@@ -1,3 +1,4 @@
+import { droneStoragePlanIndex } from "../drone-plan-mapping.ts";
 import { droneProductionForShift as calculateDroneProductionForShift, powerEfficiencyForShift as calculatePowerEfficiencyForShift } from "../drone-production-core.ts";
 import type { BaseBlueprint, MaaJson, MaaPlan, MaaRoom, RotationJson, RotationShift } from "@/types";
 
@@ -324,14 +325,18 @@ export function applyDroneAllocationsToMaa(input: {
   });
   for (const allocation of allocations) {
     const position = input.rotation.shifts.findIndex((shift) => shift.index === allocation.shiftIndex);
-    const plan = maa.plans[allocation.shiftIndex] ?? maa.plans[position];
-    if (!plan) continue;
-    plan.drones = {
-      ...plan.drones,
+    const sourcePlanIndex = maa.plans[allocation.shiftIndex]
+      ? allocation.shiftIndex
+      : position;
+    if (!maa.plans[sourcePlanIndex]) continue;
+    const storagePlan = maa.plans[droneStoragePlanIndex(sourcePlanIndex, maa.plans.length)];
+    if (!storagePlan) continue;
+    storagePlan.drones = {
+      ...storagePlan.drones,
       enable: true,
       room: allocation.target.room,
       index: allocation.target.index,
-      order: plan.drones?.order ?? "post",
+      order: "pre",
     };
   }
   return maa;
