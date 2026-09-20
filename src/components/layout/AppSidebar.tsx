@@ -10,6 +10,7 @@ import {
   Search,
   Settings2,
   SquarePen,
+  Sparkles,
   UserRound,
   UserRoundPlus,
   type LucideIcon,
@@ -123,6 +124,15 @@ export function AppSidebar({ page, onPageChange }: AppSidebarProps) {
       </SidebarContent>
       <SidebarFooter className="border-t border-sidebar-border p-2">
         <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              render={<Link href="/wishes" data-wishes-link />}
+              tooltip={locale === "en" ? "Wishes" : "许愿"}
+            >
+              <Sparkles className="size-5" />
+              <span>{locale === "en" ? "Wishes" : "许愿"}</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton
               render={<Link href="/changelog" data-changelog-link />}
