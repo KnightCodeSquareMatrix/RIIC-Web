@@ -3,7 +3,7 @@ import "server-only";
 import { tool } from "ai";
 import { z } from "zod";
 
-import { PRESETS, buildBlueprint, factoryRecipeFor, tradeOrderFor, updateFactoryRecipe, updateTradeOrder } from "@/blueprint";
+import { PRESETS, buildBlueprint, factoryRecipeFor, tradeOrderFor, updateFactoryRecipe, updateRoomLevel, updateTradeOrder } from "@/blueprint";
 import type { FactoryRecipe } from "@/factory-recipes";
 import type { TradeOrder } from "@/blueprint";
 import { runPlan, getSampleOperbox } from "@/server/infra";
@@ -11,7 +11,7 @@ import { toPublicPlanData } from "@/server/public-plan";
 import { loadStatusSnapshot } from "@/server/skland/adapter";
 import { activeSklandAccount, readSklandAccountStore } from "@/server/skland/http";
 import { sklandDataOwnerTag } from "@/server/skland/session";
-import { listSavedPlans } from "@/server/workspace";
+import { getMaaOperboxSnapshot, listSavedPlans } from "@/server/workspace";
 import { createRequestId } from "@/server/api-contract";
 import type { BaseBlueprint, OperBoxEntry, RotationProfile } from "@/types";
 import { projectPlanResult, saveAgentPlanArtifact } from "./plan-artifact.ts";
@@ -123,6 +123,131 @@ function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promi
   ]);
 }
 
+type SolveScenario = "balanced" | "orundum" | "money";
+
+interface SolveDefaults {
+  layoutPreset: string;
+  layoutSource: "skland_layout" | "saved_plan" | "fallback";
+  boxSource: "skland" | "maa" | "sample";
+}
+
+const FALLBACK_LAYOUT_PRESET = "243";
+const DEFAULT_ROTATION = "abc_12_12_12";
+
+/** 搓玉场景默认配方（按布局预设）。153/252 没有搓玉默认配置。 */
+const ORUNDUM_SCENARIOS: Partial<Record<string, { tradeOrders: TradeOrder[]; manufactureRecipes: FactoryRecipe[]; roomLevelOverrides?: Record<string, number> }>> = {
+  "243": {
+    tradeOrders: ["gold", "originium"],
+    manufactureRecipes: ["gold", "gold", "battle_record", "originium"],
+  },
+  "333": {
+    tradeOrders: ["gold", "gold", "originium"],
+    manufactureRecipes: ["gold", "gold", "originium"],
+  },
+  "342": {
+    tradeOrders: ["gold", "gold", "originium"],
+    manufactureRecipes: ["gold", "gold", "gold", "originium"],
+    roomLevelOverrides: { manu_1: 2, manu_2: 2, manu_4: 3, trade_3: 3 },
+  },
+};
+
+/**
+ * solve_schedule 的默认配置兜底：用户没说布局预设与干员来源时，
+ * 依次从「当前游戏内基建布局（森空岛）→ 最近保存的排班 → 243」推断布局；
+ * 干员来源按「森空岛 → MAA 上传文件 → 示例 Box」三级降级。
+ */
+async function resolveSolveDefaults(ctx: AgentToolContext): Promise<SolveDefaults> {
+  let layoutPreset: string | null = null;
+  let layoutSource: SolveDefaults["layoutSource"] = "fallback";
+  let boxSource: SolveDefaults["boxSource"] = "sample";
+  try {
+    const skland = await loadSklandSnapshot(ctx);
+    boxSource = "skland";
+    const label = skland.infrastructure.layoutLabel;
+    if (label && PRESETS.some((preset) => preset.label === label)) {
+      layoutPreset = label;
+      layoutSource = "skland_layout";
+    }
+  } catch {
+    // 森空岛不可用：干员来源继续探测 MAA 上传。
+  }
+  if (boxSource === "sample") {
+    try {
+      const maa = await getMaaOperboxSnapshot(ctx.userId);
+      if (maa && maa.length > 0) boxSource = "maa";
+    } catch {
+      // MAA 快照不可用：降级为 sample。
+    }
+  }
+  if (!layoutPreset) {
+    try {
+      const plans = await listSavedPlans(ctx.userId);
+      const label = plans.plans[0]?.calculationContext?.presetLabel ?? null;
+      if (label && PRESETS.some((preset) => preset.label === label)) {
+        layoutPreset = label;
+        layoutSource = "saved_plan";
+      }
+    } catch {
+      // 历史排班不可用：走兜底。
+    }
+  }
+  return {
+    layoutPreset: layoutPreset ?? FALLBACK_LAYOUT_PRESET,
+    layoutSource,
+    boxSource,
+  };
+}
+
+const LAYOUT_SOURCE_LABELS: Record<SolveDefaults["layoutSource"], string> = {
+  skland_layout: "来自当前游戏内基建布局",
+  saved_plan: "来自最近一次保存的排班",
+  fallback: "未找到可推断的布局，使用默认值",
+};
+
+function boxSourceNote(boxSource: "skland" | "maa" | "sample"): string {
+  if (boxSource === "skland") return "干员数据来自森空岛同步";
+  if (boxSource === "maa") return "干员数据来自最近一次上传的 MAA 文件（云端工作区）";
+  return "森空岛未绑定、MAA 未上传，将自动改用 243 全精二示例 Box；如需真实库存请先绑定森空岛或在工作台上传 MAA 文件";
+}
+
+/** 按场景把配方/订单应用到布局；返回应用后的说明。搓玉会做必要的房间等级修正。 */
+function applyScenario(
+  layout: BaseBlueprint,
+  presetLabel: string,
+  scenario: SolveScenario
+): { layout: BaseBlueprint; scenarioNote: string } {
+  if (scenario === "orundum") {
+    const config = ORUNDUM_SCENARIOS[presetLabel];
+    if (!config) {
+      return { layout, scenarioNote: `${presetLabel} 布局没有标准搓玉默认配置（贸易站不足以配两条线），已沿用布局默认配方；如需搓玉请换 243/333/342 布局。` };
+    }
+    let next = layout;
+    for (const [roomId, level] of Object.entries(config.roomLevelOverrides ?? {})) {
+      next = updateRoomLevel(next, roomId, level);
+    }
+    const factoryRooms = next.rooms.filter((room) => room.kind === "factory");
+    for (const [index, recipe] of config.manufactureRecipes.entries()) {
+      const room = factoryRooms[index];
+      if (room) next = updateFactoryRecipe(next, room.id, recipe);
+    }
+    const tradeRooms = next.rooms.filter((room) => room.kind === "trade_post");
+    for (const [index, order] of config.tradeOrders.entries()) {
+      const room = tradeRooms[index];
+      if (room) next = updateTradeOrder(next, room.id, order);
+    }
+    return { layout: next, scenarioNote: "搓玉默认配置已应用（贸易线 + 碎片线两条都配齐）。" };
+  }
+  if (scenario === "money") {
+    let next = layout;
+    const factoryRooms = next.rooms.filter((room) => room.kind === "factory");
+    for (const room of factoryRooms) next = updateFactoryRecipe(next, room.id, "gold");
+    const tradeRooms = next.rooms.filter((room) => room.kind === "trade_post");
+    for (const room of tradeRooms) next = updateTradeOrder(next, room.id, "gold");
+    return { layout: next, scenarioNote: "产钱配置已应用：全部贸易站交龙门商法、全部制造站产赤金。" };
+  }
+  return { layout, scenarioNote: "沿用布局默认配方。" };
+}
+
 export function buildAgentTools(ctx: AgentToolContext) {
   return {
     diagnose_account: tool({
@@ -163,27 +288,74 @@ export function buildAgentTools(ctx: AgentToolContext) {
       }),
     }),
 
+    preview_solve_defaults: tool({
+      description:
+        "排班配置预览：返回简化指令下 solve_schedule 将自动采用的默认配置（布局预设及推断来源、干员来源、换班节奏、菲亚梅塔、按场景的制造配方与贸易订单）。用户说「帮我排个班」「帮我搓玉」「纯产钱」这类没说全布局/换班/菲亚梅塔/产物的请求时，先调用本工具，把配置报给博士确认，确认后再调 solve_schedule。scene 选 orundum（搓玉）或 money（产钱）可预览对应场景默认配方。本工具只读配置，不占求解器算力。",
+      inputSchema: z.object({
+        scene: z.enum(["balanced", "orundum", "money"]).optional().describe("场景：balanced=常规（默认配方）、orundum=搓玉（默认配齐碎片线+贸易线）、money=纯产钱（全龙门商法+全赤金）。省略为 balanced"),
+      }).strict(),
+      execute: async (input) => guarded(ctx.userId, "preview_solve_defaults", input, async () => {
+        const defaults = await resolveSolveDefaults(ctx);
+        const presetLabel = defaults.layoutPreset;
+        const preset = PRESETS.find((candidate) => candidate.label === presetLabel);
+        const scenario = input.scene ?? "balanced";
+        let layout = preset ? buildBlueprint(preset) : null;
+        let scenarioNote = "沿用布局默认配方。";
+        if (layout) {
+          const applied = applyScenario(layout, presetLabel, scenario);
+          layout = applied.layout;
+          scenarioNote = applied.scenarioNote;
+        }
+        const factoryRecipes = layout
+          ? layout.rooms.filter((room) => room.kind === "factory").map((room) => factoryRecipeFor(room))
+          : [];
+        const tradeOrders = layout
+          ? layout.rooms.filter((room) => room.kind === "trade_post").map((room) => tradeOrderFor(room))
+          : [];
+        return {
+          layoutPreset: presetLabel,
+          layoutSource: LAYOUT_SOURCE_LABELS[defaults.layoutSource],
+          boxSource: defaults.boxSource,
+          boxSourceNote: boxSourceNote(defaults.boxSource),
+          rotation: DEFAULT_ROTATION,
+          rotationNote: "默认换班节奏 abc_12_12_12（三班 12/12/12 小时，一天两换）",
+          fiammettaEnable: false,
+          scenario,
+          factoryRecipes,
+          tradeOrders,
+          scenarioNote,
+          note: "把以上默认配置报给博士确认；博士要调整哪项就改哪项，确认后再调 solve_schedule。",
+        };
+      }),
+    }),
+
     solve_schedule: tool({
       description:
-        "排班求解：向站内求解器提交一次真正的排班计算，返回三班（或所选节奏）排班表、日产出与练卡建议。调用前先与用户确认布局预设与干员来源。搓玉需要同时配两条线：制造站产源石碎片（manufactureRecipes 设 originium）＋ 贸易站交源石订单换合成玉（tradeOrders 设 originium），缺一不可。计算耗时通常 10-60 秒。",
+        "排班求解：向站内求解器提交一次真正的排班计算，返回三班（或所选节奏）排班表、日产出与练卡建议。用户已给全配置、或已通过 preview_solve_defaults 报默认配置并经博士确认后调用；省略的参数服务端自动兜底（布局从游戏内基建/历史排班推断，干员按森空岛→MAA 上传→示例 Box 三级降级）。搓玉请求用 scene=orundum（默认配齐两条线），纯产钱用 scene=money（全龙门商法+全赤金），无需手写 manufactureRecipes/tradeOrders。计算耗时通常 10-60 秒。本工具只做计算，不做知识检索；机制解释类问题用 kb_route。",
       inputSchema: z.object({
-        layoutPreset: z.enum(["243", "153", "333", "252", "342"]).describe("布局预设：贸易/制造/发电站数量"),
-        boxSource: z.enum(["skland", "sample"]).describe("干员数据来源：skland=用户森空岛同步，sample=243 全精二示例"),
+        layoutPreset: z.enum(["243", "153", "333", "252", "342"]).optional().describe("布局预设：贸易/制造/发电站数量。省略则自动推断（游戏内布局 → 最近排班 → 默认 243）"),
+        boxSource: z.enum(["skland", "maa", "sample"]).optional().describe("干员数据来源：skland=用户森空岛同步，maa=最近上传的 MAA 文件，sample=243 全精二示例。省略则按森空岛 → MAA → 示例 Box 三级降级"),
+        scene: z.enum(["balanced", "orundum", "money"]).optional().describe("场景默认配方：balanced=常规（沿用布局默认配方）、orundum=搓玉（默认配齐碎片线+贸易线两条）、money=纯产钱（全贸易站龙门商法+全制造站赤金）。用户提到搓玉/合成玉必选 orundum；提到纯产钱/产龙门币必选 money。省略为 balanced"),
         rotation: z.enum(["abc_12_6_6", "abc_12_12_12", "main_backup_12_12", "fiammetta_8_8_4_4", "abyssal_7_5_7_5"]).optional().describe(
-          "换班节奏，默认 abc_12_6_6（三班 12/6/6 小时）"
+          "换班节奏，默认 abc_12_12_12（三班 12/12/12 小时，一天两换）"
         ),
         manufactureRecipes: z.array(z.enum(["gold", "battle_record", "originium"])).optional().describe(
-          "制造站配方，按制造站顺序给定：gold=贵金属（产赤金）、battle_record=作战记录（产经验）、originium=源石碎片（搓玉用）。经典搓玉配置：[\"originium\",\"originium\",\"gold\",\"gold\"]（243 布局，两条碎片线＋两条赤金线）。省略则沿用预设（243 为 2 赤金＋2 经验）。"
+          "制造站配方，按制造站顺序给定：gold=贵金属（产赤金）、battle_record=作战记录（产经验）、originium=源石碎片（搓玉用）。经典搓玉配置：[\"originium\",\"originium\",\"gold\",\"gold\"]（243 布局，两条碎片线＋两条赤金线）。省略则按场景或预设（243 为 2 赤金＋2 经验）。"
         ),
         tradeOrders: z.array(z.enum(["gold", "originium"])).optional().describe(
-          "贸易站订单，按贸易站顺序给定：gold=龙门商法（订单产龙门币）、originium=开采协力（提交源石碎片换合成玉）。搓玉必须至少一座贸易站设为 originium，否则碎片换不成玉。243 布局示例：[\"originium\",\"gold\"]。注意 Lv.3 贸易站才能用开采协力。省略则沿用预设（均为 gold）。"
+          "贸易站订单，按贸易站顺序给定：gold=龙门商法（订单产龙门币）、originium=开采协力（提交源石碎片换合成玉）。搓玉必须至少一座贸易站设为 originium，否则碎片换不成玉。243 布局示例：[\"originium\",\"gold\"]。注意 Lv.3 贸易站才能用开采协力。省略则按场景或预设。"
         ),
         fiammettaEnable: z.boolean().optional().describe("是否启用菲亚梅塔（焰尾）换班加成，默认 false"),
       }),
       execute: async (input) => guarded(ctx.userId, "solve_schedule", input, async () => {
-        const preset = PRESETS.find((candidate) => candidate.label === input.layoutPreset);
-        if (!preset) return { error: `未知布局预设：${input.layoutPreset}` };
+        const defaults = await resolveSolveDefaults(ctx);
+        const presetLabel = input.layoutPreset ?? defaults.layoutPreset;
+        const preset = PRESETS.find((candidate) => candidate.label === presetLabel);
+        if (!preset) return { error: `未知布局预设：${presetLabel}` };
         let layout: BaseBlueprint = buildBlueprint(preset);
+        const scenario = input.scene ?? "balanced";
+          const applied = applyScenario(layout, presetLabel, scenario);
+        layout = applied.layout;
         if (input.manufactureRecipes?.length) {
           const factoryRooms = layout.rooms.filter((room) => room.kind === "factory");
           for (const [index, recipe] of input.manufactureRecipes.entries()) {
@@ -204,20 +376,28 @@ export function buildAgentTools(ctx: AgentToolContext) {
         const tradeOrders = layout.rooms
           .filter((room) => room.kind === "trade_post")
           .map((room) => tradeOrderFor(room));
+        const boxSource = input.boxSource ?? defaults.boxSource;
         let operbox: OperBoxEntry[];
         let sourceName: string;
         let dataOwnerTag: string | null = null;
-        if (input.boxSource === "skland") {
+        if (boxSource === "skland") {
           const snapshot = await loadSklandSnapshot(ctx);
           operbox = snapshot.operbox;
           sourceName = snapshot.sourceName;
           dataOwnerTag = snapshot.dataOwnerTag;
+        } else if (boxSource === "maa") {
+          const maa = await getMaaOperboxSnapshot(ctx.userId);
+          if (!maa || maa.length === 0) {
+            return { error: "没有可用的 MAA 上传数据。请先在工作台上传 MAA 干员文件，或改用 skland / sample 来源。" };
+          }
+          operbox = maa;
+          sourceName = "MAA 上传";
         } else {
           const sample = await getSampleOperbox();
           operbox = sample.operbox as OperBoxEntry[];
           sourceName = sample.sourceName;
         }
-        const rotation = (input.rotation && ROTATION_PROFILES.includes(input.rotation) ? input.rotation : "abc_12_6_6");
+        const rotation = (input.rotation && ROTATION_PROFILES.includes(input.rotation) ? input.rotation : DEFAULT_ROTATION);
         const runResult = await withTimeout(
           runPlan({
             layout,
@@ -241,7 +421,7 @@ export function buildAgentTools(ctx: AgentToolContext) {
           projected,
           {
             layoutPreset: preset.label,
-            boxSource: input.boxSource,
+            boxSource,
             factoryRecipes: recipes,
             tradeOrders,
             operatorCount: operbox.length,
@@ -251,7 +431,7 @@ export function buildAgentTools(ctx: AgentToolContext) {
             layout,
             operbox,
             sourceName,
-            boxSource: input.boxSource === "skland" ? "skland" : "sample",
+            boxSource,
             rotationProfile: rotation,
             fiammettaEnabled: input.fiammettaEnable ?? false,
             result: publicResult,
@@ -260,9 +440,19 @@ export function buildAgentTools(ctx: AgentToolContext) {
         ).catch(() => null);
         return {
           solved: true,
+          defaultsApplied: {
+            layoutPreset: preset.label,
+            layoutSource: LAYOUT_SOURCE_LABELS[defaults.layoutSource],
+            boxSource,
+            boxSourceNote: boxSourceNote(boxSource),
+            rotation,
+            rotationNote: rotation === DEFAULT_ROTATION ? "abc_12_12_12（三班 12/12/12 小时，一天两换）" : null,
+            scenario,
+            scenarioNote: applied.scenarioNote,
+          },
           factoryRecipes: recipes,
           tradeOrders,
-          boxSource: input.boxSource,
+          boxSource,
           operatorCount: operbox.length,
           planUrl: artifactId ? `/plan/${artifactId}` : null,
           planArtifactNote: artifactId
@@ -311,7 +501,7 @@ export function buildAgentTools(ctx: AgentToolContext) {
 
     kb_route: tool({
       description:
-        "知识库导诊：把用户问题转成关键词，返回基建知识库（RIIC-knowledge）中最相关的候选文档路径列表。回答机制、组合、产出换算、搓玉取舍等知识类问题前先用本工具定位文档。",
+        "知识库导诊：把用户问题转成关键词，返回基建知识库（RIIC-knowledge）中最相关的候选文档路径列表。用于机制解释、数值出处、版本结论、搓玉取舍等知识性内容。技能类问题先查 query_skills 拿效果原文；原文不够用时（机制叠加、换算取舍、组队思路）再用本工具查知识库补充，不要只凭技能原文下结论。排班求解、账号诊断等纯操作请求不经过本工具。",
       inputSchema: z.object({
         question: z.string().min(1).describe("用户的问题或主题关键词，如 搓玉 源石碎片 无人机折算"),
       }),

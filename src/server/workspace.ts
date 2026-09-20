@@ -405,6 +405,24 @@ async function putValidatedWorkspace(userId: string, value: ValidatedWorkspace):
   return getWorkspace(userId);
 }
 
+/**
+ * 读取当前云端工作区里最近一次 MAA 上传的干员快照（加密存储）。
+ * 供 agent 干员来源三级降级（森空岛 → MAA → 示例 Box）的中间层使用。
+ * 未上传过、未开云同步或快照已过期时返回 null。
+ */
+export async function getMaaOperboxSnapshot(userId: string): Promise<OperBoxEntry[] | null> {
+  await requireAccountDataConsent(userId);
+  const [current] = await getDatabase().select().from(userWorkspace).where(eq(userWorkspace.userId, userId)).limit(1);
+  if (!current) return null;
+  const state = validateWorkspaceState(current.state);
+  if (state.boxSource !== "maa") return null;
+  try {
+    return await decryptSnapshot(userId, current.operboxSnapshotId);
+  } catch {
+    return null;
+  }
+}
+
 export async function getWorkspace(userId: string): Promise<CloudWorkspaceData> {
   await requireAccountDataConsent(userId);
   const [current] = await getDatabase().select().from(userWorkspace).where(eq(userWorkspace.userId, userId)).limit(1);
