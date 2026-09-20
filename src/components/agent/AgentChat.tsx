@@ -7,6 +7,12 @@ import { DefaultChatTransport } from "ai";
 
 type AgentStatus = "loading" | "ready" | "unconfigured" | "unauthenticated";
 
+interface AgentRuntimeInfo {
+  provider: string;
+  model: string;
+  baseURL: string;
+}
+
 const TOOL_LABELS: Record<string, string> = {
   diagnose_account: "账号诊断",
   solve_schedule: "排班求解",
@@ -128,6 +134,7 @@ function ToolResultSummary({ name, output }: { name: string; output: unknown }) 
 
 export function AgentChat() {
   const [agentStatus, setAgentStatus] = useState<AgentStatus>("loading");
+  const [agentInfo, setAgentInfo] = useState<AgentRuntimeInfo | null>(null);
   const [draft, setDraft] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
   const { messages, sendMessage, status, error, stop } = useChat({
@@ -142,8 +149,22 @@ export function AgentChat() {
           if (!cancelled) setAgentStatus("unauthenticated");
           return;
         }
-        const payload = (await response.json()) as { success?: boolean; data?: { enabled?: boolean } };
-        if (!cancelled) setAgentStatus(payload.data?.enabled ? "ready" : "unconfigured");
+        const payload = (await response.json()) as {
+          success?: boolean;
+          data?: { enabled?: boolean; provider?: string | null; model?: string | null; baseURL?: string | null };
+        };
+        if (!cancelled) {
+          if (payload.data?.enabled) {
+            setAgentStatus("ready");
+            setAgentInfo({
+              provider: payload.data.provider ?? "?",
+              model: payload.data.model ?? "?",
+              baseURL: payload.data.baseURL ?? "?",
+            });
+          } else {
+            setAgentStatus("unconfigured");
+          }
+        }
       })
       .catch(() => {
         if (!cancelled) setAgentStatus("unconfigured");
@@ -173,6 +194,11 @@ export function AgentChat() {
         <div className="min-w-0">
           <h1 className="truncate text-[21px] font-medium leading-none">可露希尔助理</h1>
           <p className="mt-1 text-xs text-muted-foreground">实验性 agent 入口 · 串联账号诊断、排班求解、技能查询与知识库</p>
+          {agentInfo ? (
+            <p className="mt-0.5 break-all font-number text-[11px] text-muted-foreground" data-agent-runtime-info>
+              {agentInfo.provider} · {agentInfo.model} · {agentInfo.baseURL}
+            </p>
+          ) : null}
         </div>
       </header>
 

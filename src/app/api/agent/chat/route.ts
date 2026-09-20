@@ -17,6 +17,7 @@ export async function GET() {
       enabled: settings.configured,
       provider: settings.configured ? settings.provider : null,
       model: settings.configured ? settings.model : null,
+      baseURL: settings.configured ? settings.baseURL : null,
     },
     createRequestId()
   );
