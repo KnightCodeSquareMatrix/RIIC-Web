@@ -56,6 +56,16 @@ export async function POST(request: Request) {
     });
     return result.toUIMessageStreamResponse({
       headers: { "X-Request-Id": requestId },
+      onError: (error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(JSON.stringify({
+          level: "error",
+          event: "agent_stream_error",
+          requestId,
+          message,
+        }));
+        return `模型服务调用失败：${message}`;
+      },
     });
   } catch (error) {
     return failureResponse(error, requestId, "/api/agent/chat", startedAt);
