@@ -411,6 +411,7 @@ export function planToRows(
         autofill: maaRoomAutofill(room.autofill, {
           group,
           skip: room.skip,
+          candidates: room.candidates,
           occupiedSlots: operatorSlots.length,
           capacity: layoutRoom?.dorm_beds ?? 5,
         }),
