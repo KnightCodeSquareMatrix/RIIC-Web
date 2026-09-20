@@ -28,6 +28,7 @@ export default async function PlanArtifactPage({ params }: { params: Promise<{ i
           <p className="mt-1 text-xs text-muted-foreground">
             {createdAt} 生成 · 布局 {artifact.meta.layoutPreset} · 干员 {artifact.meta.operatorCount} 名 · 保留 7 天
             {artifact.meta.factoryRecipes?.length ? ` · 制造站配方 ${artifact.meta.factoryRecipes.join(" / ")}` : ""}
+            {artifact.meta.tradeOrders?.length ? ` · 贸易站订单 ${artifact.meta.tradeOrders.join(" / ")}` : ""}
           </p>
         </div>
       </header>

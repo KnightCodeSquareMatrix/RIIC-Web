@@ -38,6 +38,8 @@ export interface AgentPlanMeta {
   layoutPreset: string;
   boxSource: string;
   factoryRecipes: string[];
+  /** v2 起记录贸易站订单（gold=龙门商法 / originium=开采协力换合成玉）。 */
+  tradeOrders?: string[];
   operatorCount: number;
 }
 

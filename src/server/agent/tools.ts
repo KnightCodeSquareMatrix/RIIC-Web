@@ -3,8 +3,9 @@ import "server-only";
 import { tool } from "ai";
 import { z } from "zod";
 
-import { PRESETS, buildBlueprint, factoryRecipeFor, updateFactoryRecipe } from "@/blueprint";
+import { PRESETS, buildBlueprint, factoryRecipeFor, tradeOrderFor, updateFactoryRecipe, updateTradeOrder } from "@/blueprint";
 import type { FactoryRecipe } from "@/factory-recipes";
+import type { TradeOrder } from "@/blueprint";
 import { runPlan, getSampleOperbox } from "@/server/infra";
 import { toPublicPlanData } from "@/server/public-plan";
 import { loadStatusSnapshot } from "@/server/skland/adapter";
@@ -164,7 +165,7 @@ export function buildAgentTools(ctx: AgentToolContext) {
 
     solve_schedule: tool({
       description:
-        "排班求解：向站内求解器提交一次真正的排班计算，返回三班（或所选节奏）排班表、日产出与练卡建议。调用前先与用户确认布局预设与干员来源；搓玉时通过 manufactureRecipes 把部分制造站配方设为 originium。计算耗时通常 10-60 秒。",
+        "排班求解：向站内求解器提交一次真正的排班计算，返回三班（或所选节奏）排班表、日产出与练卡建议。调用前先与用户确认布局预设与干员来源。搓玉需要同时配两条线：制造站产源石碎片（manufactureRecipes 设 originium）＋ 贸易站交源石订单换合成玉（tradeOrders 设 originium），缺一不可。计算耗时通常 10-60 秒。",
       inputSchema: z.object({
         layoutPreset: z.enum(["243", "153", "333", "252", "342"]).describe("布局预设：贸易/制造/发电站数量"),
         boxSource: z.enum(["skland", "sample"]).describe("干员数据来源：skland=用户森空岛同步，sample=243 全精二示例"),
@@ -172,7 +173,10 @@ export function buildAgentTools(ctx: AgentToolContext) {
           "换班节奏，默认 abc_12_6_6（三班 12/6/6 小时）"
         ),
         manufactureRecipes: z.array(z.enum(["gold", "battle_record", "originium"])).optional().describe(
-          "制造站配方，按制造站顺序给定。搓玉经典配置：[\"originium\",\"originium\",\"gold\",\"gold\"]（243 布局）。省略则全部为 gold。"
+          "制造站配方，按制造站顺序给定：gold=贵金属（产赤金）、battle_record=作战记录（产经验）、originium=源石碎片（搓玉用）。经典搓玉配置：[\"originium\",\"originium\",\"gold\",\"gold\"]（243 布局，两条碎片线＋两条赤金线）。省略则沿用预设（243 为 2 赤金＋2 经验）。"
+        ),
+        tradeOrders: z.array(z.enum(["gold", "originium"])).optional().describe(
+          "贸易站订单，按贸易站顺序给定：gold=龙门商法（订单产龙门币）、originium=开采协力（提交源石碎片换合成玉）。搓玉必须至少一座贸易站设为 originium，否则碎片换不成玉。243 布局示例：[\"originium\",\"gold\"]。注意 Lv.3 贸易站才能用开采协力。省略则沿用预设（均为 gold）。"
         ),
         fiammettaEnable: z.boolean().optional().describe("是否启用菲亚梅塔（焰尾）换班加成，默认 false"),
       }),
@@ -187,9 +191,19 @@ export function buildAgentTools(ctx: AgentToolContext) {
             if (room) layout = updateFactoryRecipe(layout, room.id, recipe as FactoryRecipe);
           }
         }
+        if (input.tradeOrders?.length) {
+          const tradeRooms = layout.rooms.filter((room) => room.kind === "trade_post");
+          for (const [index, order] of input.tradeOrders.entries()) {
+            const room = tradeRooms[index];
+            if (room) layout = updateTradeOrder(layout, room.id, order as TradeOrder);
+          }
+        }
         const recipes = layout.rooms
           .filter((room) => room.kind === "factory")
           .map((room) => factoryRecipeFor(room));
+        const tradeOrders = layout.rooms
+          .filter((room) => room.kind === "trade_post")
+          .map((room) => tradeOrderFor(room));
         let operbox: OperBoxEntry[];
         let sourceName: string;
         let dataOwnerTag: string | null = null;
@@ -229,6 +243,7 @@ export function buildAgentTools(ctx: AgentToolContext) {
             layoutPreset: preset.label,
             boxSource: input.boxSource,
             factoryRecipes: recipes,
+            tradeOrders,
             operatorCount: operbox.length,
           },
           {
@@ -246,6 +261,7 @@ export function buildAgentTools(ctx: AgentToolContext) {
         return {
           solved: true,
           factoryRecipes: recipes,
+          tradeOrders,
           boxSource: input.boxSource,
           operatorCount: operbox.length,
           planUrl: artifactId ? `/plan/${artifactId}` : null,

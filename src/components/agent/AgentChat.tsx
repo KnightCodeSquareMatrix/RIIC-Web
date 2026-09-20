@@ -56,6 +56,11 @@ function ToolResultSummary({ name, output }: { name: string; output: unknown }) 
           <span>布局 {String(plan.layoutLabel ?? record.layoutPreset ?? "?")}</span>
           <span>干员 {String(record.operatorCount ?? "?")}</span>
           <span>精二池就绪 {String(summary?.tier_up_owned ?? "?")}</span>
+          {Array.isArray(record.tradeOrders) && record.tradeOrders.length > 0 ? (
+            <span>
+              贸易订单 {record.tradeOrders.map((order) => (order === "originium" ? "开采协力" : "龙门商法")).join(" / ")}
+            </span>
+          ) : null}
         </div>
         {typeof record.planUrl === "string" && record.planUrl ? (
           <div className="flex flex-wrap items-center gap-3">
