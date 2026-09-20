@@ -351,6 +351,8 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   const [result, setResult] = useState<PublicPlanData | null>(null);
   const [agentArtifactNotice, setAgentArtifactNotice] = useState<{ id: string; preset: string } | null>(null);
   const [agentArtifactLoading, setAgentArtifactLoading] = useState(false);
+  const [agentArtifactApplied, setAgentArtifactApplied] = useState<{ preset: string } | null>(null);
+  const [agentArtifactError, setAgentArtifactError] = useState(false);
   const [manualDroneShifts, setManualDroneShifts] = useState<Record<number, boolean>>({});
   const automaticMaaRef = useRef<{ diagnosticId: string; maa: MaaJson } | null>(null);
   const [upgradeComparison, setUpgradeComparison] = useState<{ baseline: PublicPlanData; trial: PublicPlanData } | null>(null);
@@ -692,15 +694,20 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   // 使班次切换、手动排班导入、效率视图等现有功能立即可用。
   async function applyAgentArtifact(artifactId: string): Promise<void> {
     setAgentArtifactLoading(true);
+    setAgentArtifactError(false);
     try {
       const response = await fetch(`/api/agent/plan/${encodeURIComponent(artifactId)}`, { credentials: "same-origin" });
       const payload = (await response.json()) as { success?: boolean; data?: { session?: Record<string, unknown> } };
       const session = payload.data?.session;
-      if (!payload.success || !session) return;
+      if (!payload.success || !session) {
+        // 载入失败时保留横幅并显示错误，用户可重试。
+        setAgentArtifactError(true);
+        return;
+      }
       const restoredPreset = resolvePreset(PRESETS.find((item) => item.label === session.presetLabel));
       const restoredLayout = restoreEditableProducts(buildBlueprint(restoredPreset), session.layout as BaseBlueprint);
       const restoredOperbox = Array.isArray(session.operbox) ? normalizeOperboxEntries(session.operbox as OperBoxEntry[]) : null;
-      const restoredBoxSource = (session.boxSource === "skland" ? "skland" : "sample") as typeof boxSource;
+      const restoredBoxSource = (session.boxSource === "skland" || session.boxSource === "maa" ? session.boxSource : "sample") as typeof boxSource;
       setPreset(restoredPreset);
       setLayout(restoredLayout);
       setOperbox(restoredOperbox);
@@ -723,11 +730,14 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       initialLayoutSource.current = "local";
       initialLocalLayoutBackup.current = null;
       if (page !== "calculator") handleAppPageChange("calculator");
+      // 成功注入后显示"可露希尔完成排班"提示横幅（数秒后自动消失），并清掉"新排班待注入"横幅。
+      setAgentArtifactNotice(null);
+      setAgentArtifactApplied({ preset: restoredPreset.label });
     } catch {
-      // 载入失败时保留横幅，用户可重试。
+      // 网络等异常：同样保留横幅并显示错误，用户可重试。
+      setAgentArtifactError(true);
     } finally {
       setAgentArtifactLoading(false);
-      setAgentArtifactNotice(null);
     }
   }
 
@@ -745,6 +755,13 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     return () => channel.close();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasRestoredSession]);
+
+  // 排班成功注入工作台后的"可露希尔完成排班"提示横幅，数秒后自动消失。
+  useEffect(() => {
+    if (!agentArtifactApplied) return;
+    const timer = window.setTimeout(() => setAgentArtifactApplied(null), 6000);
+    return () => window.clearTimeout(timer);
+  }, [agentArtifactApplied]);
 
   useEffect(() => {
     if (!hasRestoredSession || typeof window === "undefined") return;
@@ -2331,6 +2348,32 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
               type="button"
               className="rounded-md border px-3 py-1 text-xs hover:bg-muted"
               onClick={() => setAgentArtifactNotice(null)}
+            >
+              {intl("App.agentArtifactIgnore")}
+            </button>
+          </div>
+        ) : null}
+        {agentArtifactApplied ? (
+          <div className="flex flex-wrap items-center gap-3 border-b bg-emerald-500/10 px-4 py-2 text-sm text-emerald-700 dark:text-emerald-300" data-agent-artifact-applied-banner>
+            <span className="min-w-0">
+              {intl("App.agentArtifactAppliedText", { preset: agentArtifactApplied.preset ? `（${agentArtifactApplied.preset}）` : "" })}
+            </span>
+            <button
+              type="button"
+              className="rounded-md border px-3 py-1 text-xs hover:bg-muted"
+              onClick={() => setAgentArtifactApplied(null)}
+            >
+              {intl("App.agentArtifactIgnore")}
+            </button>
+          </div>
+        ) : null}
+        {agentArtifactError && !agentArtifactNotice ? (
+          <div className="flex flex-wrap items-center gap-3 border-b bg-destructive/10 px-4 py-2 text-sm text-destructive" data-agent-artifact-error-banner>
+            <span className="min-w-0">{intl("App.agentArtifactErrorText")}</span>
+            <button
+              type="button"
+              className="rounded-md border px-3 py-1 text-xs hover:bg-muted"
+              onClick={() => setAgentArtifactError(false)}
             >
               {intl("App.agentArtifactIgnore")}
             </button>

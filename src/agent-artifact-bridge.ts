@@ -12,8 +12,12 @@ export interface AgentArtifactHandoff {
 
 export function requestAgentArtifactOpen(artifactId: string, preset: string): void {
   if (typeof window === "undefined") return;
+  // 调用方可能传入工具返回的完整 planUrl（/plan/<id>）或纯 id；统一归一化为纯 id，
+  // 否则 /api/agent/plan/<id> 会因路径里带 /plan/ 前缀而 404，工作台静默回退到旧会话。
+  const normalizedId = artifactId.startsWith("/plan/") ? artifactId.slice("/plan/".length) : artifactId;
+  if (!normalizedId) return;
   try {
-    window.sessionStorage.setItem(HANDOFF_STORAGE_KEY, JSON.stringify({ artifactId, preset } satisfies AgentArtifactHandoff));
+    window.sessionStorage.setItem(HANDOFF_STORAGE_KEY, JSON.stringify({ artifactId: normalizedId, preset } satisfies AgentArtifactHandoff));
   } catch {
     // sessionStorage 不可用时仅靠跳转，工作台无法自动注入，仍可从聊天页链接查看。
   }
