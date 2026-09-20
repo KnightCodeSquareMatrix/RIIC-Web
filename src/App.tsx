@@ -1190,6 +1190,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       scheduleResult.maa,
       userSettings.strictMaaOperatorOrder,
       userSettings.allowReplacementOperatorSort,
+      layout,
     ));
   }
 
