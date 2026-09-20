@@ -1,6 +1,17 @@
 # Agent 探索原型（可露希尔助理）
 
-实验性的 agent 入口：把站内既有功能工具化，让大模型以"可露希尔"人格在对话中编排账号诊断、排班求解、技能查询与知识库检索，输出整体方案。本文记录架构、配置与后续路线。
+实验性的 agent 入口：把站内既有功能工具化，让大模型在对话中编排账号诊断、排班求解、技能查询与知识库检索，输出整体方案。本文记录架构、配置与后续路线。
+
+## 仓库边界（重要）
+
+本仓库（RIIC-Web）只包含 agent 的**编排代码与工具定义**。运行时依赖的两类外部内容不随本仓库分发：
+
+| 内容 | 位置 | 接入方式 |
+|---|---|---|
+| 基建知识库 | 外部仓库 [RIIC-knowledge](https://github.com/lejciy/RIIC-knowledge)（markdown 语料 + 索引） | 克隆到本地后，用 `AGENT_KB_DIR` 指向仓库根目录；`kb_route`/`kb_read` 工具按需读取 |
+| 人格卡 | 独立的 person-card 仓库（不公开分发） | 克隆后用 `AGENT_PERSONA_CARD` 指向卡片文件（如 closure.md）；未配置时自动回退为中性的助理语气 |
+
+模型接入（DeepSeek / GLM，OpenAI 或 Anthropic 兼容协议）通过 `AGENT_LLM_*` 环境变量配置，密钥只存在于本地 `.env.local`。
 
 ## 架构
 
@@ -105,6 +116,6 @@ AGENT_KB_DIR=E:/arknights-infra-project/RIIC-knowledge
 
 ## 维护备注
 
-- 人格卡内容以 `E:\arknights-infra-project\person-card\closure.md` 为真源，当前内嵌于 `persona.ts`；上游改动后需手动同步。
-- 知识库是仓库外本地目录，生产部署前需同步该目录或打包索引。
-- `scripts/agent-knowledge-smoke.mts` 是知识库工具的冒烟脚本（需在 node_modules/server-only 空桩存在时运行，仅本地诊断用）。
+- 人格卡内容存放于独立的 person-card 外部仓库（不随本仓库分发），以 `AGENT_PERSONA_CARD` 指向的本地文件为真源；上游改动后同步该文件即可（60 秒缓存）。
+- 知识库是外部仓库 [RIIC-knowledge](https://github.com/lejciy/RIIC-knowledge)，以 `AGENT_KB_DIR` 指向本地克隆；部署环境需要各自克隆并配置路径。
+- `scripts/agent-knowledge-smoke.mts` 是知识库工具的冒烟脚本（需配置 AGENT_KB_DIR，仅本地诊断用）。

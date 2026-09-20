@@ -41,6 +41,9 @@ let catalogCache: { entries: KbCatalogEntry[]; loadedAt: number } | null = null;
 const CATALOG_CACHE_TTL_MS = 60_000;
 
 async function loadCatalog(): Promise<KbCatalogEntry[]> {
+  if (!agentKnowledgeDir()) {
+    throw new Error("知识库目录未配置：请在环境变量 AGENT_KB_DIR 中指向本地克隆的 RIIC-knowledge 仓库（外部仓库，不随本仓库分发）。");
+  }
   if (catalogCache && Date.now() - catalogCache.loadedAt < CATALOG_CACHE_TTL_MS) {
     return catalogCache.entries;
   }

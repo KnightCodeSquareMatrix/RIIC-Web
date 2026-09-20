@@ -30,5 +30,7 @@ export function agentLlmSettings(): AgentLlmSettings {
 }
 
 export function agentKnowledgeDir(): string {
-  return process.env.AGENT_KB_DIR?.trim() || "E:/arknights-infra-project/RIIC-knowledge";
+  // 知识库（RIIC-knowledge）是独立的外部仓库，不随本仓库分发；
+  // 克隆后把本地路径配置到 AGENT_KB_DIR（见 .env.example 与 docs/AGENT_EXPLORATION.md）。
+  return process.env.AGENT_KB_DIR?.trim() ?? "";
 }

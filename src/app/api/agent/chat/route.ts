@@ -50,7 +50,7 @@ export async function POST(request: Request) {
     }
     const result = streamText({
       model: getAgentModel(),
-      system: buildAgentSystemPrompt(),
+      system: await buildAgentSystemPrompt(),
       messages: await convertToModelMessages(body.messages),
       tools: buildAgentTools({ request, userId: session.user.id }),
       stopWhen: stepCountIs(12),
