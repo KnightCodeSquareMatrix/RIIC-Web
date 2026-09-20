@@ -47,6 +47,7 @@
     "worker:quality": "node --experimental-strip-types --import ./scripts/register-hooks.mjs scripts/quality-worker.mts"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.58",
     "@ai-sdk/openai-compatible": "^3.0.53",
     "@ai-sdk/react": "^4.0.110",
     "@base-ui/react": "^1.6.0",
