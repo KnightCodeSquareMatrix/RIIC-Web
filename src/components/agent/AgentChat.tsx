@@ -5,6 +5,9 @@ import { useEffect, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 
+import { PlanArtifactView } from "@/components/agent/PlanArtifactView";
+import type { AgentPlanProjection } from "@/server/agent/plan-artifact";
+
 type AgentStatus = "loading" | "ready" | "unconfigured" | "unauthenticated";
 
 interface AgentRuntimeInfo {
@@ -44,46 +47,27 @@ function ToolResultSummary({ name, output }: { name: string; output: unknown }) 
   const record = asRecord(output);
   if (!record) return null;
   if (name === "solve_schedule" && record.plan) {
-    const plan = asRecord(record.plan);
-    const summary = plan ? asRecord(plan.summary) : null;
-    const production = plan ? asRecord(plan.dailyProduction) : null;
-    const plans = plan && Array.isArray(plan.plans) ? plan.plans : [];
+    const plan = asRecord(record.plan) as unknown as AgentPlanProjection;
+    const summary = asRecord(plan.summary);
     return (
       <div className="grid gap-2 text-xs">
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground">
-          <span>布局 {String(plan?.layoutLabel ?? record.layoutPreset ?? "?")}</span>
+          <span>布局 {String(plan.layoutLabel ?? record.layoutPreset ?? "?")}</span>
           <span>干员 {String(record.operatorCount ?? "?")}</span>
           <span>精二池就绪 {String(summary?.tier_up_owned ?? "?")}</span>
-          {production?.daily_gold != null ? <span>赤金/日 {String(production.daily_gold)}</span> : null}
-          {production?.daily_lmd != null ? <span>龙门币/日 {String(production.daily_lmd)}</span> : null}
         </div>
-        <div className="grid gap-1">
-          {plans.slice(0, 3).map((shift, shiftIndex) => {
-            const shiftRecord = asRecord(shift);
-            const rooms = shiftRecord && Array.isArray(shiftRecord.rooms) ? shiftRecord.rooms : [];
-            return (
-              <details key={shiftIndex} className="rounded border bg-muted/40 px-2 py-1">
-                <summary className="cursor-pointer select-none">
-                  第 {String(shiftRecord?.shift ?? shiftIndex + 1)} 班 · {String(shiftRecord?.name ?? "")}（{rooms.length} 个房间）
-                </summary>
-                <ul className="mt-1 grid gap-0.5">
-                  {rooms.map((room, roomIndex) => {
-                    const roomRecord = asRecord(room);
-                    const operators = roomRecord && Array.isArray(roomRecord.operators) ? roomRecord.operators : [];
-                    return (
-                      <li key={roomIndex} className="font-number">
-                        {String(roomRecord?.room ?? "?")}：{operators.map((operator) => String(asRecord(operator)?.name ?? operator)).join("、") || "（空）"}
-                      </li>
-                    );
-                  })}
-                </ul>
-              </details>
-            );
-          })}
-        </div>
-        {Array.isArray(record.factoryRecipes) && record.factoryRecipes.length > 0 ? (
-          <p className="text-muted-foreground">制造站配方：{record.factoryRecipes.join(" / ")}</p>
+        {typeof record.planUrl === "string" && record.planUrl ? (
+          <a
+            className="w-fit rounded-md bg-[#FFD501] px-3 py-1.5 text-xs font-medium text-black underline-offset-4 hover:opacity-90"
+            href={record.planUrl}
+          >
+            打开排班结果页验收 →
+          </a>
         ) : null}
+        <details className="rounded border bg-muted/20 px-2 py-1">
+          <summary className="cursor-pointer select-none text-xs font-medium">在对话中查看完整排班（可切换班次）</summary>
+          <div className="mt-2"><PlanArtifactView plan={plan} dense /></div>
+        </details>
       </div>
     );
   }

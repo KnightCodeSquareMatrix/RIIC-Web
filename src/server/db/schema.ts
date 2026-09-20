@@ -437,3 +437,18 @@ export const telemetryEvent = appSchema.table("telemetry_event", {
   index("telemetry_event_user_created_at_idx").on(table.userId, table.createdAt),
   index("telemetry_event_owner_created_at_idx").on(table.dataOwnerTag, table.createdAt),
 ]);
+
+/** Agent 生成的排班方案产物（探索原型）：供 /plan/<id> 只读结果页验收。 */
+export const agentPlanArtifact = appSchema.table("agent_plan_artifact", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  /** projectPlanResult 的输出（排班、产出、练卡建议摘要）。 */
+  plan: jsonb("plan").notNull(),
+  /** 生成参数摘要：layoutPreset / boxSource / factoryRecipes / operatorCount。 */
+  meta: jsonb("meta").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+}, (table) => [
+  index("agent_plan_artifact_user_created_at_idx").on(table.userId, table.createdAt),
+  index("agent_plan_artifact_expires_at_idx").on(table.expiresAt),
+]);

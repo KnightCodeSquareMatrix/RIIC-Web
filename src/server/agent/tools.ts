@@ -12,7 +12,8 @@ import { activeSklandAccount, readSklandAccountStore } from "@/server/skland/htt
 import { sklandDataOwnerTag } from "@/server/skland/session";
 import { listSavedPlans } from "@/server/workspace";
 import { createRequestId } from "@/server/api-contract";
-import type { BaseBlueprint, MaaRoom, OperBoxEntry, RotationProfile } from "@/types";
+import type { BaseBlueprint, OperBoxEntry, RotationProfile } from "@/types";
+import { projectPlanResult, saveAgentPlanArtifact } from "./plan-artifact.ts";
 import { readKnowledgeDoc, searchKnowledgeBase } from "./knowledge.ts";
 
 export interface AgentToolContext {
@@ -121,42 +122,6 @@ function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promi
   ]);
 }
 
-function projectPlanResult(publicResult: ReturnType<typeof toPublicPlanData>) {
-  const { profile, maa, trainingAdvice, durationMs, diagnosticId } = publicResult;
-  const plans = maa.plans.map((plan, planIndex) => ({
-    shift: planIndex + 1,
-    name: plan.name,
-    rooms: Object.entries(plan.rooms).flatMap(([roomType, roomList]) =>
-      ((roomList ?? []) as MaaRoom[]).map((room, roomIndex) => ({
-        room: `${roomType}${roomIndex + 1}`,
-        operators: room.operators.map((operator) =>
-          typeof operator === "string" ? operator : operator?.name ?? "（空）"
-        ),
-      }))
-    ),
-    drones: plan.drones?.enable === false ? undefined : plan.drones,
-  }));
-  return {
-    diagnosticId,
-    durationMs,
-    layoutLabel: profile.layout_label,
-    operboxLabel: profile.operbox_label,
-    summary: profile.summary,
-    dailyProduction: {
-      ...profile.rotation,
-      baseline: undefined,
-    },
-    plans,
-    trainingAdvice: trainingAdvice
-      ? {
-          context: trainingAdvice.context,
-          recommendations: trainingAdvice.recommendations.slice(0, 8),
-          combinations: trainingAdvice.combinations.slice(0, 8),
-        }
-      : null,
-  };
-}
-
 export function buildAgentTools(ctx: AgentToolContext) {
   return {
     diagnose_account: tool({
@@ -256,12 +221,23 @@ export function buildAgentTools(ctx: AgentToolContext) {
           { layoutLabel: preset.label, sourceName, layout },
           createRequestId()
         );
+        const projected = projectPlanResult(publicResult);
+        const artifactId = await saveAgentPlanArtifact(ctx.userId, projected, {
+          layoutPreset: preset.label,
+          boxSource: input.boxSource,
+          factoryRecipes: recipes,
+          operatorCount: operbox.length,
+        }).catch(() => null);
         return {
           solved: true,
           factoryRecipes: recipes,
           boxSource: input.boxSource,
           operatorCount: operbox.length,
-          plan: projectPlanResult(publicResult),
+          planUrl: artifactId ? `/plan/${artifactId}` : null,
+          planArtifactNote: artifactId
+            ? "排班已保存为结果页，planUrl 可直接给博士点击验收（保留 7 天）。"
+            : "结果页保存失败，直接在对话中呈现结果即可。",
+          plan: projected,
         };
       }),
     }),

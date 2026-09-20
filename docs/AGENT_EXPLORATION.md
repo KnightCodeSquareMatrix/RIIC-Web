@@ -73,6 +73,24 @@ AGENT_KB_DIR=E:/arknights-infra-project/RIIC-knowledge
 
 待验证（需填入真实 API key）：多轮对话、工具编排正确性、搓玉场景全链路对话。
 
+## 结果验收链路（方案 1+2，已实现）
+
+- `solve_schedule` 求解成功后把精简投影落库到 `app.agent_plan_artifact`（7 天 TTL，跨用户读取被拒绝），工具返回 `planUrl = /plan/<id>`。
+- 只读结果页 `src/app/plan/[id]/page.tsx`：按登录用户鉴权读取，复用站内视觉渲染完整排班（含**班次切换按钮**、产出摘要、练卡建议折叠区）。
+- 聊天卡片同步升级：摘要行 + "打开排班结果页验收"按钮 + 折叠的班次切换完整视图（与结果页共用 `PlanArtifactView` 组件）。
+- 人格守则要求 agent 求解后把 `planUrl` 告诉用户并提醒验收。
+
+## 页面实时刷新（方案 4，调研结论）
+
+目标：用户开着的页面自动感知 agent 产出的新结果。可选路径：
+
+1. **BroadcastChannel（同浏览器，推荐第一步）**：聊天页在 solve 工具完成后 `postMessage({ type: "plan-ready", planUrl })`；工作台页监听同一 channel，弹提示条"可露希尔生成了新排班 → 查看"。零后端改动、毫秒级；限制是仅同一浏览器的标签页之间。
+2. **PostgreSQL NOTIFY → SSE（正式跨端方案）**：站内已有 LISTEN/NOTIFY 设施（plan worker 唤醒机制）与常驻进程部署（systemd standalone），可直接复用。agent 落库后 `NOTIFY agent_plan`；新增 `GET /api/agent/events` SSE 端点：per-connection LISTEN、按 userId 过滤（通知 payload 只带 artifact id，客户端收到后再拉取鉴权资源）；工作台用 `EventSource` 订阅，断线自动重连。需要处理连接注册表、25s 心跳注释行防代理超时、dev HMR 下的连接重置（生产无碍）。
+3. **轮询兜底**：页面 15–30s `GET /api/agent/plan/latest`（ETag/304），十余行实现，作为 SSE 的降级。
+4. WebSocket 不建议：单向通知场景 SSE 足够，custom server 注入 ws 会增加部署复杂度。
+
+推荐演进顺序：先 1（覆盖当前"同一浏览器边聊边看"的实际用法），需要跨设备时上 2+3。
+
 ## 二期路线（工程化调研结论）
 
 1. **会话持久化**：参照 Vercel ai-chatbot 的 Drizzle 会话表设计，聊天历史落库。
