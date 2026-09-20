@@ -2,7 +2,7 @@
 import { localize as localize_components_PlanResultSummary } from "../i18n/helpers/components_PlanResultSummary.ts";
 import { useTranslations, useLocale } from "next-intl";
 
-import { ChevronRight } from "lucide-react";
+import { AlertTriangle, ChevronRight } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import Image from "next/image";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -95,6 +95,19 @@ function productRelation(relation: string, en: boolean): string {
   return en && key ? localize_components_PlanResultSummary.text(en, key) : relation;
 }
 
+const MAA_UNCERTAIN_OPERATOR_NAMES = ["红", "红隼"] as const;
+
+function maaUncertainOperators(maa: MaaJson): string[] {
+  const scheduledNames = maa.plans.flatMap((plan) => [
+    ...Object.values(plan.rooms).flatMap((rooms) => (rooms ?? []).flatMap((room) => room.operators)),
+    ...(plan.groups ?? []).flatMap((group) => group.operators),
+  ]).flatMap((operator) => {
+    if (typeof operator === "string") return [operator];
+    return operator?.name ? [operator.name] : [];
+  });
+  return MAA_UNCERTAIN_OPERATOR_NAMES.filter((name) => scheduledNames.includes(name));
+}
+
 export function PlanResultSummary({
   profile,
   rotation,
@@ -154,6 +167,7 @@ export function PlanResultSummary({
   const activePresentation = productionPresentation ?? calculatorPresentation;
   const solverDaily = activePresentation.solverProduction;
   const productGroups = activePresentation.groups;
+  const uncertainMaaOperators = maaUncertainOperators(maa);
   const adjustmentCount = countShiftPlacementAdjustments(comparison);
   const activeDetailSection = detailSection === "comparison" && comparison ? "comparison" : "efficiency";
   const canOpenDetails = activePresentation.detailsAvailable;
@@ -190,6 +204,12 @@ export function PlanResultSummary({
       >
         {animateOnMount ? (
           <motion.span key={`accent-${planRevision}`} className="pointer-events-none absolute inset-x-0 top-0 z-20 h-0.5 origin-left bg-[#FFD501]" aria-hidden="true" initial={{ scaleX: 0, opacity: 0 }} animate={{ scaleX: 1, opacity: [0, 1, 1, 0] }} transition={{ duration: shouldReduceMotion ? 0 : 0.62, delay: shouldReduceMotion ? 0 : 0.08, times: [0, 0.15, 0.82, 1], ease: MOTION_EASE_OUT }} />
+        ) : null}
+        {uncertainMaaOperators.length ? (
+          <div role="alert" className="mx-4 mt-3 flex items-start gap-2 border border-amber-400/70 bg-amber-50 px-3 py-2.5 text-sm text-amber-950">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-700" aria-hidden="true" />
+            <p>{en ? `The schedule includes ${uncertainMaaOperators.join(", ")}. Chinese operator names may not be recognized by MAA; please take note.` : `排班中包含「${uncertainMaaOperators.join("」「")}」。以上干员可能无法被 MAA 识别，请知悉。`}</p>
+          </div>
         ) : null}
         <div data-animation-revision={animationRevision} className="grid min-h-[84px] grid-cols-[minmax(10rem,1.05fr)_minmax(0,5fr)] items-stretch max-[820px]:grid-cols-1">
           <motion.button type="button" className={cn("group relative flex min-w-0 items-center justify-between gap-3 overflow-hidden bg-[#272A2B] px-5 py-3 text-left text-white focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-[#FFD800] max-[820px]:row-span-1 max-sm:min-h-16", comparison && "row-span-2", !canOpenDetails && "cursor-default")} data-plan-details-trigger="efficiency" data-plan-primary-details-trigger disabled={!canOpenDetails} whileHover={canOpenDetails && !shouldReduceMotion ? { x: 2 } : undefined} whileTap={canOpenDetails && !shouldReduceMotion ? { scale: 0.985 } : undefined} onClick={() => { if (canOpenDetails) openDetails("efficiency"); }}>
