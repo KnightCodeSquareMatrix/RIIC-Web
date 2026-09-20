@@ -44,8 +44,33 @@ export interface AgentPlanMeta {
 export interface AgentPlanArtifactRecord {
   id: string;
   plan: AgentPlanProjection;
+  /** v2 起附带完整工作台会话（求解结果 + 布局 + box），供工作台一键注入复用全部现有功能。 */
+  session: AgentPlanSession | null;
   meta: AgentPlanMeta;
   createdAt: Date;
+}
+
+/** 与前端 PersistedSessionV5 等价的注入载荷。 */
+export interface AgentPlanSession {
+  presetLabel: string;
+  layout: unknown;
+  operbox: unknown;
+  sourceName: string | null;
+  boxSource: string;
+  rotationProfile: string;
+  fiammettaEnabled: boolean;
+  result: unknown;
+  activeShift: number;
+}
+
+interface StoredArtifactV1 {
+  projection: AgentPlanProjection;
+  meta: AgentPlanMeta;
+}
+
+interface StoredArtifactV2 extends StoredArtifactV1 {
+  version: 2;
+  session: AgentPlanSession;
 }
 
 const ARTIFACT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -86,7 +111,8 @@ export function projectPlanResult(publicResult: ReturnType<typeof toPublicPlanDa
 export async function saveAgentPlanArtifact(
   userId: string,
   plan: AgentPlanProjection,
-  meta: AgentPlanMeta
+  meta: AgentPlanMeta,
+  session: AgentPlanSession
 ): Promise<string> {
   const db = getDatabase();
   const id = randomUUID();
@@ -94,7 +120,7 @@ export async function saveAgentPlanArtifact(
   await db.insert(agentPlanArtifact).values({
     id,
     userId,
-    plan,
+    plan: { version: 2, projection: plan, session, meta } satisfies StoredArtifactV2,
     meta,
     createdAt: now,
     expiresAt: new Date(now.getTime() + ARTIFACT_TTL_MS),
@@ -118,9 +144,20 @@ export async function getAgentPlanArtifact(id: string, userId: string): Promise<
     await db.delete(agentPlanArtifact).where(eq(agentPlanArtifact.id, id)).catch(() => undefined);
     return null;
   }
+  const stored = row.plan as unknown;
+  let projection: AgentPlanProjection;
+  let session: AgentPlanSession | null = null;
+  if (stored && typeof stored === "object" && "projection" in stored) {
+    const typed = stored as StoredArtifactV2;
+    projection = typed.projection;
+    session = typed.session ?? null;
+  } else {
+    projection = stored as AgentPlanProjection;
+  }
   return {
     id: row.id,
-    plan: row.plan as AgentPlanProjection,
+    plan: projection,
+    session,
     meta: row.meta as AgentPlanMeta,
     createdAt: row.createdAt,
   };

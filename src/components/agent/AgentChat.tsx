@@ -6,6 +6,7 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 
 import { PlanArtifactView } from "@/components/agent/PlanArtifactView";
+import { AGENT_BROADCAST_CHANNEL, requestAgentArtifactOpen } from "@/agent-artifact-bridge";
 import type { AgentPlanProjection } from "@/server/agent/plan-artifact";
 
 type AgentStatus = "loading" | "ready" | "unconfigured" | "unauthenticated";
@@ -57,12 +58,18 @@ function ToolResultSummary({ name, output }: { name: string; output: unknown }) 
           <span>精二池就绪 {String(summary?.tier_up_owned ?? "?")}</span>
         </div>
         {typeof record.planUrl === "string" && record.planUrl ? (
-          <a
-            className="w-fit rounded-md bg-[#FFD501] px-3 py-1.5 text-xs font-medium text-black underline-offset-4 hover:opacity-90"
-            href={record.planUrl}
-          >
-            打开排班结果页验收 →
-          </a>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              className="w-fit rounded-md bg-[#FFD501] px-3 py-1.5 text-xs font-medium text-black transition-opacity hover:opacity-90"
+              onClick={() => requestAgentArtifactOpen(record.planUrl as string, String(plan?.layoutLabel ?? ""))}
+            >
+              在工作台中打开 →
+            </button>
+            <a className="text-xs underline underline-offset-4 hover:opacity-80" href={record.planUrl as string}>
+              只读结果页
+            </a>
+          </div>
         ) : null}
         <details className="rounded border bg-muted/20 px-2 py-1">
           <summary className="cursor-pointer select-none text-xs font-medium">在对话中查看完整排班（可切换班次）</summary>
@@ -160,6 +167,30 @@ export function AgentChat() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  // 求解完成时通知同浏览器内已打开的工作台标签页（幂等，每个工具结果只广播一次）。
+  const broadcastRef = useRef<Set<string>>(new Set());
+  const channelRef = useRef<BroadcastChannel | null>(null);
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof BroadcastChannel === "undefined") return;
+    channelRef.current ??= new BroadcastChannel(AGENT_BROADCAST_CHANNEL);
+    for (const message of messages) {
+      message.parts.forEach((part, partIndex) => {
+        if (!isToolPart(part) || part.type !== "tool-solve_schedule" || part.state !== "output-available") return;
+        const output = asRecord(part.output);
+        const planUrl = typeof output?.planUrl === "string" ? output.planUrl : null;
+        if (!planUrl || !output) return;
+        const key = `${message.id}:${partIndex}`;
+        if (broadcastRef.current.has(key)) return;
+        broadcastRef.current.add(key);
+        channelRef.current?.postMessage({
+          type: "plan-ready",
+          artifactId: planUrl.slice("/plan/".length),
+          preset: String(asRecord(output.plan)?.layoutLabel ?? ""),
+        });
+      });
+    }
   }, [messages]);
 
   const busy = status === "submitted" || status === "streaming";

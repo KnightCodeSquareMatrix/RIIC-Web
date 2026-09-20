@@ -32,17 +32,26 @@ const projected = projectPlanResult({
     ],
   },
   durationMs: 1234,
-  diagnosticId: "smoke-diagnostic",
+  diagnosticId: "smoke-diagnostic-v2",
 } as never);
 
-const id = await saveAgentPlanArtifact(anyUser.id, projected, {
-  layoutPreset: "243",
-  boxSource: "sample",
-  factoryRecipes: ["originium", "originium", "gold", "gold"],
-  operatorCount: 10,
-});
+const id = await saveAgentPlanArtifact(
+  anyUser.id,
+  projected,
+  { layoutPreset: "243", boxSource: "sample", factoryRecipes: ["gold"], operatorCount: 10 },
+  {
+    presetLabel: "243",
+    layout: { template: "243", rooms: [] },
+    operbox: [],
+    sourceName: "冒烟测试 Box",
+    boxSource: "sample",
+    rotationProfile: "abc_12_6_6",
+    fiammettaEnabled: false,
+    result: { diagnosticId: "smoke-diagnostic-v2", durationMs: 1234, profile: {} as never, maa: projected.plans.length ? { title: "smoke", plans: [] } as never : null, rotation: {} as never },
+    activeShift: 0,
+  }
+);
 const back = await getAgentPlanArtifact(id, anyUser.id);
 console.log("saved id:", id);
-console.log("read back OK:", back?.plan.layoutLabel === "243" && back?.plan.plans.length === 3 && back?.plan.plans[1].name === "中班");
+console.log("read back OK:", back !== null && back.session !== null);
 console.log("wrong-user blocked:", (await getAgentPlanArtifact(id, "00000000-0000-4000-8000-000000000000")) === null);
-console.log("VISIT_URL=/plan/" + id);

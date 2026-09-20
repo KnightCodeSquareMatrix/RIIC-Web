@@ -73,23 +73,25 @@ AGENT_KB_DIR=E:/arknights-infra-project/RIIC-knowledge
 
 待验证（需填入真实 API key）：多轮对话、工具编排正确性、搓玉场景全链路对话。
 
-## 结果验收链路（方案 1+2，已实现）
+## 结果验收链路（工作台注入为主，已实现）
 
-- `solve_schedule` 求解成功后把精简投影落库到 `app.agent_plan_artifact`（7 天 TTL，跨用户读取被拒绝），工具返回 `planUrl = /plan/<id>`。
-- 只读结果页 `src/app/plan/[id]/page.tsx`：按登录用户鉴权读取，复用站内视觉渲染完整排班（含**班次切换按钮**、产出摘要、练卡建议折叠区）。
-- 聊天卡片同步升级：摘要行 + "打开排班结果页验收"按钮 + 折叠的班次切换完整视图（与结果页共用 `PlanArtifactView` 组件）。
-- 人格守则要求 agent 求解后把 `planUrl` 告诉用户并提醒验收。
+核心思路：agent 的排班结果不另起炉灶，而是**注入现有工作台**，班次切换、手动排班导入、效率视图等全部现有功能即刻可用。
 
-## 页面实时刷新（方案 4，调研结论）
+- `solve_schedule` 求解后把「精简投影 + 完整工作台会话（完整求解结果、布局、box、换班参数）」落库 `app.agent_plan_artifact`（7 天 TTL，仅本人可读，v2 结构）。
+- 交接通道（`src/agent-artifact-bridge.ts`）：
+  - **跨页面**：聊天卡片"在工作台中打开"→ sessionStorage 交接 + 跳转 `/` → 工作台启动时自动注入；
+  - **同浏览器已开标签**：聊天页在求解完成时经 `BroadcastChannel("riic-agent")` 广播 → 工作台顶部横幅提示，一键注入。
+- 注入实现（`App.tsx` 的 `applyAgentArtifact`）：拉取 `GET /api/agent/plan/<id>`（登录鉴权）后复用会话恢复路径（同 `loadPersistedSession`）设置 preset/layout/operbox/boxSource/rotation/fiammetta/result/activeShift 全部状态，并自动切到计算器页；注入结果经既有持久化机制写入 localStorage，刷新不丢。
+- `/plan/<id>` 只读结果页保留作为轻量查看/分享入口（含班次切换），不再是主路径。
+- 主动覆盖保护：广播路径只弹横幅不自动注入（避免覆盖正在编辑的状态）；聊天页点击"在工作台中打开"视为明确意图，自动注入。
 
-目标：用户开着的页面自动感知 agent 产出的新结果。可选路径：
+## 页面实时刷新（方案 4，演进路线）
 
-1. **BroadcastChannel（同浏览器，推荐第一步）**：聊天页在 solve 工具完成后 `postMessage({ type: "plan-ready", planUrl })`；工作台页监听同一 channel，弹提示条"可露希尔生成了新排班 → 查看"。零后端改动、毫秒级；限制是仅同一浏览器的标签页之间。
-2. **PostgreSQL NOTIFY → SSE（正式跨端方案）**：站内已有 LISTEN/NOTIFY 设施（plan worker 唤醒机制）与常驻进程部署（systemd standalone），可直接复用。agent 落库后 `NOTIFY agent_plan`；新增 `GET /api/agent/events` SSE 端点：per-connection LISTEN、按 userId 过滤（通知 payload 只带 artifact id，客户端收到后再拉取鉴权资源）；工作台用 `EventSource` 订阅，断线自动重连。需要处理连接注册表、25s 心跳注释行防代理超时、dev HMR 下的连接重置（生产无碍）。
-3. **轮询兜底**：页面 15–30s `GET /api/agent/plan/latest`（ETag/304），十余行实现，作为 SSE 的降级。
-4. WebSocket 不建议：单向通知场景 SSE 足够，custom server 注入 ws 会增加部署复杂度。
+已落地：BroadcastChannel 同浏览器通知 + sessionStorage 跨页交接（见上）。后续：
 
-推荐演进顺序：先 1（覆盖当前"同一浏览器边聊边看"的实际用法），需要跨设备时上 2+3。
+1. **PostgreSQL NOTIFY → SSE（正式跨端方案）**：站内已有 LISTEN/NOTIFY 设施（plan worker 唤醒机制）与常驻进程部署（systemd standalone），可直接复用。agent 落库后 `NOTIFY agent_plan`；新增 `GET /api/agent/events` SSE 端点：per-connection LISTEN、按 userId 过滤（通知 payload 只带 artifact id，客户端收到后再拉取鉴权资源）；工作台用 `EventSource` 订阅，断线自动重连。需要处理连接注册表、25s 心跳注释行防代理超时、dev HMR 下的连接重置（生产无碍）。接入点已预留：把横幅的数据源从 BroadcastChannel 扩展为 BroadcastChannel + SSE 双通道即可。
+2. **轮询兜底**：页面 15–30s `GET /api/agent/plan/latest`（ETag/304），作为 SSE 的降级。
+3. WebSocket 不建议：单向通知场景 SSE 足够，custom server 注入 ws 会增加部署复杂度。
 
 ## 二期路线（工程化调研结论）
 

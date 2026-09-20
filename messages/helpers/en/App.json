@@ -43,5 +43,9 @@
   "additional1": "Could not parse the operator file. Check the file and try again.",
   "additional2": "Could not parse the MAA JSON. Paste the complete export and try again.",
   "additional3": "Could not read sample data.",
-  "additional4": "{choice1, select, yes {{value2}} other {Could not read the layout JSON.}}"
+  "additional4": "{choice1, select, yes {{value2}} other {Could not read the layout JSON.}}",
+  "agentArtifactBannerText": "Closure generated a new schedule{preset}. Open it in the workbench to use every tool.",
+  "agentArtifactOpen": "Open in workbench",
+  "agentArtifactIgnore": "Dismiss",
+  "agentArtifactLoading": "Loading…"
 }

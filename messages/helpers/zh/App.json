@@ -43,5 +43,9 @@
   "additional1": "{choice1, select, yes {{value2}} other {练度文件解析失败。}}",
   "additional2": "{choice1, select, yes {{value2}} other {MAA JSON 解析失败。}}",
   "additional3": "{choice1, select, yes {{value2}} other {样例数据读取失败。}}",
-  "additional4": "{choice3, select, yes {{value4}} other {布局 JSON 读取失败。}}"
+  "additional4": "{choice3, select, yes {{value4}} other {布局 JSON 读取失败。}}",
+  "agentArtifactBannerText": "可露希尔生成了新排班{preset}，可在工作台中直接打开并使用全部功能。",
+  "agentArtifactOpen": "在工作台中打开",
+  "agentArtifactIgnore": "忽略",
+  "agentArtifactLoading": "正在载入…"
 }

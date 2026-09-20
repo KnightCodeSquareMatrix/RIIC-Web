@@ -222,12 +222,27 @@ export function buildAgentTools(ctx: AgentToolContext) {
           createRequestId()
         );
         const projected = projectPlanResult(publicResult);
-        const artifactId = await saveAgentPlanArtifact(ctx.userId, projected, {
-          layoutPreset: preset.label,
-          boxSource: input.boxSource,
-          factoryRecipes: recipes,
-          operatorCount: operbox.length,
-        }).catch(() => null);
+        const artifactId = await saveAgentPlanArtifact(
+          ctx.userId,
+          projected,
+          {
+            layoutPreset: preset.label,
+            boxSource: input.boxSource,
+            factoryRecipes: recipes,
+            operatorCount: operbox.length,
+          },
+          {
+            presetLabel: preset.label,
+            layout,
+            operbox,
+            sourceName,
+            boxSource: input.boxSource === "skland" ? "skland" : "sample",
+            rotationProfile: rotation,
+            fiammettaEnabled: input.fiammettaEnable ?? false,
+            result: publicResult,
+            activeShift: 0,
+          }
+        ).catch(() => null);
         return {
           solved: true,
           factoryRecipes: recipes,
