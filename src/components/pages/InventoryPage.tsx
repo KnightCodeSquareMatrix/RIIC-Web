@@ -205,12 +205,12 @@ export default function InventoryPage() {
               </div>
               <div className="mt-5 border-t border-border/70 pt-4">
                 <h3 className="text-sm font-medium text-muted-foreground">六星从零到精二 60 级</h3>
-                <p className="mt-2 font-number text-3xl font-semibold"><span className="text-[#FFD501]">{fmt(sixStarSummary.count)}</span> 个</p>
+                <p className="mt-2 font-number text-3xl font-semibold"><span className="text-[#FFD501]">{sixStarSummary.count.toFixed(2)}</span> 个</p>
                 <div className="mt-3 grid gap-1.5 text-xs text-muted-foreground">
                   <p className="flex justify-between gap-3"><span>龙门币</span><strong className="font-number text-foreground">{fmt(itemCount("4001"))} / {fmt(SIX_STAR_E2_60_COST.lmd)}</strong></p>
                   <p className="flex justify-between gap-3"><span>作战记录经验</span><strong className="font-number text-foreground">{fmt(sixStarSummary.exp)} / {fmt(SIX_STAR_E2_60_COST.exp)}</strong></p>
                 </div>
-                <p className="mt-3 text-[11px] leading-4 text-muted-foreground">按通用龙门币和经验估算，未计芯片、精英材料、专三和潜能。实际数量取两项资源较小值。</p>
+                <p className="mt-3 text-[11px] leading-4 text-muted-foreground">仅考虑升级和精英化。</p>
               </div>
             </section>
             </div>
