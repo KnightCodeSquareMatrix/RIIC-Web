@@ -17,6 +17,7 @@ const catalog = itemCatalog as Record<string, { name?: string; icon?: string }>;
 const fmt = (value: number) => value.toLocaleString("zh-CN");
 const BATTLE_RECORD_IDS = new Set(["2001", "2002", "2003", "2004"]);
 const COMMON_IDS = ["4002", "4003", "4001", "4004", "4005", "7004", "7003", "7001"];
+const INFRASTRUCTURE_MATERIAL_IDS = new Set(["3112", "3113", "3114", "3131", "3132", "3133", "3401", "3105"]);
 const MANUAL_RESOURCE_IDS = ["4002", "4003", "4004", "4005", "7004", "7003", "7001"];
 const FEATURED_IDS = new Set([...COMMON_IDS, ...BATTLE_RECORD_IDS]);
 const MANUAL_STORAGE_KEY = "aic-skland-inventory-manual-resources-v1";
@@ -94,6 +95,8 @@ export default function InventoryPage() {
       .map((id) => ({ id, count: itemCount(id) }));
   }, [itemCount]);
   const otherItems = useMemo(() => items.filter((item) => !FEATURED_IDS.has(item.id)), [items]);
+  const infrastructureItems = useMemo(() => otherItems.filter((item) => INFRASTRUCTURE_MATERIAL_IDS.has(item.id)), [otherItems]);
+  const generalItems = useMemo(() => otherItems.filter((item) => !INFRASTRUCTURE_MATERIAL_IDS.has(item.id)), [otherItems]);
   const yellowCerts = manualValue("4004") ?? apiCountById.get("4004") ?? 0;
   const exchange = useMemo(() => {
     let selected: (typeof HEADHUNTING_STEPS)[number] | null = null;
@@ -213,10 +216,25 @@ export default function InventoryPage() {
               </div>
             </section>
             </div>
-            {otherItems.length > 0 ? <section className="mt-7 border-t border-border pt-5">
+            {generalItems.length > 0 ? <section className="mt-7 border-t border-border pt-5">
               <h3 className="mb-3 text-lg font-semibold">其他库存</h3>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                {otherItems.map((item) => {
+                {generalItems.map((item) => {
+                  const catalogItem = catalog[item.id];
+                  return <div key={item.id} className="flex min-h-20 items-center gap-2 border border-border/70 bg-muted/20 px-3 py-3">
+                    <div className="grid size-11 shrink-0 place-items-center border border-border/70 bg-background/60">
+                      {catalogItem?.icon ? <Image src={catalogItem.icon} alt="" width={44} height={44} className="size-10 object-contain" /> : <PackageOpen className="size-5 text-muted-foreground" aria-hidden="true" />}
+                    </div>
+                    <span className="min-w-0 flex-1 break-words text-sm leading-5">{catalogItem?.name ?? "未知物品"}</span>
+                    <strong className="shrink-0 font-number text-base">{fmt(item.count)}</strong>
+                  </div>;
+                })}
+              </div>
+            </section> : null}
+            {infrastructureItems.length > 0 ? <section className="mt-7 border-t border-border pt-5">
+              <h3 className="mb-3 text-lg font-semibold">基建材料</h3>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                {infrastructureItems.map((item) => {
                   const catalogItem = catalog[item.id];
                   return <div key={item.id} className="flex min-h-20 items-center gap-2 border border-border/70 bg-muted/20 px-3 py-3">
                     <div className="grid size-11 shrink-0 place-items-center border border-border/70 bg-background/60">
