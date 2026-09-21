@@ -21,6 +21,7 @@ import type {
   SklandQrStatusData,
   SklandSessionData,
   SklandStatusData,
+  SklandInventoryData,
 } from "./types";
 import type { SklandPolicyConsentRequest } from "./legal-policy";
 
@@ -256,6 +257,10 @@ export function importSklandCredential(
 
 export function refreshSklandStatus(): Promise<SklandStatusData> {
   return requestData(sklandApiPath("/status/refresh"), { method: "POST" });
+}
+
+export function getSklandInventory(): Promise<SklandInventoryData> {
+  return requestData(sklandApiPath("/inventory"));
 }
 
 export function pollSklandQr(scanId: string, signal?: AbortSignal): Promise<SklandQrStatusData> {
