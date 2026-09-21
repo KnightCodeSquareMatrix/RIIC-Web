@@ -2,6 +2,15 @@
 
 实验性的 agent 入口：把站内既有功能工具化，让大模型在对话中编排账号诊断、排班求解、技能查询与知识库检索，输出整体方案。本文记录架构、配置与后续路线。
 
+## 本次实验更新（2026-09-21）
+
+- 在原有 Agent 实验中加入专精训练、公招词条工具，复用网页计算核心，提供聊天结果卡片。
+- 专精先计算后汇报条件：默认未专精起步、换人余量一分钟；公招收到一至五个词条直接计算，默认九小时。
+- 专精接通森空岛进驻快照到六类环境人数与中枢加成，手动指定值优先，缺少快照时沿用默认值；结果标明来源与时间。
+- 干员相关术语统一为“账号／干员池”；页面模型信息仅显示模型名称。
+- 25 项工具及计算测试通过；改动文件 ESLint 和排除旧 Next.js 生成缓存后的源码类型检查通过。已在真实账号对话中验证自动环境读取、专精计算和结果反馈。
+- 待完善：模型传入字符串等级（例如 target="3"）仍会触发参数校验错误；OCR 仅记录接入设计，尚未实现；人间烟火与加工站进驻覆盖仍为实验限制。
+
 ## 仓库边界（重要）
 
 本仓库（RIIC-Web）只包含 agent 的**编排代码与工具定义**。运行时依赖的两类外部内容不随本仓库分发：
@@ -23,7 +32,7 @@
   better-auth 会话校验 → 系统提示词 → streamText 工具循环（stopWhen 12 步）
         ↓ 服务端进程内直调（传 userId，不透传任何凭证给模型）
 工具层（src/server/agent/tools.ts，Zod inputSchema）
-  diagnose_account / solve_schedule / query_skills / kb_route / kb_read
+  diagnose_account / preview_solve_defaults / solve_schedule / calculate_mastery / calculate_recruitment / query_skills / kb_route / kb_read
         ↓
 站内既有服务：skland adapter、runPlan 求解器、arkntools 技能目录、RIIC-knowledge 文件库
 ```
@@ -36,17 +45,35 @@
 | `src/server/agent/llm.ts` | `@ai-sdk/openai-compatible` provider 工厂，两家厂商同一通道 |
 | `src/server/agent/persona.ts` | 人格（person-card/closure.md 内嵌）+ 工具使用守则与搓玉工作流剧本 |
 | `src/server/agent/knowledge.ts` | 知识库访问器：标题清单索引检索、正文读取（路径白名单防越界，16K 截断） |
-| `src/server/agent/tools.ts` | 5 个工具定义、结果投影、审计日志 |
+| `src/server/agent/tools.ts` | 工具注册、干员池来源解析、结果投影、审计日志 |
+| `src/server/agent/calculator-tools.ts` | 专精训练、公招词条工具参数与共享计算核心适配 |
 
 ## 工具清单
 
+专精、公招和账号诊断的干员池按森空岛 → MAA 上传 → 全精二示例兜底，返回来源信息。示例池不代表用户实际持有；公招此时仍计算组合，个人拥有状态为未知。专精返回简单/快速两种方案及与网页共用的操作时间线。干员持有和练度称为“干员池”；“库存”保留给真实仓库资源与设施存量。
+
+新增工具测试已纳入 `npm test`，也可单独执行 `node --test --experimental-strip-types src/server/agent/calculator-tools.test.ts`。
+
 | 工具 | 数据源 | 说明 |
 |---|---|---|
-| `diagnose_account` | `readSklandAccountStore` + `loadStatusSnapshot` + `listSavedPlans` | 森空岛绑定/玩家信息/库存练度统计/当前基建/最近排班 |
+| `calculate_mastery` | `calculateMastery` + `masteryInstructions` | 干员、专精起止等级、中枢加成、操作余量和环境参数；返回两种方案及换人时间线 |
+| `calculate_recruitment` | `calculateRecruitment` | 最多五个词条、招聘时间、四星及缺失筛选；返回词条组合和候选干员 |
+| `preview_solve_defaults` | 账号、排班历史与场景默认配置 | 排班前预览实际采用的配置 |
+| `diagnose_account` | `readSklandAccountStore` + `loadStatusSnapshot` + `listSavedPlans` | 森空岛绑定/玩家信息/干员池练度统计/当前基建/最近排班 |
 | `solve_schedule` | `buildBlueprint`/`updateFactoryRecipe` + `runPlan`/`getSampleOperbox` + `toPublicPlanData` | 真实求解：布局预设、box 来源、换班节奏、制造站配方（搓玉配 originium）；返回排班、日产出、练卡建议 |
 | `query_skills` | `src/generated/arkntools/building-skill-catalog.json` | 技能名/关键词/标签查询，富文本标记清洗 |
 | `kb_route` | `RIIC-knowledge/index/标题清单.md` | 关键词→候选文档路径（2-gram 匹配扩大召回） |
 | `kb_read` | `RIIC-knowledge/docs/**` | 读正文，仅限知识库目录内 .md |
+
+## 专精与公招路由
+
+- 专精已知目标干员和目标等级即计算，起始等级省略按 0，明确“从专X开始”按 X；中枢与六类环境人数优先读取森空岛快照，用户指定值优先；无快照时中枢默认 +5%、环境全 0，换人余量 1 分钟。先输出方案，末尾根据返回的 settings 汇报条件和来源、询问是否调整。调整时保留未改变的参数。
+- 公招提供一至五个词条即可计算，默认九小时；未提供词条才追问具体词条，不要求补齐五个。
+
+## 环境读取实验与后续接口
+
+- 基建环境映射已接入：mastery-environment.ts 从同一次森空岛完整快照读取进驻名单，对照术语成员表映射六类人数，包括宿舍和训练室、按 ID 去重、排除推断的加工站。中枢按实际进驻者已解锁技能判断 +5%。工具返回命中名单、采用值、来源和快照时间；用户明确的 0/false 优先。人间烟火未自动推导，未指定按 0。卡片和 Agent 反馈统一简要提示“自动读取状态可能存在误差或延迟，如果环境加成变动，记得跟我说哦。”，详细限制在用户追问时解释。
+- 公招截图 OCR：预留独立识别适配边界，建议输入上传图片引用，输出候选词条名称、置信度及未识别项；校验 RECRUITMENT_TAGS 后将一至五个有效词条传给现有 calculate_recruitment。低置信度候选需澄清，识别失败则请求文字词条。当前没有上传/OCR 实现、模型可调用 OCR 工具或外部识别请求。
 
 ## 配置
 
@@ -73,7 +100,7 @@ AGENT_KB_DIR=E:/arknights-infra-project/RIIC-knowledge
 用户："我想搓玉，不知道怎么搞" →
 
 1. agent 追问需求与 box 来源（人格守则第 1 条）；
-2. `diagnose_account`：森空岛库存/练度概览；
+2. `diagnose_account`：森空岛干员池/练度概览；
 3. `kb_route`+`kb_read`：《搓玉》《产出常数表》《高效率散件》等，取搓玉线取舍、无人机折算、换算常数；
 4. 确认后 `solve_schedule`（243 布局，制造站配方 `["originium","originium","gold","gold"]`）；
 5. 汇总：排班表（卡片渲染）+ 日产出 + 练卡建议 + 知识库解释（标注出处）。

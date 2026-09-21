@@ -16,6 +16,8 @@ import { createRequestId } from "@/server/api-contract";
 import type { BaseBlueprint, OperBoxEntry, RotationProfile } from "@/types";
 import { projectPlanResult, saveAgentPlanArtifact } from "./plan-artifact.ts";
 import { readKnowledgeDoc, searchKnowledgeBase } from "./knowledge.ts";
+import { observeMasteryEnvironment, type MasteryEnvironmentObservation } from "./mastery-environment.ts";
+import { buildCalculatorTools, type AgentOperatorPool } from "./calculator-tools.ts";
 
 export interface AgentToolContext {
   request: Request;
@@ -50,6 +52,7 @@ async function guarded<T>(userId: string, name: string, input: unknown, run: () 
 }
 
 interface SklandSnapshotForTools {
+  masteryEnvironment: MasteryEnvironmentObservation;
   operbox: OperBoxEntry[];
   dataOwnerTag: string;
   sourceName: string;
@@ -74,6 +77,7 @@ async function loadSklandSnapshot(ctx: AgentToolContext): Promise<SklandSnapshot
   }
   const { snapshot } = await loadStatusSnapshot(account.session);
   return {
+    masteryEnvironment: observeMasteryEnvironment(snapshot),
     operbox: snapshot.operbox,
     dataOwnerTag: sklandDataOwnerTag(account.session.userId),
     sourceName: `森空岛·${snapshot.player.nickname}`,
@@ -207,7 +211,7 @@ const LAYOUT_SOURCE_LABELS: Record<SolveDefaults["layoutSource"], string> = {
 function boxSourceNote(boxSource: "skland" | "maa" | "sample"): string {
   if (boxSource === "skland") return "干员数据来自森空岛同步";
   if (boxSource === "maa") return "干员数据来自最近一次上传的 MAA 文件（云端工作区）";
-  return "森空岛未绑定、MAA 未上传，将自动改用 243 全精二示例 Box；如需真实库存请先绑定森空岛或在工作台上传 MAA 文件";
+  return "森空岛未绑定、MAA 未上传，将自动改用 243 全精二示例 Box；如需真实干员池请先绑定森空岛或在工作台上传 MAA 文件";
 }
 
 /** 按场景把配方/订单应用到布局；返回应用后的说明。搓玉会做必要的房间等级修正。 */
@@ -248,11 +252,31 @@ function applyScenario(
   return { layout, scenarioNote: "沿用布局默认配方。" };
 }
 
+async function loadAgentOperatorPool(ctx: AgentToolContext): Promise<AgentOperatorPool> {
+  try {
+    const snapshot = await loadSklandSnapshot(ctx);
+    if (snapshot.operbox.length) return { operbox: snapshot.operbox, source: "skland", sourceName: snapshot.sourceName, masteryEnvironment: snapshot.masteryEnvironment };
+  } catch {
+    // 森空岛不可用时继续读取云端干员池。
+  }
+  try {
+    const operbox = await getMaaOperboxSnapshot(ctx.userId);
+    if (operbox?.length) return { operbox, source: "maa", sourceName: "MAA 上传干员池" };
+  } catch {
+    // 云端不可用时使用站内全精二示例。
+  }
+  const sample = await getSampleOperbox();
+  return { operbox: sample.operbox as OperBoxEntry[], source: "sample", sourceName: "全精二示例干员池" };
+}
+
 export function buildAgentTools(ctx: AgentToolContext) {
+  let operatorPool: Promise<AgentOperatorPool> | undefined;
+  const loadPool = () => operatorPool ??= loadAgentOperatorPool(ctx);
   return {
+    ...buildCalculatorTools(loadPool, (name, input, run) => guarded(ctx.userId, name, input, run)),
     diagnose_account: tool({
       description:
-        "账号诊断：查看当前用户的森空岛绑定状态、干员库存概览（总数、精二数、稀有度分布、精二六星名单）、当前游戏内基建布局、最近保存的排班。判断用户库存与练度水平时必用。",
+        "账号诊断：查看当前用户的森空岛绑定状态、干员池概览（总数、精二数、稀有度分布、精二六星名单）、当前游戏内基建布局、最近保存的排班。判断用户干员池与练度水平时必用。",
       inputSchema: z.object({}).strict().describe("无需参数"),
       execute: async () => guarded(ctx.userId, "diagnose_account", {}, async () => {
         let skland: Awaited<ReturnType<typeof loadSklandSnapshot>> | null = null;
@@ -273,7 +297,9 @@ export function buildAgentTools(ctx: AgentToolContext) {
         } catch {
           savedPlans = [];
         }
+        const pool = await loadPool();
         return {
+          operatorPool: { source: pool.source, sourceName: pool.sourceName, isSample: pool.source === "sample", ...operboxStats(pool.operbox) },
           skland: skland
             ? {
                 connected: true,

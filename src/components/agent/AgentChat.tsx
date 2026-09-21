@@ -18,6 +18,9 @@ interface AgentRuntimeInfo {
 }
 
 const TOOL_LABELS: Record<string, string> = {
+  calculate_mastery: "专精训练",
+  calculate_recruitment: "公招词条计算",
+  preview_solve_defaults: "排班配置预览",
   diagnose_account: "账号诊断",
   solve_schedule: "排班求解",
   query_skills: "技能查询",
@@ -83,11 +86,58 @@ function ToolResultSummary({ name, output }: { name: string; output: unknown }) 
       </div>
     );
   }
+  if (name === "calculate_mastery" && record.simple && record.fast) {
+    const settings = asRecord(record.settings);
+    const sources = asRecord(record.settingsSources);
+    const observation = asRecord(record.environmentObservation);
+    const labels: Record<string, string> = { sami: "萨米", abyssal: "深海猎人", knights: "骑士", defence: "防守方", attack: "进攻方", siracusa: "叙拉古", fireworks: "人间烟火" };
+    return <div className="grid gap-2 text-xs">
+      <p>{String(asRecord(record.targetOperator)?.name)} · 干员池：{String(record.sourceName)}</p>
+      <p>起始专精 {String(settings?.current)} → {String(settings?.target)} · 中枢 {settings?.controlBonus ? "+5%" : "0%"}（{String(sources?.controlBonus ?? "默认值")}） · 换人余量 {String(settings?.bufferMinutes)} 分钟</p>
+      <p>{Object.entries(asRecord(settings?.environment) ?? {}).map(([key, value]) => `${labels[key] ?? key} ${value}（${asRecord(sources?.environment)?.[key] ?? "默认值"}）`).join(" · ")}</p>
+      {observation ? <><p>森空岛快照：{typeof observation.storeTs === "number" && observation.storeTs > 0 ? new Date(observation.storeTs * 1000).toLocaleString("zh-CN") : "时间未知"}</p><p className="text-amber-600 dark:text-amber-300">{String(observation.warning)}</p></> : null}
+      {record.isSample === true ? <p className="text-muted-foreground">按全精二示例干员池计算。</p> : null}
+      {(["simple", "fast"] as const).map((mode) => {
+        const plan = asRecord(record[mode]);
+        return <details key={mode} className="rounded border p-2" open={mode === "simple"}>
+          <summary className="cursor-pointer">{mode === "simple" ? "简单方案" : "快速方案"} · {String(plan?.totalTime)} · 换人 {String(plan?.switches)} 次</summary>
+          {Array.isArray(plan?.instructions) ? plan.instructions.map((stage, index) => <ol key={index} className="mt-2 grid gap-1 border-t pt-2">
+            {Array.isArray(stage) ? stage.map((step, stepIndex) => {
+              const item = asRecord(step);
+              const seconds = Math.ceil(Number(item?.elapsed ?? 0));
+              const time = `${Math.floor(seconds / 3600)}:${String(Math.floor(seconds / 60) % 60).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+              return <li key={stepIndex}>+{time} · {String(item?.text ?? "")}</li>;
+            }) : null}
+          </ol>) : null}
+        </details>;
+      })}
+      <p className="text-muted-foreground">{String(record.assumptions)}</p>
+    </div>;
+  }
+  if (name === "calculate_recruitment" && Array.isArray(record.results)) {
+    return <div className="grid gap-2 text-xs">
+      <p>招聘 {String(record.minutes)} 分钟 · 干员池：{String(record.sourceName)}</p>
+      {record.ownershipKnown === false ? <p className="text-muted-foreground">示例干员池：个人拥有状态未知。</p> : null}
+      {record.results.length === 0 ? <p>没有符合当前词条和筛选条件的组合。</p> : null}
+      {record.results.map((value, index) => {
+        const result = asRecord(value);
+        return <details key={index} className="rounded border p-2">
+          <summary className="cursor-pointer">{Array.isArray(result?.tags) ? result.tags.join(" + ") : ""} · 最低 {String(result?.minimumRarity)}★</summary>
+          <p className="mt-1 leading-5">{Array.isArray(result?.operators) ? result.operators.map((value) => {
+            const operator = asRecord(value);
+            return `${operator?.name} ${operator?.rarity}★${operator?.ownership === "missing" ? "（未拥有）" : ""}`;
+          }).join("、") : ""}</p>
+        </details>;
+      })}
+      <p className="text-muted-foreground">{String(record.assumptions)}</p>
+    </div>;
+  }
   if (name === "diagnose_account") {
     const skland = asRecord(record.skland);
     if (!skland) return null;
+    const pool = asRecord(record.operatorPool);
     if (skland.connected !== true) {
-      return <p className="text-xs text-muted-foreground">森空岛未连接：{String(skland.reason ?? "")}</p>;
+      return <div className="grid gap-1 text-xs text-muted-foreground"><p>森空岛未连接：{String(skland.reason ?? "")}</p><p>干员池：{String(pool?.sourceName ?? "未知")} · 干员 {String(pool?.owned ?? "?")} / 精二 {String(pool?.elite2 ?? "?")}</p></div>;
     }
     const player = asRecord(skland.player);
     const operbox = asRecord(skland.operbox);
@@ -213,10 +263,10 @@ export function AgentChat() {
         <span className="h-7 w-1.5 shrink-0 bg-[#FFD501]" aria-hidden="true" />
         <div className="min-w-0">
           <h1 className="truncate text-[21px] font-medium leading-none">可露希尔助理</h1>
-          <p className="mt-1 text-xs text-muted-foreground">实验性 agent 入口 · 串联账号诊断、排班求解、技能查询与知识库</p>
+          <p className="mt-1 text-xs text-muted-foreground">实验性 agent 入口 · 账号诊断、排班、专精训练、公招计算与知识库</p>
           {agentInfo ? (
             <p className="mt-0.5 break-all font-number text-[11px] text-muted-foreground" data-agent-runtime-info>
-              {agentInfo.provider} · {agentInfo.model} · {agentInfo.baseURL}
+              {agentInfo.model}
             </p>
           ) : null}
         </div>
@@ -242,7 +292,7 @@ AGENT_LLM_API_KEY=你的密钥`}</pre>
         <div className="grid gap-2 rounded-lg border bg-muted/30 p-4">
           <p className="text-sm text-muted-foreground">嘿，博士，需要我帮你算点什么？比如——</p>
           <div className="grid gap-2 sm:grid-cols-2">
-            {["我想搓玉，但不知道自己库存适不适合", "帮我看看账号现在什么水平", "243 和 252 布局我该用哪个？"].map((prompt) => (
+            {["我想搓玉，但不知道自己干员池适不适合", "帮我看看账号现在什么水平", "帮我算能天使从未专精到专三的训练方案", "公招有高级资深干员、狙击干员、远程位，九小时怎么选？"].map((prompt) => (
               <button
                 key={prompt}
                 type="button"
