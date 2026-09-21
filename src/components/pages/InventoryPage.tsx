@@ -120,16 +120,15 @@ export default function InventoryPage() {
     };
   }, [exchange.pulls, itemCount]);
   const sixStarSummary = useMemo(() => {
-    const lmdCount = Math.floor(itemCount("4001") / SIX_STAR_E2_60_COST.lmd);
+    const lmdCount = itemCount("4001") / SIX_STAR_E2_60_COST.lmd;
     const exp = (Object.entries(BATTLE_RECORD_EXP) as Array<[keyof typeof BATTLE_RECORD_EXP, number]>).reduce(
       (total, [id, value]) => total + itemCount(id) * value,
       0,
     );
     return {
-      count: Math.min(lmdCount, Math.floor(exp / SIX_STAR_E2_60_COST.exp)),
+      count: Math.min(lmdCount, exp / SIX_STAR_E2_60_COST.exp),
       exp,
       lmdCount,
-      expCount: Math.floor(exp / SIX_STAR_E2_60_COST.exp),
     };
   }, [itemCount]);
   return (
