@@ -30,6 +30,7 @@ export type ManualRoomEvaluation = {
   orderMultiplier: number;
   finalEfficiency: number;
   goldEquivalentEfficiency: number;
+  tradeEquivalentEfficiency?: number;
   dailyOutput: number | null;
   outputKind?: "lmd" | "pure_gold" | "battle_records" | "originium_shards" | "power";
 };

@@ -71,7 +71,6 @@ function roomEvaluation(input: {
     if (room.settlement_status !== "evaluated") return [];
     const layoutRoom = input.layout.rooms.find((candidate) => candidate.id === room.room_id);
     if (!layoutRoom) return [];
-    const breakdown = room.breakdown;
     const factoryRecipe = layoutRoom.kind === "factory" ? factoryRecipeFor(layoutRoom) : undefined;
     const factoryOutputKind = factoryRecipe === "gold"
       ? "pure_gold"
@@ -86,13 +85,14 @@ function roomEvaluation(input: {
     return [{
       roomId: room.room_id,
       members: namesForRoom(input.draft, input.shiftIndex, room.room_id, manualRoomCapacity(layoutRoom)),
-      baseEfficiency: (breakdown?.occupancy_basis_points ?? 0) / 1_000,
-      skillEfficiency: (breakdown?.skill_basis_points ?? 0) / 1_000,
-      globalEfficiency: (breakdown?.global_basis_points ?? 0) / 1_000,
-      totalEfficiency: room.total_basis_points / 1_000,
-      orderMultiplier: (breakdown?.order_multiplier_basis_points ?? 1_000) / 1_000,
-      finalEfficiency: room.final_basis_points / 1_000,
-      goldEquivalentEfficiency: (breakdown?.gold_equivalent_basis_points ?? 0) / 1_000,
+      baseEfficiency: room.display_base_basis_points / 1_000,
+      skillEfficiency: room.display_skill_basis_points / 1_000,
+      globalEfficiency: room.display_global_basis_points / 1_000,
+      totalEfficiency: room.display_total_basis_points / 1_000,
+      orderMultiplier: room.order_multiplier_basis_points / 1_000,
+      finalEfficiency: room.display_final_basis_points / 1_000,
+      goldEquivalentEfficiency: room.gold_equivalent_basis_points / 1_000,
+      tradeEquivalentEfficiency: room.trade_equivalent_basis_points / 1_000,
       dailyOutput: null,
       ...(outputKind ? { outputKind } : {}),
     }];
@@ -104,7 +104,7 @@ function roomLine(room: ManualRoomEvaluation, kind: BaseBlueprint["rooms"][numbe
     room_id: room.roomId,
     ...(kind === "power_plant" ? {} : { base_efficiency: room.baseEfficiency }),
     equivalent_efficiency: kind === "trade_post"
-      ? room.finalEfficiency - room.baseEfficiency - room.globalEfficiency
+      ? room.tradeEquivalentEfficiency ?? room.skillEfficiency
       : room.skillEfficiency,
     global_efficiency: room.globalEfficiency,
     total_efficiency: room.totalEfficiency,
@@ -115,7 +115,7 @@ function roomLine(room: ManualRoomEvaluation, kind: BaseBlueprint["rooms"][numbe
     line.trade_score = room.finalEfficiency;
     line.trade_skill_pct = room.skillEfficiency * 100;
     line.trade_display_pct = (room.skillEfficiency + room.globalEfficiency) * 100;
-    line.trade_equivalent_efficiency = room.finalEfficiency - room.baseEfficiency - room.globalEfficiency;
+    line.trade_equivalent_efficiency = room.tradeEquivalentEfficiency ?? room.skillEfficiency;
     line.gold_equivalent_efficiency = room.goldEquivalentEfficiency;
   } else if (kind === "factory") {
     line.manu_score = room.finalEfficiency * 100;

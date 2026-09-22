@@ -43,6 +43,14 @@ type NativeEvalRoom = {
   facility: string;
   level: number;
   settlement_status: "evaluated" | "not_supported";
+  display_base_basis_points: number;
+  display_skill_basis_points: number;
+  display_global_basis_points: number;
+  display_total_basis_points: number;
+  display_final_basis_points: number;
+  order_multiplier_basis_points: number;
+  trade_equivalent_basis_points: number;
+  gold_equivalent_basis_points: number;
   total_basis_points: number;
   final_basis_points: number;
   breakdown: NativeEvalBreakdown | null;

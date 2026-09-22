@@ -52,5 +52,5 @@ test("manual schedule evaluates the current assignment with the lazy WASM engine
   await nativeButton.click();
   await expect(page.locator("[data-room-title=\"贸易站 1\"] [data-room-primary-efficiency]")).not.toHaveText("0%");
   await expect.poll(() => wasmRequests.some((url) => url.endsWith("infra_eval_wasm.js"))).toBe(true);
-  await expect.poll(() => wasmRequests.some((url) => url.includes("infra-eval.v3-0c35f30.b7dbffd1a334.wasm"))).toBe(true);
+  await expect.poll(() => wasmRequests.some((url) => url.includes("infra-eval.v3-0c35f30.8c344b61e8e1.wasm"))).toBe(true);
 });
