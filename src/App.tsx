@@ -1,4 +1,5 @@
 "use client";
+import { withDefaultDormAutofill } from "./automatic-dorm-defaults";
 import { localize as localize_App } from "./i18n/helpers/App.ts";
 import { useTranslations, useLocale } from "next-intl";
 
@@ -413,7 +414,8 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   }, []);
 
   const planTask = usePlanTask({
-    onDone: (finalizedResult) => {
+    onDone: (rawResult) => {
+      const finalizedResult = withDefaultDormAutofill(rawResult);
       setCliReady(true);
       setActiveShift(0);
       automaticMaaRef.current = { diagnosticId: finalizedResult.diagnosticId, maa: structuredClone(finalizedResult.maa) };
@@ -2107,7 +2109,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       onScheduleVariantChange: setScheduleVariant,
       onUpgradeTrialReady: (trial: PublicPlanData) => {
         if (!result) return;
-        setUpgradeComparison({ baseline: result, trial });
+        setUpgradeComparison({ baseline: result, trial: withDefaultDormAutofill(trial) });
         setScheduleVariant("trial");
         setActiveShift(0);
       },
