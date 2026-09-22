@@ -17,10 +17,8 @@ import type { DisplayError, SklandInventoryData } from "@/types";
 const catalog = itemCatalog as Record<string, { name?: string; icon?: string }>;
 const fmt = (value: number) => value.toLocaleString("zh-CN");
 const BATTLE_RECORD_IDS = new Set(["2001", "2002", "2003", "2004"]);
-const COMMON_IDS = ["4002", "4003", "4001", "4004", "4005", "7004", "7003", "7001"];
-const INFRASTRUCTURE_MATERIAL_IDS = new Set(["3112", "3113", "3114", "3131", "3132", "3133", "3401", "3105"]);
+const COMMON_IDS = ["4002", "4003", "4001", "4004", "4005", "7004", "7003", "7001", "3141", "3003"];
 const MANUAL_RESOURCE_IDS = ["4002", "4003", "4004", "4005", "7004", "7003", "7001"];
-const FEATURED_IDS = new Set([...COMMON_IDS, ...BATTLE_RECORD_IDS]);
 const MANUAL_STORAGE_KEY = "aic-skland-inventory-manual-resources-v1";
 const HEADHUNTING_STEPS = [
   { tier: 1, content: "寻访凭证 x1", cost: 10, pulls: 1, average: 10 },
@@ -101,27 +99,27 @@ export default function InventoryPage() {
     return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : null;
   }, [manualCounts]);
   const itemCount = useCallback((id: string) => manualValue(id) ?? apiCountById.get(id) ?? 0, [apiCountById, manualValue]);
-  const featuredItems = useMemo(() => {
-    return [...COMMON_IDS, ...BATTLE_RECORD_IDS]
-      .map((id) => ({ id, count: itemCount(id) }));
-  }, [itemCount]);
-  const commonItems = useMemo(() => featuredItems.filter((item) => item.id !== "4001" && !BATTLE_RECORD_IDS.has(item.id)), [featuredItems]);
-  const experienceItems = useMemo(() => featuredItems.filter((item) => item.id === "4001" || BATTLE_RECORD_IDS.has(item.id)), [featuredItems]);
-  const otherItems = useMemo(() => items.filter((item) => !FEATURED_IDS.has(item.id)), [items]);
-  const infrastructureItems = useMemo(() => otherItems.filter((item) => INFRASTRUCTURE_MATERIAL_IDS.has(item.id)), [otherItems]);
-  const generalItems = useMemo(() => otherItems.filter((item) => !INFRASTRUCTURE_MATERIAL_IDS.has(item.id)), [otherItems]);
+  const commonItems = ["4002", "4003", "4004", "7004", "7003", "3141"]
+    .map((id) => ({ id, count: itemCount(id) }));
+  const experienceItems = ["4001", ...BATTLE_RECORD_IDS, "3003"]
+    .map((id) => ({ id, count: itemCount(id) }));
   const materialGroups = useMemo(() => {
-    const remaining = new Set(generalItems.map((item) => item.id));
-    const groups = Object.entries(MATERIAL_GROUPS).map(([title, names]) => {
-      const groupedItems = generalItems
-        .filter((item) => names.includes(catalog[item.id]?.name ?? ""))
+    const excluded = new Set(["4002", "4003", "4004", "7004", "7003", "3141", "4001", ...BATTLE_RECORD_IDS, "3003"]);
+    const candidates = new Map(items.filter((item) => !excluded.has(item.id)).map((item) => [item.id, item]));
+    for (const id of ["4005", "7001"]) candidates.set(id, { id, count: itemCount(id) });
+    const categories = [
+      { title: "养成材料", names: Object.entries(MATERIAL_GROUPS).filter(([title]) => title.startsWith("稀有度")).flatMap(([, names]) => names) },
+      { title: "模组芯片和技能书", names: [...MATERIAL_GROUPS["模组"], ...MATERIAL_GROUPS["芯片相关"], ...MATERIAL_GROUPS["技能书"]] },
+    ];
+    const groups = categories.map(({ title, names }) => {
+      const grouped = [...candidates.values()].filter((item) => names.includes(catalog[item.id]?.name ?? ""))
         .sort((a, b) => names.indexOf(catalog[a.id]?.name ?? "") - names.indexOf(catalog[b.id]?.name ?? ""));
-      groupedItems.forEach((item) => remaining.delete(item.id));
-      return { title, items: groupedItems };
+      grouped.forEach((item) => candidates.delete(item.id));
+      return { title, items: grouped };
     });
-    groups.push({ title: "其他材料", items: generalItems.filter((item) => remaining.has(item.id)) });
-    return groups.filter((group) => group.items.length > 0);
-  }, [generalItems]);
+    groups.push({ title: "其他", items: [...candidates.values()] });
+    return groups;
+  }, [items, itemCount]);
   const yellowCerts = manualValue("4004") ?? apiCountById.get("4004") ?? 0;
   const exchange = useMemo(() => {
     let selected: (typeof HEADHUNTING_STEPS)[number] | null = null;
@@ -175,7 +173,6 @@ export default function InventoryPage() {
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="flex items-center gap-2.5 text-lg font-semibold"><span className="h-6 w-1.5 bg-[#FFD501]" aria-hidden="true" />{locale === "en" ? "Inventory" : "查看库存"}</h1>
-            <p className="mt-2 text-sm text-muted-foreground">{locale === "en" ? "Read-only inventory from Skland." : "读取森空岛仓库物品，仅查看，不修改游戏数据。"}</p>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => setEstimateOpen(true)} disabled={loading || !!error}><Calculator className="size-4" />资源估算</Button>
@@ -195,7 +192,7 @@ export default function InventoryPage() {
           {!error && !loading ? <>
             <div className="mt-5 grid gap-6">
               <div className="min-w-0">
-              <h3 className="mb-3 border-b border-border pb-3 text-xl font-medium">常用</h3>
+              <h3 className="mb-3 border-b border-border pb-3 text-xl font-medium">抽卡资源</h3>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                 {commonItems.map((item) => {
                   const catalogItem = catalog[item.id];
@@ -219,7 +216,7 @@ export default function InventoryPage() {
               </div>
               </div>
               <div className="border-b border-border pb-5">
-                <h3 className="mb-3 border-b border-border pb-3 text-xl font-medium">龙门币与经验卡</h3>
+                <h3 className="mb-3 border-b border-border pb-3 text-xl font-medium">钱书资源</h3>
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                   {experienceItems.map((item) => {
                     const catalogItem = catalog[item.id];
@@ -306,25 +303,13 @@ export default function InventoryPage() {
                     <div className="grid size-10 shrink-0 place-items-center rounded-full bg-muted/30">
                       {catalogItem?.icon ? <Image src={catalogItem.icon} alt="" width={44} height={44} className="size-10 object-contain" /> : <PackageOpen className="size-5 text-muted-foreground" aria-hidden="true" />}
                     </div>
-                    <span className="min-w-0 flex-1 break-words text-sm leading-5"><span className="block">{catalogItem?.name ?? "未知物品"}</span><span className="mt-1 block text-xs text-muted-foreground">拥有：{fmt(item.count)}</span></span>
+                    <div className="min-w-0 flex-1 text-sm leading-5"><span className="block break-words">{catalogItem?.name ?? "未知物品"}</span>
+                      {MANUAL_RESOURCE_IDS.includes(item.id) ? <Input inputMode="numeric" value={manualCounts[item.id] ?? ""} onChange={(event) => setManualCount(item.id, event.target.value)} placeholder={String(apiCountById.get(item.id) ?? 0)} aria-label={`填写${catalogItem?.name ?? "资源"}数量`} className="mt-1 h-9 w-full min-w-0 px-2 font-number text-xs" /> : <span className="mt-1 block text-xs text-muted-foreground">拥有：{fmt(item.count)}</span>}
+                    </div>
                   </div>;
                 })}
               </div>
             </section>)}
-            {infrastructureItems.length > 0 ? <section className="mt-7 border-t border-border pt-5">
-              <h3 className="mb-3 border-b border-border pb-2 text-lg font-semibold">基建材料</h3>
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
-                {infrastructureItems.map((item) => {
-                  const catalogItem = catalog[item.id];
-                  return <div key={item.id} className="flex min-h-[74px] items-center gap-2 rounded-md px-3 py-2 transition-colors hover:bg-muted/40">
-                    <div className="grid size-10 shrink-0 place-items-center rounded-full bg-muted/30">
-                      {catalogItem?.icon ? <Image src={catalogItem.icon} alt="" width={44} height={44} className="size-10 object-contain" /> : <PackageOpen className="size-5 text-muted-foreground" aria-hidden="true" />}
-                    </div>
-                    <span className="min-w-0 flex-1 break-words text-sm leading-5"><span className="block">{catalogItem?.name ?? "未知物品"}</span><span className="mt-1 block text-xs text-muted-foreground">拥有：{fmt(item.count)}</span></span>
-                  </div>;
-                })}
-              </div>
-            </section> : null}
             {items.length === 0 ? <div className="py-16 text-center text-sm text-muted-foreground">没有匹配的库存物品。</div> : null}
           </> : null}
           {data ? <p className="mt-5 text-xs text-muted-foreground">读取时间：{new Date(data.fetchedAt).toLocaleString()}</p> : null}
