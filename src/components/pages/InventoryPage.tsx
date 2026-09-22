@@ -14,11 +14,15 @@ import itemCatalog from "@/generated/item-catalog.json";
 import { useLocale } from "next-intl";
 import type { DisplayError, SklandInventoryData } from "@/types";
 
-const catalog = itemCatalog as Record<string, { name?: string; icon?: string }>;
+const catalog: Record<string, { name?: string; icon?: string }> = {
+  ...itemCatalog,
+  classic_normal_ticket: { name: "通用凭证", icon: "/images/items/classic_normal_ticket.png" },
+  classic_gacha: { name: "中坚寻访凭证", icon: "/images/items/classic_gacha.png" },
+};
 const fmt = (value: number) => value.toLocaleString("zh-CN");
 const BATTLE_RECORD_IDS = new Set(["2001", "2002", "2003", "2004"]);
-const COMMON_IDS = ["4002", "4003", "4001", "4004", "4005", "7004", "7003", "7001", "3141", "3003"];
-const MANUAL_RESOURCE_IDS = ["4002", "4003", "4004", "4005", "7004", "7003", "7001"];
+const COMMON_IDS = ["4002", "4003", "4001", "4004", "4005", "7004", "7003", "7001", "3141", "3003", "classic_normal_ticket", "classic_gacha"];
+const MANUAL_RESOURCE_IDS = ["4002", "4003", "4004", "4005", "7004", "7003", "7001", "classic_normal_ticket", "classic_gacha"];
 const MANUAL_STORAGE_KEY = "aic-skland-inventory-manual-resources-v1";
 const HEADHUNTING_STEPS = [
   { tier: 1, content: "寻访凭证 x1", cost: 10, pulls: 1, average: 10 },
@@ -99,7 +103,7 @@ export default function InventoryPage() {
     return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : null;
   }, [manualCounts]);
   const itemCount = useCallback((id: string) => manualValue(id) ?? apiCountById.get(id) ?? 0, [apiCountById, manualValue]);
-  const commonItems = ["4002", "4003", "4004", "7004", "7003", "3141"]
+  const commonItems = ["4002", "4003", "4004", "classic_normal_ticket", "7004", "7003", "classic_gacha", "3141"]
     .map((id) => ({ id, count: itemCount(id) }));
   const experienceItems = ["4001", ...BATTLE_RECORD_IDS, "3003"]
     .map((id) => ({ id, count: itemCount(id) }));
