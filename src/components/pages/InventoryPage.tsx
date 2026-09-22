@@ -101,6 +101,8 @@ export default function InventoryPage() {
     return [...COMMON_IDS, ...BATTLE_RECORD_IDS]
       .map((id) => ({ id, count: itemCount(id) }));
   }, [itemCount]);
+  const commonItems = useMemo(() => featuredItems.filter((item) => !BATTLE_RECORD_IDS.has(item.id)), [featuredItems]);
+  const experienceItems = useMemo(() => featuredItems.filter((item) => BATTLE_RECORD_IDS.has(item.id)), [featuredItems]);
   const otherItems = useMemo(() => items.filter((item) => !FEATURED_IDS.has(item.id)), [items]);
   const infrastructureItems = useMemo(() => otherItems.filter((item) => INFRASTRUCTURE_MATERIAL_IDS.has(item.id)), [otherItems]);
   const generalItems = useMemo(() => otherItems.filter((item) => !INFRASTRUCTURE_MATERIAL_IDS.has(item.id)), [otherItems]);
@@ -165,7 +167,7 @@ export default function InventoryPage() {
           </div>
         </header>
 
-        <section className="border border-border/70 bg-card/80 p-4 sm:p-6">
+        <section className="p-1 sm:p-2">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
             <div className="flex items-center gap-2"><PackageOpen className="size-5 text-[#FFD501]" /><h2 className="text-xl font-semibold">背包物品</h2></div>
             <span className="text-sm text-muted-foreground">共 {items.length} 项</span>
@@ -176,11 +178,11 @@ export default function InventoryPage() {
           {!error && !loading ? <>
             <div className="mt-5 grid gap-6">
               <div className="min-w-0">
-              <h3 className="mb-3 border-b border-border pb-2 text-lg font-medium">常用</h3>
+              <h3 className="mb-3 border-b border-border pb-3 text-xl font-medium">常用</h3>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-                {featuredItems.map((item) => {
+                {commonItems.map((item) => {
                   const catalogItem = catalog[item.id];
-                  return <div key={item.id} className="flex min-h-[74px] items-center gap-2 rounded-md border border-border/60 bg-background/80 px-3 py-2 shadow-sm transition-colors hover:border-primary/40 hover:bg-muted/30">
+                  return <div key={item.id} className="flex min-h-[74px] items-center gap-2 rounded-md px-3 py-2 transition-colors hover:bg-muted/40">
                     <div className="grid size-10 shrink-0 place-items-center rounded-full bg-muted/30">
                       {catalogItem?.icon ? <Image src={catalogItem.icon} alt="" width={44} height={44} className="size-10 object-contain" /> : <PackageOpen className="size-5 text-muted-foreground" aria-hidden="true" />}
                     </div>
@@ -195,7 +197,21 @@ export default function InventoryPage() {
                     /> : null}
                   </div>;
                 })}
-            </div>
+              </div>
+              </div>
+              <div className="border-b border-border pb-5">
+                <h3 className="mb-3 border-b border-border pb-3 text-xl font-medium">经验卡</h3>
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+                  {experienceItems.map((item) => {
+                    const catalogItem = catalog[item.id];
+                    return <div key={item.id} className="flex min-h-[74px] items-center gap-2 rounded-md px-3 py-2 transition-colors hover:bg-muted/40">
+                      <div className="grid size-10 shrink-0 place-items-center rounded-full bg-muted/30">
+                        {catalogItem?.icon ? <Image src={catalogItem.icon} alt="" width={44} height={44} className="size-10 object-contain" /> : <PackageOpen className="size-5 text-muted-foreground" aria-hidden="true" />}
+                      </div>
+                      <span className="min-w-0 flex-1 truncate text-sm"><span className="block truncate">{catalogItem?.name ?? "未知物品"}</span><span className="mt-1 block text-xs text-muted-foreground">拥有：{fmt(item.count)}</span></span>
+                    </div>;
+                  })}
+                </div>
               </div>
             <section className="grid gap-5 border-y border-border/70 bg-muted/10 p-4 sm:grid-cols-2 sm:p-5">
               <div>
@@ -249,7 +265,7 @@ export default function InventoryPage() {
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
                 {generalItems.map((item) => {
                   const catalogItem = catalog[item.id];
-                  return <div key={item.id} className="flex min-h-[74px] items-center gap-2 rounded-md border border-border/60 bg-background/80 px-3 py-2 shadow-sm transition-colors hover:border-primary/40">
+                  return <div key={item.id} className="flex min-h-[74px] items-center gap-2 rounded-md px-3 py-2 transition-colors hover:bg-muted/40">
                     <div className="grid size-10 shrink-0 place-items-center rounded-full bg-muted/30">
                       {catalogItem?.icon ? <Image src={catalogItem.icon} alt="" width={44} height={44} className="size-10 object-contain" /> : <PackageOpen className="size-5 text-muted-foreground" aria-hidden="true" />}
                     </div>
@@ -263,7 +279,7 @@ export default function InventoryPage() {
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
                 {infrastructureItems.map((item) => {
                   const catalogItem = catalog[item.id];
-                  return <div key={item.id} className="flex min-h-[74px] items-center gap-2 rounded-md border border-border/60 bg-background/80 px-3 py-2 shadow-sm transition-colors hover:border-primary/40">
+                  return <div key={item.id} className="flex min-h-[74px] items-center gap-2 rounded-md px-3 py-2 transition-colors hover:bg-muted/40">
                     <div className="grid size-10 shrink-0 place-items-center rounded-full bg-muted/30">
                       {catalogItem?.icon ? <Image src={catalogItem.icon} alt="" width={44} height={44} className="size-10 object-contain" /> : <PackageOpen className="size-5 text-muted-foreground" aria-hidden="true" />}
                     </div>
