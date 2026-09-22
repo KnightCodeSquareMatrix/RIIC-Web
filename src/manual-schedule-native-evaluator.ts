@@ -1,6 +1,5 @@
 import { factoryRecipeFor, tradeOrderFor } from "./blueprint.ts";
 import { evaluateNativeSchedule, type NativeEvalRequestV1, type NativeEvalResponseV1 } from "./lib/infra-eval/client.ts";
-import { createWasmEvaluationArtifact, type ManualWasmEvaluationArtifact } from "./manual-wasm-evaluation-diagnostic.ts";
 import { manualRoomCapacity, type ManualScheduleDraft } from "./manual-schedule.ts";
 import { normalizeOperboxEntries } from "./operbox-normalization.ts";
 import type { ManualEvaluationWarning, ManualRoomEvaluation, ManualScheduleEvaluation } from "./manual-schedule-evaluator.ts";
@@ -135,7 +134,7 @@ export async function evaluateManualScheduleWithNativeEngine(input: {
   draft: ManualScheduleDraft;
   layout: BaseBlueprint;
   operbox: readonly OperBoxEntry[] | null;
-}): Promise<{ evaluation: ManualScheduleEvaluation; artifact: ManualWasmEvaluationArtifact }> {
+}): Promise<ManualScheduleEvaluation> {
   const startedAt = performance.now();
   const request = buildNativeEvalRequest(input);
   const response = await evaluateNativeSchedule(request);
@@ -185,14 +184,5 @@ export async function evaluateManualScheduleWithNativeEngine(input: {
     warnings,
     elapsedMs: performance.now() - startedAt,
   } satisfies ManualScheduleEvaluation;
-  return {
-    evaluation,
-    artifact: createWasmEvaluationArtifact({
-      ...input,
-      request,
-      response,
-      evaluation,
-      elapsedMs: evaluation.elapsedMs,
-    }),
-  };
+  return evaluation;
 }

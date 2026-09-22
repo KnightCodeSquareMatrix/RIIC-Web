@@ -152,87 +152,27 @@ function selectedTarget(input: {
   return null;
 }
 
-export type SelectedDroneProductionTrace = {
-  totalDurationHours: number;
-  normalizeScale: number;
-  shifts: Array<{
-    position: number;
-    shiftIndex: number;
-    durationHours: number;
-    planIndex: number | null;
-    dronePlanIndex: number | null;
-    drones?: { room: "trading" | "manufacture"; index: number; order?: string };
-    powerEfficiency?: number;
-    droneEquivalent?: number;
-    targetRecipeOrProfile?: string;
-    formula?: string;
-    rawContribution?: DroneDailyProduction;
-  }>;
-};
-
 /** Calculates drone output for user-selected MAA targets without choosing or rewriting targets. */
-export function droneProductionForSelectedMaaTargetsWithTrace(input: {
-  layout: BaseBlueprint;
-  maa: MaaJson;
-  rotation: RotationJson;
-}): { production: DroneDailyProduction; trace: SelectedDroneProductionTrace } {
-  const totalHours = input.rotation.shifts.reduce((sum, shift) => sum + (positive(shift.duration_hours) ? shift.duration_hours : 0), 0);
-  const cycle = { lmd: 0, pure_gold: 0, battle_records: 0 };
-  const traceShifts: SelectedDroneProductionTrace["shifts"] = [];
-  input.rotation.shifts.forEach((shift, position) => {
-    const planIndex = actualPlanIndex(input.maa, shift, position);
-    const actualPlan = planIndex === null ? undefined : input.maa.plans[planIndex];
-    const dronePlanIndex = planIndex === null ? null : droneStoragePlanIndex(planIndex, input.maa.plans.length);
-    const drones = dronePlanIndex === null ? undefined : input.maa.plans[dronePlanIndex]?.drones;
-    if (!actualPlan || !drones || drones.enable === false) {
-      traceShifts.push({ position, shiftIndex: shift.index, durationHours: shift.duration_hours, planIndex, dronePlanIndex });
-      return;
-    }
-    const target = selectedTarget({ layout: input.layout, actualPlan, drones });
-    if (!target) {
-      traceShifts.push({
-        position, shiftIndex: shift.index, durationHours: shift.duration_hours, planIndex, dronePlanIndex,
-        drones: { room: drones.room, index: drones.index, order: drones.order },
-        targetRecipeOrProfile: "unsupported-target",
-        formula: "unsupported-target",
-      });
-      return;
-    }
-    const powerStations = powerStationsFromRotation(input.layout, shift, actualPlan);
-    const output = droneDailyProductionForActualShift({ powerStations, durationHours: shift.duration_hours, target });
-    const targetRecipeOrProfile = target.room === "trading" ? target.profile.kind : target.product;
-    const formula = target.room === "trading"
-      ? "droneEquivalent * tradeTargetBaseDaily"
-      : target.product === "gold"
-        ? "droneEquivalent * 10000"
-        : "droneEquivalent * 8000";
-    traceShifts.push({
-      position,
-      shiftIndex: shift.index,
-      durationHours: shift.duration_hours,
-      planIndex,
-      dronePlanIndex,
-      drones: { room: drones.room, index: drones.index, order: drones.order },
-      powerEfficiency: powerEfficiencyForShift(powerStations),
-      droneEquivalent: output.equivalentEfficiency,
-      targetRecipeOrProfile,
-      formula,
-      rawContribution: { lmd: output.lmd, pure_gold: output.pure_gold, battle_records: output.battle_records },
-    });
-    cycle.lmd += output.lmd;
-    cycle.pure_gold += output.pure_gold;
-    cycle.battle_records += output.battle_records;
-  });
-  return {
-    production: normalizeDroneDailyProduction(cycle, totalHours),
-    trace: { totalDurationHours: totalHours, normalizeScale: totalHours > 0 ? 24 / totalHours : 1, shifts: traceShifts },
-  };
-}
-
 export function droneProductionForSelectedMaaTargets(input: {
   layout: BaseBlueprint;
   maa: MaaJson;
   rotation: RotationJson;
 }): DroneDailyProduction {
-  return droneProductionForSelectedMaaTargetsWithTrace(input).production;
+  const totalHours = input.rotation.shifts.reduce((sum, shift) => sum + (positive(shift.duration_hours) ? shift.duration_hours : 0), 0);
+  const cycle = { lmd: 0, pure_gold: 0, battle_records: 0 };
+  input.rotation.shifts.forEach((shift, position) => {
+    const planIndex = actualPlanIndex(input.maa, shift, position);
+    const actualPlan = planIndex === null ? undefined : input.maa.plans[planIndex];
+    const dronePlanIndex = planIndex === null ? null : droneStoragePlanIndex(planIndex, input.maa.plans.length);
+    const drones = dronePlanIndex === null ? undefined : input.maa.plans[dronePlanIndex]?.drones;
+    if (!actualPlan || !drones || drones.enable === false) return;
+    const target = selectedTarget({ layout: input.layout, actualPlan, drones });
+    if (!target) return;
+    const powerStations = powerStationsFromRotation(input.layout, shift, actualPlan);
+    const output = droneDailyProductionForActualShift({ powerStations, durationHours: shift.duration_hours, target });
+    cycle.lmd += output.lmd;
+    cycle.pure_gold += output.pure_gold;
+    cycle.battle_records += output.battle_records;
+  });
+  return normalizeDroneDailyProduction(cycle, totalHours);
 }

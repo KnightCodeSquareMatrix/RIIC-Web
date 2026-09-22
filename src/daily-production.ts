@@ -158,28 +158,7 @@ function finalizedAmount(source: MutableAmount): DailyProductionAmount {
   };
 }
 
-export type DailyProductionTrace = {
-  totalDurationHours: number;
-  normalizeScale: number;
-  rooms: Array<{
-    shiftIndex: number;
-    position: number;
-    roomId: string;
-    kind: "trade" | "manufacture";
-    product: TradeOrder | FactoryRecipe;
-    baseDaily?: number;
-    totalEfficiency?: number;
-    orderMultiplier?: number;
-    multiplier?: number;
-    rawDurationWeight: number;
-    formula: string;
-    rawContribution?: number;
-    normalizedContribution?: number;
-    unavailableReason?: DailyProductionUnavailableReason;
-  }>;
-};
-
-export function estimateDailyProductionWithTrace({
+export function estimateDailyProduction({
   layout,
   maa,
   rotation,
@@ -187,7 +166,7 @@ export function estimateDailyProductionWithTrace({
   layout: BaseBlueprint;
   maa: MaaJson;
   rotation: RotationJson;
-}): { estimate: DailyProductionEstimate; trace: DailyProductionTrace } {
+}): DailyProductionEstimate {
   const tradeRooms = layoutRooms(layout, "trade_post");
   const factoryRooms = layoutRooms(layout, "factory");
   const lmdOrders: MutableAmount = { natural: 0, drones: 0 };
@@ -196,7 +175,6 @@ export function estimateDailyProductionWithTrace({
   const shards: MutableAmount = { natural: 0, drones: 0 };
   const orundumTrade: MutableAmount = { natural: 0, drones: 0 };
   let droneTrade = 0;
-  const traceRooms: DailyProductionTrace["rooms"] = [];
 
   rotation.shifts.forEach((shift, position) => {
     const durationWeight = shift.duration_hours / 24;
@@ -224,20 +202,6 @@ export function estimateDailyProductionWithTrace({
         return;
       }
       const output = baseDaily * multiplier * durationWeight;
-      traceRooms.push({
-        shiftIndex: shift.index,
-        position,
-        roomId: room.blueprint.id,
-        kind: "trade",
-        product: order,
-        baseDaily,
-        totalEfficiency: room.efficiency?.total_efficiency,
-        orderMultiplier: room.efficiency?.order_multiplier,
-        multiplier,
-        rawDurationWeight: durationWeight,
-        formula: "baseDaily * (totalEfficiency * orderMultiplier) * durationHours / 24",
-        rawContribution: output,
-      });
       if (order === "gold") lmdOrders.natural += output;
       else orundumTrade.natural += output;
     });
@@ -263,20 +227,6 @@ export function estimateDailyProductionWithTrace({
           ? EXPERIENCE_BASE_DAILY
           : SHARD_BASE_DAILY;
       const output = baseDaily * multiplier * durationWeight;
-      traceRooms.push({
-        shiftIndex: shift.index,
-        position,
-        roomId: room.blueprint.id,
-        kind: "manufacture",
-        product: recipe,
-        baseDaily,
-        totalEfficiency: room.efficiency?.total_efficiency,
-        orderMultiplier: room.efficiency?.order_multiplier,
-        multiplier,
-        rawDurationWeight: durationWeight,
-        formula: "baseDaily * (totalEfficiency * orderMultiplier) * durationHours / 24",
-        rawContribution: output,
-      });
       target.natural += output;
     });
 
@@ -337,23 +287,5 @@ export function estimateDailyProductionWithTrace({
       bottleneck,
     },
   } satisfies DailyProductionEstimate;
-  return {
-    estimate,
-    trace: {
-      totalDurationHours,
-      normalizeScale,
-      rooms: traceRooms.map((room) => ({
-        ...room,
-        ...(room.rawContribution === undefined ? {} : { normalizedContribution: room.rawContribution * normalizeScale }),
-      })),
-    },
-  };
-}
-
-export function estimateDailyProduction(input: {
-  layout: BaseBlueprint;
-  maa: MaaJson;
-  rotation: RotationJson;
-}): DailyProductionEstimate {
-  return estimateDailyProductionWithTrace(input).estimate;
+  return estimate;
 }
