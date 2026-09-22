@@ -1231,6 +1231,25 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     if (manualEvaluationPending) return;
     setManualEvaluationPending(true);
     try {
+      const { assembleNativeManualPlanResult } = await import("./manual-plan-result");
+      const result = await assembleNativeManualPlanResult({ draft: input.draft, layout, operbox });
+      setManualPlanResult(result);
+      try {
+        persistManualEvaluationCache(window.localStorage, result);
+      } catch {
+        // The in-memory result remains available for the current workbench session.
+      }
+    } finally {
+      setManualEvaluationPending(false);
+    }
+  }
+
+  async function evaluatePaperManualScheduleFromPage(input: {
+    draft: ManualScheduleDraft;
+  }) {
+    if (manualEvaluationPending) return;
+    setManualEvaluationPending(true);
+    try {
       const { assemblePaperManualPlanResult } = await import("./manual-plan-result");
       const result = assemblePaperManualPlanResult({ draft: input.draft, layout, operbox });
       setManualPlanResult(result);
@@ -2134,6 +2153,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       result: manualPlanResult,
       evaluationPending: manualEvaluationPending,
       onEvaluate: evaluateManualScheduleFromPage,
+      onPaperEvaluate: evaluatePaperManualScheduleFromPage,
       onRestoreEvaluation: restoreManualEvaluation,
       onOpenCalculator: () => navigateToPage("calculator"),
       onShiftDurationsChange: setManualShiftDurations,

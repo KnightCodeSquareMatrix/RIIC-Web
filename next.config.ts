@@ -75,6 +75,10 @@ const nextConfig: NextConfig = {
         source: "/images/elite/:asset",
         headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
       },
+      {
+        source: "/wasm/:asset",
+        headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
+      },
     ];
   },
   async rewrites() {
