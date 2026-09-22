@@ -172,8 +172,8 @@ export default function InventoryPage() {
     };
   }, [itemCount, targetElite, targetLevel, targetRarity]);
   return (
-    <main className="min-h-dvh bg-background text-foreground">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 pb-8 pt-5 sm:px-6">
+    <main className="w-full min-w-0 bg-background text-foreground">
+      <div className="flex w-full min-w-0 flex-col gap-5 pb-8 pt-5">
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="flex items-center gap-2.5 text-lg font-semibold"><span className="h-6 w-1.5 bg-[#FFD501]" aria-hidden="true" />{locale === "en" ? "Inventory" : "查看库存"}</h1>
@@ -185,7 +185,7 @@ export default function InventoryPage() {
           </div>
         </header>
 
-        <section className="p-1 sm:p-2">
+        <section className="w-full min-w-0">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
             <div className="flex items-center gap-2"><PackageOpen className="size-5 text-[#FFD501]" /><h2 className="text-xl font-semibold">背包物品</h2></div>
             <span className="text-sm text-muted-foreground">共 {items.length} 项</span>
