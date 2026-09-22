@@ -28,8 +28,12 @@ const HEADHUNTING_STEPS = [
   { tier: 4, content: "十连寻访凭证 x1", cost: 138, pulls: 18, average: 7.67 },
   { tier: 5, content: "十连寻访凭证 x2", cost: 258, pulls: 38, average: 6.79 },
 ] as const;
-const SIX_STAR_E2_60_COST = { lmd: 588_000, exp: 1_092_000 };
+const COST_BY_RARITY: Record<number, { lmd: number; exp: number }> = {
+  3: { lmd: 247_000, exp: 458_640 }, 4: { lmd: 341_000, exp: 633_360 },
+  5: { lmd: 458_000, exp: 851_760 }, 6: { lmd: 588_000, exp: 1_092_000 },
+};
 const BATTLE_RECORD_EXP = { "2001": 200, "2002": 400, "2003": 1_000, "2004": 2_000 } as const;
+const MAX_LEVEL_BY_TARGET: Record<string, number> = { "0": 50, "1": 50, "2": 90 };
 
 export default function InventoryPage() {
   const locale = useLocale();
@@ -38,6 +42,9 @@ export default function InventoryPage() {
   const [error, setError] = useState<DisplayError | null>(null);
   const [loading, setLoading] = useState(true);
   const [manualCounts, setManualCounts] = useState<Record<string, string>>({});
+  const [targetRarity, setTargetRarity] = useState(6);
+  const [targetElite, setTargetElite] = useState(2);
+  const [targetLevel, setTargetLevel] = useState(60);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -123,17 +130,27 @@ export default function InventoryPage() {
     };
   }, [exchange.pulls, itemCount]);
   const sixStarSummary = useMemo(() => {
-    const lmdCount = itemCount("4001") / SIX_STAR_E2_60_COST.lmd;
+    const isStartingPoint = targetElite === 0 && targetLevel === 1;
+    const levelRatio = targetLevel / 60;
+    const eliteRatio = targetElite === 2 ? 1 : targetElite === 1 ? 0.58 : 0.22;
+    const baseCost = COST_BY_RARITY[targetRarity] ?? COST_BY_RARITY[6];
+    const costScale = (0.35 + levelRatio * 0.65) * (0.45 + eliteRatio * 0.55);
+    const targetCost = {
+      lmd: isStartingPoint ? 0 : Math.round(baseCost.lmd * costScale),
+      exp: isStartingPoint ? 0 : Math.round(baseCost.exp * costScale),
+    };
+    const lmdCount = targetCost.lmd === 0 ? 0 : itemCount("4001") / targetCost.lmd;
     const exp = (Object.entries(BATTLE_RECORD_EXP) as Array<[keyof typeof BATTLE_RECORD_EXP, number]>).reduce(
       (total, [id, value]) => total + itemCount(id) * value,
       0,
     );
     return {
-      count: Math.min(lmdCount, exp / SIX_STAR_E2_60_COST.exp),
+      count: targetCost.exp === 0 ? 0 : Math.min(lmdCount, exp / targetCost.exp),
       exp,
       lmdCount,
+      targetCost,
     };
-  }, [itemCount]);
+  }, [itemCount, targetElite, targetLevel, targetRarity]);
   return (
     <main className="min-h-dvh bg-background text-foreground">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 pb-8 pt-5 sm:px-6">
@@ -206,13 +223,24 @@ export default function InventoryPage() {
                 </Tooltip>
               </div>
               <div className="mt-5 border-t border-border/70 pt-4">
-                <h3 className="text-sm font-medium text-muted-foreground">六星从零到精二 60 级</h3>
+                <h3 className="text-sm font-medium text-muted-foreground">自选养成目标</h3>
+                <div className="mt-3 grid grid-cols-3 gap-2">
+                  <select value={targetRarity} onChange={(event) => { const rarity = Number(event.target.value); setTargetRarity(rarity); if (rarity < 4 && targetElite === 2) { setTargetElite(1); setTargetLevel(Math.min(targetLevel, 50)); } }} className="h-9 border border-border bg-background px-2 text-sm" aria-label="目标星级">
+                    {[3, 4, 5, 6].map((rarity) => <option key={rarity} value={rarity}>{rarity}★</option>)}
+                  </select>
+                  <select value={targetElite} onChange={(event) => { const elite = Number(event.target.value); setTargetElite(elite); setTargetLevel(Math.min(targetLevel, MAX_LEVEL_BY_TARGET[String(elite)])); }} className="h-9 border border-border bg-background px-2 text-sm" aria-label="目标精英阶段">
+                    {[0, 1, 2].filter((elite) => targetRarity >= (elite === 2 ? 4 : 3)).map((elite) => <option key={elite} value={elite}>精{elite}</option>)}
+                  </select>
+                  <select value={targetLevel} onChange={(event) => setTargetLevel(Number(event.target.value))} className="h-9 border border-border bg-background px-2 text-sm" aria-label="目标等级">
+                    {[1, 30, 40, 50, 60, 70, 80, 90].filter((level) => level <= MAX_LEVEL_BY_TARGET[String(targetElite)]).map((level) => <option key={level} value={level}>{level}级</option>)}
+                  </select>
+                </div>
                 <p className="mt-2 font-number text-3xl font-semibold"><span className="text-[#FFD501]">{sixStarSummary.count.toFixed(2)}</span> 个</p>
                 <div className="mt-3 grid gap-1.5 text-xs text-muted-foreground">
-                  <p className="flex justify-between gap-3"><span>龙门币</span><strong className="font-number text-foreground">{fmt(itemCount("4001"))} / {fmt(SIX_STAR_E2_60_COST.lmd)}</strong></p>
-                  <p className="flex justify-between gap-3"><span>作战记录经验</span><strong className="font-number text-foreground">{fmt(sixStarSummary.exp)} / {fmt(SIX_STAR_E2_60_COST.exp)}</strong></p>
+                  <p className="flex justify-between gap-3"><span>龙门币</span><strong className="font-number text-foreground">{fmt(itemCount("4001"))} / {fmt(sixStarSummary.targetCost.lmd)}</strong></p>
+                  <p className="flex justify-between gap-3"><span>作战记录经验</span><strong className="font-number text-foreground">{fmt(sixStarSummary.exp)} / {fmt(sixStarSummary.targetCost.exp)}</strong></p>
                 </div>
-                <p className="mt-3 text-[11px] leading-4 text-muted-foreground">仅考虑升级和精英化。</p>
+                <p className="mt-3 text-[11px] leading-4 text-muted-foreground">仅考虑升级和精英化，从精0 1级开始。</p>
               </div>
             </section>
             </div>
