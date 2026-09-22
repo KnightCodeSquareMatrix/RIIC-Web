@@ -14,8 +14,11 @@ import { sklandDataOwnerTag } from "@/server/skland/session";
 import { getMaaOperboxSnapshot, listSavedPlans } from "@/server/workspace";
 import { createRequestId } from "@/server/api-contract";
 import type { BaseBlueprint, OperBoxEntry, RotationProfile } from "@/types";
-import { projectPlanResult, saveAgentPlanArtifact } from "./plan-artifact.ts";
+import { projectPlanResult } from "./plan-artifact.ts";
 import { readKnowledgeDoc, searchKnowledgeBase } from "./knowledge.ts";
+import { readAgentSkill } from "./knowledge-policy.ts";
+import { agentKnowledgeDir } from "./config.ts";
+import { queryAgentSkills, inspectAgentOperators } from "./operator-tools.ts";
 import { observeMasteryEnvironment, type MasteryEnvironmentObservation } from "./mastery-environment.ts";
 import { buildCalculatorTools, type AgentOperatorPool } from "./calculator-tools.ts";
 
@@ -276,9 +279,9 @@ export function buildAgentTools(ctx: AgentToolContext) {
     ...buildCalculatorTools(loadPool, (name, input, run) => guarded(ctx.userId, name, input, run)),
     diagnose_account: tool({
       description:
-        "账号诊断：查看当前用户的森空岛绑定状态、干员池概览（总数、精二数、稀有度分布、精二六星名单）、当前游戏内基建布局、最近保存的排班。判断用户干员池与练度水平时必用。",
-      inputSchema: z.object({}).strict().describe("无需参数"),
-      execute: async () => guarded(ctx.userId, "diagnose_account", {}, async () => {
+        "账号诊断：查看当前用户的森空岛绑定状态、干员池概览（总数、精二数、稀有度分布、精二六星名单）、当前游戏内基建布局、最近保存的排班。可通过 operators 精确查询指定干员的 own/elite/level；示例池个人状态为未知。判断个人持有与练度时使用。",
+      inputSchema: z.object({ operators: z.array(z.string().min(1)).max(30).optional().describe("需要核对的干员规范名或 id") }).strict(),
+      execute: async (input) => guarded(ctx.userId, "diagnose_account", input, async () => {
         let skland: Awaited<ReturnType<typeof loadSklandSnapshot>> | null = null;
         let sklandError: string | null = null;
         try {
@@ -299,6 +302,7 @@ export function buildAgentTools(ctx: AgentToolContext) {
         }
         const pool = await loadPool();
         return {
+          operators: inspectAgentOperators(pool, input.operators ?? []),
           operatorPool: { source: pool.source, sourceName: pool.sourceName, isSample: pool.source === "sample", ...operboxStats(pool.operbox) },
           skland: skland
             ? {
@@ -356,6 +360,11 @@ export function buildAgentTools(ctx: AgentToolContext) {
     }),
 
     solve_schedule: tool({
+      toModelOutput: ({ output }) => {
+        const projection = { ...(output as Record<string, unknown>) };
+        delete projection.workbenchSession;
+        return { type: "text", value: JSON.stringify(projection) };
+      },
       description:
         "排班求解：向站内求解器提交一次真正的排班计算，返回三班（或所选节奏）排班表、日产出与练卡建议。用户已给全配置、或已通过 preview_solve_defaults 报默认配置并经博士确认后调用；省略的参数服务端自动兜底（布局从游戏内基建/历史排班推断，干员按森空岛→MAA 上传→示例 Box 三级降级）。搓玉请求用 scene=orundum（默认配齐两条线），纯产钱用 scene=money（全龙门商法+全赤金），无需手写 manufactureRecipes/tradeOrders。计算耗时通常 10-60 秒。本工具只做计算，不做知识检索；机制解释类问题用 kb_route。",
       inputSchema: z.object({
@@ -442,28 +451,17 @@ export function buildAgentTools(ctx: AgentToolContext) {
           createRequestId()
         );
         const projected = projectPlanResult(publicResult);
-        const artifactId = await saveAgentPlanArtifact(
-          ctx.userId,
-          projected,
-          {
-            layoutPreset: preset.label,
-            boxSource,
-            factoryRecipes: recipes,
-            tradeOrders,
-            operatorCount: operbox.length,
-          },
-          {
-            presetLabel: preset.label,
-            layout,
-            operbox,
-            sourceName,
-            boxSource,
-            rotationProfile: rotation,
-            fiammettaEnabled: input.fiammettaEnable ?? false,
-            result: publicResult,
-            activeShift: 0,
-          }
-        ).catch(() => null);
+        const workbenchSession = {
+          presetLabel: preset.label,
+          layout,
+          operbox,
+          sourceName,
+          boxSource,
+          rotationProfile: rotation,
+          fiammettaEnabled: input.fiammettaEnable ?? false,
+          result: publicResult,
+          activeShift: 0,
+        };
         return {
           solved: true,
           defaultsApplied: {
@@ -480,54 +478,33 @@ export function buildAgentTools(ctx: AgentToolContext) {
           tradeOrders,
           boxSource,
           operatorCount: operbox.length,
-          planUrl: artifactId ? `/plan/${artifactId}` : null,
-          planArtifactNote: artifactId
-            ? "排班已保存为结果页，planUrl 可直接给博士点击验收（保留 7 天）。"
-            : "结果页保存失败，直接在对话中呈现结果即可。",
+          workbenchSession,
           plan: projected,
         };
       }),
     }),
 
     query_skills: tool({
-      description: "基建技能查询：按技能名、关键词或标签查询游戏内基建技能效果原文。用于回答某技能效果、某类加成技能有哪些。",
+      description: "基建技能查询：按干员名或 id、技能名、关键词或标签查询游戏基建技能原文、持有者与解锁练度。返回后固定用 kb_route 定位隐性释义并 kb_read 阅读相关正文；组合用法按需继续读取。",
       inputSchema: z.object({
-        query: z.string().min(1).describe("技能名或效果关键词，如 订单效率 赤金 生产力"),
+        query: z.string().min(1).describe("干员名或 id、技能名或效果关键词，如 孑 订单效率 赤金 生产力"),
         tag: z.string().optional().describe("可选标签过滤，如 生产力 订单效率 心情消耗"),
         limit: z.number().int().min(1).max(30).optional().describe("返回条数上限，默认 12"),
       }),
       execute: async (input) => guarded(ctx.userId, "query_skills", input, async () => {
-        const catalog = (await import("@/generated/arkntools/building-skill-catalog.json")).default as Record<
-          string,
-          { id: string; name: string; descriptionRich: string; tags: string[] }
-        >;
-        const needle = input.query.trim().toLowerCase();
-        const tag = input.tag?.trim().toLowerCase();
-        const limit = input.limit ?? 12;
-        const matched = Object.values(catalog)
-          .filter((skill) => {
-            const description = skill.descriptionRich.replace(/<[^>]+>/g, "");
-            if (tag && !skill.tags.some((value) => value.toLowerCase().includes(tag))) return false;
-            return (
-              skill.name.toLowerCase().includes(needle)
-              || description.toLowerCase().includes(needle)
-              || skill.tags.some((value) => value.toLowerCase().includes(needle))
-            );
-          })
-          .slice(0, limit)
-          .map((skill) => ({
-            id: skill.id,
-            name: skill.name,
-            description: skill.descriptionRich.replace(/<[^>]+>/g, ""),
-            tags: skill.tags,
-          }));
-        return { query: input.query, matchedCount: matched.length, skills: matched };
+        return queryAgentSkills(input);
       }),
+    }),
+
+    load_agent_skill: tool({
+      description: "按 id 加载已启用任务指引；可按复杂请求自主组合，简单排班/专精/公招无需加载。指引是取证流程，不是事实来源。",
+      inputSchema: z.object({ id: z.string().min(1) }).strict(),
+      execute: async (input) => guarded(ctx.userId, "load_agent_skill", input, async () => readAgentSkill(agentKnowledgeDir(), input.id)),
     }),
 
     kb_route: tool({
       description:
-        "知识库导诊：把用户问题转成关键词，返回基建知识库（RIIC-knowledge）中最相关的候选文档路径列表。用于机制解释、数值出处、版本结论、搓玉取舍等知识性内容。技能类问题先查 query_skills 拿效果原文；原文不够用时（机制叠加、换算取舍、组队思路）再用本工具查知识库补充，不要只凭技能原文下结论。排班求解、账号诊断等纯操作请求不经过本工具。",
+        "知识库导诊：把用户问题转成关键词，返回基建知识库（RIIC-knowledge）中最相关的候选文档路径列表。用于机制解释、数值出处、版本结论、搓玉取舍等知识性内容。技能类问题先查 query_skills 拿效果原文；所有技能问题都用本工具定位隐性释义并 kb_read 阅读相关正文；用法与组合按需继续读。成功检索无特殊释义时正常按原文回答，不汇报检索过程。排班求解、账号诊断等纯操作请求不经过本工具。",
       inputSchema: z.object({
         question: z.string().min(1).describe("用户的问题或主题关键词，如 搓玉 源石碎片 无人机折算"),
       }),
@@ -535,11 +512,12 @@ export function buildAgentTools(ctx: AgentToolContext) {
     }),
 
     kb_read: tool({
-      description: "读取知识库文档正文（markdown）。path 必须使用 kb_route 返回的相对路径；超长文档会被截断。",
+      description: "读取知识库文档正文（markdown）。path 使用 kb_route、已加载任务指引或已读正文引用的 docs 相对路径；超长文档返回 nextOffset，可用 offset 继续读取，避免遗漏后续条件。",
       inputSchema: z.object({
         path: z.string().min(1).describe("知识库内相对路径，如 docs/1-基础设定/资源体系/产出常数表.md"),
+        offset: z.number().int().min(0).optional().describe("续读时使用上次 nextOffset"),
       }),
-      execute: async (input) => guarded(ctx.userId, "kb_read", input, async () => readKnowledgeDoc(input.path)),
+      execute: async (input) => guarded(ctx.userId, "kb_read", input, async () => readKnowledgeDoc(input.path, input.offset)),
     }),
   };
 }

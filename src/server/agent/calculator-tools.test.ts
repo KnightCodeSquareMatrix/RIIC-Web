@@ -1,3 +1,7 @@
+import { resolveAgentOperator } from "./operator-tools.ts";
+import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { z } from "zod";
@@ -7,6 +11,96 @@ import { observeMasteryEnvironment } from "./mastery-environment.ts";
 import type { SklandStatusSnapshot } from "../../types.ts";
 import { calculateMastery } from "../../mastery.ts";
 import { calculateRecruitment, RECRUITMENT_TAGS } from "../../recruitment.ts";
+
+test("identity resolution uses aliases, preserves ambiguity and prioritizes canonical names", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "agent-alias-"));
+  const old = process.env.AGENT_KB_DIR;
+  try {
+    await mkdir(path.join(root, "index"));
+    await writeFile(path.join(root, "index/消歧字典.json"), JSON.stringify({ operator_aliases: {
+      "维娜": { targets: ["维娜·维多利亚"] }, "德狼": { targets: ["德克萨斯", "拉普兰德"] },
+      "能天使": { targets: ["新约能天使"] },
+    } }));
+    process.env.AGENT_KB_DIR = root;
+    assert.deepEqual((await resolveAgentOperator("维娜")).candidates.map((op) => op.name), ["维娜·维多利亚"]);
+    assert.deepEqual((await resolveAgentOperator("能天使")).candidates.map((op) => op.name), ["能天使"]);
+    const ambiguous = await tools().calculate_mastery.execute!({ targetOperator: "德狼", target: 3 }, options);
+    assert.ok(ambiguous && "code" in ambiguous);
+    assert.equal(ambiguous.code, "identity_ambiguous");
+    assert.equal(ambiguous.candidates.length, 2);
+    const result = await tools().calculate_mastery.execute!({ targetOperator: "维娜", current: 0, target: 3 }, options);
+    assert.ok(result && "settings" in result);
+    assert.equal(result.targetOperator.name, "维娜·维多利亚");
+    assert.deepEqual(result.simple.stages.map((s) => s.level), [1, 2, 3]);
+    assert.equal(result.settingsSources.environment.fireworks, "默认值");
+    assert.equal((await resolveAgentOperator("维娜", path.join(root, "missing"))).status, "ambiguous");
+    assert.equal((await resolveAgentOperator("结城理", path.join(root, "missing"))).status, "resolved");
+  } finally {
+    if (old === undefined) delete process.env.AGENT_KB_DIR; else process.env.AGENT_KB_DIR = old;
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("mastery warns about ownership and training while preserving identity and support errors", async () => {
+  const op = roster.find((entry) => entry.name === "至简")!;
+  assert.ok(op);
+  const run = async (pool: AgentOperatorPool, query = op.name) => buildCalculatorTools(async () => pool, async (_n, _i, fn) => fn()).resolve_operator.execute!({ query }, options);
+  for (const [source, entries, code] of [
+    ["skland", [], "not_owned"], ["maa", [], "ownership_unknown"], ["sample", [], "ownership_unknown"],
+    ["sample", [op], "ownership_unknown"], ["maa", [{ ...op, own: false }], "not_owned"],
+    ["skland", [{ ...op, elite: 0 }], "insufficient_training"], ["skland", [{ ...op, elite: 1 }], "insufficient_training"],
+    ["skland", [op], undefined],
+  ] as const) {
+    const pool: AgentOperatorPool = { source, operbox: [...entries], sourceName: source };
+    const before = structuredClone(pool);
+    const result = await run(pool);
+    assert.ok(result && "warnings" in result);
+    assert.equal(result.warnings[0]?.code, code);
+    assert.equal(result.eligible, true);
+    assert.equal(result.own, source === "sample" || source === "maa" && !entries.length ? null : !!entries[0]?.own);
+    const calculated = await buildCalculatorTools(async () => pool, async (_n, _i, fn) => fn()).calculate_mastery.execute!({ targetOperator: op.name, target: 3 }, options);
+    assert.ok(calculated && "simple" in calculated);
+    assert.deepEqual(calculated.warnings, result.warnings);
+    assert.deepEqual(calculated.targetAssumptions, { owned: true, elite: 2 });
+    assert.equal(calculated.targetStatus.elite, result.elite);
+    assert.deepEqual(calculated.simple.stages.map((s) => s.level), [1, 2, 3]);
+    assert.deepEqual(pool, before);
+  }
+  const unknown = await run({ source: "sample", operbox: roster, sourceName: "示例" }, "不存在");
+  assert.ok(unknown && "code" in unknown); assert.equal(unknown.code, "identity_unknown");
+  const unsupported = await run({ source: "sample", operbox: roster, sourceName: "示例" }, "char_4195_radian");
+  assert.ok(unsupported && "code" in unsupported); assert.equal(unsupported.code, "calculation_unsupported");
+  const sample = await run({ source: "sample", operbox: [{ ...op, id: op.id.replace(/^char_/, "") }], sourceName: "示例" });
+  assert.ok(sample && "eligible" in sample); assert.equal(sample.own, null); assert.equal(sample.eligible, true);
+});
+
+test("hypothetical target uses actual trainers without upgrading or adding pool entries", async () => {
+  const find = (name: string) => ({ ...roster.find((entry) => entry.name === name)! });
+  const target = { ...find("至简"), elite: 0 };
+  const operbox = [target, { ...find("逻各斯"), elite: 1 }, { ...find("艾丽妮"), own: false }];
+  const before = structuredClone(operbox);
+  const all = buildCalculatorTools(async () => ({ source: "skland", sourceName: "森空岛", operbox }), async (_n, _i, fn) => fn());
+  const result = await all.calculate_mastery.execute!({ targetOperator: "至简", target: 3 }, options);
+  assert.ok(result && "simple" in result);
+  const expected = calculateMastery({ operbox, targetId: target.id, current: 0, target: 3, controlBonus: true, bufferMinutes: 1, environment: {} });
+  assert.equal(result.fast.totalSeconds, expected.fast.totalSeconds);
+  assert.ok(result.fast.stages.every((s) => !s.activateWith && s.segments.every((p) => p.trainerName !== "艾丽妮" && p.trainerName !== "至简")));
+  assert.deepEqual(operbox, before);
+  for (const query of ["芬", "char_4195_radian", "char_4230_mcnist"]) {
+    for (const result of [await all.resolve_operator.execute!({ query }, options), await all.calculate_mastery.execute!({ targetOperator: query, target: 3 }, options)]) {
+      assert.ok(result && "code" in result);
+      assert.equal(result.code, "calculation_unsupported");
+    }
+  }
+});
+
+test("real KB operator aliases match the site catalog", { skip: !process.env.AGENT_TEST_KB_DIR }, async () => {
+  const root = process.env.AGENT_TEST_KB_DIR!;
+  for (const [query, name] of [["结城理", "结城理"], ["维娜", "维娜·维多利亚"], ["推王", "推进之王"]]) {
+    const result = await resolveAgentOperator(query, root);
+    assert.equal(result.status, "resolved"); assert.deepEqual(result.candidates.map((op) => op.name), [name]);
+  }
+});
 
 function tools(source: AgentOperatorPool["source"] = "sample") {
   return buildCalculatorTools(async () => ({ operbox: roster, source, sourceName: "测试干员池" }), async (_name, _input, run) => {

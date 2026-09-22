@@ -69,7 +69,7 @@ import {
 } from "./onboarding";
 import { normalizeOperboxEntries } from "./operbox-normalization";
 import { droneStoragePlanIndex } from "./drone-plan-mapping";
-import { AGENT_BROADCAST_CHANNEL, consumeAgentArtifactHandoff } from "./agent-artifact-bridge";
+import { AGENT_BROADCAST_CHANNEL, consumeAgentArtifactHandoff, isAgentArtifactHandoff, receiveAgentArtifactMessage, type AgentArtifactHandoff } from "./agent-artifact-bridge";
 import { prepareMaaForExport } from "./maa-safety";
 import { upgradeSimulationBoxSource } from "./upgrade-simulation";
 import {
@@ -349,7 +349,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   const [sampleLoading, setSampleLoading] = useState(false);
   const sampleTrialInFlightRef = useRef(false);
   const [result, setResult] = useState<PublicPlanData | null>(null);
-  const [agentArtifactNotice, setAgentArtifactNotice] = useState<{ id: string; preset: string } | null>(null);
+  const [agentArtifactNotice, setAgentArtifactNotice] = useState<AgentArtifactHandoff | null>(null);
   const [agentArtifactLoading, setAgentArtifactLoading] = useState(false);
   const [agentArtifactApplied, setAgentArtifactApplied] = useState<{ preset: string } | null>(null);
   const [agentArtifactError, setAgentArtifactError] = useState(false);
@@ -692,18 +692,13 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
 
   // 将 agent 生成的排班产物注入工作台：复用会话恢复路径设置全部状态，
   // 使班次切换、手动排班导入、效率视图等现有功能立即可用。
-  async function applyAgentArtifact(artifactId: string): Promise<void> {
+  async function applyAgentArtifact(handoff: AgentArtifactHandoff): Promise<void> {
     setAgentArtifactLoading(true);
     setAgentArtifactError(false);
+    setAgentArtifactNotice(handoff);
     try {
-      const response = await fetch(`/api/agent/plan/${encodeURIComponent(artifactId)}`, { credentials: "same-origin" });
-      const payload = (await response.json()) as { success?: boolean; data?: { session?: Record<string, unknown> } };
-      const session = payload.data?.session;
-      if (!payload.success || !session) {
-        // 载入失败时保留横幅并显示错误，用户可重试。
-        setAgentArtifactError(true);
-        return;
-      }
+      if (!isAgentArtifactHandoff(handoff)) throw new Error("Invalid agent session");
+      const session = handoff.session;
       const restoredPreset = resolvePreset(PRESETS.find((item) => item.label === session.presetLabel));
       const restoredLayout = restoreEditableProducts(buildBlueprint(restoredPreset), session.layout as BaseBlueprint);
       const restoredOperbox = Array.isArray(session.operbox) ? normalizeOperboxEntries(session.operbox as OperBoxEntry[]) : null;
@@ -743,16 +738,20 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!hasRestoredSession || typeof window === "undefined") return;
-    const channel = new BroadcastChannel(AGENT_BROADCAST_CHANNEL);
-    channel.onmessage = (event: MessageEvent) => {
-      const data = event.data as { type?: string; artifactId?: string; preset?: string } | null;
-      if (data?.type === "plan-ready" && typeof data.artifactId === "string") {
-        setAgentArtifactNotice({ id: data.artifactId, preset: typeof data.preset === "string" ? data.preset : "" });
-      }
+    const channel = typeof BroadcastChannel !== "undefined" ? new BroadcastChannel(AGENT_BROADCAST_CHANNEL) : null;
+    if (channel) channel.onmessage = (event: MessageEvent) => {
+      receiveAgentArtifactMessage(event.data, (handoff) => {
+        setAgentArtifactNotice(handoff);
+        setAgentArtifactError(false);
+      });
     };
-    const handoff = consumeAgentArtifactHandoff();
-    if (handoff) void applyAgentArtifact(handoff.artifactId);
-    return () => channel.close();
+    try {
+      const handoff = consumeAgentArtifactHandoff();
+      if (handoff) void applyAgentArtifact(handoff);
+    } catch {
+      setAgentArtifactError(true);
+    }
+    return () => channel?.close();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasRestoredSession]);
 
@@ -2341,7 +2340,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
               type="button"
               disabled={agentArtifactLoading}
               className="rounded-md bg-[#FFD501] px-3 py-1 text-xs font-medium text-black disabled:opacity-50"
-              onClick={() => void applyAgentArtifact(agentArtifactNotice.id)}
+              onClick={() => void applyAgentArtifact(agentArtifactNotice)}
             >
               {agentArtifactLoading ? intl("App.agentArtifactLoading") : intl("App.agentArtifactOpen")}
             </button>
@@ -2368,7 +2367,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
             </button>
           </div>
         ) : null}
-        {agentArtifactError && !agentArtifactNotice ? (
+        {agentArtifactError ? (
           <div className="flex flex-wrap items-center gap-3 border-b bg-destructive/10 px-4 py-2 text-sm text-destructive" data-agent-artifact-error-banner>
             <span className="min-w-0">{intl("App.agentArtifactErrorText")}</span>
             <button

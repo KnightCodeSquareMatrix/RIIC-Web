@@ -46,7 +46,7 @@
   "additional4": "{choice1, select, yes {{value2}} other {Could not read the layout JSON.}}",
   "agentArtifactBannerText": "Closure generated a new schedule{preset}. Open it in the workbench to use every tool.",
   "agentArtifactAppliedText": "Closure finished the schedule{preset} and loaded it into the workbench. Shift switching and efficiency views are ready to use.",
-  "agentArtifactErrorText": "Failed to load the schedule artifact: it may have expired (kept for 7 days) or the network failed. Solve again from the assistant chat.",
+  "agentArtifactErrorText": "Temporary schedule transfer or loading failed. Retry the new-result banner if available, or return to the assistant chat while it still has the result. Solve again if the result is no longer available.",
   "agentArtifactOpen": "Open in workbench",
   "agentArtifactIgnore": "Dismiss",
   "agentArtifactLoading": "Loading…"

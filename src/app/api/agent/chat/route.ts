@@ -48,11 +48,12 @@ export async function POST(request: Request) {
       const response = failureResponse(new Error("缺少对话消息。"), requestId, "/api/agent/chat", startedAt);
       return new Response(response.body, { status: 400, headers: response.headers });
     }
+    const tools = buildAgentTools({ request, userId: session.user.id });
     const result = streamText({
       model: getAgentModel(),
       system: await buildAgentSystemPrompt(),
-      messages: await convertToModelMessages(body.messages),
-      tools: buildAgentTools({ request, userId: session.user.id }),
+      messages: await convertToModelMessages(body.messages, { tools }),
+      tools,
       stopWhen: stepCountIs(12),
     });
     return result.toUIMessageStreamResponse({

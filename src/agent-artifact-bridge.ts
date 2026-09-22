@@ -1,41 +1,64 @@
-// 浏览器端桥接：agent 聊天页与工作台（计算器）之间交接排班产物。
-// - 跨页面导航：sessionStorage 交接（聊天页点击"在工作台中打开"→ 跳转 / 后工作台自动注入）
-// - 同浏览器已开标签：BroadcastChannel 通知（工作台顶部弹横幅，一键注入）
-export const AGENT_BROADCAST_CHANNEL = "riic-agent";
+// 浏览器临时交接：广播只更新待载入横幅；跨页 storage 仅一次性使用，读取即删除。
+import type { AgentPlanSession } from "./server/agent/plan-artifact";
 
+export const AGENT_BROADCAST_CHANNEL = "riic-agent";
 const HANDOFF_STORAGE_KEY = "riic-agent-artifact-handoff";
+const HANDOFF_TTL_MS = 5 * 60 * 1000;
 
 export interface AgentArtifactHandoff {
-  artifactId: string;
   preset: string;
+  session: AgentPlanSession;
 }
 
-export function requestAgentArtifactOpen(artifactId: string, preset: string): void {
-  if (typeof window === "undefined") return;
-  // 调用方可能传入工具返回的完整 planUrl（/plan/<id>）或纯 id；统一归一化为纯 id，
-  // 否则 /api/agent/plan/<id> 会因路径里带 /plan/ 前缀而 404，工作台静默回退到旧会话。
-  const normalizedId = artifactId.startsWith("/plan/") ? artifactId.slice("/plan/".length) : artifactId;
-  if (!normalizedId) return;
-  try {
-    window.sessionStorage.setItem(HANDOFF_STORAGE_KEY, JSON.stringify({ artifactId: normalizedId, preset } satisfies AgentArtifactHandoff));
-  } catch {
-    // sessionStorage 不可用时仅靠跳转，工作台无法自动注入，仍可从聊天页链接查看。
+export function isAgentArtifactHandoff(value: unknown): value is AgentArtifactHandoff {
+  if (!value || typeof value !== "object") return false;
+  const { preset, session } = value as AgentArtifactHandoff;
+  return typeof preset === "string" && !!session && typeof session === "object"
+    && typeof session.presetLabel === "string" && !!session.layout && typeof session.layout === "object"
+    && Array.isArray((session.layout as { rooms?: unknown }).rooms) && Array.isArray(session.operbox)
+    && !!session.result && typeof session.result === "object"
+    && !!(session.result as { maa?: unknown }).maa
+    && Array.isArray((session.result as { maa: { plans?: unknown } }).maa.plans);
+}
+
+export function agentArtifactFromOutput(output: unknown): AgentArtifactHandoff | null {
+  if (!output || typeof output !== "object") return null;
+  const record = output as { workbenchSession?: AgentPlanSession };
+  const handoff = { preset: record.workbenchSession?.presetLabel, session: record.workbenchSession };
+  return isAgentArtifactHandoff(handoff) ? handoff : null;
+}
+
+export function receiveAgentArtifactMessage(value: unknown, onReady: (handoff: AgentArtifactHandoff) => void): void {
+  if (value && typeof value === "object" && (value as { type?: unknown }).type === "plan-ready" && isAgentArtifactHandoff(value)) {
+    onReady(value);
   }
-  if (window.location.pathname !== "/") {
+}
+
+export function requestAgentArtifactOpen(handoff: AgentArtifactHandoff): void {
+  if (typeof window === "undefined") return;
+  if (!isAgentArtifactHandoff(handoff)) throw new Error("排班数据不完整，请重新求解后打开。");
+  try {
+    window.sessionStorage.setItem(HANDOFF_STORAGE_KEY, JSON.stringify({ ...handoff, expiresAt: Date.now() + HANDOFF_TTL_MS }));
+  } catch {
+    throw new Error("临时交接失败（浏览器存储不可用或空间不足），请留在此页重试，或在已打开的工作台点击新结果提示。");
+  }
+  try {
     window.location.assign("/");
+  } catch {
+    window.sessionStorage.removeItem(HANDOFF_STORAGE_KEY);
+    throw new Error("工作台跳转失败，请在此页重试。");
   }
 }
 
 export function consumeAgentArtifactHandoff(): AgentArtifactHandoff | null {
   if (typeof window === "undefined") return null;
-  try {
-    const raw = window.sessionStorage.getItem(HANDOFF_STORAGE_KEY);
-    if (!raw) return null;
-    window.sessionStorage.removeItem(HANDOFF_STORAGE_KEY);
-    const parsed = JSON.parse(raw) as Partial<AgentArtifactHandoff>;
-    if (typeof parsed.artifactId !== "string") return null;
-    return { artifactId: parsed.artifactId, preset: typeof parsed.preset === "string" ? parsed.preset : "" };
-  } catch {
-    return null;
+  const raw = window.sessionStorage.getItem(HANDOFF_STORAGE_KEY);
+  if (!raw) return null;
+  window.sessionStorage.removeItem(HANDOFF_STORAGE_KEY);
+  const parsed: unknown = JSON.parse(raw);
+  if (!isAgentArtifactHandoff(parsed) || typeof (parsed as { expiresAt?: unknown }).expiresAt !== "number"
+    || (parsed as AgentArtifactHandoff & { expiresAt: number }).expiresAt <= Date.now()) {
+    throw new Error("临时排班交接已过期或不完整，请返回助理重新打开。");
   }
+  return parsed;
 }

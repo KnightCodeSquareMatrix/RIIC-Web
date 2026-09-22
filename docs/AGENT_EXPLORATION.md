@@ -2,6 +2,22 @@
 
 实验性的 agent 入口：把站内既有功能工具化，让大模型在对话中编排账号诊断、排班求解、技能查询与知识库检索，输出整体方案。本文记录架构、配置与后续路线。
 
+## Agent 知识与能力接入（2026-09-22）
+
+- `RIIC-knowledge/agent/KNOWLEDGE_RULES.md` 是共享知识规则唯一真源。网站通过 `knowledge-policy.ts` 加载；独立入口通过 `agent/load-policy.mjs` 展开 SYSTEM_PROMPT 模板。网站不注入独立 RAG 的 context/question 模板。
+- 外部人格卡保持身份与语气职责，宿主明确知识规则和工具编排优先级，不修改外部角色内容。网站就是 riic.autos，可由本地工具完成的直接调用，产品使用问答、MAA 配置及账号支持按具体能力处理。
+- 所有技能查询固定 `query_skills → kb_route → kb_read`：先游戏原文与解锁条件，再隐性释义；用法、组合与培养正文按需读取。成功检索没有特殊释义时按原文正常答，不声明检索情况；工具故障只说明相关限制，不能声称没有规则。
+- `query_skills` 复用网页 `operatorBuildingSkillList` 与搜索能力，支持干员名/id、英文与拼音，返回持有者与解锁练度。`diagnose_account({operators:[...]})` 复用已加载干员池，返回指定干员 own/elite/level；示例池与未知名称为 null；森空岛完整持有列表中缺少的已知干员为 false，MAA 部分上传中未出现条目保留未知。
+- `load_agent_skill` 从 KB manifest 白名单按 id 加载 1/3/4/6/7；模型可自主组合。2/5/8 仍为未接入草稿，现有工具没有通用产出诊断/回本计算接口，相关问题只引用既有结论或定性说明。
+- 简单排班、专精、公招不查机制 KB、不加载 skill；排班保留既有预览确认。知识卡片只显示友好状态与查询对象，如“技能查询 完成 · 巫恋”“知识库阅读 完成《违约索赔》”，不展开路径、检索覆盖或原文片段。`output.error` 与 `output-error` 统一只显示一次失败信息，知识错误使用友好提示避免泄漏内部诊断。
+- 专精身份在筛选资格前解析：完整规范名/ID 优先，其他名称合并站内名称、英文/拼音及 KB `operator_aliases` 的候选。只读别名索引，不触发技能/机制知识两阶段查询；多候选让用户选。别名索引不可用时，非规范名候选须确认，完整名仍可计算。
+- `calculate_mastery` 内置解析；目标等级缺失时可先 `resolve_operator` 核实身份和资格，再只问必要参数。提示词要求先查站内数据，不凭跨作品记忆拒绝；“那某某呢”继承上文专精起止等级。
+- 分层失败码：`identity_unknown` / `identity_ambiguous` / `not_owned` / `ownership_unknown` / `insufficient_training` / `calculation_unsupported`。复用网页资格及短 ID 归一化；森空岛缺失视为未持有，MAA 未出现条目保留未知，示例池不推断个人持有。
+- 已核实目录收录结城理（`char_4217_makoto`），示例池具备计算资格。现有 KB 字典及其来源“歧义-简称合称”明确：维娜/异格推王→维娜·维多利亚，推王→推进之王；不额外制造候选，也不修改 KB 事实。
+- 专精环境卡片按来源合并，逐项保留数值与零值，例如“默认：人间烟火 0；森空岛自动读取：萨米 1、深海猎人 0；用户指定：骑士 0”。正文简要概括，详细参数与快照时间见卡片。
+- 正文每页 16K 字符，返回 nextOffset 供续读；仅允许 docs 下 Markdown，标题缺失返回“知识正文”。
+- 测试：`node --test --experimental-strip-types src/server/agent/knowledge-tools.test.ts src/server/agent/calculator-tools.test.ts src/components/agent/AgentChat.test.mjs src/mastery.test.ts`。设置 `AGENT_TEST_KB_DIR` 可额外验证真实 KB 身份别名、独立/网站同源加载和白名单（未设置时跳过真实库项）。本轮 28 项离线测试通过，覆盖分层失败、精确名优先、多候选、真实别名、环境零值及来源、卡片实际渲染与两种错误状态；ESLint 与排除旧 Next 生成缓存后的源码类型检查通过。全量类型检查仍被已有 `.next/types/validator.ts` 引用缺失的 `demo-notice-run/route.js` 阻挡。本次没有调用付费模型；提示词测试验证规则装配，不能替代模型多轮行为验收。
+
 ## 本次实验更新（2026-09-21）
 
 - 在原有 Agent 实验中加入专精训练、公招词条工具，复用网页计算核心，提供聊天结果卡片。
@@ -43,8 +59,8 @@
 |---|---|
 | `src/server/agent/config.ts` | AGENT_* 环境变量（provider 预设 deepseek/glm、base URL、model、key、知识库路径） |
 | `src/server/agent/llm.ts` | `@ai-sdk/openai-compatible` provider 工厂，两家厂商同一通道 |
-| `src/server/agent/persona.ts` | 人格（person-card/closure.md 内嵌）+ 工具使用守则与搓玉工作流剧本 |
-| `src/server/agent/knowledge.ts` | 知识库访问器：标题清单索引检索、正文读取（路径白名单防越界，16K 截断） |
+| `src/server/agent/persona.ts` | 外部人格卡加载 + 同源知识规则 + 宿主工具编排 |
+| `src/server/agent/knowledge.ts` | 知识库访问器：标题清单索引检索、正文读取（路径白名单防越界，16K 分页续读） |
 | `src/server/agent/tools.ts` | 工具注册、干员池来源解析、结果投影、审计日志 |
 | `src/server/agent/calculator-tools.ts` | 专精训练、公招词条工具参数与共享计算核心适配 |
 
@@ -61,13 +77,13 @@
 | `preview_solve_defaults` | 账号、排班历史与场景默认配置 | 排班前预览实际采用的配置 |
 | `diagnose_account` | `readSklandAccountStore` + `loadStatusSnapshot` + `listSavedPlans` | 森空岛绑定/玩家信息/干员池练度统计/当前基建/最近排班 |
 | `solve_schedule` | `buildBlueprint`/`updateFactoryRecipe` + `runPlan`/`getSampleOperbox` + `toPublicPlanData` | 真实求解：布局预设、box 来源、换班节奏、制造站配方（搓玉配 originium）；返回排班、日产出、练卡建议 |
-| `query_skills` | `src/generated/arkntools/building-skill-catalog.json` | 技能名/关键词/标签查询，富文本标记清洗 |
+| `query_skills` | `src/generated/arkntools/building-skill-catalog.json` | 干员名/id、技能名/关键词/标签查询，复用网页技能原文及解锁练度 |
 | `kb_route` | `RIIC-knowledge/index/标题清单.md` | 关键词→候选文档路径（2-gram 匹配扩大召回） |
 | `kb_read` | `RIIC-knowledge/docs/**` | 读正文，仅限知识库目录内 .md |
 
 ## 专精与公招路由
 
-- 专精已知目标干员和目标等级即计算，起始等级省略按 0，明确“从专X开始”按 X；中枢与六类环境人数优先读取森空岛快照，用户指定值优先；无快照时中枢默认 +5%、环境全 0，换人余量 1 分钟。先输出方案，末尾根据返回的 settings 汇报条件和来源、询问是否调整。调整时保留未改变的参数。
+- 专精已知目标干员和目标等级即计算，起始等级省略按 0，明确“从专X开始”按 X；中枢与六类环境人数优先读取森空岛快照，用户指定值优先；无快照时中枢默认 +5%、环境全 0，换人余量 1 分钟。先输出方案，末尾根据返回的 settings 汇报条件和来源。调整时保留未改变的参数。
 - 公招提供一至五个词条即可计算，默认九小时；未提供词条才追问具体词条，不要求补齐五个。
 
 ## 环境读取实验与后续接口
@@ -99,11 +115,9 @@ AGENT_KB_DIR=E:/arknights-infra-project/RIIC-knowledge
 
 用户："我想搓玉，不知道怎么搞" →
 
-1. agent 追问需求与 box 来源（人格守则第 1 条）；
-2. `diagnose_account`：森空岛干员池/练度概览；
-3. `kb_route`+`kb_read`：《搓玉》《产出常数表》《高效率散件》等，取搓玉线取舍、无人机折算、换算常数；
-4. 确认后 `solve_schedule`（243 布局，制造站配方 `["originium","originium","gold","gold"]`）；
-5. 汇总：排班表（卡片渲染）+ 日产出 + 练卡建议 + 知识库解释（标注出处）。
+1. `preview_solve_defaults({scene:"orundum"})` 获取默认配置并向用户确认；
+2. 用户确认或调整后调用 `solve_schedule`，复用已有工具默认值；
+3. 回复排班与业务结果。用户额外询问技能或机制时再按知识路由读取正文，不主动展开长篇 KB 解释。
 
 ## 已验证 / 待验证
 
@@ -136,7 +150,7 @@ AGENT_KB_DIR=E:/arknights-infra-project/RIIC-knowledge
 1. **会话持久化**：参照 Vercel ai-chatbot 的 Drizzle 会话表设计，聊天历史落库。
 2. **工具审批**：AI SDK `toolApproval`，把 solve 等消耗类工具升级为显式人工确认。
 3. **MCP 外部化**：用 `@modelcontextprotocol/server` v2 把同一批 Zod 工具挂成 Streamable HTTP MCP server（OAuth 2.1 Resource Server），让用户在 Claude/Cursor 等客户端查询自己的基建数据；内部工具定义与 MCP schema 共享。
-4. **知识库检索增强**：接入 RIIC-knowledge 自带的导诊表路由与消歧字典做俗称归一；长文档做小节级定位。
+4. **知识库检索增强**：已接消歧字典与长文续读；后续可加入导诊表与小节级定位。
 5. **观测**：工具调用审计日志接入管理端指标（复用 plan-run/solver-metrics 模式）。
 
 主要参考：Vercel AI SDK v7（tool loop / UIMessage parts）、assistant-ui（可替换的聊天 UI 层）、Vercel ai-chatbot（会话持久化与 artifacts 模式）、MCP 2025-11/2026-07 规范（Streamable HTTP、OAuth 2.1、异步 Tasks）。

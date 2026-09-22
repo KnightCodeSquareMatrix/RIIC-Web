@@ -1,6 +1,7 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { calculateMastery, eligibleMasteryTargets, formatMasteryTime, MASTERY_ENVIRONMENTS } from "../../mastery.ts";
+import { calculateMastery, formatMasteryTime, MASTERY_ENVIRONMENTS } from "../../mastery.ts";
+import { inspectMasteryTarget } from "./operator-tools.ts";
 import { masteryInstructions } from "../../mastery-presentation.ts";
 import { calculateRecruitment, RECRUITMENT_TAGS, RECRUITMENT_SOURCE } from "../../recruitment.ts";
 import type { MasteryEnvironmentObservation } from "./mastery-environment.ts";
@@ -17,10 +18,15 @@ type Guard = <T>(name: string, input: unknown, run: () => Promise<T>) => Promise
 
 export function buildCalculatorTools(loadPool: () => Promise<AgentOperatorPool>, guard: Guard) {
   return {
+    resolve_operator: tool({
+      description: "轻量查询站内干员身份和专精资格，复用目录、干员别名及当前干员池，不查询技能机制。目标等级尚不明确时先用它核实身份；等级已明确可直接 calculate_mastery。歧义返回候选供用户选择，示例池不代表个人持有。",
+      inputSchema: z.object({ query: z.string().trim().min(1) }).strict(),
+      execute: async (input) => guard("resolve_operator", input, async () => inspectMasteryTarget(await loadPool(), input.query)),
+    }),
     calculate_mastery: tool({
-      description: "专精训练计算：按当前账号干员池生成简单、快速两套教官与换人时间线，无需基建排班。干员池自动按森空岛→MAA→全精二示例兜底。targetOperator 使用完整干员名称或 ID；current 省略从未专精开始，用户指定从专X开始则传 X。未指定中枢与环境参数时自动读取森空岛快照；无快照中枢默认 +5%、环境默认 0，换人余量默认 1 分钟。用户未明确设置时请省略 controlBonus/environment，不要用默认值覆盖自动读取。先调用出方案，末尾按 settings 汇报条件并询问是否调整，不要先确认默认值。环境值为实际进驻人数或对应点数。",
+      description: "专精训练计算：按当前账号干员池生成简单、快速两套教官与换人时间线，无需基建排班。干员池自动按森空岛→MAA→全精二示例兜底。targetOperator 可传用户给出的名称、简称或 ID，由工具查站内目录和现有别名；目标未持有、持有未知或未精二时仍按已获得且精二的前提计算，成功结果附带警告；教官按原始干员池的持有与练度筛选。身份与支持范围以工具结果为准，歧义时请用户选候选，不凭记忆否认干员存在。追问“那某某呢”时继承上文 current/target；current 优先继承上下文，无上下文时省略从未专精开始，用户指定从专X开始则传 X。未指定中枢与环境参数时自动读取森空岛快照；无快照中枢默认 +5%、环境默认 0，换人余量默认 1 分钟。用户未明确设置时请省略 controlBonus/environment，不要用默认值覆盖自动读取。先调用出方案，末尾按 settings 简短汇报条件，不要先确认默认值。环境值为实际进驻人数或对应点数。",
       inputSchema: z.object({
-        targetOperator: z.string().trim().min(1).describe("目标干员完整名称或 ID"),
+        targetOperator: z.string().trim().min(1).describe("目标干员名称、简称或 ID；由工具解析，多候选时请用户选择"),
         current: z.union([z.literal(0), z.literal(1), z.literal(2)]).optional().describe("当前专精等级，省略从未专精（0）开始；用户说从专X开始时传 X"),
         target: z.union([z.literal(1), z.literal(2), z.literal(3)]).describe("目标专精等级，必须高于当前等级"),
         controlBonus: z.boolean().optional().describe("用户明确指定的中枢加成；省略自动读取，无快照默认开启"),
@@ -31,9 +37,9 @@ export function buildCalculatorTools(loadPool: () => Promise<AgentOperatorPool>,
       }).strict(),
       execute: async (input) => guard("calculate_mastery", input, async () => {
         const pool = await loadPool();
-        const candidates = eligibleMasteryTargets(pool.operbox);
-        const target = candidates.find((entry) => entry.id === input.targetOperator || entry.name === input.targetOperator || entry.id === `char_${input.targetOperator}`);
-        if (!target) throw new Error(`干员池中没有可专精的「${input.targetOperator}」，请使用已拥有、精二且受计算器支持的干员完整名称。当前来源：${pool.sourceName}`);
+        const identity = await inspectMasteryTarget(pool, input.targetOperator);
+        if ("error" in identity) return identity;
+        const target = identity.operator;
         const settings = {
           current: input.current ?? 0, target: input.target,
           controlBonus: input.controlBonus ?? pool.masteryEnvironment?.controlBonus ?? true, bufferMinutes: input.bufferMinutes ?? 1,
@@ -46,14 +52,16 @@ export function buildCalculatorTools(loadPool: () => Promise<AgentOperatorPool>,
         return {
           source: pool.source, sourceName: pool.sourceName, isSample: pool.source === "sample",
           targetOperator: { id: target.id, name: target.name }, settings,
+          targetStatus: { ownershipKnown: identity.ownershipKnown, own: identity.own, elite: identity.elite },
+          warnings: identity.warnings, targetAssumptions: identity.targetAssumptions,
           environmentObservation: pool.masteryEnvironment ?? null,
           settingsSources: {
             controlBonus: input.controlBonus !== undefined ? "手动指定" : pool.masteryEnvironment ? "森空岛自动读取" : "默认值",
-            environment: Object.fromEntries(Object.keys(MASTERY_ENVIRONMENTS).map((key) => [key, input.environment?.[key] !== undefined ? "手动指定" : pool.masteryEnvironment?.environment[key] !== undefined ? "森空岛自动读取" : "默认值（未自动推导）"])),
+            environment: Object.fromEntries(Object.keys(MASTERY_ENVIRONMENTS).map((key) => [key, input.environment?.[key] !== undefined ? "手动指定" : pool.masteryEnvironment?.environment[key] !== undefined ? "森空岛自动读取" : "默认值"])),
           },
           simple: project(result.simple), fast: project(result.fast),
           savedSeconds: Math.max(0, result.simple.totalSeconds - result.fast.totalSeconds),
-          assumptions: "按教官心情充足、材料齐备、训练室等级满足要求计算。环境加成需全程保持；暂不计算休息、武道秒专一和基建产能影响。",
+          assumptions: "按目标干员已获得且达到精二、教官心情充足、材料齐备、训练室等级满足要求计算；教官持有与练度采用所标明来源的原始干员池。环境加成需全程保持；暂不计算休息、武道秒专一和基建产能影响。",
         };
       }),
     }),

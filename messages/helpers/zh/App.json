@@ -46,7 +46,7 @@
   "additional4": "{choice3, select, yes {{value4}} other {布局 JSON 读取失败。}}",
   "agentArtifactBannerText": "可露希尔生成了新排班{preset}，可在工作台中直接打开并使用全部功能。",
   "agentArtifactAppliedText": "可露希尔已完成排班{preset}，已加载到工作台，班次切换与效率视图可直接使用。",
-  "agentArtifactErrorText": "排班结果载入失败：结果页可能已过期（保留 7 天），或网络异常。可回到助手对话重新求解。",
+  "agentArtifactErrorText": "排班临时交接或载入失败。若仍有新结果提示，可再次点击打开；也可返回仍保留结果的助手对话重试，结果已丢失时请重新求解。",
   "agentArtifactOpen": "在工作台中打开",
   "agentArtifactIgnore": "忽略",
   "agentArtifactLoading": "正在载入…"

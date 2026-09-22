@@ -1,57 +1,78 @@
-import { getAgentPlanArtifact, projectPlanResult, saveAgentPlanArtifact } from "../src/server/agent/plan-artifact.ts";
-import { getDatabase } from "../src/server/db/index.ts";
-import { user } from "../src/server/db/schema.ts";
+import assert from "node:assert/strict";
+import test from "node:test";
+import { readFile } from "node:fs/promises";
+import ts from "typescript";
+import { convertToModelMessages, tool } from "ai";
+import { z } from "zod";
+import { agentArtifactFromOutput, consumeAgentArtifactHandoff, isAgentArtifactHandoff, receiveAgentArtifactMessage, requestAgentArtifactOpen } from "../src/agent-artifact-bridge.ts";
 
-const db = getDatabase();
-const [anyUser] = await db.select({ id: user.id }).from(user).limit(1);
-if (!anyUser) {
-  console.log("NO USER ROWS — cannot smoke test");
-  process.exit(0);
-}
+const session = { presetLabel: "243", layout: { rooms: [] }, operbox: [{ name: "test" }], sourceName: "sample", boxSource: "sample", rotationProfile: "abc_12_12_12", fiammettaEnabled: false, result: { maa: { plans: [] }, diagnosticId: "first" }, activeShift: 0 };
+const handoff = { preset: "243", session };
 
-const projected = projectPlanResult({
-  profile: {
-    schema_version: 1,
-    layout_label: "243",
-    operbox_label: "冒烟测试 Box",
-    baseline_label: "baseline",
-    summary: { owned: 10, tier_up_owned: 5, trade_pool_ready: 3, manufacture_pool_ready: 2 },
-    domains: [],
-    rotation: { daily_gold: 12.3, daily_lmd: 45000 },
-    baseline_rotation: {},
-    actions: [],
-    flags: [],
-    narration_hints: [],
-  },
-  maa: {
-    title: "smoke",
-    plans: [
-      { name: "早班", rooms: { trading: [{ operators: ["德克萨斯", "拉普兰德"] }], manufacture: [{ operators: ["红云"] }, { operators: [] }] } },
-      { name: "中班", rooms: { trading: [{ operators: ["伺夜"] }] } },
-      { name: "晚班", rooms: { trading: [{ operators: ["但书"] }] } },
-    ],
-  },
-  durationMs: 1234,
-  diagnosticId: "smoke-diagnostic-v2",
-} as never);
-
-const id = await saveAgentPlanArtifact(
-  anyUser.id,
-  projected,
-  { layoutPreset: "243", boxSource: "sample", factoryRecipes: ["gold"], operatorCount: 10 },
-  {
-    presetLabel: "243",
-    layout: { template: "243", rooms: [] },
-    operbox: [],
-    sourceName: "冒烟测试 Box",
-    boxSource: "sample",
-    rotationProfile: "abc_12_6_6",
-    fiammettaEnabled: false,
-    result: { diagnosticId: "smoke-diagnostic-v2", durationMs: 1234, profile: {} as never, maa: projected.plans.length ? { title: "smoke", plans: [] } as never : null, rotation: {} as never },
-    activeShift: 0,
+test("temporary handoff navigates same tab, consumes once, rejects invalid and expired data", () => {
+  const storage = new Map<string, string>();
+  const locations: string[] = [];
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "window");
+  Object.defineProperty(globalThis, "window", { configurable: true, value: {
+    sessionStorage: { setItem: (key: string, value: string) => storage.set(key, value), getItem: (key: string) => storage.get(key) ?? null, removeItem: (key: string) => storage.delete(key) },
+    location: { assign: (url: string) => locations.push(url) },
+  } });
+  try {
+    requestAgentArtifactOpen(handoff);
+    assert.deepEqual(locations, ["/"]);
+    assert.deepEqual(consumeAgentArtifactHandoff()?.session, session);
+    assert.equal(storage.size, 0);
+    assert.equal(consumeAgentArtifactHandoff(), null);
+    for (const value of ["{", JSON.stringify({ ...handoff, expiresAt: 0 }), JSON.stringify({ artifactId: "old" })]) {
+      storage.set("riic-agent-artifact-handoff", value);
+      assert.throws(() => consumeAgentArtifactHandoff());
+      assert.equal(storage.size, 0);
+    }
+    window.sessionStorage.setItem = () => { throw new Error("quota"); };
+    assert.throws(() => requestAgentArtifactOpen(handoff), /临时交接失败/);
+    assert.deepEqual(locations, ["/"]);
+  } finally {
+    if (previous) Object.defineProperty(globalThis, "window", previous);
+    else Reflect.deleteProperty(globalThis, "window");
   }
-);
-const back = await getAgentPlanArtifact(id, anyUser.id);
-console.log("saved id:", id);
-console.log("read back OK:", back !== null && back.session !== null);
-console.log("wrong-user blocked:", (await getAgentPlanArtifact(id, "00000000-0000-4000-8000-000000000000")) === null);
+});
+
+test("broadcast payload preserves complete session and rejects obsolete or malformed messages", () => {
+  assert.equal(agentArtifactFromOutput({ planUrl: "/plan/old" }), null);
+  for (const value of [null, {}, { preset: "243", session: {} }, { ...handoff, session: { ...session, operbox: null } }]) {
+    assert.equal(isAgentArtifactHandoff(value), false);
+  }
+  const first = agentArtifactFromOutput({ workbenchSession: session });
+  const latest = agentArtifactFromOutput({ workbenchSession: { ...session, result: { ...session.result, diagnosticId: "latest" } } });
+  let notice: unknown = null;
+  const ready = (value: unknown) => { notice = structuredClone(value); };
+  for (const data of [first, latest]) receiveAgentArtifactMessage({ type: "plan-ready", ...data }, ready);
+  assert.deepEqual(notice, { type: "plan-ready", ...latest });
+  receiveAgentArtifactMessage({ type: "plan-ready", artifactId: "old" }, ready);
+  receiveAgentArtifactMessage({ type: "other", ...first }, ready);
+  assert.deepEqual(notice, { type: "plan-ready", ...latest });
+  assert.deepEqual(first?.session.operbox, session.operbox);
+});
+
+test("solve tool stops artifact writes and SDK projection excludes full session on subsequent turns", async () => {
+  const source = await readFile(new URL("../src/server/agent/tools.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /saveAgentPlanArtifact|planUrl|planArtifactNote/);
+  const ast = ts.createSourceFile("tools.ts", source, ts.ScriptTarget.Latest, true);
+  let projection = "";
+  function visit(node: ts.Node) {
+    if (ts.isPropertyAssignment(node) && node.name.getText(ast) === "toModelOutput") projection = node.initializer.getText(ast);
+    ts.forEachChild(node, visit);
+  }
+  visit(ast);
+  assert.ok(projection);
+  const js = ts.transpile(`const project = ${projection};`, { target: ts.ScriptTarget.ES2022 });
+  const project = new Function(`${js}; return project;`)();
+  const output = { solved: true, plan: { plans: [], summary: { owned: 1 } }, workbenchSession: session };
+  assert.deepEqual(JSON.parse(project({ output }).value), { solved: true, plan: output.plan });
+  const tools = { solve_schedule: tool({ inputSchema: z.object({}), toModelOutput: project }) };
+  const converted = await convertToModelMessages([{ id: "test", role: "assistant", parts: [{ type: "tool-solve_schedule", toolCallId: "call", input: {}, state: "output-available", output }] }], { tools });
+  assert.doesNotMatch(JSON.stringify(converted), /workbenchSession|operbox|diagnosticId/);
+  assert.match(JSON.stringify(converted), /owned/);
+  const route = await readFile(new URL("../src/app/api/agent/chat/route.ts", import.meta.url), "utf8");
+  assert.match(route, /convertToModelMessages\(body.messages, \{ tools \}\)/);
+});

@@ -6,7 +6,7 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 
 import { PlanArtifactView } from "@/components/agent/PlanArtifactView";
-import { AGENT_BROADCAST_CHANNEL, requestAgentArtifactOpen } from "@/agent-artifact-bridge";
+import { AGENT_BROADCAST_CHANNEL, agentArtifactFromOutput, requestAgentArtifactOpen } from "@/agent-artifact-bridge";
 import type { AgentPlanProjection } from "@/server/agent/plan-artifact";
 
 type AgentStatus = "loading" | "ready" | "unconfigured" | "unauthenticated";
@@ -18,6 +18,7 @@ interface AgentRuntimeInfo {
 }
 
 const TOOL_LABELS: Record<string, string> = {
+  resolve_operator: "干员核实",
   calculate_mastery: "专精训练",
   calculate_recruitment: "公招词条计算",
   preview_solve_defaults: "排班配置预览",
@@ -26,6 +27,7 @@ const TOOL_LABELS: Record<string, string> = {
   query_skills: "技能查询",
   kb_route: "知识库导诊",
   kb_read: "知识库阅读",
+  load_agent_skill: "任务指引",
 };
 
 function toolLabel(name: string): string {
@@ -47,7 +49,28 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
 }
 
-function ToolResultSummary({ name, output }: { name: string; output: unknown }) {
+export function formatEnvironmentSummary(environment: Record<string, unknown>, sources: Record<string, unknown>) {
+  const labels: Record<string, string> = { sami: "萨米", abyssal: "深海猎人", knights: "骑士", defence: "防守方", attack: "进攻方", siracusa: "叙拉古", fireworks: "人间烟火" };
+  const groups = new Map<string, string[]>();
+  for (const [key, value] of Object.entries(environment)) {
+    const raw = String(sources[key] ?? "默认值");
+    const source = raw.startsWith("默认值") ? "默认" : raw === "手动指定" ? "用户指定" : raw;
+    groups.set(source, [...(groups.get(source) ?? []), `${labels[key] ?? key} ${value}`]);
+  }
+  return [...groups].map(([source, values]) => `${source}：${values.join("、")}`).join("；");
+}
+
+function MasteryWarnings({ warnings }: { warnings: unknown }) {
+  if (!Array.isArray(warnings)) return null;
+  return <>{warnings.map((value, index) => {
+    const warning = asRecord(value);
+    return typeof warning?.message === "string" ? <p key={index} role="status" className="text-amber-600 dark:text-amber-300">{warning.message}</p> : null;
+  })}</>;
+}
+
+export function ToolResultSummary({ name, output }: { name: string; output: unknown }) {
+  const [handoffError, setHandoffError] = useState<string | null>(null);
+  const handoff = agentArtifactFromOutput(output);
   const record = asRecord(output);
   if (!record) return null;
   if (name === "solve_schedule" && record.plan) {
@@ -65,18 +88,20 @@ function ToolResultSummary({ name, output }: { name: string; output: unknown }) 
             </span>
           ) : null}
         </div>
-        {typeof record.planUrl === "string" && record.planUrl ? (
+        {handoff ? (
           <div className="flex flex-wrap items-center gap-3">
             <button
               type="button"
               className="w-fit rounded-md bg-[#FFD501] px-3 py-1.5 text-xs font-medium text-black transition-opacity hover:opacity-90"
-              onClick={() => requestAgentArtifactOpen(record.planUrl as string, String(plan?.layoutLabel ?? ""))}
+              onClick={() => {
+                setHandoffError(null);
+                try { requestAgentArtifactOpen(handoff); }
+                catch (error) { setHandoffError(error instanceof Error ? error.message : "临时交接失败，请重试。"); }
+              }}
             >
               在工作台中打开 →
             </button>
-            <a className="text-xs underline underline-offset-4 hover:opacity-80" href={record.planUrl as string}>
-              只读结果页
-            </a>
+            {handoffError ? <p role="alert" className="text-destructive">{handoffError}</p> : null}
           </div>
         ) : null}
         <details className="rounded border bg-muted/20 px-2 py-1">
@@ -90,13 +115,13 @@ function ToolResultSummary({ name, output }: { name: string; output: unknown }) 
     const settings = asRecord(record.settings);
     const sources = asRecord(record.settingsSources);
     const observation = asRecord(record.environmentObservation);
-    const labels: Record<string, string> = { sami: "萨米", abyssal: "深海猎人", knights: "骑士", defence: "防守方", attack: "进攻方", siracusa: "叙拉古", fireworks: "人间烟火" };
     return <div className="grid gap-2 text-xs">
       <p>{String(asRecord(record.targetOperator)?.name)} · 干员池：{String(record.sourceName)}</p>
       <p>起始专精 {String(settings?.current)} → {String(settings?.target)} · 中枢 {settings?.controlBonus ? "+5%" : "0%"}（{String(sources?.controlBonus ?? "默认值")}） · 换人余量 {String(settings?.bufferMinutes)} 分钟</p>
-      <p>{Object.entries(asRecord(settings?.environment) ?? {}).map(([key, value]) => `${labels[key] ?? key} ${value}（${asRecord(sources?.environment)?.[key] ?? "默认值"}）`).join(" · ")}</p>
+      <p>{formatEnvironmentSummary(asRecord(settings?.environment) ?? {}, asRecord(sources?.environment) ?? {})}</p>
       {observation ? <><p>森空岛快照：{typeof observation.storeTs === "number" && observation.storeTs > 0 ? new Date(observation.storeTs * 1000).toLocaleString("zh-CN") : "时间未知"}</p><p className="text-amber-600 dark:text-amber-300">{String(observation.warning)}</p></> : null}
-      {record.isSample === true ? <p className="text-muted-foreground">按全精二示例干员池计算。</p> : null}
+      {record.isSample === true ? <p className="text-muted-foreground">按全精二示例干员池计算，不代表个人实际持有与练度。</p> : null}
+      <MasteryWarnings warnings={record.warnings} />
       {(["simple", "fast"] as const).map((mode) => {
         const plan = asRecord(record[mode]);
         return <details key={mode} className="rounded border p-2" open={mode === "simple"}>
@@ -149,33 +174,28 @@ function ToolResultSummary({ name, output }: { name: string; output: unknown }) 
       </div>
     );
   }
-  if (name === "kb_read") {
-    return <p className="text-xs text-muted-foreground">《{String(record.title ?? record.path ?? "?")}》{record.truncated === true ? "（已截断）" : ""}</p>;
-  }
-  if (name === "kb_route" && Array.isArray(record.matched)) {
-    return (
-      <ul className="grid gap-0.5 text-xs text-muted-foreground">
-        {record.matched.slice(0, 5).map((entry, index) => {
-          const entryRecord = asRecord(entry);
-          return <li key={index}>《{String(entryRecord?.label ?? "")}》 {String(entryRecord?.path ?? "")}</li>;
-        })}
-      </ul>
-    );
-  }
-  if (name === "query_skills" && Array.isArray(record.skills)) {
-    return (
-      <ul className="grid gap-0.5 text-xs text-muted-foreground">
-        {record.skills.slice(0, 5).map((skill, index) => {
-          const skillRecord = asRecord(skill);
-          return <li key={index}>{String(skillRecord?.name ?? "?")}：{String(skillRecord?.description ?? "").slice(0, 60)}…</li>;
-        })}
-      </ul>
-    );
-  }
-  if (record.error) {
-    return <p className="text-xs text-destructive">{String(record.error)}</p>;
-  }
+  if (name === "resolve_operator" && record.operator) return <div className="grid gap-2 text-xs"><p className="text-muted-foreground">{String(asRecord(record.operator)?.name)}</p><MasteryWarnings warnings={record.warnings} /></div>;
+  if (["kb_read", "kb_route", "query_skills", "load_agent_skill"].includes(name)) return null;
   return null;
+}
+
+export function AgentToolCard({ part }: { part: AgentToolPartView }) {
+  const name = part.type.slice("tool-".length);
+  const record = asRecord(part.output);
+  const running = part.state === "input-streaming" || part.state === "input-available";
+  const failed = part.state === "output-error" || !!record?.error;
+  const knowledge = ["query_skills", "kb_route", "kb_read", "load_agent_skill"].includes(name);
+  const object = name === "query_skills" ? record?.query : name === "kb_route" ? "" : record?.title;
+  const safeObject = typeof object === "string" && !/[\\/\n\r]/.test(object) ? object.slice(0, 100) : "";
+  const label = toolLabel(name);
+  const suffix = knowledge && safeObject ? name === "kb_read" || name === "load_agent_skill" ? `《${safeObject}》` : ` · ${safeObject}` : "";
+  return <div className={`rounded-lg border px-3 py-2 text-sm ${failed ? "border-destructive/60" : "bg-muted/20"}`} data-agent-tool={name}>
+    <div className="flex items-center gap-2 text-xs font-medium"><span className={running ? "animate-pulse text-muted-foreground" : failed ? "text-destructive" : ""}>
+      {running ? `正在调用 ${label}…` : failed ? `${label} 出错` : `${label} 完成${suffix}`}
+    </span></div>
+    {!failed && part.state === "output-available" && !knowledge ? <div className="mt-1.5"><ToolResultSummary name={name} output={part.output} /></div> : null}
+    {failed ? <p className="mt-1 text-xs text-destructive">{knowledge ? "本次查询暂未完成，请稍后重试。" : String(part.errorText ?? record?.error ?? "工具调用失败")}</p> : null}
+  </div>;
 }
 
 export function AgentChat() {
@@ -233,20 +253,23 @@ export function AgentChat() {
     for (const message of messages) {
       message.parts.forEach((part, partIndex) => {
         if (!isToolPart(part) || part.type !== "tool-solve_schedule" || part.state !== "output-available") return;
-        const output = asRecord(part.output);
-        const planUrl = typeof output?.planUrl === "string" ? output.planUrl : null;
-        if (!planUrl || !output) return;
+        const handoff = agentArtifactFromOutput(part.output);
+        if (!handoff) return;
         const key = `${message.id}:${partIndex}`;
         if (broadcastRef.current.has(key)) return;
         broadcastRef.current.add(key);
         channelRef.current?.postMessage({
           type: "plan-ready",
-          artifactId: planUrl.slice("/plan/".length),
-          preset: String(asRecord(output.plan)?.layoutLabel ?? ""),
+          ...handoff,
         });
       });
     }
   }, [messages]);
+
+  useEffect(() => () => {
+    channelRef.current?.close();
+    channelRef.current = null;
+  }, []);
 
   const busy = status === "submitted" || status === "streaming";
 
@@ -324,24 +347,7 @@ AGENT_LLM_API_KEY=你的密钥`}</pre>
                   ) : null;
                 }
                 if (isToolPart(part)) {
-                  const toolName = part.type.slice("tool-".length);
-                  const running = part.state === "input-streaming" || part.state === "input-available";
-                  const failed = part.state === "output-error";
-                  return (
-                    <div
-                      key={partIndex}
-                      className={`rounded-lg border px-3 py-2 text-sm ${failed ? "border-destructive/60" : "bg-muted/20"}`}
-                      data-agent-tool={toolName}
-                    >
-                      <div className="flex items-center gap-2 text-xs font-medium">
-                        <span className={running ? "animate-pulse text-muted-foreground" : failed ? "text-destructive" : ""}>
-                          {running ? `正在调用 ${toolLabel(toolName)}…` : failed ? `${toolLabel(toolName)} 出错` : `${toolLabel(toolName)} 完成`}
-                        </span>
-                      </div>
-                      {part.state === "output-available" ? <div className="mt-1.5"><ToolResultSummary name={toolName} output={part.output} /></div> : null}
-                      {failed ? <p className="mt-1 text-xs text-destructive">{String(part.errorText ?? "工具调用失败")}</p> : null}
-                    </div>
-                  );
+                  return <AgentToolCard key={partIndex} part={part} />;
                 }
                 return null;
               })
