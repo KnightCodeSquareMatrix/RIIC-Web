@@ -165,39 +165,39 @@ export default function InventoryPage() {
           </div>
         </header>
 
-        <section className="border border-border bg-card p-5 shadow-sm sm:p-6">
+        <section className="border border-border/70 bg-card/80 p-4 sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
-            <div className="flex items-center gap-2"><PackageOpen className="size-5 text-[#FFD501]" /><h2 className="text-xl font-semibold">仓库物品</h2></div>
+            <div className="flex items-center gap-2"><PackageOpen className="size-5 text-[#FFD501]" /><h2 className="text-xl font-semibold">背包物品</h2></div>
             <span className="text-sm text-muted-foreground">共 {items.length} 项</span>
           </div>
-          <div className="relative mt-5 max-w-xl"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索物品名称" className="pl-9" aria-label="搜索库存" /></div>
+          <div className="relative mt-4 max-w-md"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索物品名称" className="h-9 pl-9" aria-label="搜索库存" /></div>
           {error ? <div className="mt-5 border border-amber-400/40 bg-amber-50/10 px-4 py-3 text-sm text-amber-200">{error.message || "库存读取失败，请稍后重试。"}</div> : null}
           {!error && loading ? <div className="py-16 text-center text-sm text-muted-foreground">正在读取森空岛库存...</div> : null}
           {!error && !loading ? <>
-            <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
+            <div className="mt-5 grid gap-6">
               <div className="min-w-0">
-              <h3 className="mb-2 text-sm font-medium text-muted-foreground">基础资源</h3>
-              <div className="grid gap-2 sm:grid-cols-2">
+              <h3 className="mb-3 border-b border-border pb-2 text-lg font-medium">常用</h3>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                 {featuredItems.map((item) => {
                   const catalogItem = catalog[item.id];
-                  return <div key={item.id} className="flex items-center gap-3 border border-border/70 bg-muted/20 px-4 py-3">
-                    <div className="grid size-11 shrink-0 place-items-center border border-border/70 bg-background/60">
+                  return <div key={item.id} className="flex min-h-[74px] items-center gap-2 rounded-md border border-border/60 bg-background/80 px-3 py-2 shadow-sm transition-colors hover:border-primary/40 hover:bg-muted/30">
+                    <div className="grid size-10 shrink-0 place-items-center rounded-full bg-muted/30">
                       {catalogItem?.icon ? <Image src={catalogItem.icon} alt="" width={44} height={44} className="size-10 object-contain" /> : <PackageOpen className="size-5 text-muted-foreground" aria-hidden="true" />}
                     </div>
-                    <span className="min-w-0 flex-1 truncate text-sm">{catalogItem?.name ?? "未知物品"}</span>
+                    <span className="min-w-0 flex-1 truncate text-sm"><span className="block truncate">{catalogItem?.name ?? "未知物品"}</span><span className="mt-1 block text-xs text-muted-foreground">拥有：{MANUAL_RESOURCE_IDS.includes(item.id) ? (manualCounts[item.id] || fmt(apiCountById.get(item.id) ?? 0)) : fmt(item.count)}</span></span>
                     {MANUAL_RESOURCE_IDS.includes(item.id) ? <Input
                       inputMode="numeric"
                       value={manualCounts[item.id] ?? ""}
                       onChange={(event) => setManualCount(item.id, event.target.value)}
                       placeholder={fmt(apiCountById.get(item.id) ?? 0)}
                       aria-label={`填写${catalogItem?.name ?? "资源"}数量`}
-                      className="ml-2 h-9 w-24 shrink-0 text-right font-number"
-                    /> : <strong className="ml-3 shrink-0 font-number text-base">{fmt(item.count)}</strong>}
+                      className="absolute h-6 w-16 opacity-0 focus:opacity-100"
+                    /> : null}
                   </div>;
                 })}
             </div>
               </div>
-            <section className="border border-border/70 bg-muted/10 p-4">
+            <section className="grid gap-5 border-y border-border/70 bg-muted/10 p-4 sm:grid-cols-2 sm:p-5">
               <div>
                 <h3 className="text-sm font-medium text-muted-foreground">当前资源可用寻访</h3>
                 <p className="mt-2 font-number text-4xl font-semibold"><span className="text-[#FFD501]">{fmt(pullSummary.total)}</span> 抽</p>
@@ -222,7 +222,7 @@ export default function InventoryPage() {
                   </TooltipContent>
                 </Tooltip>
               </div>
-              <div className="mt-5 border-t border-border/70 pt-4">
+              <div className="border-t border-border/70 pt-4 sm:mt-0 sm:border-l sm:border-t-0 sm:pl-5">
                 <h3 className="text-sm font-medium text-muted-foreground">自选养成目标</h3>
                 <div className="mt-3 grid grid-cols-3 gap-2">
                   <select value={targetRarity} onChange={(event) => { const rarity = Number(event.target.value); setTargetRarity(rarity); if (rarity < 4 && targetElite === 2) { setTargetElite(1); setTargetLevel(Math.min(targetLevel, 50)); } }} className="h-9 border border-border bg-background px-2 text-sm" aria-label="目标星级">
@@ -245,31 +245,29 @@ export default function InventoryPage() {
             </section>
             </div>
             {generalItems.length > 0 ? <section className="mt-7 border-t border-border pt-5">
-              <h3 className="mb-3 text-lg font-semibold">其他库存</h3>
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              <h3 className="mb-3 border-b border-border pb-2 text-lg font-semibold">稀有度材料</h3>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
                 {generalItems.map((item) => {
                   const catalogItem = catalog[item.id];
-                  return <div key={item.id} className="flex min-h-20 items-center gap-2 border border-border/70 bg-muted/20 px-3 py-3">
-                    <div className="grid size-11 shrink-0 place-items-center border border-border/70 bg-background/60">
+                  return <div key={item.id} className="flex min-h-[74px] items-center gap-2 rounded-md border border-border/60 bg-background/80 px-3 py-2 shadow-sm transition-colors hover:border-primary/40">
+                    <div className="grid size-10 shrink-0 place-items-center rounded-full bg-muted/30">
                       {catalogItem?.icon ? <Image src={catalogItem.icon} alt="" width={44} height={44} className="size-10 object-contain" /> : <PackageOpen className="size-5 text-muted-foreground" aria-hidden="true" />}
                     </div>
-                    <span className="min-w-0 flex-1 break-words text-sm leading-5">{catalogItem?.name ?? "未知物品"}</span>
-                    <strong className="shrink-0 font-number text-base">{fmt(item.count)}</strong>
+                    <span className="min-w-0 flex-1 break-words text-sm leading-5"><span className="block">{catalogItem?.name ?? "未知物品"}</span><span className="mt-1 block text-xs text-muted-foreground">拥有：{fmt(item.count)}</span></span>
                   </div>;
                 })}
               </div>
             </section> : null}
             {infrastructureItems.length > 0 ? <section className="mt-7 border-t border-border pt-5">
-              <h3 className="mb-3 text-lg font-semibold">基建材料</h3>
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              <h3 className="mb-3 border-b border-border pb-2 text-lg font-semibold">基建材料</h3>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
                 {infrastructureItems.map((item) => {
                   const catalogItem = catalog[item.id];
-                  return <div key={item.id} className="flex min-h-20 items-center gap-2 border border-border/70 bg-muted/20 px-3 py-3">
-                    <div className="grid size-11 shrink-0 place-items-center border border-border/70 bg-background/60">
+                  return <div key={item.id} className="flex min-h-[74px] items-center gap-2 rounded-md border border-border/60 bg-background/80 px-3 py-2 shadow-sm transition-colors hover:border-primary/40">
+                    <div className="grid size-10 shrink-0 place-items-center rounded-full bg-muted/30">
                       {catalogItem?.icon ? <Image src={catalogItem.icon} alt="" width={44} height={44} className="size-10 object-contain" /> : <PackageOpen className="size-5 text-muted-foreground" aria-hidden="true" />}
                     </div>
-                    <span className="min-w-0 flex-1 break-words text-sm leading-5">{catalogItem?.name ?? "未知物品"}</span>
-                    <strong className="shrink-0 font-number text-base">{fmt(item.count)}</strong>
+                    <span className="min-w-0 flex-1 break-words text-sm leading-5"><span className="block">{catalogItem?.name ?? "未知物品"}</span><span className="mt-1 block text-xs text-muted-foreground">拥有：{fmt(item.count)}</span></span>
                   </div>;
                 })}
               </div>
