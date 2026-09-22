@@ -102,6 +102,8 @@ export interface ManualSchedulePageProps {
   evaluationPending: boolean;
   onEvaluate: (input: { draft: ManualScheduleDraft }) => Promise<void>;
   onPaperEvaluate: (input: { draft: ManualScheduleDraft }) => Promise<void>;
+  hasWasmEvaluationArtifact: boolean;
+  onDownloadWasmEvaluationArtifact: () => void;
   onRestoreEvaluation: (result: ManualPlanResult) => void;
   onOpenCalculator: () => void;
   onShiftDurationsChange: (durations: number[]) => void;
@@ -220,6 +222,8 @@ export function ManualSchedulePage({
   evaluationPending,
   onEvaluate,
   onPaperEvaluate,
+  hasWasmEvaluationArtifact,
+  onDownloadWasmEvaluationArtifact,
   onRestoreEvaluation,
   onOpenCalculator,
   onShiftDurationsChange,
@@ -682,6 +686,7 @@ export function ManualSchedulePage({
     <Button type="button" variant={mobile ? "ghost" : "outline"} size="sm" onClick={() => { closeMobileTools(); onOpenSetup(); }}><Settings2 />{intl("components_pages_ManualSchedulePage.configureBoxLayout")}</Button>
     <Button type="button" variant={mobile ? "ghost" : "outline"} size="sm" onClick={runNativeEvaluation} disabled={evaluationPending}><Sparkles />{intl("components_pages_ManualSchedulePage.calculateBasedOnSchedule")}</Button>
     <Button type="button" variant={mobile ? "ghost" : "outline"} size="sm" onClick={runPaperEvaluation} disabled={evaluationPending}><Sparkles />{intl("components_pages_ManualSchedulePage.calculateBasedOnEfficiency")}</Button>
+    <Button type="button" variant={mobile ? "ghost" : "outline"} size="sm" disabled={!hasWasmEvaluationArtifact} title={hasWasmEvaluationArtifact ? "包含布局、排班和干员练度；仅下载到本地，不会自动上传。" : "请先执行根据排班计算。"} onClick={() => { closeMobileTools(); onDownloadWasmEvaluationArtifact(); }}><Download />下载 WASM 评估日志</Button>
     <FileUploadDialog
       title={intl("components_pages_ManualSchedulePage.importScheduleFile")}
       description={intl("FileUpload.scheduleDescription")}

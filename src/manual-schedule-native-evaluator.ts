@@ -1,5 +1,6 @@
 import { factoryRecipeFor, tradeOrderFor } from "./blueprint.ts";
 import { evaluateNativeSchedule, type NativeEvalRequestV1, type NativeEvalResponseV1 } from "./lib/infra-eval/client.ts";
+import { createWasmEvaluationArtifact, type ManualWasmEvaluationArtifact } from "./manual-wasm-evaluation-diagnostic.ts";
 import { manualRoomCapacity, type ManualScheduleDraft } from "./manual-schedule.ts";
 import { normalizeOperboxEntries } from "./operbox-normalization.ts";
 import type { ManualEvaluationWarning, ManualRoomEvaluation, ManualScheduleEvaluation } from "./manual-schedule-evaluator.ts";
@@ -134,9 +135,10 @@ export async function evaluateManualScheduleWithNativeEngine(input: {
   draft: ManualScheduleDraft;
   layout: BaseBlueprint;
   operbox: readonly OperBoxEntry[] | null;
-}): Promise<ManualScheduleEvaluation> {
+}): Promise<{ evaluation: ManualScheduleEvaluation; artifact: ManualWasmEvaluationArtifact }> {
   const startedAt = performance.now();
-  const response = await evaluateNativeSchedule(buildNativeEvalRequest(input));
+  const request = buildNativeEvalRequest(input);
+  const response = await evaluateNativeSchedule(request);
   const totalHours = input.draft.shifts.reduce((sum, shift) => sum + shift.durationHours, 0) || 24;
   const roomsByShift = input.draft.shifts.map((_, index) => roomEvaluation({ ...input, response, shiftIndex: index }));
   const shifts: RotationShift[] = input.draft.shifts.map((shift, index) => {
@@ -169,9 +171,9 @@ export async function evaluateManualScheduleWithNativeEngine(input: {
     code: "unsupported-rule",
     message: `Rust 原生评估 ${response.engine.ruleset}：各班独立结算，不模拟跨班心情、库存、无人机或菲亚梅塔运行时状态。`,
   }];
-  return {
+  const evaluation = {
     rotation: {
-      profile: "abc_12_12_12",
+      profile: "abc_12_12_12" as const,
       shifts,
       daily: {
         trade: response.weighted.trade_final_basis_points / 1_000,
@@ -182,5 +184,15 @@ export async function evaluateManualScheduleWithNativeEngine(input: {
     roomsByShift,
     warnings,
     elapsedMs: performance.now() - startedAt,
+  } satisfies ManualScheduleEvaluation;
+  return {
+    evaluation,
+    artifact: createWasmEvaluationArtifact({
+      ...input,
+      request,
+      response,
+      evaluation,
+      elapsedMs: evaluation.elapsedMs,
+    }),
   };
 }

@@ -307,6 +307,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   const [manualScheduleMode, setManualScheduleMode] = useState<ManualScheduleMode>("sequential");
   const [manualDraftHandoff, setManualDraftHandoff] = useState<ManualScheduleDraft | null>(null);
   const [manualPlanResult, setManualPlanResult] = useState<ManualPlanResult | null>(null);
+  const [manualWasmEvaluationArtifact, setManualWasmEvaluationArtifact] = useState<import("./manual-wasm-evaluation-diagnostic").ManualWasmEvaluationArtifact | null>(null);
   const [manualEvaluationPending, setManualEvaluationPending] = useState(false);
   const [pendingManualDraftReplacement, setPendingManualDraftReplacement] = useState<ManualScheduleDraft | null>(null);
   const [inputMode, setInputMode] = useState<"skland" | "maa" | "manual">(CLIENT_SKLAND_ENABLED ? "skland" : "maa");
@@ -1232,8 +1233,9 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     setManualEvaluationPending(true);
     try {
       const { assembleNativeManualPlanResult } = await import("./manual-plan-result");
-      const result = await assembleNativeManualPlanResult({ draft: input.draft, layout, operbox });
+      const { result, artifact } = await assembleNativeManualPlanResult({ draft: input.draft, layout, operbox });
       setManualPlanResult(result);
+      setManualWasmEvaluationArtifact(artifact);
       try {
         persistManualEvaluationCache(window.localStorage, result);
       } catch {
@@ -1265,10 +1267,23 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
 
   function restoreManualEvaluation(result: ManualPlanResult) {
     setManualPlanResult(result);
+    setManualWasmEvaluationArtifact(null);
+  }
+
+  function downloadManualWasmEvaluationArtifact() {
+    if (!manualWasmEvaluationArtifact) return;
+    void import("./download").then(({ downloadJson }) => {
+      const stamp = manualWasmEvaluationArtifact.createdAt
+        .replace(/[-:]/g, "")
+        .replace(/\.\d{3}Z$/, "")
+        .replace("T", "-");
+      downloadJson(`riic-manual-wasm-evaluation-${stamp}.json`, manualWasmEvaluationArtifact);
+    });
   }
 
   function clearManualEvaluation() {
     setManualPlanResult(null);
+    setManualWasmEvaluationArtifact(null);
     setManualEvaluationPending(false);
     try {
       clearManualEvaluationCache(window.localStorage);
@@ -2154,6 +2169,8 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       evaluationPending: manualEvaluationPending,
       onEvaluate: evaluateManualScheduleFromPage,
       onPaperEvaluate: evaluatePaperManualScheduleFromPage,
+      hasWasmEvaluationArtifact: Boolean(manualWasmEvaluationArtifact),
+      onDownloadWasmEvaluationArtifact: downloadManualWasmEvaluationArtifact,
       onRestoreEvaluation: restoreManualEvaluation,
       onOpenCalculator: () => navigateToPage("calculator"),
       onShiftDurationsChange: setManualShiftDurations,

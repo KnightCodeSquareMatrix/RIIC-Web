@@ -1,4 +1,3 @@
-import { powerEfficiencyForShift } from "./drone-production-core.ts";
 import type {
   BaseBlueprint,
   BlueprintRoom,
@@ -66,7 +65,7 @@ const TRADE_BASE_DAILY: Record<number, number> = {
 const EXPERIENCE_BASE_DAILY = 8_000;
 const SHARD_BASE_DAILY = 24;
 const ORUNDUM_ORDER_BASE_DAILY = 240;
-const GOLD_UNITS_BASE_DAILY = 20;
+const GOLD_VALUE_BASE_DAILY = 10_000;
 const ORUNDUM_PER_SHARD = 10;
 
 function finite(value: unknown): value is number {
@@ -143,35 +142,6 @@ function finalEfficiency(efficiency: RoomEfficiency | undefined): number | null 
   return finite(efficiency.final_efficiency) ? efficiency.final_efficiency : null;
 }
 
-function droneEquivalent(
-  shift: RotationShift,
-  powerRooms: BlueprintRoom[],
-  maaPowerRooms: MaaRoom[] | undefined,
-  durationWeight: number
-): number | null {
-  const powerStations = powerRooms.map((room, index) => {
-    const efficiency = roomLine(shift, room.id);
-    const equivalentEfficiency = efficiency?.equivalent_efficiency;
-    if (!finite(equivalentEfficiency)) return null;
-    const operators = maaPowerRooms?.[index]?.operators ?? [];
-    return {
-      equivalentEfficiency,
-      working: operators.some((operator) => operator !== null)
-        && equivalentEfficiency > 0,
-    };
-  });
-  if (powerStations.some((station) => station === null)) {
-    let legacyBonusSum = 0;
-    for (const room of powerRooms) {
-      const final = finalEfficiency(roomLine(shift, room.id));
-      if (final === null) return null;
-      legacyBonusSum += (final - 1) * 100;
-    }
-    return ((1 + legacyBonusSum / 100) / 2) * durationWeight;
-  }
-  return powerEfficiencyForShift(powerStations.filter((station): station is NonNullable<typeof station> => station !== null)) / 2 * durationWeight;
-}
-
 function finalizedAmount(source: MutableAmount): DailyProductionAmount {
   if (source.unavailableReason) {
     return {
@@ -188,7 +158,28 @@ function finalizedAmount(source: MutableAmount): DailyProductionAmount {
   };
 }
 
-export function estimateDailyProduction({
+export type DailyProductionTrace = {
+  totalDurationHours: number;
+  normalizeScale: number;
+  rooms: Array<{
+    shiftIndex: number;
+    position: number;
+    roomId: string;
+    kind: "trade" | "manufacture";
+    product: TradeOrder | FactoryRecipe;
+    baseDaily?: number;
+    totalEfficiency?: number;
+    orderMultiplier?: number;
+    multiplier?: number;
+    rawDurationWeight: number;
+    formula: string;
+    rawContribution?: number;
+    normalizedContribution?: number;
+    unavailableReason?: DailyProductionUnavailableReason;
+  }>;
+};
+
+export function estimateDailyProductionWithTrace({
   layout,
   maa,
   rotation,
@@ -196,16 +187,16 @@ export function estimateDailyProduction({
   layout: BaseBlueprint;
   maa: MaaJson;
   rotation: RotationJson;
-}): DailyProductionEstimate {
+}): { estimate: DailyProductionEstimate; trace: DailyProductionTrace } {
   const tradeRooms = layoutRooms(layout, "trade_post");
   const factoryRooms = layoutRooms(layout, "factory");
-  const powerRooms = layoutRooms(layout, "power_plant");
   const lmdOrders: MutableAmount = { natural: 0, drones: 0 };
   const gold: MutableAmount = { natural: 0, drones: 0 };
   const experience: MutableAmount = { natural: 0, drones: 0 };
   const shards: MutableAmount = { natural: 0, drones: 0 };
   const orundumTrade: MutableAmount = { natural: 0, drones: 0 };
   let droneTrade = 0;
+  const traceRooms: DailyProductionTrace["rooms"] = [];
 
   rotation.shifts.forEach((shift, position) => {
     const durationWeight = shift.duration_hours / 24;
@@ -233,6 +224,20 @@ export function estimateDailyProduction({
         return;
       }
       const output = baseDaily * multiplier * durationWeight;
+      traceRooms.push({
+        shiftIndex: shift.index,
+        position,
+        roomId: room.blueprint.id,
+        kind: "trade",
+        product: order,
+        baseDaily,
+        totalEfficiency: room.efficiency?.total_efficiency,
+        orderMultiplier: room.efficiency?.order_multiplier,
+        multiplier,
+        rawDurationWeight: durationWeight,
+        formula: "baseDaily * (totalEfficiency * orderMultiplier) * durationHours / 24",
+        rawContribution: output,
+      });
       if (order === "gold") lmdOrders.natural += output;
       else orundumTrade.natural += output;
     });
@@ -252,91 +257,30 @@ export function estimateDailyProduction({
         unavailable(target, "missing-room-data");
         return;
       }
-      target.natural += (recipe === "gold"
-        ? GOLD_UNITS_BASE_DAILY
+      const baseDaily = recipe === "gold"
+        ? GOLD_VALUE_BASE_DAILY
         : recipe === "battle_record"
           ? EXPERIENCE_BASE_DAILY
-          : SHARD_BASE_DAILY)
-        * multiplier
-        * durationWeight;
+          : SHARD_BASE_DAILY;
+      const output = baseDaily * multiplier * durationWeight;
+      traceRooms.push({
+        shiftIndex: shift.index,
+        position,
+        roomId: room.blueprint.id,
+        kind: "manufacture",
+        product: recipe,
+        baseDaily,
+        totalEfficiency: room.efficiency?.total_efficiency,
+        orderMultiplier: room.efficiency?.order_multiplier,
+        multiplier,
+        rawDurationWeight: durationWeight,
+        formula: "baseDaily * (totalEfficiency * orderMultiplier) * durationHours / 24",
+        rawContribution: output,
+      });
+      target.natural += output;
     });
 
-    const drones = plan?.drones;
-    if (!drones || drones.enable === false) return;
-    const equivalent = droneEquivalent(shift, powerRooms, plan?.rooms.power, durationWeight);
-    if (equivalent === null) {
-      if (drones.room === "trading") {
-        const targetRoom = tradeRooms[drones.index - 1];
-        const order = targetRoom
-          ? tradeOrder(roomAt(tradeRooms, plan?.rooms.trading, shift, drones.index - 1))
-          : "ambiguous";
-        unavailable(order === "originium" ? orundumTrade : lmdOrders, "missing-drone-data");
-      } else {
-        const targetRoom = factoryRooms[drones.index - 1];
-        const recipe = targetRoom
-          ? factoryRecipe(roomAt(factoryRooms, plan?.rooms.manufacture, shift, drones.index - 1))
-          : "ambiguous";
-        if (recipe === "battle_record") unavailable(experience, "missing-drone-data");
-        else if (recipe === "originium") unavailable(shards, "missing-drone-data");
-        else unavailable(gold, "missing-drone-data");
-      }
-      return;
-    }
 
-    if (drones.room === "trading") {
-      const roomIndex = drones.index - 1;
-      const targetRoom = tradeRooms[roomIndex];
-      if (!targetRoom) {
-        unavailable(lmdOrders, "ambiguous-recipe");
-        unavailable(orundumTrade, "ambiguous-recipe");
-        return;
-      }
-      const room = roomAt(tradeRooms, plan?.rooms.trading, shift, roomIndex);
-      const order = tradeOrder(room);
-      if (order === "ambiguous") {
-        unavailable(lmdOrders, "ambiguous-recipe");
-        unavailable(orundumTrade, "ambiguous-recipe");
-        return;
-      }
-      const multiplier = finalEfficiency(room.efficiency);
-      const baseDaily = order === "gold" ? TRADE_BASE_DAILY[targetRoom.level] : ORUNDUM_ORDER_BASE_DAILY;
-      const target = order === "gold" ? lmdOrders : orundumTrade;
-      if (multiplier === null || !finite(baseDaily)) {
-        unavailable(target, "missing-drone-data");
-        return;
-      }
-      const output = equivalent * baseDaily * multiplier;
-      target.drones += output;
-      if (order === "gold") {
-        droneTrade += output;
-      }
-      return;
-    }
-
-    const roomIndex = drones.index - 1;
-    const targetRoom = factoryRooms[roomIndex];
-    if (!targetRoom) {
-      unavailable(gold, "ambiguous-recipe");
-      unavailable(experience, "ambiguous-recipe");
-      unavailable(shards, "ambiguous-recipe");
-      return;
-    }
-    const room = roomAt(factoryRooms, plan?.rooms.manufacture, shift, roomIndex);
-    const recipe = factoryRecipe(room);
-    const multiplier = finalEfficiency(room.efficiency);
-    if (recipe === "ambiguous") {
-      unavailable(gold, "ambiguous-recipe");
-      unavailable(experience, "ambiguous-recipe");
-      unavailable(shards, "ambiguous-recipe");
-    } else if (multiplier === null) {
-      unavailable(recipe === "gold" ? gold : recipe === "battle_record" ? experience : shards, "missing-drone-data");
-    } else if (recipe === "gold") {
-      gold.drones += equivalent * GOLD_UNITS_BASE_DAILY * multiplier;
-    } else if (recipe === "battle_record") {
-      experience.drones += equivalent * EXPERIENCE_BASE_DAILY * multiplier;
-    } else {
-      shards.drones += equivalent * SHARD_BASE_DAILY * multiplier;
-    }
   });
 
   // 轮换周期归一化：abc_12_12_12 等 36 小时周期（3×12h）折算回 24 小时等效每日产量。
@@ -371,7 +315,7 @@ export function estimateDailyProduction({
   else if (Math.abs(manufactureCapacity - tradeCapacity) < 0.000_001) bottleneck = "balanced";
   else bottleneck = manufactureCapacity < tradeCapacity ? "manufacture" : "trade";
 
-  return {
+  const estimate = {
     lmdOrders: {
       ...lmdOrderAmount,
       droneTrade: lmdOrders.unavailableReason ? null : droneTrade,
@@ -392,5 +336,24 @@ export function estimateDailyProduction({
       tradeDrones: tradeAmount.drones,
       bottleneck,
     },
+  } satisfies DailyProductionEstimate;
+  return {
+    estimate,
+    trace: {
+      totalDurationHours,
+      normalizeScale,
+      rooms: traceRooms.map((room) => ({
+        ...room,
+        ...(room.rawContribution === undefined ? {} : { normalizedContribution: room.rawContribution * normalizeScale }),
+      })),
+    },
   };
+}
+
+export function estimateDailyProduction(input: {
+  layout: BaseBlueprint;
+  maa: MaaJson;
+  rotation: RotationJson;
+}): DailyProductionEstimate {
+  return estimateDailyProductionWithTrace(input).estimate;
 }

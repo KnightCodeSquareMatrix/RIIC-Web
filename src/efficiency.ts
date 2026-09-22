@@ -156,32 +156,34 @@ export function presentRoomEfficiency(
   }
 
   if (group === "manufacture") {
-    // 新 serve 输出优先：制造站无等效倍率，总效率 = 基础 + 等效 + 全局。
-    const structured = structuredEfficiency(efficiency, false, locale);
-    if (structured) return structured;
     const skill = efficiency.manu_prod_skill;
     const display = efficiency.manu_display_pct;
     const final = efficiency.final_efficiency !== undefined
       ? efficiency.final_efficiency * 100
-      : efficiency.manu_score !== undefined
-        ? efficiency.manu_score
-        : efficiency.manu_prod_total !== undefined
-          ? 100 + efficiency.manu_prod_total
-          : display !== undefined
-            ? 100 + display
-            : skill !== undefined
-              ? 100 + skill
-              : undefined;
+      : efficiency.total_efficiency !== undefined
+        ? efficiency.total_efficiency * 100
+        : efficiency.manu_score !== undefined
+          ? efficiency.manu_score
+          : efficiency.manu_prod_total !== undefined
+            ? 100 + efficiency.manu_prod_total
+            : display !== undefined
+              ? 100 + display
+              : skill !== undefined
+                ? 100 + skill
+                : undefined;
     if (final === undefined) return null;
+    const base = efficiency.base_efficiency;
+    const baseBonus = base === undefined ? undefined : (base - 1) * 100;
     const totalBonus = final - 100;
     const crossStation = display !== undefined && skill !== undefined && different(display, skill)
       ? display - skill
       : undefined;
     const provenSkill = skill ?? (crossStation === undefined || display === undefined ? undefined : display - crossStation);
-    const knownBonus = (provenSkill ?? 0) + (crossStation ?? 0);
+    const knownBonus = (baseBonus ?? 0) + (provenSkill ?? 0) + (crossStation ?? 0);
     const remainder = totalBonus - knownBonus;
     const details: EfficiencyDetail[] = [
       { label: "", value: "100%", operator: "=" },
+      ...(baseBonus === undefined || !different(baseBonus, 0) ? [] : [formulaTerm(localizeEfficiency.text(locale, "combinedBonus"), baseBonus)]),
       ...(provenSkill === undefined ? [] : [formulaTerm(localizeEfficiency.text(locale, "skill"), provenSkill)]),
       ...(crossStation === undefined ? [] : [formulaTerm(localizeEfficiency.text(locale, "crossFacility"), crossStation, "cross-station")]),
       ...(different(remainder, 0) ? [formulaTerm(localizeEfficiency.text(locale, "combinedBonus"), remainder)] : []),
@@ -198,35 +200,18 @@ export function presentRoomEfficiency(
   }
 
   if (group === "power") {
-    // 新 serve 输出：直接展示总效率（final/total 恒存在），不再依赖被双重归一化吞掉的
-    // power_skill_pct/power_score 字段。
-    const total = efficiency.final_efficiency ?? efficiency.total_efficiency;
-    if (total !== undefined) {
-      return {
-        primaryLabel: localizeEfficiency.text(locale, "totalEfficiency"),
-        primaryValue: percent(total * 100),
-        details: [],
-      };
-    }
-    const scoreFallback = efficiency.power_score !== undefined ? Math.max(0, efficiency.power_score - 100) : undefined;
-    const skill = efficiency.power_skill_pct ?? efficiency.power_charge_speed_pct ?? scoreFallback;
-    const display = efficiency.power_display_pct;
-    const primary = display ?? skill;
-    if (primary === undefined) return null;
-    const crossStation = display !== undefined && skill !== undefined && different(display, skill)
-      ? display - skill
+    const scoreFallback = efficiency.power_score !== undefined
+      ? (efficiency.power_score > 1 ? efficiency.power_score - 1 : efficiency.power_score) * 100
       : undefined;
-    const details: EfficiencyDetail[] = [
-      ...(skill === undefined ? [] : [{ label: localizeEfficiency.text(locale, "skill"), value: percent(skill) }]),
-      ...(crossStation === undefined ? [] : [formulaTerm(localizeEfficiency.text(locale, "crossFacility"), crossStation, "cross-station")]),
-    ];
-    if (efficiency.power_score !== undefined && different(efficiency.power_score, primary)) {
-      details.push({ label: localizeEfficiency.text(locale, "totalCharge"), value: percent(efficiency.power_score) });
-    }
+    const skill = efficiency.power_skill_pct
+      ?? efficiency.power_charge_speed_pct
+      ?? (efficiency.equivalent_efficiency === undefined ? undefined : efficiency.equivalent_efficiency * 100)
+      ?? scoreFallback;
+    if (skill === undefined) return null;
     return {
-      primaryLabel: localizeEfficiency.text(locale, display !== undefined ? "displayEfficiency" : "chargingEfficiency"),
-      primaryValue: percent(primary),
-      details,
+      primaryLabel: localizeEfficiency.text(locale, "skillEfficiency"),
+      primaryValue: percent(skill),
+      details: [],
     };
   }
 
