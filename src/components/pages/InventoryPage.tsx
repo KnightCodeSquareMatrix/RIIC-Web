@@ -105,8 +105,8 @@ export default function InventoryPage() {
     return [...COMMON_IDS, ...BATTLE_RECORD_IDS]
       .map((id) => ({ id, count: itemCount(id) }));
   }, [itemCount]);
-  const commonItems = useMemo(() => featuredItems.filter((item) => !BATTLE_RECORD_IDS.has(item.id)), [featuredItems]);
-  const experienceItems = useMemo(() => featuredItems.filter((item) => BATTLE_RECORD_IDS.has(item.id)), [featuredItems]);
+  const commonItems = useMemo(() => featuredItems.filter((item) => item.id !== "4001" && !BATTLE_RECORD_IDS.has(item.id)), [featuredItems]);
+  const experienceItems = useMemo(() => featuredItems.filter((item) => item.id === "4001" || BATTLE_RECORD_IDS.has(item.id)), [featuredItems]);
   const otherItems = useMemo(() => items.filter((item) => !FEATURED_IDS.has(item.id)), [items]);
   const infrastructureItems = useMemo(() => otherItems.filter((item) => INFRASTRUCTURE_MATERIAL_IDS.has(item.id)), [otherItems]);
   const generalItems = useMemo(() => otherItems.filter((item) => !INFRASTRUCTURE_MATERIAL_IDS.has(item.id)), [otherItems]);
@@ -219,7 +219,7 @@ export default function InventoryPage() {
               </div>
               </div>
               <div className="border-b border-border pb-5">
-                <h3 className="mb-3 border-b border-border pb-3 text-xl font-medium">经验卡</h3>
+                <h3 className="mb-3 border-b border-border pb-3 text-xl font-medium">龙门币与经验卡</h3>
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                   {experienceItems.map((item) => {
                     const catalogItem = catalog[item.id];
@@ -227,7 +227,17 @@ export default function InventoryPage() {
                       <div className="grid size-10 shrink-0 place-items-center rounded-full bg-muted/30">
                         {catalogItem?.icon ? <Image src={catalogItem.icon} alt="" width={44} height={44} className="size-10 object-contain" /> : <PackageOpen className="size-5 text-muted-foreground" aria-hidden="true" />}
                       </div>
-                      <span className="min-w-0 flex-1 truncate text-sm"><span className="block truncate">{catalogItem?.name ?? "未知物品"}</span><span className="mt-1 block text-xs text-muted-foreground">拥有：{fmt(item.count)}</span></span>
+                      <div className="min-w-0 flex-1 text-sm">
+                        <span className="block break-words">{catalogItem?.name ?? "未知物品"}</span>
+                        {item.id === "4001" && !apiCountById.has(item.id) ? <Input
+                          inputMode="numeric"
+                          value={manualCounts[item.id] ?? ""}
+                          onChange={(event) => setManualCount(item.id, event.target.value)}
+                          placeholder="填写数量"
+                          aria-label="填写龙门币数量"
+                          className="mt-1 h-9 w-full min-w-0 px-2 font-number text-xs"
+                        /> : <span className="mt-1 block text-xs text-muted-foreground">拥有：{fmt(item.count)}</span>}
+                      </div>
                     </div>;
                   })}
                 </div>
