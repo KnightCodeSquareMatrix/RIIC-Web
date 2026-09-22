@@ -337,6 +337,7 @@ export interface InfraCalculatorProps {
   onSwapOperators?: (row: RoomRow, firstSlotIndex: number, secondSlotIndex: number) => void;
   droneTargetRoomId?: string | null;
   onDroneTargetChange?: (row: RoomRow) => void;
+  onDormAutofillChange?: (row: RoomRow, enabled: boolean) => void;
   onEditManualSchedule: () => void;
   onDownloadMaa: () => void;
   onDownloadImage: () => Promise<void>;
@@ -365,7 +366,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     sampleLoading, loading, canRun, runCooldownSeconds, hasBox, hasPersonalBox, feedbackDisabledForSampleBox, plannerReady, websiteAuthenticated, showOnboarding, taskQueue, animatePlanEntrance, animateEmptyScheduleEntrance, onPlanEntranceConsumed, requiresAccount = false, accountControl,
     onRunSampleTrial, onStartPersonalFlow, onDismissOnboarding, onOpenSetup, upgradeSimulationOpen, onOpenUpgradeSimulation, onUpgradeSimulationOpenChange, onRun, onAutoDroneAllocation, onManualDroneAllocation, manualDroneSelection = false, onSimulateUpgrades, upgradeComparison, scheduleVariant, onScheduleVariantChange, onUpgradeTrialReady, onCancelRun,
     onSetActiveShift, onMarkIssue, onPerformanceIssue,
-    onFactoryRecipeChange, onTradeOrderChange, droneTargetRoomId, onDroneTargetChange,
+    onFactoryRecipeChange, onTradeOrderChange, droneTargetRoomId, onDroneTargetChange, onDormAutofillChange,
     onSwapOperators,
     onEditManualSchedule, onDownloadMaa, onDownloadImage, showProgressionRecalculate = true, showManualScheduleEdit = true, scheduleViewControl = "tabs", shiftViewControl = "tabs", imageExportScope = "single", showFeedback = true, showImages = true,
     onClearResultNotice, onDismissResultClearWarning, allowReplacementOperatorSort = false,
@@ -731,6 +732,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
               hideImages={!showImages}
               droneTargetRoomId={droneTargetRoomId}
               onDroneTargetChange={manualDroneSelection ? onDroneTargetChange : undefined}
+              onDormAutofillChange={onDormAutofillChange}
             /> : (
               <div className="flex min-h-[420px] items-center justify-center border-y border-dashed border-border/70 py-6 text-center text-sm text-muted-foreground">
                 {intl("components_pages_InfraCalculator.noLayoutRoomsToDisplay")}

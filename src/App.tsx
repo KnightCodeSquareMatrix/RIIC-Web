@@ -1568,6 +1568,23 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     requestScheduleProductChange({ type: "trade", roomId, order });
   }
 
+  function handleScheduleDormAutofillChange(row: RoomRow, enabled: boolean) {
+    if (row.group !== "dormitory") return;
+    const update = (current: PublicPlanData | null) => {
+      if (!current) return current;
+      const next = structuredClone(current);
+      const room = next.maa.plans[activeShift]?.rooms.dormitory?.[row.index];
+      if (!room) return current;
+      room.autofill = enabled;
+      return next;
+    };
+    if (scheduleVariant === "trial" && upgradeComparison?.baseline === result) {
+      setUpgradeComparison((current) => current ? { ...current, trial: update(current.trial)! } : current);
+    } else {
+      setResult(update);
+    }
+  }
+
   function handleScheduleDroneTargetChange(row: RoomRow) {
     setManualDroneShifts((current) => ({ ...current, [activeShift]: true }));
     setResult((current) => {
@@ -2106,6 +2123,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
         return layout.rooms.filter((room) => room.kind === kind)[activeDronePlan.drones.index - 1]?.id ?? null;
       })() : null,
       onDroneTargetChange: handleScheduleDroneTargetChange,
+      onDormAutofillChange: handleScheduleDormAutofillChange,
       onEditManualSchedule: handleProtectedEditManualSchedule,
       onDownloadMaa: handleDownloadMaa,
       onDownloadImage: handleDownloadScheduleImage,

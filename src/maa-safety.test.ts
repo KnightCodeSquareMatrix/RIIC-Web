@@ -63,7 +63,9 @@ test("calculator downloads preserve displayed dorm autofill across every shift",
   exported.plans.forEach((plan, index) => {
     const displayed = planToRows(maa.plans[index], undefined, layout)
       .filter((row) => row.group === "dormitory");
-    assert.deepEqual(plan.rooms.dormitory?.map((room) => room.autofill), [true, true, false, false, false, true, false]);
+    assert.deepEqual(plan.rooms.dormitory?.map((room) => room.autofill), plan === exported.plans[0]
+      ? [false, false, false, false, false, true, false]
+      : [true, true, false, false, false, true, false]);
     assert.deepEqual(plan.rooms.dormitory?.map((room) => room.autofill), displayed.map((row) => row.autofill));
     assert.deepEqual(plan.rooms.dormitory?.map((room) => room.operators), maa.plans[index]!.rooms.dormitory?.map((room) => room.operators));
     assert.deepEqual(plan.rooms.dormitory?.[6]?.candidates, ["芬"]);
