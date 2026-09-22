@@ -1553,16 +1553,6 @@ export function ScheduleBoard({
                                 </Button>
                               ) : null}
                               {renderListRoomActions?.(row, "header")}
-                              {!renderListRoomActions && row.group === "dormitory" && onDormAutofillChange ? (
-                                <Button type="button" variant="ghost" size="sm"
-                                  aria-pressed={row.autofill}
-                                  aria-label={`${row.title} ${intl("components.autoFill")}`}
-                                  className={cn("h-7 shrink-0 border px-2 text-xs text-white hover:text-white",
-                                    row.autofill ? "border-[#FFD800]/70 bg-[#FFD800]/18 hover:bg-[#FFD800]/28" : "border-white/15 bg-[#3C3C3C]/55 hover:bg-[#4B4B4B]")}
-                                  onClick={() => onDormAutofillChange(row, !row.autofill)}>
-                                  {intl("components.autoFill")}
-                                </Button>
-                              ) : null}
                             </div>
                           </div>
                           {efficiency ? (
@@ -1711,7 +1701,7 @@ export function ScheduleBoard({
   ), [rowGroups, en, layout, collapsedGroups, hiddenGroups, intl, locale, gameCatalog,
     onSortToggle, sortRoomId, renderListRoomActions, shiftDirection, onFactoryRecipeChange,
     onTradeOrderChange, eliteByOperator, levelByOperator, onSlotClick, sortSelection,
-    onSortSlotClick, onIssue, feedbackDisabled, normalizedQuery, onClearRoom, onManualSkillEfficiencyChange, onDormAutofillChange]);
+    onSortSlotClick, onIssue, feedbackDisabled, normalizedQuery, onClearRoom, onManualSkillEfficiencyChange]);
 
   const compactContent = useMemo(() => (
         <SkeletonSwap ready={Boolean(CompactScheduleView) || compactScheduleLoadFailed} skeleton={<CompactScheduleLoading rows={visibleRows} />}>
