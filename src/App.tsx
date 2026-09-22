@@ -69,6 +69,7 @@ import {
 } from "./onboarding";
 import { normalizeOperboxEntries } from "./operbox-normalization";
 import { droneStoragePlanIndex } from "./drone-plan-mapping";
+import { AGENT_BROADCAST_CHANNEL, consumeAgentArtifactHandoff, isAgentArtifactHandoff, receiveAgentArtifactMessage, type AgentArtifactHandoff } from "./agent-artifact-bridge";
 import { prepareMaaForExport } from "./maa-safety";
 import { upgradeSimulationBoxSource } from "./upgrade-simulation";
 import {
@@ -89,7 +90,7 @@ import {
   RESULT_CLEAR_WARNING_DISMISSED_KEY,
 } from "./persistence";
 import type { RoomRow } from "./schedule";
-import { DEFAULT_ROTATION_PROFILE, rotationDurations } from "./rotation-settings";
+import { DEFAULT_ROTATION_PROFILE, isRotationProfile, rotationDurations } from "./rotation-settings";
 import { MOTION_DURATION } from "./motion";
 import { emptySklandBindingSummary } from "./skland-binding-state";
 import { createSklandRestoreGuard } from "./skland-restore-guard";
@@ -348,6 +349,10 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   const [sampleLoading, setSampleLoading] = useState(false);
   const sampleTrialInFlightRef = useRef(false);
   const [result, setResult] = useState<PublicPlanData | null>(null);
+  const [agentArtifactNotice, setAgentArtifactNotice] = useState<AgentArtifactHandoff | null>(null);
+  const [agentArtifactLoading, setAgentArtifactLoading] = useState(false);
+  const [agentArtifactApplied, setAgentArtifactApplied] = useState<{ preset: string } | null>(null);
+  const [agentArtifactError, setAgentArtifactError] = useState(false);
   const [manualDroneShifts, setManualDroneShifts] = useState<Record<number, boolean>>({});
   const automaticMaaRef = useRef<{ diagnosticId: string; maa: MaaJson } | null>(null);
   const [upgradeComparison, setUpgradeComparison] = useState<{ baseline: PublicPlanData; trial: PublicPlanData } | null>(null);
@@ -684,6 +689,78 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       setHasRestoredSession(true);
     }
   }, [intl, locale, setBoxSource, setLayoutDirty, setOperbox]);
+
+  // 将 agent 生成的排班产物注入工作台：复用会话恢复路径设置全部状态，
+  // 使班次切换、手动排班导入、效率视图等现有功能立即可用。
+  async function applyAgentArtifact(handoff: AgentArtifactHandoff): Promise<void> {
+    setAgentArtifactLoading(true);
+    setAgentArtifactError(false);
+    setAgentArtifactNotice(handoff);
+    try {
+      if (!isAgentArtifactHandoff(handoff)) throw new Error("Invalid agent session");
+      const session = handoff.session;
+      const restoredPreset = resolvePreset(PRESETS.find((item) => item.label === session.presetLabel));
+      const restoredLayout = restoreEditableProducts(buildBlueprint(restoredPreset), session.layout as BaseBlueprint);
+      const restoredOperbox = Array.isArray(session.operbox) ? normalizeOperboxEntries(session.operbox as OperBoxEntry[]) : null;
+      const restoredBoxSource = (session.boxSource === "skland" || session.boxSource === "maa" ? session.boxSource : "sample") as typeof boxSource;
+      setPreset(restoredPreset);
+      setLayout(restoredLayout);
+      setOperbox(restoredOperbox);
+      setFileName(typeof session.sourceName === "string" ? session.sourceName : null);
+      setBoxSource(restoredBoxSource);
+      setLayoutDirty(false);
+      setLayoutSource("local");
+      setLocalLayoutBackup(null);
+      setRotationProfile(isRotationProfile(session.rotationProfile) ? session.rotationProfile : DEFAULT_ROTATION_PROFILE);
+      setFiammettaEnabled(Boolean(session.fiammettaEnabled));
+      const artifactResult = (session.result ?? null) as PublicPlanData | null;
+      setResult(artifactResult);
+      automaticMaaRef.current = artifactResult ? { diagnosticId: artifactResult.diagnosticId, maa: structuredClone(artifactResult.maa) } : null;
+      setActiveShift(0);
+      setUpgradeComparison(null);
+      setScheduleVariant("baseline");
+      initialLayoutForRestore.current = restoredLayout;
+      initialBoxSource.current = restoredBoxSource;
+      initialOperbox.current = restoredOperbox;
+      initialLayoutSource.current = "local";
+      initialLocalLayoutBackup.current = null;
+      if (page !== "calculator") handleAppPageChange("calculator");
+      // 成功注入后显示"可露希尔完成排班"提示横幅（数秒后自动消失），并清掉"新排班待注入"横幅。
+      setAgentArtifactNotice(null);
+      setAgentArtifactApplied({ preset: restoredPreset.label });
+    } catch {
+      // 网络等异常：同样保留横幅并显示错误，用户可重试。
+      setAgentArtifactError(true);
+    } finally {
+      setAgentArtifactLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!hasRestoredSession || typeof window === "undefined") return;
+    const channel = typeof BroadcastChannel !== "undefined" ? new BroadcastChannel(AGENT_BROADCAST_CHANNEL) : null;
+    if (channel) channel.onmessage = (event: MessageEvent) => {
+      receiveAgentArtifactMessage(event.data, (handoff) => {
+        setAgentArtifactNotice(handoff);
+        setAgentArtifactError(false);
+      });
+    };
+    try {
+      const handoff = consumeAgentArtifactHandoff();
+      if (handoff) void applyAgentArtifact(handoff);
+    } catch {
+      setAgentArtifactError(true);
+    }
+    return () => channel?.close();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasRestoredSession]);
+
+  // 排班成功注入工作台后的"可露希尔完成排班"提示横幅，数秒后自动消失。
+  useEffect(() => {
+    if (!agentArtifactApplied) return;
+    const timer = window.setTimeout(() => setAgentArtifactApplied(null), 6000);
+    return () => window.clearTimeout(timer);
+  }, [agentArtifactApplied]);
 
   useEffect(() => {
     if (!hasRestoredSession || typeof window === "undefined") return;
@@ -2254,6 +2331,54 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       <AppSidebar page={page} onPageChange={handleAppPageChange} />
       <SidebarInset>
         <AppTopBar />
+        {agentArtifactNotice ? (
+          <div className="flex flex-wrap items-center gap-3 border-b bg-[#FFD501]/15 px-4 py-2 text-sm" data-agent-artifact-banner>
+            <span className="min-w-0">
+              {intl("App.agentArtifactBannerText", { preset: agentArtifactNotice.preset ? `（${agentArtifactNotice.preset}）` : "" })}
+            </span>
+            <button
+              type="button"
+              disabled={agentArtifactLoading}
+              className="rounded-md bg-[#FFD501] px-3 py-1 text-xs font-medium text-black disabled:opacity-50"
+              onClick={() => void applyAgentArtifact(agentArtifactNotice)}
+            >
+              {agentArtifactLoading ? intl("App.agentArtifactLoading") : intl("App.agentArtifactOpen")}
+            </button>
+            <button
+              type="button"
+              className="rounded-md border px-3 py-1 text-xs hover:bg-muted"
+              onClick={() => setAgentArtifactNotice(null)}
+            >
+              {intl("App.agentArtifactIgnore")}
+            </button>
+          </div>
+        ) : null}
+        {agentArtifactApplied ? (
+          <div className="flex flex-wrap items-center gap-3 border-b bg-emerald-500/10 px-4 py-2 text-sm text-emerald-700 dark:text-emerald-300" data-agent-artifact-applied-banner>
+            <span className="min-w-0">
+              {intl("App.agentArtifactAppliedText", { preset: agentArtifactApplied.preset ? `（${agentArtifactApplied.preset}）` : "" })}
+            </span>
+            <button
+              type="button"
+              className="rounded-md border px-3 py-1 text-xs hover:bg-muted"
+              onClick={() => setAgentArtifactApplied(null)}
+            >
+              {intl("App.agentArtifactIgnore")}
+            </button>
+          </div>
+        ) : null}
+        {agentArtifactError ? (
+          <div className="flex flex-wrap items-center gap-3 border-b bg-destructive/10 px-4 py-2 text-sm text-destructive" data-agent-artifact-error-banner>
+            <span className="min-w-0">{intl("App.agentArtifactErrorText")}</span>
+            <button
+              type="button"
+              className="rounded-md border px-3 py-1 text-xs hover:bg-muted"
+              onClick={() => setAgentArtifactError(false)}
+            >
+              {intl("App.agentArtifactIgnore")}
+            </button>
+          </div>
+        ) : null}
         <LiveActivity
           activity={activity}
           onRetry={() => void handleRetry()}
