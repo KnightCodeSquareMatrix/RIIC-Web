@@ -16,6 +16,7 @@ export interface UserSettings {
   showFeedback: boolean;
   showImages: boolean;
   allowReplacementOperatorSort: boolean;
+  usePreMaaExecutionOrder: boolean;
 }
 
 export const DEFAULT_USER_SETTINGS: UserSettings = {
@@ -33,6 +34,7 @@ export const DEFAULT_USER_SETTINGS: UserSettings = {
   showFeedback: true,
   showImages: true,
   allowReplacementOperatorSort: false,
+  usePreMaaExecutionOrder: false,
 };
 
 type StorageLike = Pick<Storage, "getItem" | "setItem">;

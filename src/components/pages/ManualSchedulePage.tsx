@@ -114,6 +114,7 @@ export interface ManualSchedulePageProps {
   onTradeOrderChange: (roomId: string, order: TradeOrder) => void;
   strictMaaOperatorOrder: boolean;
   allowReplacementOperatorSort: boolean;
+  usePreMaaExecutionOrder: boolean;
   scheduleViewControl?: "tabs" | "select";
   shiftViewControl?: "tabs" | "select";
   showImages?: boolean;
@@ -233,6 +234,7 @@ export function ManualSchedulePage({
   onTradeOrderChange,
   strictMaaOperatorOrder,
   allowReplacementOperatorSort,
+  usePreMaaExecutionOrder,
   scheduleViewControl = "tabs",
   shiftViewControl = "tabs",
   showImages = true,
@@ -607,6 +609,7 @@ export function ManualSchedulePage({
       maa,
       strictMaaOperatorOrder,
       allowReplacementOperatorSort,
+      usePreMaaExecutionOrder,
     ));
   }
 

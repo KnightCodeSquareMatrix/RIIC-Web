@@ -1191,6 +1191,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       userSettings.strictMaaOperatorOrder,
       userSettings.allowReplacementOperatorSort,
       layout,
+      userSettings.usePreMaaExecutionOrder,
     ));
   }
 
