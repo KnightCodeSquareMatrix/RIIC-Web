@@ -55,6 +55,11 @@ export default async function RootLayout({
       suppressHydrationWarning
     >
       <body>
+        <noscript>
+          <div style={{ padding: "24px", fontFamily: "sans-serif", lineHeight: 1.6 }}>
+            当前浏览器无法运行页面脚本。请启用 JavaScript，或升级浏览器 / Android System WebView。
+          </div>
+        </noscript>
         <NextIntlClientProvider><LocaleProvider>{children}</LocaleProvider></NextIntlClientProvider>
         <TelemetryLoader />
         <PageScrollbar />

@@ -42,6 +42,7 @@ import { localizedRoomTitle } from "@/i18n/game-data";
 import { useGameCatalog } from "@/i18n/game-data-client";
 
 export interface CompactScheduleViewProps {
+  noLayoutSkillOperators?: ReadonlySet<string>;
   rows: RoomRow[];
   layout: BaseBlueprint;
   eliteByOperator?: ReadonlyMap<string, number>;
@@ -77,6 +78,7 @@ function roomSlotCountFor(group: string) {
 }
 
 function CompactRoomCard({
+  noLayoutSkillOperators,
   row,
   layoutRoom,
   visual,
@@ -101,6 +103,7 @@ function CompactRoomCard({
   onDroneTargetChange,
   onManualSkillEfficiencyChange,
 }: {
+  noLayoutSkillOperators?: ReadonlySet<string>;
   row: RoomRow;
   layoutRoom: BaseBlueprint["rooms"][number] | undefined;
   visual: ReturnType<typeof roomVisualFor>;
@@ -252,6 +255,7 @@ function CompactRoomCard({
     <OperatorSlot
       key={`${row.key}-${index}`}
       slot={slot}
+      highlightNoLayoutSkill={Boolean(slot && noLayoutSkillOperators?.has(slot.name))}
       elite={slot ? eliteByOperator?.get(slot.name) : undefined}
       operatorLevel={slot ? levelByOperator?.get(slot.name) : undefined}
       autofill={row.group === "dormitory" && row.autofill}
@@ -469,6 +473,7 @@ export function CompactScheduleView(props: CompactScheduleViewProps) {
       : Array.from({ length: slotCount }, (_, i) => ({ slot: row.slotAssignments ? row.slotAssignments[i] : row.operatorSlots[i] }));
     return (
       <CompactRoomCard
+        noLayoutSkillOperators={props.noLayoutSkillOperators}
         key={row.key}
         row={row}
         layoutRoom={layoutRoom!}

@@ -34,7 +34,9 @@ test("user settings persist and fall back to defaults", () => {
   persistUserSettings(storage, {
     strictMaaOperatorOrder: false,
     showProgressionRecalculate: false,
-  showManualScheduleEdit: false,
+    showManualScheduleEdit: false,
+    showMower: true,
+    highlightNoLayoutSkill: true,
   scheduleViewControl: "select",
   linkShiftViewControl: false,
   shiftViewControl: "select",
@@ -44,12 +46,15 @@ test("user settings persist and fall back to defaults", () => {
     showFeedback: false,
     showImages: false,
     allowReplacementOperatorSort: true,
+    usePreMaaExecutionOrder: false,
 });
-assert.equal(storage.getItem(USER_SETTINGS_STORAGE_KEY), "{\"strictMaaOperatorOrder\":false,\"showProgressionRecalculate\":false,\"showManualScheduleEdit\":false,\"scheduleViewControl\":\"select\",\"linkShiftViewControl\":false,\"shiftViewControl\":\"select\",\"imageExportScope\":\"all\",\"loadEnglishResources\":false,\"skillPagination\":\"manual\",\"showFeedback\":false,\"showImages\":false,\"allowReplacementOperatorSort\":true}");
+assert.equal(storage.getItem(USER_SETTINGS_STORAGE_KEY), "{\"strictMaaOperatorOrder\":false,\"showProgressionRecalculate\":false,\"showManualScheduleEdit\":false,\"showMower\":true,\"highlightNoLayoutSkill\":true,\"scheduleViewControl\":\"select\",\"linkShiftViewControl\":false,\"shiftViewControl\":\"select\",\"imageExportScope\":\"all\",\"loadEnglishResources\":false,\"skillPagination\":\"manual\",\"showFeedback\":false,\"showImages\":false,\"allowReplacementOperatorSort\":true,\"usePreMaaExecutionOrder\":false}");
 assert.deepEqual(loadUserSettings(storage), {
   strictMaaOperatorOrder: false,
   showProgressionRecalculate: false,
   showManualScheduleEdit: false,
+  showMower: true,
+  highlightNoLayoutSkill: true,
   scheduleViewControl: "select",
   linkShiftViewControl: false,
   shiftViewControl: "select",
@@ -59,5 +64,6 @@ assert.deepEqual(loadUserSettings(storage), {
   showFeedback: false,
   showImages: false,
   allowReplacementOperatorSort: true,
+  usePreMaaExecutionOrder: false,
 });
 });
