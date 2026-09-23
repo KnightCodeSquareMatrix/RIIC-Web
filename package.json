@@ -46,6 +46,19 @@
     "test:quality-integration": "node --experimental-strip-types --import ./scripts/register-hooks.mjs --test src/server/quality/quality.integration.test.mjs",
     "worker:quality": "node --experimental-strip-types --import ./scripts/register-hooks.mjs scripts/quality-worker.mts"
   },
+  "browserslist": {
+    "production": [
+      "Android >= 8",
+      "Chrome >= 60",
+      "iOS >= 12",
+      "Safari >= 12"
+    ],
+    "development": [
+      "last 2 Chrome versions",
+      "last 2 Edge versions",
+      "last 2 Firefox versions"
+    ]
+  },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
     "@better-auth/drizzle-adapter": "^1.6.29",
