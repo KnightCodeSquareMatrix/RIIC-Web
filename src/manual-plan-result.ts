@@ -2,7 +2,7 @@ import { estimateDailyProduction } from "./daily-production.ts";
 import { droneProductionForSelectedMaaTargets, equivalentGoldForRotation } from "./drone-production-core.ts";
 import { manualScheduleToMaa, type ManualScheduleDraft } from "./manual-schedule.ts";
 import { evaluateManualSchedule, type ManualEvaluationWarning, type ManualRoomEvaluation } from "./manual-schedule-evaluator.ts";
-import { evaluateManualScheduleWithNativeEngine } from "./manual-schedule-native-evaluator.ts";
+import { evaluateCrossFacilityEfficiency, evaluateManualScheduleWithNativeEngine } from "./manual-schedule-native-evaluator.ts";
 import type { BaseBlueprint, MaaJson, OperBoxEntry, RotationJson } from "./types.ts";
 
 export type ManualPlanResult = {
@@ -56,15 +56,16 @@ export async function assembleNativeManualPlanResult(input: {
   };
 }
 
-export function assemblePaperManualPlanResult(input: {
+export async function assemblePaperManualPlanResult(input: {
   draft: ManualScheduleDraft;
   layout: BaseBlueprint;
   operbox: readonly OperBoxEntry[] | null;
-}): ManualPlanResult {
+}): Promise<ManualPlanResult> {
   const layout = structuredClone(input.layout);
   const draft = structuredClone(input.draft);
   const maa = manualScheduleToMaa(draft, layout, draft.fiammettaEnabled);
-  const evaluation = evaluateManualSchedule({ draft, layout, operbox: input.operbox });
+  const crossFacilityEfficiencyByShift = await evaluateCrossFacilityEfficiency({ draft, layout, operbox: input.operbox });
+  const evaluation = evaluateManualSchedule({ draft, layout, operbox: input.operbox, crossFacilityEfficiencyByShift });
   const rotation = structuredClone(evaluation.rotation);
   applyManualProduction({ layout, maa, rotation });
   return {

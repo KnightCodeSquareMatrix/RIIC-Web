@@ -156,6 +156,8 @@ export function presentRoomEfficiency(
   }
 
   if (group === "manufacture") {
+    const structured = structuredEfficiency(efficiency, false, locale);
+    if (structured) return structured;
     const skill = efficiency.manu_prod_skill;
     const display = efficiency.manu_display_pct;
     const final = efficiency.final_efficiency !== undefined

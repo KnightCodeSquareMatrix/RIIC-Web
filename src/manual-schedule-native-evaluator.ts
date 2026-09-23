@@ -15,6 +15,8 @@ function namesForRoom(draft: ManualScheduleDraft, shiftIndex: number, roomId: st
     .filter((name): name is string => Boolean(name?.trim()));
 }
 
+export type CrossFacilityEfficiencyByShift = ReadonlyMap<number, ReadonlyMap<string, number>>;
+
 export function buildNativeEvalRequest(input: {
   draft: ManualScheduleDraft;
   layout: BaseBlueprint;
@@ -57,6 +59,20 @@ export function buildNativeEvalRequest(input: {
     scheduled_operators: [...assignedNames].map((name) => operboxByName.get(name)!),
     shifts,
   };
+}
+
+export async function evaluateCrossFacilityEfficiency(input: {
+  draft: ManualScheduleDraft;
+  layout: BaseBlueprint;
+  operbox: readonly OperBoxEntry[] | null;
+}): Promise<CrossFacilityEfficiencyByShift> {
+  const response = await evaluateNativeSchedule(buildNativeEvalRequest(input));
+  return new Map(response.shifts.map((shift, shiftIndex) => [
+    shiftIndex,
+    new Map(shift.rooms
+      .filter((room) => room.settlement_status === "evaluated")
+      .map((room) => [room.room_id, room.display_global_basis_points / 1_000])),
+  ]));
 }
 
 function roomEvaluation(input: {

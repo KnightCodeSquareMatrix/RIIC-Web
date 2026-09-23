@@ -1251,7 +1251,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     setManualEvaluationPending(true);
     try {
       const { assemblePaperManualPlanResult } = await import("./manual-plan-result");
-      const result = assemblePaperManualPlanResult({ draft: input.draft, layout, operbox });
+      const result = await assemblePaperManualPlanResult({ draft: input.draft, layout, operbox });
       setManualPlanResult(result);
       try {
         persistManualEvaluationCache(window.localStorage, result);
