@@ -1304,6 +1304,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       return;
     }
     const {
+      DEFAULT_MANUAL_SHIFT_START_TIME,
       createManualScheduleDraftFromCalculator,
       loadManualScheduleDraft,
       manualScheduleDraftContentEqual,
@@ -1313,10 +1314,14 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       .map((shift) => shift.duration_hours)
       .filter((duration) => Number.isFinite(duration) && duration > 0);
     const durations = resultDurations?.length ? resultDurations : rotationDurations(rotationProfile);
+    const equalDurations = durations.every((duration) => Math.abs(duration - durations[0]!) < 0.000_001);
     const draft = reconcileManualScheduleDraft(createManualScheduleDraftFromCalculator({
       layout,
       maa: scheduleResult.maa,
       fallbackDurations: durations,
+      timingOverride: equalDurations
+        ? { scheduleMode: "sequential" }
+        : { scheduleMode: "period", startTime: DEFAULT_MANUAL_SHIFT_START_TIME },
       fiammettaEnabled: effectiveFiammettaEnabled,
       trainingRoomShifts: scheduleResult.trainingRoom?.shifts,
       source: {

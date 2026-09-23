@@ -468,6 +468,7 @@ export function createManualScheduleDraftFromCalculator(input: {
   source?: ManualScheduleSource;
   ownedOperatorNames?: readonly string[];
   preferMaaTiming?: boolean;
+  timingOverride?: { scheduleMode: ManualScheduleMode; startTime?: string };
   preserveExternalOperators?: boolean;
 }): ManualScheduleDraft {
   const planCount = input.maa?.plans.length ?? 0;
@@ -488,10 +489,12 @@ export function createManualScheduleDraftFromCalculator(input: {
         : finitePositive(input.fallbackDurations[index], maaDuration);
     },
   );
-  const scheduleMode: ManualScheduleMode = input.maa?.plans.some((plan) => Array.isArray(plan.period) && plan.period.length > 0)
-    ? "period"
-    : "sequential";
-  const draft = createManualScheduleDraft(durations, input.maa?.plans[0]?.period?.[0]?.[0], scheduleMode);
+  const scheduleMode: ManualScheduleMode = input.timingOverride?.scheduleMode
+    ?? (input.maa?.plans.some((plan) => Array.isArray(plan.period) && plan.period.length > 0)
+      ? "period"
+      : "sequential");
+  const startTime = input.timingOverride?.startTime ?? input.maa?.plans[0]?.period?.[0]?.[0];
+  const draft = createManualScheduleDraft(durations, startTime, scheduleMode);
   draft.fiammettaEnabled = input.fiammettaEnabled;
   if (input.source) draft.source = { ...input.source };
   const owned = input.ownedOperatorNames ? new Set(input.ownedOperatorNames) : undefined;
