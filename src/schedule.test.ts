@@ -55,7 +55,7 @@ test("also adds the training room while only a layout is available", () => {
   assert.deepEqual(row?.positionSlots?.map((position) => position.positionLabel), ["训练位", "协助位"]);
 });
 
-test("shows zero efficiency and marks Lancet-2 when its power room omits total efficiency", () => {
+test("omits unavailable efficiency and marks Lancet-2 when its power room omits total efficiency", () => {
   const powerLayout: BaseBlueprint = {
     template: "243",
     drone_cap: 235,
@@ -101,6 +101,6 @@ test("shows zero efficiency and marks Lancet-2 when its power room omits total e
   assert.equal(presentRoomEfficiency("power", firstPower?.efficiency), null);
   assert.equal(firstPower?.operatorSlots[0]?.portraitAlert, undefined);
   assert.equal(lancetPower?.efficiency?.total_efficiency, 0);
-  assert.equal(presentRoomEfficiency("power", lancetPower?.efficiency)?.primaryValue, "0%");
+  assert.equal(presentRoomEfficiency("power", lancetPower?.efficiency), null);
   assert.equal(lancetPower?.operatorSlots[0]?.portraitAlert, "missing-power-efficiency");
 });

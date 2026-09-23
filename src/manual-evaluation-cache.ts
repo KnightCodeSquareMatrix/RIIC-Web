@@ -1,8 +1,8 @@
 import type { ManualPlanResult } from "./manual-plan-result.ts";
 
 export const MANUAL_EVALUATION_CACHE_STORAGE_KEY = "arknights-infra-manual-evaluation-v1";
-const CACHE_VERSION = 4;
-const EVALUATOR_VERSION = 4;
+const CACHE_VERSION = 5;
+const EVALUATOR_VERSION = 5;
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;

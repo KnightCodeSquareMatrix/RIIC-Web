@@ -1,3 +1,4 @@
+import { droneStoragePlanIndex } from "./drone-plan-mapping.ts";
 import type { BaseBlueprint, MaaJson, MaaPlan, MaaRoom, RotationJson, RotationShift } from "./types.ts";
 
 export type PowerStationContribution = {
@@ -5,17 +6,22 @@ export type PowerStationContribution = {
   working: boolean;
 };
 
+/** All production fields use their calculator value domain; pure_gold is gold value, not gold pieces. */
 export type DroneDailyProduction = {
   lmd: number;
   pure_gold: number;
   battle_records: number;
 };
 
-type DroneTradeTarget =
+export type DroneTradeTarget =
   | { kind: "normal"; level: 1 | 2 | 3 }
   | { kind: "dantshu"; level: 1 | 2 | 3 }
   | { kind: "tequila" }
   | { kind: "closure" };
+
+export type DroneOutputTarget =
+  | { room: "trading"; index: number; profile: DroneTradeTarget }
+  | { room: "manufacture"; index: number; product: "gold" | "experience" };
 
 const NORMAL_TRADE_DAILY: Record<1 | 2 | 3, number> = { 1: 10_000, 2: 10_141, 3: 10_265 };
 const DANTSHU_DAILY: Record<1 | 2 | 3, number> = { 1: 20_000, 2: 18_591.55, 3: 15_929.2 };
@@ -32,7 +38,7 @@ function operatorName(operator: MaaRoom["operators"][number]): string {
   return typeof operator === "string" ? operator : operator?.name ?? "";
 }
 
-function tradeTarget(level: number, operators: MaaRoom["operators"]): DroneTradeTarget {
+export function droneTradeTarget(level: number, operators: MaaRoom["operators"]): DroneTradeTarget {
   const names = operators.map(operatorName).filter(Boolean);
   const normalizedLevel = level === 1 || level === 2 ? level : 3;
   if (names.includes("但书")) return { kind: "dantshu", level: normalizedLevel };
@@ -59,6 +65,39 @@ export function droneProductionForShift(input: {
   return { drones, equivalentEfficiency: drones / 480 };
 }
 
+export function droneTradeOutputForEfficiency(target: DroneTradeTarget, equivalentEfficiency: number): DroneDailyProduction {
+  if (target.kind === "normal") return { lmd: equivalentEfficiency * NORMAL_TRADE_DAILY[target.level], pure_gold: 0, battle_records: 0 };
+  if (target.kind === "dantshu") return { lmd: equivalentEfficiency * DANTSHU_DAILY[target.level], pure_gold: 0, battle_records: 0 };
+  const output = SPECIAL_TRADE_DAILY[target.kind];
+  return { lmd: equivalentEfficiency * output.lmd, pure_gold: equivalentEfficiency * output.gold, battle_records: 0 };
+}
+
+/** Converts one actual shift's drone quantity into output using the automatic allocator's target rules. */
+export function droneDailyProductionForActualShift(input: {
+  powerStations: readonly PowerStationContribution[];
+  durationHours: number;
+  target: DroneOutputTarget;
+}): DroneDailyProduction & { drones: number; equivalentEfficiency: number } {
+  const quantity = droneProductionForShift(input);
+  const output = input.target.room === "trading"
+    ? droneTradeOutputForEfficiency(input.target.profile, quantity.equivalentEfficiency)
+    : {
+        lmd: 0,
+        pure_gold: input.target.product === "gold" ? quantity.equivalentEfficiency * 10_000 : 0,
+        battle_records: input.target.product === "experience" ? quantity.equivalentEfficiency * 8_000 : 0,
+      };
+  return { ...quantity, ...output };
+}
+
+export function normalizeDroneDailyProduction(cycle: DroneDailyProduction, totalDurationHours: number): DroneDailyProduction {
+  const scale = totalDurationHours > 0 ? 24 / totalDurationHours : 1;
+  return {
+    lmd: cycle.lmd * scale,
+    pure_gold: cycle.pure_gold * scale,
+    battle_records: cycle.battle_records * scale,
+  };
+}
+
 export function equivalentGoldForRotation(rotation: RotationJson): number {
   const totalHours = rotation.shifts.reduce((sum, shift) => sum + (positive(shift.duration_hours) ? shift.duration_hours : 0), 0);
   if (totalHours <= 0) return 0;
@@ -82,15 +121,9 @@ export function powerStationsFromRotation(layout: BaseBlueprint, shift: Rotation
   });
 }
 
-function tradeOutput(target: DroneTradeTarget, equivalentEfficiency: number): { lmd: number; gold: number } {
-  if (target.kind === "normal") return { lmd: equivalentEfficiency * NORMAL_TRADE_DAILY[target.level], gold: 0 };
-  if (target.kind === "dantshu") return { lmd: equivalentEfficiency * DANTSHU_DAILY[target.level], gold: 0 };
-  const output = SPECIAL_TRADE_DAILY[target.kind];
-  return { lmd: equivalentEfficiency * output.lmd, gold: equivalentEfficiency * output.gold };
-}
-
-function planForShift(maa: MaaJson, shift: RotationShift, position: number): MaaPlan | undefined {
-  return maa.plans[shift.index] ?? maa.plans[position];
+function actualPlanIndex(maa: MaaJson, shift: RotationShift, position: number): number | null {
+  if (maa.plans[shift.index]) return shift.index;
+  return maa.plans[position] ? position : null;
 }
 
 function factoryRecipe(room: MaaRoom | undefined): "gold" | "battle_record" | "originium" | null {
@@ -101,36 +134,45 @@ function factoryRecipe(room: MaaRoom | undefined): "gold" | "battle_record" | "o
   return null;
 }
 
+function selectedTarget(input: {
+  layout: BaseBlueprint;
+  actualPlan: MaaPlan;
+  drones: NonNullable<MaaPlan["drones"]>;
+}): DroneOutputTarget | null {
+  const index = input.drones.index - 1;
+  if (input.drones.room === "trading") {
+    const blueprint = input.layout.rooms.filter((room) => room.kind === "trade_post")[index];
+    const room = input.actualPlan.rooms.trading?.[index];
+    if (!blueprint || !room) return null;
+    return { room: "trading", index: input.drones.index, profile: droneTradeTarget(blueprint.level, room.operators) };
+  }
+  const recipe = factoryRecipe(input.actualPlan.rooms.manufacture?.[index]);
+  if (recipe === "gold") return { room: "manufacture", index: input.drones.index, product: "gold" };
+  if (recipe === "battle_record") return { room: "manufacture", index: input.drones.index, product: "experience" };
+  return null;
+}
+
 /** Calculates drone output for user-selected MAA targets without choosing or rewriting targets. */
 export function droneProductionForSelectedMaaTargets(input: {
   layout: BaseBlueprint;
   maa: MaaJson;
   rotation: RotationJson;
 }): DroneDailyProduction {
-  const tradeRooms = input.layout.rooms.filter((room) => room.kind === "trade_post");
   const totalHours = input.rotation.shifts.reduce((sum, shift) => sum + (positive(shift.duration_hours) ? shift.duration_hours : 0), 0);
   const cycle = { lmd: 0, pure_gold: 0, battle_records: 0 };
   input.rotation.shifts.forEach((shift, position) => {
-    const plan = planForShift(input.maa, shift, position);
-    const drones = plan?.drones;
-    if (!plan || !drones || drones.enable === false) return;
-    const equivalent = droneProductionForShift({ powerStations: powerStationsFromRotation(input.layout, shift, plan), durationHours: shift.duration_hours }).equivalentEfficiency;
-    if (drones.room === "trading") {
-      const index = drones.index - 1;
-      const room = tradeRooms[index];
-      const maaRoom = plan.rooms.trading?.[index];
-      if (!room || !maaRoom) return;
-      const output = tradeOutput(tradeTarget(room.level, maaRoom.operators), equivalent);
-      cycle.lmd += output.lmd;
-      cycle.pure_gold += output.gold;
-      return;
-    }
-    const index = drones.index - 1;
-    const recipe = factoryRecipe(plan.rooms.manufacture?.[index]);
-    if (recipe === "gold") cycle.pure_gold += equivalent * 10_000;
-    if (recipe === "battle_record") cycle.battle_records += equivalent * 8_000;
-    // RotationJson.daily.drone_production has no originium shard field; its estimate detail remains separate.
+    const planIndex = actualPlanIndex(input.maa, shift, position);
+    const actualPlan = planIndex === null ? undefined : input.maa.plans[planIndex];
+    const dronePlanIndex = planIndex === null ? null : droneStoragePlanIndex(planIndex, input.maa.plans.length);
+    const drones = dronePlanIndex === null ? undefined : input.maa.plans[dronePlanIndex]?.drones;
+    if (!actualPlan || !drones || drones.enable === false) return;
+    const target = selectedTarget({ layout: input.layout, actualPlan, drones });
+    if (!target) return;
+    const powerStations = powerStationsFromRotation(input.layout, shift, actualPlan);
+    const output = droneDailyProductionForActualShift({ powerStations, durationHours: shift.duration_hours, target });
+    cycle.lmd += output.lmd;
+    cycle.pure_gold += output.pure_gold;
+    cycle.battle_records += output.battle_records;
   });
-  const scale = totalHours > 0 ? 24 / totalHours : 1;
-  return { lmd: cycle.lmd * scale, pure_gold: cycle.pure_gold * scale, battle_records: cycle.battle_records * scale };
+  return normalizeDroneDailyProduction(cycle, totalHours);
 }

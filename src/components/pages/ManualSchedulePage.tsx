@@ -104,6 +104,7 @@ export interface ManualSchedulePageProps {
   result: ManualPlanResult | null;
   evaluationPending: boolean;
   onEvaluate: (input: { draft: ManualScheduleDraft }) => Promise<void>;
+  onPaperEvaluate: (input: { draft: ManualScheduleDraft }) => Promise<void>;
   onRestoreEvaluation: (result: ManualPlanResult) => void;
   onOpenCalculator: () => void;
   onShiftDurationsChange: (durations: number[]) => void;
@@ -224,6 +225,7 @@ export function ManualSchedulePage({
   result,
   evaluationPending,
   onEvaluate,
+  onPaperEvaluate,
   onRestoreEvaluation,
   onOpenCalculator,
   onShiftDurationsChange,
@@ -604,10 +606,6 @@ export function ManualSchedulePage({
     ));
   }
 
-  function runEvaluation() {
-    void onEvaluate({ draft });
-  }
-
   function exportMaa() {
     downloadJson("arknights-infra-schedule-maa.json", prepareMaaForExport(
       maa,
@@ -775,14 +773,16 @@ export function ManualSchedulePage({
   );
 
   const closeMobileTools = () => { if (mobileToolsRef.current) mobileToolsRef.current.open = false; };
+  const runNativeEvaluation = () => { closeMobileTools(); void onEvaluate({ draft }); };
+  const runPaperEvaluation = () => { closeMobileTools(); void onPaperEvaluate({ draft }); };
   const scheduleTools = (mobile = false) => <>
     {draft.source ? <Button type="button" variant="ghost" size="sm" onClick={() => { closeMobileTools(); onOpenCalculator(); }}>
       <ArrowLeft />{intl("components_pages_ManualSchedulePage.backToCalculation")}
     </Button> : null}
     <Button type="button" variant={mobile ? "ghost" : "outline"} size="sm" onClick={() => { closeMobileTools(); onOpenSetup(); }}><Settings2 />{intl("components_pages_ManualSchedulePage.configureBoxLayout")}</Button>
     <Button type="button" variant={mobile ? "ghost" : "outline"} size="sm" onClick={() => { closeMobileTools(); setMoodSettingsOpen(true); }}><Settings2 />{intl("MoodSimulation.settings")}</Button>
-    <Button type="button" variant={mobile ? "ghost" : "outline"} size="sm" disabled title={intl("components_pages_ManualSchedulePage.evaluateBasedOnCurrentScheduleUnavailable")}><Sparkles />{intl("components_pages_ManualSchedulePage.calculateBasedOnSchedule")}</Button>
-    <Button type="button" variant={mobile ? "ghost" : "outline"} size="sm" onClick={() => { closeMobileTools(); runEvaluation(); }} disabled={evaluationPending}><Sparkles />{intl("components_pages_ManualSchedulePage.calculateBasedOnEfficiency")}</Button>
+    <Button type="button" variant={mobile ? "ghost" : "outline"} size="sm" onClick={runNativeEvaluation} disabled={evaluationPending}><Sparkles />{intl("components_pages_ManualSchedulePage.calculateBasedOnSchedule")}</Button>
+    <Button type="button" variant={mobile ? "ghost" : "outline"} size="sm" onClick={runPaperEvaluation} disabled={evaluationPending}><Sparkles />{intl("components_pages_ManualSchedulePage.calculateBasedOnEfficiency")}</Button>
     <FileUploadDialog
       title={intl("components_pages_ManualSchedulePage.importScheduleFile")}
       description={intl("FileUpload.scheduleDescription")}
