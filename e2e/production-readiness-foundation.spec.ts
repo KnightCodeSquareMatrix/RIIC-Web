@@ -564,7 +564,7 @@ test("website login lazy-loads its UI without probing the shared session again",
   await page.route("**/_next/static/chunks/*.js", async (route) => {
     const response = await route.fetch();
     const body = await response.body();
-    if (body.toString("utf8").includes("function WebsiteAccountDialog({")) {
+    if (/function WebsiteAccountDialog\s*\(/.test(body.toString("utf8"))) {
       deferredChunkRequests += 1;
       await chunkGate;
     }

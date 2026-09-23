@@ -276,6 +276,10 @@ export function syncSkland(): Promise<SklandSessionData> {
   return requestData(sklandApiPath("/sync"), { method: "POST" });
 }
 
+export function syncSklandTraining(): Promise<SklandSessionData> {
+  return requestData(sklandApiPath("/training-sync"), { method: "POST" });
+}
+
 export function selectSklandRole(accountId: string, uid: string): Promise<SklandSessionData> {
   return requestData(sklandApiPath("/role"), {
     method: "POST",

@@ -36,7 +36,7 @@ test("sync refreshes training advice, preserves the schedule and skips unchanged
   let syncs = 0;
   let computes = 0;
   let failSync = false;
-  await page.route("**/api/skland/sync", (route) => {
+  await page.route("**/api/skland/training-sync", (route) => {
     syncs += 1;
     return route.fulfill({ json: failSync
       ? { success: false, error: { code: "AIC-RATE-6001", message: "Rate limited", retryable: true, retryAfterSeconds: 600 }, requestId }
@@ -99,7 +99,7 @@ test("sync refreshes training advice, preserves the schedule and skips unchanged
 test("failed recomputation preserves old advice and can retry with the new progression", async ({ page }) => {
   test.slow();
   await setup(page);
-  await page.route("**/api/skland/sync", (route) => route.fulfill({ json: { success: true, data: {
+  await page.route("**/api/skland/training-sync", (route) => route.fulfill({ json: { success: true, data: {
     authenticated: true, configured: true, accounts: [primarySklandAccount], activeAccountId: primarySklandAccount.accountId,
     scheduleSnapshot: authenticatedSklandSnapshot, statusSnapshot: authenticatedSklandSnapshot,
   }, requestId } }));
@@ -122,10 +122,36 @@ test("failed recomputation preserves old advice and can retry with the new progr
 test("a manual import is not overwritten by an attached Skland account", async ({ page }) => {
   await setup(page, false, "maa");
   let syncs = 0;
-  await page.route("**/api/skland/sync", (route) => { syncs += 1; return route.abort(); });
+  await page.route("**/api/skland/training-sync", (route) => { syncs += 1; return route.abort(); });
   await page.goto("/training");
   await expect(page.locator('[data-training-advice-list] [data-slot="training-advice-card"]')).toHaveCount(1);
   await page.clock.fastForward(301_000);
   await expect(page.locator("[data-training-sync]")).toHaveCount(0);
   expect(syncs).toBe(0);
+});
+
+test("an authentication pause releases training sync so reauthentication can retry", async ({ page }) => {
+  test.slow();
+  await setup(page, true);
+  await page.route("**/api/skland/training-sync", route => route.fulfill({ json: { success: true, data: {
+    authenticated: true, configured: true, accounts: [primarySklandAccount], activeAccountId: primarySklandAccount.accountId,
+    scheduleSnapshot: authenticatedSklandSnapshot, statusSnapshot: authenticatedSklandSnapshot,
+  }, requestId } }));
+  let submissions = 0;
+  await page.route("**/api/tasks", route => {
+    submissions++;
+    return route.fulfill({ json: { success: true, data: { status: "pending", taskId: `training-auth-${submissions}` }, requestId } });
+  });
+  await page.route("**/api/tasks/training-auth-*", route => route.fulfill({ json: submissions === 1
+    ? { success: false, error: { code: "AIC-AUTH-2001", message: "Authentication expired" }, requestId }
+    : { success: true, data: { status: "done", taskId: "training-auth-2", result: newResult }, requestId },
+  }));
+  await page.goto("/training");
+  const sync = page.locator("[data-training-sync]");
+  await expect(sync).toContainText("更新未完成", { timeout: 60_000 });
+  await page.clock.fastForward(31_000);
+  await sync.getByRole("button", { name: "立即同步" }).click();
+  await expect(sync).not.toContainText("更新未完成");
+  await expect(page.locator('[data-training-advice-list] [data-slot="training-advice-card"]')).toHaveCount(0);
+  expect(submissions).toBe(2);
 });

@@ -15,9 +15,7 @@ import {
   assertSklandAvailable,
   assertSklandFeatureEnabled,
   readSklandAccountStore,
-  setSklandAccountStoreCookies,
   sklandErrorResponse,
-  withUpdatedSklandSession,
 } from "./http";
 
 export async function handleGetSklandInventory(request: Request, route: string) {
@@ -36,12 +34,11 @@ export async function handleGetSklandInventory(request: Request, route: string) 
     if (!account) throw new SklandServiceError("AUTH_EXPIRED", "请先登录森空岛。", 401);
 
     const loaded = await loadInventorySnapshot(account.session);
-    const next = withUpdatedSklandSession(previous, account.accountId, loaded.session);
     const response = successResponse({
       ...loaded.inventory,
       identityKey: JSON.stringify([website.user.id, account.accountId, loaded.session.selectedUid]),
     }, requestId);
-    setSklandAccountStoreCookies(response, request, next, previous);
+    response.headers.set("Cache-Control", "private, no-store");
     return response;
   } catch (error) {
     return sklandErrorResponse(error, requestId, route, startedAt, request);

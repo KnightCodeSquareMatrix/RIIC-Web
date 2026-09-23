@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
-import { computePlan, submitPlanTask, syncSkland, toDisplayError } from "@/api";
+import { computePlan, submitPlanTask, syncSklandTraining, toDisplayError } from "@/api";
 import { usePlanTask } from "./use-plan-task";
 import { effectiveFiammettaSetting } from "@/plan-presentation";
 import { refreshSklandTraining, trainingInputKey, trainingSyncDue, type TrainingData, type TrainingInput } from "@/skland-training-sync";
@@ -38,13 +38,22 @@ export function useSklandTrainingSync(options: Options) {
     syncedAt: number | null;
     error: string | null;
   } | null>(null);
-  const task = usePlanTask({ storageKey: null, onDone: () => undefined, onFailed: () => undefined });
+  const task = usePlanTask({ storageKey: null, rejectOnAuthPause: true, onDone: () => undefined, onFailed: () => undefined });
+  const detachTask = task.detach;
 
   // Invalidate responses after account/source/settings changes, including an A -> B -> A switch.
   useEffect(() => {
     generation.current += 1;
-    return () => { generation.current += 1; };
-  }, [context, blocked]);
+    return () => {
+      generation.current += 1;
+      detachTask();
+      if (inFlight.current) {
+        inFlight.current = false;
+        attempts.current.last = null;
+        setBusy(false);
+      }
+    };
+  }, [context, blocked, detachTask]);
 
   const refresh = useEffectEvent(async (manual: boolean) => {
     if (!enabled || !active || blocked || inFlight.current || document.visibilityState !== "visible" || !navigator.onLine) return;
@@ -63,7 +72,7 @@ export function useSklandTrainingSync(options: Options) {
       const refreshed = await refreshSklandTraining(options, {
         accountId: options.accountId,
         uid: options.uid,
-        sync: syncSkland,
+        sync: syncSklandTraining,
         isCurrent,
         cached,
         compute: async (operbox, sourceName) => {
@@ -72,14 +81,18 @@ export function useSklandTrainingSync(options: Options) {
             rotation: options.rotation,
             fiammetta_enable: effectiveFiammettaSetting(operbox, options.rotation, options.fiammettaEnabled),
           };
-          const result = options.taskQueueEnabled
-            ? await task.run(await submitPlanTask(payload))
-            : await computePlan(payload);
+          let result;
+          if (options.taskQueueEnabled) {
+            const submitted = await submitPlanTask(payload);
+            if (!isCurrent()) throw new Error("Training context changed.");
+            result = await task.run(submitted);
+          } else {
+            result = await computePlan(payload);
+          }
           return { trainingAdvice: result.trainingAdvice, profile: result.profile };
         },
       });
       if (!refreshed) {
-        if (attempts.current.identity === identity) attempts.current.last = null;
         return;
       }
       const error = refreshed.error ? toDisplayError(refreshed.error, options.failureMessage) : null;
@@ -92,7 +105,6 @@ export function useSklandTrainingSync(options: Options) {
       options.onSynced(refreshed.session);
     } catch (cause) {
       if (!isCurrent()) {
-        if (attempts.current.identity === identity) attempts.current.last = null;
         return;
       }
       const error = toDisplayError(cause, options.failureMessage);
@@ -104,8 +116,10 @@ export function useSklandTrainingSync(options: Options) {
         error: options.failureMessage,
       }));
     } finally {
-      inFlight.current = false;
-      setBusy(false);
+      if (isCurrent()) {
+        inFlight.current = false;
+        setBusy(false);
+      }
     }
   });
 

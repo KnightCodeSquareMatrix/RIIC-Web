@@ -16,9 +16,19 @@ function relativeLuminance(cssColor: string) {
 
 async function expectNonTextContrast(foreground: Locator, background: Locator) {
   await expect.poll(async () => {
+    // Let the browser convert any supported CSS color (including OKLCH) to sRGB.
+    const readColor = (element: Element, property: "color" | "backgroundColor") => {
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = 1;
+      const context = canvas.getContext("2d")!;
+      context.fillStyle = getComputedStyle(element)[property];
+      context.fillRect(0, 0, 1, 1);
+      const [r, g, b] = context.getImageData(0, 0, 1, 1).data;
+      return `rgb(${r}, ${g}, ${b})`;
+    };
     const [foregroundColor, backgroundColor] = await Promise.all([
-      foreground.evaluate((element) => getComputedStyle(element).color),
-      background.evaluate((element) => getComputedStyle(element).backgroundColor),
+      foreground.evaluate(readColor, "color"),
+      background.evaluate(readColor, "backgroundColor"),
     ]);
     const brighter = Math.max(relativeLuminance(foregroundColor), relativeLuminance(backgroundColor));
     const darker = Math.min(relativeLuminance(foregroundColor), relativeLuminance(backgroundColor));
@@ -1169,11 +1179,14 @@ test("Skland base metrics reuse the existing technical card grid and keyboard ta
   }
 
   const overviewTab = page.getByRole("tab", { name: "概览", exact: true });
+  const inventoryTab = page.getByRole("tab", { name: "背包", exact: true });
   const infrastructureTab = page.getByRole("tab", { name: "基建", exact: true });
-  await expect(page.locator("[data-skland-view-tabs] [role=tab]")).toHaveText(["概览", "基建"]);
+  await expect(page.locator("[data-skland-view-tabs] [role=tab]")).toHaveText(["概览", "背包", "基建"]);
   await expect(page.getByRole("tab", { name: "进度", exact: true })).toHaveCount(0);
   await overviewTab.focus();
   await overviewTab.press("ArrowRight");
+  await expect(inventoryTab).toBeFocused();
+  await inventoryTab.press("ArrowRight");
   await expect(infrastructureTab).toBeFocused();
   await infrastructureTab.press("ArrowRight");
   await expect(overviewTab).toBeFocused();
