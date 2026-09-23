@@ -27,8 +27,8 @@ async function expectNonTextContrast(foreground: Locator, background: Locator) {
       return `rgb(${r}, ${g}, ${b})`;
     };
     const [foregroundColor, backgroundColor] = await Promise.all([
-      foreground.evaluate(readColor, "color"),
-      background.evaluate(readColor, "backgroundColor"),
+      foreground.evaluate(readColor, "color" as const),
+      background.evaluate(readColor, "backgroundColor" as const),
     ]);
     const brighter = Math.max(relativeLuminance(foregroundColor), relativeLuminance(backgroundColor));
     const darker = Math.min(relativeLuminance(foregroundColor), relativeLuminance(backgroundColor));
