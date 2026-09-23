@@ -8,6 +8,7 @@
     "dev": "next dev -H 0.0.0.0 -p 5174",
     "dev:full": "npm run dev",
     "build": "next build",
+    "wasm:build": "node scripts/build-infra-eval-wasm.mjs",
     "postbuild": "node scripts/prepare-standalone.mjs",
     "release:stage": "node scripts/stage-standalone-release.mjs",
     "check:bundle-budget": "node scripts/check-bundle-budget.mjs",

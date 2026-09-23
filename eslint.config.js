@@ -4,9 +4,15 @@ import reactHooks from "eslint-plugin-react-hooks";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist", ".next", ".tmp", "server"] },
+  { ignores: ["dist", ".next", ".tmp", "server", "src/lib/infra-eval/generated", "public/wasm"] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
+  {
+    files: ["scripts/build-infra-eval-wasm.mjs"],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
   {
     files: ["**/*.{ts,tsx}"],
     languageOptions: {
