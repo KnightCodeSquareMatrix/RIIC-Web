@@ -1,10 +1,34 @@
 import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 import { mockApis, mockAnonymousWebsiteSession } from "./production-readiness.fixture";
+import { MOWER_PRODUCTION_KEYS } from "../src/mower-editor";
 
 test.beforeEach(async ({ page }) => {
   await mockAnonymousWebsiteSession(page);
   await mockApis(page);
+});
+
+test("Mower compact view keeps every production facility reachable in sparse and unusual plans", async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  const extraPower = Object.fromEntries(MOWER_PRODUCTION_KEYS.map((key, index) => [key, {
+    name: index < 4 ? "发电站" : "制造站", plans: [],
+  }]));
+  await page.addInitScript((plan) => localStorage.setItem("riic-web-mower-editor-v1", JSON.stringify({
+    plan1: plan, backup_plans: [{ name: "空副表", plan: {} }],
+  })), extraPower);
+  await page.goto("/mower");
+  const board = page.locator("[data-compact-schedule-view]:visible");
+  for (const name of ["主表", "空副表"]) {
+    await page.getByRole("tab", { name, exact: true }).click();
+    for (const key of MOWER_PRODUCTION_KEYS) {
+      const [, floor, room] = key.split("_");
+      const card = board.locator(`[data-room-title$="B${floor}0${room}"]`);
+      await expect(card).toBeVisible();
+      await card.locator('.infra-operator-slot[role="button"]').first().click();
+      await expect(page.getByRole("dialog")).toBeVisible();
+      await page.getByRole("button", { name: "取消", exact: true }).click();
+    }
+  }
 });
 
 test("Mower facility editing stays scoped to the selected plan and export keeps its fields", async ({ page }) => {

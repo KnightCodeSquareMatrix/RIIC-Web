@@ -438,6 +438,10 @@ export function CompactScheduleView(props: CompactScheduleViewProps) {
   const power = getGroup("power");
   const dorms = getGroup("dormitory");
   const powerCount = power.length;
+  const overflowProductionRooms = [
+    ...workstations.slice(powerCount === 3 ? 6 : 7),
+    ...power.slice(powerCount === 3 ? 3 : 2),
+  ];
   const layoutRooms = new Map(layout.rooms.map((room) => [room.id, room]));
 
   function makeCard(row: RoomRow, widthPercent?: number) {
@@ -512,6 +516,11 @@ export function CompactScheduleView(props: CompactScheduleViewProps) {
             {workstations[6] && makeCard(workstations[6], 50)}
           </div>
         )}
+        {overflowProductionRooms.length > 0 ? (
+          <div className="grid grid-cols-2 gap-3">
+            {overflowProductionRooms.map((row) => makeCard(row))}
+          </div>
+        ) : null}
       </div>
 
       <div
