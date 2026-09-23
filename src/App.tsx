@@ -33,6 +33,7 @@ import { WorkbenchContext } from "@/workbench-context";
 import { WORKBENCH_PAGE_PATHS, workbenchHref, workbenchPageFromPathname, type AppPage } from "@/workbench-routes";
 import { useWebsiteSession } from "@/website-session";
 import { usePlanTask } from "@/hooks/use-plan-task";
+import { useSklandTrainingSync } from "@/hooks/use-skland-training-sync";
 import { LanguageSwitch } from "@/i18n/client";
 
 import {
@@ -543,6 +544,29 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     && planRetryCountdown === 0
   );
   const sklandBindingCount = sklandBindingSummary.totalCount;
+  const sklandTrainingSync = useSklandTrainingSync({
+    enabled: Boolean(CLIENT_SKLAND_ENABLED && websiteSession?.user.id && boxSource === "skland" && activeSklandAccount && hasRestoredSession),
+    active: page === "training",
+    blocked: sklandBusy || sklandSessionLoading || loading || Boolean(planTask.taskId) || progressionAdjustmentActivity.loading || setupOpen,
+    identity: `${websiteSession?.user.id}:${activeSklandAccount?.accountId}:${activeSklandAccount?.selectedUid}`,
+    accountId: activeSklandAccount?.accountId ?? "",
+    uid: activeSklandAccount?.selectedUid ?? "",
+    layout,
+    operbox: operbox ?? [],
+    rotation: rotationProfile,
+    fiammettaEnabled,
+    resultId: result?.diagnosticId ?? null,
+    taskQueueEnabled,
+    failureMessage: intl("components_pages_TrainingAdvice.syncFailed"),
+    onSynced: (session) => {
+      // Refresh progression without replacing the user's layout or existing schedule.
+      if (!session.scheduleSnapshot || currentBoxSourceRef.current !== "skland" || currentOperboxRef.current !== operbox) return;
+      setSklandScheduleSnapshot(session.scheduleSnapshot);
+      setSklandStatusSnapshot(session.statusSnapshot ?? null);
+      setOperbox(normalizeOperboxEntries(session.scheduleSnapshot.operbox));
+      setFileName(session.scheduleSnapshot.sourceName);
+    },
+  });
   const websiteUserId = websiteSession?.user.id ?? null;
   const accountCloudWorkspace = useAccountCloudWorkspace(CLIENT_ACCOUNT_CLOUD_SYNC_ENABLED ? {
     userId: websiteUserId,
@@ -2154,8 +2178,9 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     training: {
       operbox: accountCanUseCurrentBox ? operbox : null,
       layout,
-      profile: accountCanUseCurrentBox ? result?.profile : null,
-      trainingAdvice: accountCanUseCurrentBox ? result?.trainingAdvice ?? null : null,
+      profile: accountCanUseCurrentBox ? sklandTrainingSync.data?.profile ?? result?.profile : null,
+      trainingAdvice: accountCanUseCurrentBox ? (sklandTrainingSync.data ? sklandTrainingSync.data.trainingAdvice ?? null : result?.trainingAdvice ?? null) : null,
+      sync: boxSource === "skland" && activeSklandAccount && accountCanUseCurrentBox ? sklandTrainingSync : undefined,
       requiresAccount: !accountCanUseCurrentBox,
       onOpenCalculator: () => navigateToPage("calculator"),
     },
