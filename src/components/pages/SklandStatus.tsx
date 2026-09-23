@@ -3,7 +3,7 @@ import { localize as localize_components_pages_SklandStatus } from "../../i18n/h
 import { useTranslations, useLocale } from "next-intl";
 import { messageRecord } from "@/i18n/translate";
 
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -51,7 +51,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { RemoteAvatar } from "@/components/ui/remote-avatar";
-import InventoryPage from "@/components/pages/InventoryPage";
+const InventoryPage = lazy(() => import("@/components/pages/InventoryPage"));
 import { Skeleton } from "@/components/ui/skeleton";
 import { SkeletonRouteFallback } from "@/components/ui/skeleton-swap";
 import { HoldToConfirm } from "@/components/ui/hold-to-confirm";
@@ -1728,7 +1728,7 @@ export function SklandStatus({
           <InfrastructureTab snapshot={snapshot} />
         </TabsContent>
         <TabsContent value="inventory" className="pt-5">
-          <InventoryPage />
+          <Suspense fallback={<Skeleton className="h-64 w-full" />}><InventoryPage /></Suspense>
         </TabsContent>
       </Tabs>
 
