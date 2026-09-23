@@ -167,10 +167,11 @@ export default function MoodSimulationPanel({layout,operbox,draft,fiammettaEnabl
         <TabsList aria-label={t("boardMode")}><TabsTrigger value="edit">{t("editMode")}</TabsTrigger><TabsTrigger value="simulation">{t("simulationMode")}</TabsTrigger></TabsList>
       </Tabs>
     </div>
+    {mode==="edit" ? renderBoard(null) : valid && segment ? renderBoard({rows,shift:segment.shift,cycle:segment.cycle,moods,selected,onSelect:setSelected}) : null}
+    {/* Recalculation messages stay below the editor so its controls do not move under the pointer. */}
     {storageWarning && <p role="status" className="text-sm text-amber-700">{t("storageWarning")}</p>}
     {pending && <div role="status"><p className="text-sm text-muted-foreground">{t("calculating")}</p>{mode==="simulation" && <Skeleton className="mt-3 h-40 w-full"/>}</div>}
     {error && <p role="alert" className="rounded-md border border-destructive/40 p-3 text-sm text-destructive">{t("error",{message:error})}</p>}
-    {mode==="edit" ? renderBoard(null) : valid && segment ? renderBoard({rows,shift:segment.shift,cycle:segment.cycle,moods,selected,onSelect:setSelected}) : null}
     <div className="flex flex-wrap items-center gap-2" data-mood-playback-controls>
       <div className="flex items-center gap-2 text-sm"><span>{t("cycles")}</span><MoodSelect label={t("cycles")} className="w-20" value={String(settings.cycles)} onChange={value => setSettings(s => ({...s,cycles:Number(value)}))} options={[1,2,3,4,5,6,7].map(n => ({value:String(n),label:String(n)}))}/></div>
       <Button disabled={!valid} onClick={() => {setMode("simulation");if (cursor>=result!.total) setCursor(0);setPlaying(v => !v);}}>{playing?<Pause/>:<Play/>}{playing?t("pause"):t("play")}</Button>
