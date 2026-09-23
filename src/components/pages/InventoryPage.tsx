@@ -175,22 +175,19 @@ function InventoryContent({ identityKey }: { identityKey: string }) {
     <main className="w-full min-w-0 bg-background text-foreground">
       <div className="flex w-full min-w-0 flex-col gap-5 pb-8 pt-5">
         <header className="flex flex-wrap items-start justify-between gap-4">
-          <div>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <h1 className="flex items-center gap-2.5 text-lg font-semibold"><span className="h-6 w-1.5 bg-[#FFD501]" aria-hidden="true" />{locale === "en" ? "Inventory" : "查看库存"}</h1>
+            <span className="whitespace-nowrap text-sm text-muted-foreground">共 {items.length} 项</span>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => setEstimateOpen(true)} disabled={loading}><Calculator className="size-4" />资源估算</Button>
             <Button variant="outline" onClick={() => void load()} disabled={loading} aria-label="刷新库存"><RefreshCw className={loading ? "size-4 animate-spin" : "size-4"} />刷新</Button>
-            <Link href="/" aria-label="返回基建终端" className="grid size-11 place-items-center border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"><ArrowLeft className="size-5" /></Link>
+            <Button nativeButton={false} variant="outline" size="icon" render={<Link href="/" />} aria-label="返回基建终端"><ArrowLeft /></Button>
           </div>
         </header>
 
         <section className="w-full min-w-0">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
-            <div className="flex items-center gap-2"><PackageOpen className="size-5 text-[#FFD501]" /><h2 className="text-xl font-semibold">背包物品</h2></div>
-            <span className="text-sm text-muted-foreground">共 {items.length} 项</span>
-          </div>
-          <div className="relative mt-4 max-w-md"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索物品名称" className="h-9 pl-9" aria-label="搜索库存" /></div>
+          <div className="relative max-w-md"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索物品名称" className="h-9 pl-9" aria-label="搜索库存" /></div>
           {error ? <div className="mt-5 border border-amber-400/40 bg-amber-50/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-200">{error.message || "库存读取失败，请稍后重试。"} 手工填写仍可用于估算；未读取的数量按 0 处理。</div> : null}
           {!error && loading ? <div className="py-16 text-center text-sm text-muted-foreground">正在读取森空岛库存...</div> : null}
           {!loading ? <>

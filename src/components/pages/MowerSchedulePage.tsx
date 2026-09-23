@@ -1,20 +1,22 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocale } from "next-intl";
-import { ArrowDown, ArrowUp, Bot, Check, Download, FileJson, GitBranch, Pencil, Plus, Trash2, Upload, Users } from "lucide-react";
+import { ArrowDown, ArrowUp, Bot, Check, Download, FileJson, GitBranch, Pencil, Plus, Search, Settings2, Trash2, Upload, Users } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { InfraTechnicalCard, InfraTechnicalHeading } from "@/components/InfraTechnicalCard";
-import { OperatorSlot } from "@/components";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { OperatorSlot, ScheduleBoard } from "@/components";
+import { addOperatorPresentations } from "@/schedule-presentation";
+import { mowerSchedulePresentation } from "@/mower-schedule-presentation";
 import { OperatorIdentity, OperatorRarityFilter, OperatorRosterGrid, OperatorSearch } from "@/components/operators/OperatorPickerParts";
-import { StatusCenterHeader, StatusCenterPage } from "@/components/pages/StatusCenterShell";
+
 import { downloadJson } from "@/download";
 import { cn } from "@/lib/utils";
-import { createMowerEditorDocument, MOWER_EDITOR_STORAGE_KEY, MOWER_FIXED_ROOMS, MOWER_PRODUCTION_KEYS, parseMowerEditorDocument, type MowerEditorDocument } from "@/mower-editor";
+import { createMowerEditorDocument, MOWER_EDITOR_STORAGE_KEY, MOWER_FIXED_ROOMS, parseMowerEditorDocument, type MowerEditorDocument } from "@/mower-editor";
 import type { MowerFacility } from "@/mower-plan";
 import { OPERATOR_CATALOG, operatorPresentationFor } from "@/operatorPortraits";
 import type { RoomRow } from "@/schedule";
@@ -94,12 +96,20 @@ export function MowerSchedulePage({ operbox = null }: { operbox?: OperBoxEntry[]
   const [triggerTiming, setTriggerTiming] = useState("AFTER_PLANNING");
   const [editorError, setEditorError] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [scheduleQuery, setScheduleQuery] = useState("");
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const backup = active >= 0 ? document.backup_plans[active] : undefined;
   const currentPlan = backup?.plan ?? document.plan1;
   const currentConf = backup?.conf ?? document.conf;
   const text = (zh: string, english: string) => en ? english : zh;
   const boxOperators = (operbox ?? []).filter((operator) => operator.own);
+  const board = useMemo(() => {
+    const view = mowerSchedulePresentation(currentPlan);
+    return { ...view, rows: addOperatorPresentations(view.rows) };
+  }, [currentPlan]);
+  const eliteByOperator = new Map(boxOperators.map((operator) => [operator.name, operator.elite]));
+  const levelByOperator = new Map(boxOperators.map((operator) => [operator.name, operator.level]));
 
   useEffect(() => {
     try {
@@ -213,14 +223,13 @@ export function MowerSchedulePage({ operbox = null }: { operbox?: OperBoxEntry[]
     }
   }
 
-  function renderRoom(key: string, title: string, column: number, row: number) {
+  function renderRoom(key: string, title: string) {
     const room = currentPlan[key];
     const name = room?.name || title;
     const occupants = room?.plans ?? [];
     const label = key.startsWith("room_") ? `${name} B${key.split("_")[1]}0${key.split("_")[2]}` : title;
     return (
       <button key={key} type="button" onClick={() => openRoom(key, name)} aria-label={`${text("编辑", "Edit ")}${label}`} data-mower-room={key}
-        style={{ gridColumn: column, gridRow: row }}
         className={cn("flex h-[92px] min-w-0 flex-col items-center justify-center gap-2 rounded-[4px] border px-2 transition-shadow hover:ring-2 hover:ring-blue-400/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500", roomTone(room?.name))}>
         <span className="flex max-w-full items-center gap-2 text-[13px] font-medium"><span className="truncate">{key.startsWith("room_") ? name : title}</span>{key.startsWith("room_") ? <span className="text-[10px] font-normal opacity-55">B{key.split("_")[1]}0{key.split("_")[2]}</span> : null}</span>
         <span className="flex max-w-full items-center justify-center gap-1.5">
@@ -231,56 +240,77 @@ export function MowerSchedulePage({ operbox = null }: { operbox?: OperBoxEntry[]
   }
 
   return (
-    <StatusCenterPage className="mx-auto max-w-[1180px]" data-mower-schedule-page>
-      <StatusCenterHeader
-        identity={<div className="flex min-w-0 items-center gap-3"><span className="grid size-10 place-items-center rounded-[4px] bg-[#272A2B] text-[#FFD800]"><Bot className="size-6" /></span><h1 className="font-technical truncate text-xl font-semibold">{text("排班表（Mower）", "Mower Schedule")}</h1></div>}
-        actions={<span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Check className="size-3.5" />{saved ? text("已保存到本地", "Saved locally") : text("本地草稿", "Local draft")}</span>}
+    <div className="min-h-[calc(100svh-9rem)] min-w-0 py-2" data-mower-schedule-page>
+      <header className="mb-4 flex flex-wrap items-center gap-2">
+        <div className="relative min-w-0 basis-full md:flex-1 md:basis-auto">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input className="pl-9 max-md:h-11" value={scheduleQuery} onChange={(event) => setScheduleQuery(event.target.value)}
+            aria-label={text("搜索 Mower 排班", "Search Mower schedule")} placeholder={text("搜索干员或设施", "Search operators or facilities")} />
+        </div>
+        <Button variant="outline" size="sm" onClick={() => setDetailsOpen(true)}><Settings2 />{text("排班信息", "Plan details")}</Button>
+        <Button variant="outline" size="sm" onClick={() => fileInput.current?.click()}><Upload />{text("导入排班文件", "Import plan")}</Button>
+        <Button size="sm" onClick={() => downloadJson("plan.json", document)}><Download />{text("下载排班文件", "Download plan")}</Button>
+        <input ref={fileInput} type="file" accept="application/json,.json" className="sr-only" aria-label={text("选择 Mower 排班文件", "Choose Mower plan file")} onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) void importFile(file); event.currentTarget.value = ""; }} />
+      </header>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-y border-border/70 bg-muted/25 px-3 py-3">
+        <div className="min-w-0">
+          <h1 className="flex items-center gap-2 text-sm font-medium"><Bot className="size-4 shrink-0" /><span className="truncate">{document.title || text("排班表（Mower）", "Mower Schedule")}</span><span className="font-number text-muted-foreground">Mower</span></h1>
+          <p className="mt-1 text-xs text-muted-foreground">{backup?.name ?? text("主表", "Main plan")} · {text("当前 Box", "Current Box")} {boxOperators.length} {text("名干员", "operators")}</p>
+        </div>
+        <span className="flex items-center gap-1.5 text-xs text-muted-foreground" role="status"><Check className="size-3.5" />{saved ? text("已保存到本地", "Saved locally") : text("本地草稿", "Local draft")}</span>
+      </div>
+      {error ? <p role="alert" className="mb-3 text-sm text-destructive">{error}</p> : null}
+
+      <div className="mb-3 flex flex-wrap items-center gap-2" data-mower-plan-toolbar>
+        <Button variant="outline" size="sm" onClick={addBackup}><Plus />{text("新建副表", "New backup")}</Button>
+        <Button size="icon-sm" variant="outline" disabled={!backup} onClick={() => openEditor("rename")} aria-label={text("重命名", "Rename")}><Pencil /></Button>
+        <Button size="icon-sm" variant="outline" disabled={active <= 0} onClick={() => moveBackup(-1)} aria-label={text("上移", "Move up")}><ArrowUp /></Button>
+        <Button size="icon-sm" variant="outline" disabled={active < 0 || active >= document.backup_plans.length - 1} onClick={() => moveBackup(1)} aria-label={text("下移", "Move down")}><ArrowDown /></Button>
+        <Button variant="outline" size="sm" disabled={!backup} onClick={() => openEditor("trigger")}><GitBranch />{text("编辑触发条件", "Edit trigger")}</Button>
+        <Button variant="outline" size="sm" disabled={!backup} onClick={() => openEditor("task")}><FileJson />{text("编辑任务", "Edit task")}</Button>
+        <Button size="icon-sm" variant="destructive" disabled={!backup} onClick={() => setDeleteOpen(true)} aria-label={text("删除此副表", "Delete backup")}><Trash2 /></Button>
+      </div>
+      <ScheduleBoard
+        rows={board.rows} layout={board.layout} activeShift={active + 1} planRevision={`mower-${active}`}
+        eliteByOperator={eliteByOperator} levelByOperator={levelByOperator} searchQuery={scheduleQuery}
+        shiftTabsSlot={(
+          <Tabs value={String(active)} onValueChange={(value) => setActive(Number(value))} className="min-w-0 max-w-full">
+            <TabsList className="h-auto max-w-full flex-wrap justify-start" aria-label={text("选择排班表", "Select plan")}>
+              <TabsTrigger value="-1" className="px-3">{text("主表", "Main plan")}</TabsTrigger>
+              {document.backup_plans.map((plan, index) => <TabsTrigger key={index} value={String(index)} className="max-w-48 px-3"><span className="truncate">{plan.name}</span></TabsTrigger>)}
+            </TabsList>
+          </Tabs>
+        )}
+        onSlotClick={(row) => openRoom(row.roomId, currentPlan[row.roomId]?.name || (row.roomId.startsWith("room_") ? "制造站" : row.groupLabel))}
+        onFactoryRecipeChange={(roomId, recipe) => updateFacility(roomId, { ...currentPlan[roomId], name: "制造站", product: recipe === "battle_record" ? "exp3" : recipe === "originium" ? "orirock" : "gold" })}
+        onTradeOrderChange={(roomId, order) => updateFacility(roomId, { ...currentPlan[roomId], name: "贸易站", product: order === "originium" ? "orundum" : "lmd" })}
+        renderListRoomActions={(row, position) => position === "header" ? (
+          <Button variant="outline" size="icon-sm" aria-label={`${text("编辑", "Edit ")}${row.title}`} onClick={() => openRoom(row.roomId, currentPlan[row.roomId]?.name || (row.roomId.startsWith("room_") ? "制造站" : row.groupLabel))}><Pencil /></Button>
+        ) : null}
       />
+      {["gaming_1", "gaming_2", "gaming_3"].some((key) => currentPlan[key]) ? <section className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">{["gaming_1", "gaming_2", "gaming_3"].filter((key) => currentPlan[key]).map((key) => renderRoom(key, `${text("活动室", "Activity room")} ${key.split("_")[1]}`))}</section> : null}
 
-      <section className="grid gap-4 md:grid-cols-2">
-        <div className="grid gap-3">
-          <label className="grid grid-cols-[56px_minmax(0,1fr)] items-center gap-3 text-sm"><span>{text("标题", "Title")}</span><Input className={FIELD_CLASS} value={document.title} onChange={(event) => setDocument({ ...document, title: event.target.value })} /></label>
-          <label className="grid grid-cols-[56px_minmax(0,1fr)] items-center gap-3 text-sm"><span>{text("作者", "Author")}</span><Input className={FIELD_CLASS} value={document.author} onChange={(event) => setDocument({ ...document, author: event.target.value })} /></label>
-        </div>
-        <label className="grid gap-2 text-sm"><span>{text("笔记", "Notes")}</span><Textarea className="min-h-20 rounded-[4px]" value={document.description} onChange={(event) => setDocument({ ...document, description: event.target.value })} /></label>
-        <div className="flex flex-wrap gap-3 md:col-span-2">
-          <label className="flex min-w-48 flex-1 items-center gap-3 text-sm"><span className="shrink-0">{text("排班 ID", "Plan ID")}</span><Input className={FIELD_CLASS} value={document.id} onChange={(event) => setDocument({ ...document, id: event.target.value })} /></label>
-          <Button variant="outline" className="h-9 rounded-[4px]" onClick={() => fileInput.current?.click()}><Upload />{text("导入排班文件", "Import plan")}</Button>
-          <Button className="h-9 bg-white text-[#272A2B] hover:bg-white/90" onClick={() => downloadJson("plan.json", document)}><Download />{text("下载排班文件", "Download plan")}</Button>
-          <input ref={fileInput} type="file" accept="application/json,.json" className="sr-only" aria-label={text("选择 Mower 排班文件", "Choose Mower plan file")} onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) void importFile(file); event.currentTarget.value = ""; }} />
-        </div>
-      </section>
-
-      {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
-
-      <InfraTechnicalCard group="control" showEmblem={false} className="!overflow-visible rounded-[4px] bg-[#272a2b] px-3 py-3 sm:px-4" dataSlot="mower-board">
-        <InfraTechnicalHeading icon={<Bot className="size-4" />} titleId="mower-board-title">{text("基建排班", "Infrastructure schedule")}</InfraTechnicalHeading>
-      <section className="mt-3 space-y-3">
-        <div className="flex flex-wrap items-center gap-2 border-y border-border/70 py-3" data-mower-plan-toolbar>
-          <Button size="icon" variant="outline" disabled={active <= 0} onClick={() => moveBackup(-1)} title={text("上移", "Move up")} aria-label={text("上移", "Move up")}><ArrowUp /></Button>
-          <Button size="icon" variant="outline" disabled={active < 0 || active >= document.backup_plans.length - 1} onClick={() => moveBackup(1)} title={text("下移", "Move down")} aria-label={text("下移", "Move down")}><ArrowDown /></Button>
-          <select className={cn(SELECT_CLASS, "w-40")} value={active} onChange={(event) => setActive(Number(event.target.value))} aria-label={text("选择排班表", "Select plan")}><option value={-1}>{text("主表", "Main plan")}</option>{document.backup_plans.map((plan, index) => <option key={index} value={index}>{plan.name}</option>)}</select>
-          <Button size="icon" variant="outline" disabled={!backup} onClick={() => openEditor("rename")} title={text("重命名", "Rename")} aria-label={text("重命名", "Rename")}><Pencil /></Button>
-          <Button variant="outline" onClick={addBackup}><Plus />{text("新建副表", "New backup")}</Button>
-          <Button variant="outline" disabled={!backup} onClick={() => openEditor("trigger")}><GitBranch />{text("编辑触发条件", "Edit trigger")}</Button>
-          <Button variant="outline" disabled={!backup} onClick={() => openEditor("task")}><FileJson />{text("编辑任务", "Edit task")}</Button>
-          <Button size="icon" variant="destructive" disabled={!backup} onClick={() => setDeleteOpen(true)} title={text("删除此副表", "Delete backup")} aria-label={text("删除此副表", "Delete backup")}><Trash2 /></Button>
-        </div>
-
-        <div className="overflow-x-auto pb-2" role="region" aria-label={text("Mower 基建布局", "Mower base layout")} tabIndex={0}>
-          <div className="grid min-w-[810px] grid-cols-[repeat(3,minmax(130px,1fr))_minmax(230px,1.55fr)_minmax(105px,.8fr)] gap-1.5" data-mower-base-grid>
-            {MOWER_PRODUCTION_KEYS.map((key, index) => renderRoom(key, text("空设施", "Empty facility"), index % 3 + 1, Math.floor(index / 3) + 2))}
-            {MOWER_FIXED_ROOMS.map((room) => renderRoom(room.key, en ? room.en : room.name, room.column, room.row))}
-          </div>
-        </div>
-        {["gaming_1", "gaming_2", "gaming_3"].some((key) => currentPlan[key]) ? <div className="grid grid-cols-3 gap-2">{["gaming_1", "gaming_2", "gaming_3"].map((key, index) => renderRoom(key, `${text("活动室", "Activity room")} ${index + 1}`, index + 1, 1))}</div> : null}
-      </section>
-      </InfraTechnicalCard>
-
+      <details className="mt-5 border-y border-border/70 bg-muted/15 px-3 py-3 sm:px-4" data-mower-rules>
+        <summary className="cursor-pointer text-sm font-medium">{text("心情与调度规则", "Morale and scheduling rules")}</summary>
       <section className="grid gap-3 border-t border-border/70 pt-5">
         <div className="grid gap-3 sm:grid-cols-[210px_minmax(0,1fr)] sm:items-center"><span className="text-sm">{text("令夕模式", "Ling / Dusk mode")}</span><div className="flex flex-wrap gap-x-6 gap-y-2">{[[1, "感知信息", "Perception"], [2, "人间烟火", "Worldly"], [3, "均衡模式", "Balanced"]].map(([value, zh, english]) => <label key={value} className="flex items-center gap-2 text-sm"><input type="radio" name="mower-ling-xi" value={value} checked={Number(currentConf.ling_xi ?? 1) === value} onChange={() => changeConf("ling_xi", Number(value))} className="size-4 accent-blue-600" />{en ? english : zh}</label>)}</div></div>
         {[["rest_in_full", "需要回满心情的干员", "Rest to full morale"], ["exhaust_require", "需要用尽心情的干员", "Work to exhaustion"], ["workaholic", "0 心情工作的干员", "Work at zero morale"], ["resting_priority", "低优先级休息干员", "Low rest priority"], ["ope_resting_priority", "休息排序优先级", "Resting order priority"], ["refresh_trading", "跑单时间刷新干员", "Refresh trading timers"], ["refresh_drained", "用尽时间刷新干员", "Refresh exhaustion timers"]].map(([key, zh, english]) => <label key={key} className="grid gap-2 text-sm sm:grid-cols-[210px_minmax(0,1fr)] sm:items-center"><span>{en ? english : zh}</span><MowerOperatorPicker label={en ? english : zh} selected={String(currentConf[key as keyof typeof currentConf] ?? "").split(",").map((name) => name.trim()).filter(Boolean)} operators={boxOperators} onChange={(names) => changeConf(key!, names.join(","))} text={text} /></label>)}
       </section>
+
+      </details>
+
+      <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
+        <DialogContent className="max-h-[calc(100svh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-xl">
+          <DialogHeader><DialogTitle>{text("排班信息", "Plan details")}</DialogTitle><DialogDescription>{text("标题、作者和笔记会随排班文件一起保存。", "The title, author and notes are saved with the plan file.")}</DialogDescription></DialogHeader>
+          <DialogBody className="min-h-0 overflow-y-auto">
+            <label className="grid gap-2 text-sm">{text("标题", "Title")}<Input value={document.title} onChange={(event) => setDocument({ ...document, title: event.target.value })} /></label>
+            <label className="grid gap-2 text-sm">{text("作者", "Author")}<Input value={document.author} onChange={(event) => setDocument({ ...document, author: event.target.value })} /></label>
+            <label className="grid gap-2 text-sm">{text("排班 ID", "Plan ID")}<Input value={document.id} onChange={(event) => setDocument({ ...document, id: event.target.value })} /></label>
+            <label className="grid gap-2 text-sm">{text("笔记", "Notes")}<Textarea className="min-h-28" value={document.description} onChange={(event) => setDocument({ ...document, description: event.target.value })} /></label>
+          </DialogBody>
+          <DialogFooter><Button onClick={() => setDetailsOpen(false)}><Check />{text("完成", "Done")}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={Boolean(editingRoom)} onOpenChange={(open) => { if (!open) setEditingRoom(null); }}>
         <DialogContent className="max-h-[90svh] sm:max-w-[min(800px,calc(100vw-2rem))]">
@@ -300,6 +330,6 @@ export function MowerSchedulePage({ operbox = null }: { operbox?: OperBoxEntry[]
       </Dialog>
 
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}><DialogContent><DialogHeader><DialogTitle>{text("删除副表？", "Delete backup?")}</DialogTitle><DialogDescription>{backup?.name}</DialogDescription></DialogHeader><DialogFooter><Button variant="ghost" onClick={() => setDeleteOpen(false)}>{text("取消", "Cancel")}</Button><Button variant="destructive" onClick={() => { setDocument((current) => ({ ...current, backup_plans: current.backup_plans.filter((_, index) => index !== active) })); setActive(-1); setDeleteOpen(false); }}><Trash2 />{text("删除", "Delete")}</Button></DialogFooter></DialogContent></Dialog>
-    </StatusCenterPage>
+    </div>
   );
 }
