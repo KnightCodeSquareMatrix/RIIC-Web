@@ -56,6 +56,7 @@
   "levelMaximum": "{level} 级，最高 {value2} 级",
   "infrastructureSkillS": "基建技能 S{index}：{nameValue}，{unlockLabel}",
   "autoFill": "自动补位",
+  "paperSkillEfficiency": "纸面技能效率",
   "empty": "空置",
   "slotLocked": "未解锁",
   "label2": "：",
