@@ -1,12 +1,12 @@
+import structuredClonePolyfill from "@ungap/structured-clone";
+import ResizeObserverPolyfill from "resize-observer-polyfill";
+
 type IdleCallback = (deadline: { didTimeout: boolean; timeRemaining: () => number }) => void;
 
 const browserGlobal = typeof window !== "undefined" ? window : undefined;
 
 if (browserGlobal && typeof browserGlobal.structuredClone !== "function") {
-  browserGlobal.structuredClone = function structuredCloneFallback<T>(value: T): T {
-    if (value === undefined) return value;
-    return JSON.parse(JSON.stringify(value)) as T;
-  };
+  browserGlobal.structuredClone = structuredClonePolyfill;
 }
 
 if (browserGlobal && typeof browserGlobal.requestIdleCallback !== "function") {
@@ -26,11 +26,7 @@ if (browserGlobal && typeof browserGlobal.cancelIdleCallback !== "function") {
 }
 
 if (browserGlobal && typeof browserGlobal.ResizeObserver !== "function") {
-  browserGlobal.ResizeObserver = class ResizeObserverFallback {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  };
+  browserGlobal.ResizeObserver = ResizeObserverPolyfill;
 }
 
 if (browserGlobal?.crypto && typeof browserGlobal.crypto.randomUUID !== "function") {

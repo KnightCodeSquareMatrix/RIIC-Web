@@ -17,6 +17,8 @@ const uncachedDocumentRoutes = [
   "/account/reset-password",
   "/admin/users",
   "/manual",
+  "/mower",
+  "/inventory",
   "/mastery",
   "/recruitment",
   "/privacy",

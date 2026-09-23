@@ -5,6 +5,9 @@ import { ArrowLeft, Calculator, PackageOpen, RefreshCw, Search } from "lucide-re
 import Link from "next/link";
 import Image from "next/image";
 
+import { useWorkbench } from "@/workbench-context";
+import { trainingCost } from "@/inventory-estimates";
+import { manualLevelFor, maxEliteForRarity } from "@/manual-operbox";
 import { getSklandInventory } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,16 +34,18 @@ const HEADHUNTING_STEPS = [
   { tier: 4, content: "十连寻访凭证 x1", cost: 138, pulls: 18, average: 7.67 },
   { tier: 5, content: "十连寻访凭证 x2", cost: 258, pulls: 38, average: 6.79 },
 ] as const;
-const COST_BY_RARITY: Record<number, { lmd: number; exp: number }> = {
-  3: { lmd: 247_000, exp: 458_640 }, 4: { lmd: 341_000, exp: 633_360 },
-  5: { lmd: 458_000, exp: 851_760 }, 6: { lmd: 588_000, exp: 1_092_000 },
-};
 const BATTLE_RECORD_EXP = { "2001": 200, "2002": 400, "2003": 1_000, "2004": 2_000 } as const;
-const MAX_LEVEL_BY_TARGET: Record<string, number> = { "0": 50, "1": 50, "2": 90 };
 // Categories from ArkMowers/arknights-mower arknights_mower/utils/depot.py.
 const MATERIAL_GROUPS: Record<string, string[]> = {"稀有度5":["烧结核凝晶","晶体电子单元","D32钢","双极纳米片","聚合剂","重相位对映体"],"稀有度4":["提纯源岩","改量装置","聚酸酯块","糖聚块","异铁块","酮阵列","转质盐聚块","切削原液","精炼溶剂","晶体电路","炽合金块","聚合凝胶","白马醇","三水锰矿","五水研磨石","RMA70-24","环烃预制体","固化纤维板","手性屈光体"],"稀有度3":["固源岩组","全新装置","聚酸酯组","糖组","异铁组","酮凝集组","转质盐组","化合切削液","半自然溶剂","晶体元件","炽合金","凝胶","扭转醇","轻锰矿","研磨石","RMA70-12","环烃聚质","褐素纤维","类凝结核"],"稀有度2":["固源岩","装置","聚酸酯","糖","异铁","酮凝集"],"稀有度1":["源岩","破损装置","酯原料","代糖","异铁碎片","双酮"],"模组":["模组数据块","数据增补仪","数据增补条"],"技能书":["技巧概要·卷3","技巧概要·卷2","技巧概要·卷1"],"芯片相关":["重装双芯片","重装芯片组","重装芯片","狙击双芯片","狙击芯片组","狙击芯片","医疗双芯片","医疗芯片组","医疗芯片","术师双芯片","术师芯片组","术师芯片","先锋双芯片","先锋芯片组","先锋芯片","近卫双芯片","近卫芯片组","近卫芯片","辅助双芯片","辅助芯片组","辅助芯片","特种双芯片","特种芯片组","特种芯片","采购凭证","芯片助剂"]};
 
 export default function InventoryPage() {
+  const { inventory } = useWorkbench();
+  if (inventory.pending) return null;
+  return <InventoryContent key={inventory.identityKey} identityKey={inventory.identityKey} />;
+}
+
+function InventoryContent({ identityKey }: { identityKey: string }) {
+  const storageKey = `${MANUAL_STORAGE_KEY}:${identityKey}`;
   const locale = useLocale();
   const [data, setData] = useState<SklandInventoryData | null>(null);
   const [query, setQuery] = useState("");
@@ -55,20 +60,23 @@ export default function InventoryPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setData(await getSklandInventory());
+      const inventory = await getSklandInventory();
+      if (inventory.identityKey !== identityKey) throw new Error("账号或角色已变化，请刷新页面后重试。");
+      setData(inventory);
       setError(null);
     } catch (value) {
+      setData(null);
       setError(value as DisplayError);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [identityKey]);
 
   useEffect(() => { void load(); }, [load]);
 
   useEffect(() => {
     try {
-      const parsed = JSON.parse(window.localStorage.getItem(MANUAL_STORAGE_KEY) ?? "{}") as Record<string, unknown>;
+      const parsed = JSON.parse(window.localStorage.getItem(storageKey) ?? "{}") as Record<string, unknown>;
       const next: Record<string, string> = {};
       for (const id of COMMON_IDS) {
         const value = parsed[id];
@@ -78,13 +86,13 @@ export default function InventoryPage() {
     } catch {
       setManualCounts({});
     }
-  }, []);
+  }, [storageKey]);
 
   const setManualCount = (id: string, value: string) => {
     const normalized = value.replace(/\D/g, "").slice(0, 12);
     setManualCounts((current) => {
       const next = { ...current, [id]: normalized };
-      try { window.localStorage.setItem(MANUAL_STORAGE_KEY, JSON.stringify(next)); } catch { /* keep session value */ }
+      try { window.localStorage.setItem(storageKey, JSON.stringify(next)); } catch { /* keep session value */ }
       return next;
     });
   };
@@ -150,15 +158,7 @@ export default function InventoryPage() {
     };
   }, [exchange.pulls, itemCount]);
   const sixStarSummary = useMemo(() => {
-    const isStartingPoint = targetElite === 0 && targetLevel === 1;
-    const levelRatio = targetLevel / 60;
-    const eliteRatio = targetElite === 2 ? 1 : targetElite === 1 ? 0.58 : 0.22;
-    const baseCost = COST_BY_RARITY[targetRarity] ?? COST_BY_RARITY[6];
-    const costScale = (0.35 + levelRatio * 0.65) * (0.45 + eliteRatio * 0.55);
-    const targetCost = {
-      lmd: isStartingPoint ? 0 : Math.round(baseCost.lmd * costScale),
-      exp: isStartingPoint ? 0 : Math.round(baseCost.exp * costScale),
-    };
+    const targetCost = trainingCost(targetRarity, targetElite, targetLevel);
     const lmdCount = targetCost.lmd === 0 ? 0 : itemCount("4001") / targetCost.lmd;
     const exp = (Object.entries(BATTLE_RECORD_EXP) as Array<[keyof typeof BATTLE_RECORD_EXP, number]>).reduce(
       (total, [id, value]) => total + itemCount(id) * value,
@@ -179,7 +179,7 @@ export default function InventoryPage() {
             <h1 className="flex items-center gap-2.5 text-lg font-semibold"><span className="h-6 w-1.5 bg-[#FFD501]" aria-hidden="true" />{locale === "en" ? "Inventory" : "查看库存"}</h1>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setEstimateOpen(true)} disabled={loading || !!error}><Calculator className="size-4" />资源估算</Button>
+            <Button variant="outline" onClick={() => setEstimateOpen(true)} disabled={loading}><Calculator className="size-4" />资源估算</Button>
             <Button variant="outline" onClick={() => void load()} disabled={loading} aria-label="刷新库存"><RefreshCw className={loading ? "size-4 animate-spin" : "size-4"} />刷新</Button>
             <Link href="/" aria-label="返回基建终端" className="grid size-11 place-items-center border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"><ArrowLeft className="size-5" /></Link>
           </div>
@@ -191,9 +191,9 @@ export default function InventoryPage() {
             <span className="text-sm text-muted-foreground">共 {items.length} 项</span>
           </div>
           <div className="relative mt-4 max-w-md"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索物品名称" className="h-9 pl-9" aria-label="搜索库存" /></div>
-          {error ? <div className="mt-5 border border-amber-400/40 bg-amber-50/10 px-4 py-3 text-sm text-amber-200">{error.message || "库存读取失败，请稍后重试。"}</div> : null}
+          {error ? <div className="mt-5 border border-amber-400/40 bg-amber-50/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-200">{error.message || "库存读取失败，请稍后重试。"} 手工填写仍可用于估算；未读取的数量按 0 处理。</div> : null}
           {!error && loading ? <div className="py-16 text-center text-sm text-muted-foreground">正在读取森空岛库存...</div> : null}
-          {!error && !loading ? <>
+          {!loading ? <>
             <div className="mt-5 grid gap-6">
               <div className="min-w-0">
               <h3 className="mb-3 border-b border-border pb-3 text-xl font-medium">抽卡资源</h3>
@@ -271,19 +271,19 @@ export default function InventoryPage() {
                   </TooltipContent>
                 </Tooltip>
               </div>
-                <p className="text-xs leading-[18px] text-muted-foreground">另余 {fmt(pullSummary.remainingOrundum)} 合成玉</p>
+                <p className="text-xs leading-[18px] text-muted-foreground">另余 {fmt(pullSummary.remainingOrundum)} 合成玉。假设源石全部兑换、当月黄票兑换尚未购买；不含中坚票。</p>
               </div>
               <div className="grid min-w-0 grid-rows-[24px_44px_56px_1fr_36px] gap-3 border-t border-border/70 pt-5 sm:border-l sm:border-t-0 sm:pl-6 sm:pt-0">
                 <h3 className="text-base font-semibold">养成估算</h3>
                 <div className="grid grid-cols-3 items-center gap-2 [&_select]:min-w-0 [&_select]:w-full [&_select]:h-11">
-                  <select value={targetRarity} onChange={(event) => { const rarity = Number(event.target.value); setTargetRarity(rarity); if (rarity < 4 && targetElite === 2) { setTargetElite(1); setTargetLevel(Math.min(targetLevel, 50)); } }} className="h-9 border border-border bg-background px-2 text-sm" aria-label="目标星级">
+                  <select value={targetRarity} onChange={(event) => { const rarity = Number(event.target.value); setTargetRarity(rarity); const elite = Math.min(targetElite, maxEliteForRarity(rarity)); setTargetElite(elite); setTargetLevel(Math.min(targetLevel, manualLevelFor(rarity, elite))); }} className="h-9 border border-border bg-background px-2 text-sm" aria-label="目标星级">
                     {[3, 4, 5, 6].map((rarity) => <option key={rarity} value={rarity}>{rarity}★</option>)}
                   </select>
-                  <select value={targetElite} onChange={(event) => { const elite = Number(event.target.value); setTargetElite(elite); setTargetLevel(Math.min(targetLevel, MAX_LEVEL_BY_TARGET[String(elite)])); }} className="h-9 border border-border bg-background px-2 text-sm" aria-label="目标精英阶段">
+                  <select value={targetElite} onChange={(event) => { const elite = Number(event.target.value); setTargetElite(elite); setTargetLevel(Math.min(targetLevel, manualLevelFor(targetRarity, elite))); }} className="h-9 border border-border bg-background px-2 text-sm" aria-label="目标精英阶段">
                     {[0, 1, 2].filter((elite) => targetRarity >= (elite === 2 ? 4 : 3)).map((elite) => <option key={elite} value={elite}>精{elite}</option>)}
                   </select>
                   <select value={targetLevel} onChange={(event) => setTargetLevel(Number(event.target.value))} className="h-9 border border-border bg-background px-2 text-sm" aria-label="目标等级">
-                    {[1, 30, 40, 50, 60, 70, 80, 90].filter((level) => level <= MAX_LEVEL_BY_TARGET[String(targetElite)]).map((level) => <option key={level} value={level}>{level}级</option>)}
+                    {Array.from({ length: manualLevelFor(targetRarity, targetElite) }, (_, index) => index + 1).map((level) => <option key={level} value={level}>{level}级</option>)}
                   </select>
                 </div>
                 <p className="font-number text-4xl font-semibold leading-[56px]"><span className="text-[#FFD501]">{sixStarSummary.count.toFixed(2)}</span> <span className="text-xl">个</span></p>
@@ -291,7 +291,7 @@ export default function InventoryPage() {
                   <p className="flex justify-between gap-3"><span>龙门币</span><strong className="font-number text-foreground">{fmt(itemCount("4001"))} / {fmt(sixStarSummary.targetCost.lmd)}</strong></p>
                   <p className="flex justify-between gap-3"><span>作战记录经验</span><strong className="font-number text-foreground">{fmt(sixStarSummary.exp)} / {fmt(sixStarSummary.targetCost.exp)}</strong></p>
                 </div>
-                <p className="text-xs leading-[18px] text-muted-foreground">仅考虑升级和精英化，从精0 1级开始。</p>
+                <p className="text-xs leading-[18px] text-muted-foreground">从精0 1级开始，仅计算升级与精英化的钱书；不包含材料、技能、模组。</p>
               </div>
             </section>
                 </DialogBody>

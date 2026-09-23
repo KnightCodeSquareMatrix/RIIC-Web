@@ -2019,6 +2019,10 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   );
   const animateEmptyScheduleEntrance = page === "calculator" && hasRenderedCalculator.current;
   const workbenchContext = {
+    inventory: {
+      identityKey: JSON.stringify([websiteUserId, sklandActiveAccountId, activeSklandAccount?.selectedUid ?? null]),
+      pending: websiteSessionPending || !hasRestoredSession,
+    },
     calculator: {
       layout,
       result,
@@ -2123,6 +2127,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       highlightNoLayoutSkill: userSettings.highlightNoLayoutSkill,
     },
     manual: {
+      usePreMaaExecutionOrder: userSettings.usePreMaaExecutionOrder,
       layout,
       operbox: accountCanUseCurrentBox ? operbox : null,
       sourceName: accountCanUseCurrentBox ? fileName : null,

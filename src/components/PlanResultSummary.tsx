@@ -99,7 +99,7 @@ const MAA_UNCERTAIN_OPERATOR_NAMES = ["红", "红隼"] as const;
 
 function maaUncertainOperators(maa: MaaJson): string[] {
   const scheduledNames = maa.plans.flatMap((plan) => [
-    ...Object.values(plan.rooms).flatMap((rooms) => (rooms ?? []).flatMap((room) => room.operators)),
+    ...Object.values(plan.rooms).flatMap((rooms) => (rooms ?? []).flatMap((room: NonNullable<MaaJson["plans"][number]["rooms"]["trading"]>[number]) => room.operators ?? [])),
     ...(plan.groups ?? []).flatMap((group) => group.operators),
   ]).flatMap((operator) => {
     if (typeof operator === "string") return [operator];

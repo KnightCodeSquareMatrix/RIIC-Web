@@ -609,6 +609,7 @@ export function ManualSchedulePage({
       maa,
       strictMaaOperatorOrder,
       allowReplacementOperatorSort,
+      undefined,
       usePreMaaExecutionOrder,
     ));
   }

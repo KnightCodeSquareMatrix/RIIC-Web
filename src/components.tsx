@@ -1707,7 +1707,7 @@ export function ScheduleBoard({
       })}
           </>
 
-  ), [rowGroups, en, layout, collapsedGroups, hiddenGroups, intl, locale, gameCatalog,
+  ), [highlightNoLayoutSkill, noLayoutSkillOperators, rowGroups, en, layout, collapsedGroups, hiddenGroups, intl, locale, gameCatalog,
     onSortToggle, sortRoomId, renderListRoomActions, shiftDirection, onFactoryRecipeChange,
     onTradeOrderChange, eliteByOperator, levelByOperator, onSlotClick, sortSelection,
     onSortSlotClick, onIssue, feedbackDisabled, normalizedQuery, onClearRoom, onManualSkillEfficiencyChange]);
@@ -1716,6 +1716,7 @@ export function ScheduleBoard({
         <SkeletonSwap ready={Boolean(CompactScheduleView) || compactScheduleLoadFailed} skeleton={<CompactScheduleLoading rows={visibleRows} />}>
           {CompactScheduleView ? (
             <CompactScheduleView
+              noLayoutSkillOperators={highlightNoLayoutSkill ? noLayoutSkillOperators : undefined}
               rows={visibleRows}
               layout={layout}
               eliteByOperator={eliteByOperator}
@@ -1746,7 +1747,7 @@ export function ScheduleBoard({
           )}
         </SkeletonSwap>
 
-  ), [CompactScheduleView, visibleRows, layout, eliteByOperator, levelByOperator,
+  ), [highlightNoLayoutSkill, noLayoutSkillOperators, CompactScheduleView, visibleRows, layout, eliteByOperator, levelByOperator,
     activeShift, activePlan, shiftDirection, onIssue, feedbackDisabled, hideImages,
     onSlotClick, sortRoomId, sortSelection, onSortToggle, onSortSlotClick, onClearRoom,
     onDormAutofillChange, droneTargetRoomId, onDroneTargetChange, onManualSkillEfficiencyChange, compactScheduleLoadFailed, intl]);

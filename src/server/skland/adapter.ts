@@ -20,7 +20,6 @@ import {
 } from "./credential";
 import { rolesFromBinding, snapshotFromPlayerInfo, snapshotsFromPlayerInfo } from "./normalize";
 import { inventoryItemsFromResponse } from "./inventory-parser";
-import { loadMowerInventory, mergeInventoryItems } from "./mower-inventory";
 import { sklandLayoutSuggestion } from "./layout-suggestion";
 import {
   SKLAND_SESSION_TTL_SECONDS,
@@ -514,7 +513,7 @@ export async function loadStatusSnapshot(payload: SklandSessionPayload): Promise
 
 export async function loadInventorySnapshot(payload: SklandSessionPayload): Promise<{
   session: SklandSessionPayload;
-  inventory: SklandInventoryData;
+  inventory: Omit<SklandInventoryData, "identityKey">;
 }> {
   try {
     assertUpstreamCapacity();
@@ -542,31 +541,15 @@ export async function loadInventorySnapshot(payload: SklandSessionPayload): Prom
       return response && typeof response === "object" ? response as { code?: unknown; data?: unknown } : {};
     };
 
-    let record = await loadRawInventory(refreshed.selectedUid);
+    const record = await loadRawInventory(refreshed.selectedUid);
     if (Number(record.code) !== 0) throw new SklandServiceError("AUTH_EXPIRED", "森空岛库存读取失败，请重新授权。", 401);
-    let items = inventoryItemsFromResponse(record.data);
+    const items = inventoryItemsFromResponse(record.data);
 
-    if (!items.some((item) => item.id === "4002" || item.id === "4003")) {
-      const binding = await client.collections.player.getBinding();
-      const alternateRoles = rolesFromBinding(binding).filter((role) => role.uid !== refreshed.selectedUid);
-      for (const role of alternateRoles) {
-        const alternateRecord = await loadRawInventory(role.uid);
-        if (Number(alternateRecord.code) !== 0) continue;
-        const alternateItems = inventoryItemsFromResponse(alternateRecord.data);
-        if (alternateItems.some((item) => item.id === "4002" || item.id === "4003")) {
-          record = alternateRecord;
-          items = alternateItems;
-          break;
-        }
-      }
-    }
 
-    if (items.length === 0) throw new SklandServiceError("BAD_DATA", "森空岛未返回有效库存数据。", 502);
-    const mowerItems = await loadMowerInventory();
     return {
       session: refreshed,
       inventory: {
-        items: mergeInventoryItems(items, mowerItems),
+        items,
         fetchedAt: new Date().toISOString(),
       },
     };

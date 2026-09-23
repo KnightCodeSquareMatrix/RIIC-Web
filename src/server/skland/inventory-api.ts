@@ -37,7 +37,10 @@ export async function handleGetSklandInventory(request: Request, route: string) 
 
     const loaded = await loadInventorySnapshot(account.session);
     const next = withUpdatedSklandSession(previous, account.accountId, loaded.session);
-    const response = successResponse(loaded.inventory, requestId);
+    const response = successResponse({
+      ...loaded.inventory,
+      identityKey: JSON.stringify([website.user.id, account.accountId, loaded.session.selectedUid]),
+    }, requestId);
     setSklandAccountStoreCookies(response, request, next, previous);
     return response;
   } catch (error) {

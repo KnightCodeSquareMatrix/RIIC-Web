@@ -91,6 +91,7 @@ export function MowerSchedulePage({ operbox = null }: { operbox?: OperBoxEntry[]
   const [roomDraft, setRoomDraft] = useState<MowerFacility>({ plans: [] });
   const [editorMode, setEditorMode] = useState<"rename" | "trigger" | "task" | null>(null);
   const [editorValue, setEditorValue] = useState("");
+  const [triggerTiming, setTriggerTiming] = useState("AFTER_PLANNING");
   const [editorError, setEditorError] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -104,10 +105,10 @@ export function MowerSchedulePage({ operbox = null }: { operbox?: OperBoxEntry[]
     try {
       const stored = window.localStorage.getItem(MOWER_EDITOR_STORAGE_KEY);
       if (stored) setDocument(parseMowerEditorDocument(stored));
+      setRestored(true);
     } catch {
       setError(en ? "The saved Mower plan could not be restored." : "无法恢复本地 Mower 排班。可重新导入文件。");
     }
-    setRestored(true);
   }, [en]);
 
   useEffect(() => {
@@ -173,6 +174,7 @@ export function MowerSchedulePage({ operbox = null }: { operbox?: OperBoxEntry[]
   function openEditor(mode: "rename" | "trigger" | "task") {
     if (!backup) return;
     setEditorMode(mode);
+    setTriggerTiming(backup.trigger_timing);
     setEditorError(null);
     setEditorValue(mode === "rename" ? backup.name : JSON.stringify(backup[mode], null, 2));
   }
@@ -186,7 +188,10 @@ export function MowerSchedulePage({ operbox = null }: { operbox?: OperBoxEntry[]
       setDocument((current) => {
         const next = structuredClone(current);
         const selected = next.backup_plans[active];
-        if (selected) Object.assign(selected, { [editorMode === "rename" ? "name" : editorMode]: value });
+        if (selected) {
+          Object.assign(selected, { [editorMode === "rename" ? "name" : editorMode]: value });
+          if (editorMode === "trigger") selected.trigger_timing = triggerTiming;
+        }
         return next;
       });
       setEditorMode(null);
@@ -200,6 +205,7 @@ export function MowerSchedulePage({ operbox = null }: { operbox?: OperBoxEntry[]
       if (file.size > 5 * 1024 * 1024) throw new Error("too large");
       const imported = parseMowerEditorDocument(await file.text());
       setDocument(imported);
+      setRestored(true);
       setActive(-1);
       setError(null);
     } catch {
@@ -290,7 +296,7 @@ export function MowerSchedulePage({ operbox = null }: { operbox?: OperBoxEntry[]
       </Dialog>
 
       <Dialog open={Boolean(editorMode)} onOpenChange={(open) => { if (!open) setEditorMode(null); }}>
-        <DialogContent className="sm:max-w-[min(660px,calc(100vw-2rem))]"><DialogHeader><DialogTitle>{editorMode === "rename" ? text("重命名副表", "Rename backup") : editorMode === "trigger" ? text("编辑触发条件", "Edit trigger") : text("编辑任务", "Edit task")}</DialogTitle><DialogDescription>{backup?.name}</DialogDescription></DialogHeader><DialogBody>{editorMode === "rename" ? <Input value={editorValue} onChange={(event) => setEditorValue(event.target.value)} aria-label={text("副表名称", "Backup name")} /> : <Textarea className="min-h-64 font-mono text-xs" value={editorValue} onChange={(event) => setEditorValue(event.target.value)} aria-label="JSON" />}{editorMode === "trigger" && backup ? <select className={SELECT_CLASS} value={backup.trigger_timing} aria-label={text("触发时机", "Trigger timing")} onChange={(event) => setDocument((current) => { const next = structuredClone(current); next.backup_plans[active]!.trigger_timing = event.target.value; return next; })}>{["BEGINNING", "BEFORE_PLANNING", "AFTER_PLANNING", "END"].map((timing) => <option key={timing}>{timing}</option>)}</select> : null}{editorError ? <p className="text-sm text-destructive" role="alert">{editorError}</p> : null}</DialogBody><DialogFooter><Button variant="ghost" onClick={() => setEditorMode(null)}>{text("取消", "Cancel")}</Button><Button onClick={saveEditor}><Check />{text("保存", "Save")}</Button></DialogFooter></DialogContent>
+        <DialogContent className="sm:max-w-[min(660px,calc(100vw-2rem))]"><DialogHeader><DialogTitle>{editorMode === "rename" ? text("重命名副表", "Rename backup") : editorMode === "trigger" ? text("编辑触发条件", "Edit trigger") : text("编辑任务", "Edit task")}</DialogTitle><DialogDescription>{backup?.name}</DialogDescription></DialogHeader><DialogBody>{editorMode === "rename" ? <Input value={editorValue} onChange={(event) => setEditorValue(event.target.value)} aria-label={text("副表名称", "Backup name")} /> : <Textarea className="min-h-64 font-mono text-xs" value={editorValue} onChange={(event) => setEditorValue(event.target.value)} aria-label="JSON" />}{editorMode === "trigger" && backup ? <select className={SELECT_CLASS} value={triggerTiming} aria-label={text("触发时机", "Trigger timing")} onChange={(event) => setTriggerTiming(event.target.value)}>{["BEGINNING", "BEFORE_PLANNING", "AFTER_PLANNING", "END"].map((timing) => <option key={timing}>{timing}</option>)}</select> : null}{editorError ? <p className="text-sm text-destructive" role="alert">{editorError}</p> : null}</DialogBody><DialogFooter><Button variant="ghost" onClick={() => setEditorMode(null)}>{text("取消", "Cancel")}</Button><Button onClick={saveEditor}><Check />{text("保存", "Save")}</Button></DialogFooter></DialogContent>
       </Dialog>
 
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}><DialogContent><DialogHeader><DialogTitle>{text("删除副表？", "Delete backup?")}</DialogTitle><DialogDescription>{backup?.name}</DialogDescription></DialogHeader><DialogFooter><Button variant="ghost" onClick={() => setDeleteOpen(false)}>{text("取消", "Cancel")}</Button><Button variant="destructive" onClick={() => { setDocument((current) => ({ ...current, backup_plans: current.backup_plans.filter((_, index) => index !== active) })); setActive(-1); setDeleteOpen(false); }}><Trash2 />{text("删除", "Delete")}</Button></DialogFooter></DialogContent></Dialog>

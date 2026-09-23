@@ -1497,6 +1497,7 @@ export interface SklandInventoryItem {
 }
 
 export interface SklandInventoryData {
+  identityKey: string;
   items: SklandInventoryItem[];
   fetchedAt: string;
 }
