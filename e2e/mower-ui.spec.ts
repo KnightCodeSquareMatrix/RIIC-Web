@@ -9,6 +9,8 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("Mower compact view keeps every production facility reachable in sparse and unusual plans", async ({ page }) => {
+  // Exercise all 18 facility dialogs, including their opening and closing transitions.
+  test.slow();
   await page.setViewportSize({ width: 1600, height: 1000 });
   const extraPower = Object.fromEntries(MOWER_PRODUCTION_KEYS.map((key, index) => [key, {
     name: index < 4 ? "发电站" : "制造站", plans: [],
