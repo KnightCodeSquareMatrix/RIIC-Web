@@ -13,6 +13,7 @@ import { FileUploadDialog } from "@/components/FileUploadDialog";
 import { ManualProductionSummary } from "@/components/ManualProductionSummary";
 import { PlanSupportSummary } from "@/components/PlanSupportSummary";
 import { ManualScheduleRoomActions } from "@/components/ManualScheduleRoomActions";
+import type { MoodBoardState } from "@/components/manual-mood/MoodSimulationPanel";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -66,6 +67,7 @@ import { planToRows, type RoomRow } from "@/schedule";
 import type { BaseBlueprint, MaaJson, MaaOperatorSlot, MaaRoom, OperBoxEntry } from "@/types";
 
 const ScrollArea = lazy(() => import("@/components/ui/scroll-area").then((module) => ({ default: module.ScrollArea })));
+const MoodSimulationPanel = lazy(() => import("@/components/manual-mood/MoodSimulationPanel"));
 const OperatorRarityFilter = lazy(() => import("@/components/operators/OperatorPickerParts").then(module => ({ default: module.OperatorRarityFilter })));
 const OperatorSearch = lazy(() => import("@/components/operators/OperatorPickerParts").then(module => ({ default: module.OperatorSearch })));
 const Pagination = lazy(() => import("@/components/skill-query/Pagination").then(module => ({ default: module.Pagination })));
@@ -246,6 +248,8 @@ export function ManualSchedulePage({
   const gameCatalog = useGameCatalog();
   const en = locale === "en";
   const [draft, setDraft] = useState<ManualScheduleDraft>(() => createManualScheduleDraft(shiftDurations, shiftStartTime, scheduleMode));
+  const [moodRevision, setMoodRevision] = useState(0);
+  const [moodSettingsOpen, setMoodSettingsOpen] = useState(false);
   const [restored, setRestored] = useState(false);
   const [picker, setPicker] = useState<PickerTarget | null>(null);
   const [pickerQuery, setPickerQuery] = useState("");
@@ -655,6 +659,7 @@ export function ManualSchedulePage({
 
   function confirmMaaImport() {
     if (!maaImportPreview) return;
+    setMoodRevision(value => value + 1);
     const imported = maaImportPreview.draft;
     onImportedLayoutChange(maaImportPreview.layout);
     setDraft(imported);
@@ -686,12 +691,96 @@ export function ManualSchedulePage({
     : (intl("components_pages_ManualSchedulePage.originalPlan"));
   const previousRoomTitle = pendingMove ? rows.find((row) => row.roomId === pendingMove.conflict.roomId)?.title ?? pendingMove.conflict.roomId : "";
   const nextRoomTitle = pendingMove ? rows.find((row) => row.roomId === pendingMove.target.roomId)?.title ?? pendingMove.target.roomId : "";
+  const renderBoard = (simulation: MoodBoardState | null) => (
+    <div data-manual-editor-board data-board-mode={simulation ? "simulation" : "edit"}>
+      <ScheduleBoard
+        rows={simulation?.rows ?? rows}
+        layout={layout}
+        planRevision={simulation ? `mood-${simulation.shift}` : `manual-${activeShift}`}
+        simulation={simulation ? {moods:simulation.moods,selected:simulation.selected,onSelect:simulation.onSelect} : undefined}
+        eliteByOperator={eliteByOperator}
+        levelByOperator={levelByOperator}
+        activeShift={simulation?.shift ?? activeShift}
+        activePlan={simulation ? undefined : activePlan}
+        searchQuery={scheduleQuery}
+        viewModeActionSlot={!simulation && (
+          <Button type="button" variant="destructive" size="sm" onClick={() => setClearShiftConfirmationOpen(true)}>
+            <Trash2 />{intl("components_pages_ManualSchedulePage.clearEveryFacilityInShift")}
+          </Button>
+        )}
+        shiftInfoSlot={!simulation && hasFiammetta ? (
+          <FiammettaTargetChip
+            target={fiammettaEnabled ? fiammettaTarget : null}
+            portrait={fiammettaEnabled ? fiammettaPortrait : null}
+            onClick={() => {
+              if (!fiammettaEnabled) onFiammettaEnabledChange(true);
+              openFiammettaPicker();
+            }}
+          />
+        ) : undefined}
+        shiftTabsSlot={simulation ? <span className="text-sm text-muted-foreground">{intl("MoodSimulation.position",{cycle:simulation.cycle+1,shift:simulation.shift+1})}</span> : (
+          <div className="min-w-0 max-w-full" data-manual-shift-actions>
+            <ShiftTabs
+              maaJson={maa}
+              durations={draft.shifts.map((shift) => shift.durationHours)}
+              labels={draft.scheduleMode === "period" ? shiftRanges.map((range, index) => ({
+                content: <>
+                  {intl("components_pages_ManualSchedulePage.shift", { shift: index + 1 })}
+                  {" · "}<span className="font-number">{range.startTime}–{range.endTime}</span>
+                  {intl("components_pages_ManualSchedulePage.durationParenthetical", { duration: formatManualShiftDuration(range.durationMinutes, en) })}
+                </>,
+                ariaLabel: intl("components_pages_ManualSchedulePage.shiftRange", {
+                  shift: index + 1,
+                  startTime: range.startTime,
+                  endTime: range.endTime,
+                  duration: formatManualShiftDuration(range.durationMinutes, en),
+                }),
+              })) : undefined}
+              wrap
+              active={activeShift}
+              control={shiftViewControl}
+              onChange={setActiveShift}
+            />
+          </div>
+        )}
+        onSlotClick={simulation ? undefined : handleSlotClick}
+        sortRoomId={!simulation && allowReplacementOperatorSort ? sortRoomId : null}
+        sortSelection={simulation ? null : sortSelection}
+        onSortToggle={!simulation && allowReplacementOperatorSort ? toggleSortMode : undefined}
+        onSortSlotClick={simulation ? undefined : handleSortSlotClick}
+        viewModeControl={scheduleViewControl}
+        hideImages={!showImages}
+        renderListRoomActions={simulation ? undefined : (row, position) => (
+          <ManualScheduleRoomActions
+            row={row}
+            position={position}
+            roomTitle={localizedRoomTitle(row.title, row.group, locale, gameCatalog)}
+            onClearRoom={clearRoom}
+            onDormAutofillChange={setDormAutofill}
+            droneTargetRoomId={draft.shifts[activeShift]?.droneTargetRoomId}
+            onDroneTargetChange={toggleDroneTarget}
+            sortMode={sortRoomId === row.roomId}
+            onSortToggle={allowReplacementOperatorSort ? toggleSortMode : undefined}
+          />
+        )}
+        onClearRoom={simulation ? undefined : clearRoom}
+        onDormAutofillChange={simulation ? undefined : setDormAutofill}
+        droneTargetRoomId={simulation ? undefined : draft.shifts[activeShift]?.droneTargetRoomId}
+        onDroneTargetChange={simulation ? undefined : toggleDroneTarget}
+        onManualSkillEfficiencyChange={simulation ? undefined : setRoomSkillEfficiency}
+        onFactoryRecipeChange={onFactoryRecipeChange}
+        onTradeOrderChange={onTradeOrderChange}
+      />
+    </div>
+  );
+
   const closeMobileTools = () => { if (mobileToolsRef.current) mobileToolsRef.current.open = false; };
   const scheduleTools = (mobile = false) => <>
     {draft.source ? <Button type="button" variant="ghost" size="sm" onClick={() => { closeMobileTools(); onOpenCalculator(); }}>
       <ArrowLeft />{intl("components_pages_ManualSchedulePage.backToCalculation")}
     </Button> : null}
     <Button type="button" variant={mobile ? "ghost" : "outline"} size="sm" onClick={() => { closeMobileTools(); onOpenSetup(); }}><Settings2 />{intl("components_pages_ManualSchedulePage.configureBoxLayout")}</Button>
+    <Button type="button" variant={mobile ? "ghost" : "outline"} size="sm" onClick={() => { closeMobileTools(); setMoodSettingsOpen(true); }}><Settings2 />{intl("MoodSimulation.settings")}</Button>
     <Button type="button" variant={mobile ? "ghost" : "outline"} size="sm" disabled title={intl("components_pages_ManualSchedulePage.evaluateBasedOnCurrentScheduleUnavailable")}><Sparkles />{intl("components_pages_ManualSchedulePage.calculateBasedOnSchedule")}</Button>
     <Button type="button" variant={mobile ? "ghost" : "outline"} size="sm" onClick={() => { closeMobileTools(); runEvaluation(); }} disabled={evaluationPending}><Sparkles />{intl("components_pages_ManualSchedulePage.calculateBasedOnEfficiency")}</Button>
     <FileUploadDialog
@@ -729,10 +818,10 @@ export function ManualSchedulePage({
       </header>
       {maaImportError ? <p className="mb-3 text-sm text-destructive" role="alert">{maaImportError}</p> : null}
 
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-y border-border/70 bg-muted/25 px-3 py-3">
-        <div className="min-w-0">
-          <p className="text-sm font-medium">{intl("components_pages_ManualSchedulePage.manualDraft")} · <span className="font-number">{layout.template}</span></p>
-          <p className="mt-1 truncate text-xs text-muted-foreground" data-manual-draft-source={draft.source?.variant ?? "standalone"}>
+      <div className="mb-4 border-y border-border/70 bg-muted/25 px-3 py-3">
+        <div className="flex min-w-0 items-baseline gap-3" data-manual-draft-info>
+          <p className="shrink-0 whitespace-nowrap text-sm font-medium">{intl("components_pages_ManualSchedulePage.manualDraft")} · <span className="font-number">{layout.template}</span></p>
+          <p className="min-w-0 truncate text-xs text-muted-foreground" title={`${sourceName ?? intl("components_pages_ManualSchedulePage.currentOperatorBox")} · ${ownedOperators.length} ${intl("components_pages_ManualSchedulePage.owned")}`} data-manual-draft-source={draft.source?.variant ?? "standalone"}>
             {draft.source ? (intl("components_pages_ManualSchedulePage.basedOn", { sourceVariantLabel: sourceVariantLabel })) : null}
             {draft.source ? " · " : null}
             {sourceName ?? (intl("components_pages_ManualSchedulePage.currentOperatorBox"))} · {ownedOperators.length} {intl("components_pages_ManualSchedulePage.owned")}
@@ -757,83 +846,15 @@ export function ManualSchedulePage({
 
       {storageWarning ? <p className="mb-3 text-sm text-amber-700" role="status">{storageWarning}</p> : null}
 
-      <ScheduleBoard
-        rows={rows}
-        layout={layout}
-        planRevision={`manual-${activeShift}`}
-        eliteByOperator={eliteByOperator}
-        levelByOperator={levelByOperator}
-        activeShift={activeShift}
-        activePlan={activePlan}
-        searchQuery={scheduleQuery}
-        viewModeActionSlot={(
-          <Button type="button" variant="destructive" size="sm" onClick={() => setClearShiftConfirmationOpen(true)}>
-            <Trash2 />{intl("components_pages_ManualSchedulePage.clearEveryFacilityInShift")}
-          </Button>
-        )}
-        shiftInfoSlot={hasFiammetta ? (
-          <FiammettaTargetChip
-            target={fiammettaEnabled ? fiammettaTarget : null}
-            portrait={fiammettaEnabled ? fiammettaPortrait : null}
-            onClick={() => {
-              if (!fiammettaEnabled) onFiammettaEnabledChange(true);
-              openFiammettaPicker();
-            }}
-          />
-        ) : undefined}
-        shiftTabsSlot={(
-          <div className="min-w-0 max-w-full" data-manual-shift-actions>
-            <ShiftTabs
-              maaJson={maa}
-              durations={draft.shifts.map((shift) => shift.durationHours)}
-              labels={draft.scheduleMode === "period" ? shiftRanges.map((range, index) => ({
-                content: <>
-                  {intl("components_pages_ManualSchedulePage.shift", { shift: index + 1 })}
-                  {" · "}<span className="font-number">{range.startTime}–{range.endTime}</span>
-                  {intl("components_pages_ManualSchedulePage.durationParenthetical", { duration: formatManualShiftDuration(range.durationMinutes, en) })}
-                </>,
-                ariaLabel: intl("components_pages_ManualSchedulePage.shiftRange", {
-                  shift: index + 1,
-                  startTime: range.startTime,
-                  endTime: range.endTime,
-                  duration: formatManualShiftDuration(range.durationMinutes, en),
-                }),
-              })) : undefined}
-              wrap
-              active={activeShift}
-              control={shiftViewControl}
-              onChange={setActiveShift}
-            />
-          </div>
-        )}
-        onSlotClick={handleSlotClick}
-        sortRoomId={allowReplacementOperatorSort ? sortRoomId : null}
-        sortSelection={sortSelection}
-        onSortToggle={allowReplacementOperatorSort ? toggleSortMode : undefined}
-        onSortSlotClick={handleSortSlotClick}
-        viewModeControl={scheduleViewControl}
-        hideImages={!showImages}
-        renderListRoomActions={(row, position) => (
-          <ManualScheduleRoomActions
-            row={row}
-            position={position}
-            roomTitle={localizedRoomTitle(row.title, row.group, locale, gameCatalog)}
-            onClearRoom={clearRoom}
-            onDormAutofillChange={setDormAutofill}
-            droneTargetRoomId={draft.shifts[activeShift]?.droneTargetRoomId}
-            onDroneTargetChange={toggleDroneTarget}
-            sortMode={sortRoomId === row.roomId}
-            onSortToggle={allowReplacementOperatorSort ? toggleSortMode : undefined}
-          />
-        )}
-        onClearRoom={clearRoom}
-        onDormAutofillChange={setDormAutofill}
-        droneTargetRoomId={draft.shifts[activeShift]?.droneTargetRoomId}
-        onDroneTargetChange={toggleDroneTarget}
-        onManualSkillEfficiencyChange={setRoomSkillEfficiency}
-        onFactoryRecipeChange={onFactoryRecipeChange}
-        onTradeOrderChange={onTradeOrderChange}
-      />
+      {restored && <Suspense fallback={<Skeleton className="mt-8 h-48 w-full" />}>
+        <MoodSimulationPanel key={moodRevision} layout={layout} operbox={operbox ?? []} draft={draft}
+          renderBoard={renderBoard}
+          settingsOpen={moodSettingsOpen} onSettingsOpenChange={setMoodSettingsOpen}
+          fiammettaEnabled={fiammettaEnabled} onFiammettaEnabledChange={onFiammettaEnabledChange}
+          onTargetChange={(shift, target) => setDraft(current => ({
+            ...current, shifts: current.shifts.map((item, index) => index === shift ? { ...item, fiammettaTarget: target } : item),
+          }))} />
+      </Suspense>}
 
       {dronePickerOpen ? <DroneTargetPicker
         rows={rows}

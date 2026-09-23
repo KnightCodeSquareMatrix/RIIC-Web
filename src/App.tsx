@@ -78,6 +78,7 @@ import {
   DEFAULT_MANUAL_SHIFT_DURATIONS,
   DEFAULT_MANUAL_SHIFT_START_TIME,
   MANUAL_SCHEDULE_STORAGE_KEY,
+  MOOD_STORAGE_KEY,
 } from "./manual-schedule-config";
 import { type ManualScheduleDraft, type ManualScheduleMode } from "./manual-schedule";
 import type { ManualPlanResult } from "./manual-plan-result";
@@ -1946,7 +1947,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
 
   function handleClearLocalData() {
     try {
-      clearLocalProductData(window.localStorage, [ONBOARDING_STORAGE_KEY, MANUAL_SCHEDULE_STORAGE_KEY]);
+      clearLocalProductData(window.localStorage, [ONBOARDING_STORAGE_KEY, MANUAL_SCHEDULE_STORAGE_KEY, MOOD_STORAGE_KEY]);
       skipNextPersistence.current = true;
       setPreset(defaultPreset);
       setLayout(buildBlueprint(defaultPreset));
