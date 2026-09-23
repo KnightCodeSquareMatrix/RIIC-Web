@@ -133,7 +133,9 @@ test("calculator converts a solved schedule into editable manual assignments", a
 
   await expect(page).toHaveURL(/\/manual$/);
   await expect(page.locator('[data-manual-draft-source="baseline"]')).toContainText("基于「原方案」创建");
-  await expect(page.getByRole("tab", { name: /第 1 班.*12h/ })).toBeVisible();
+  await expect(page.getByRole("tab", { name: /班次 1.*08:00至19:59.*12小时/ })).toBeVisible();
+  await expect(page.getByRole("tab", { name: /班次 2.*20:00至01:59.*6小时/ })).toBeVisible();
+  await expect(page.getByRole("tab", { name: /班次 3.*02:00至07:59.*6小时/ })).toBeVisible();
   await expect(page.locator('[data-manual-editor-board] [data-room-title="加工站"] [data-operator-identity="阿米娅"]')).toBeVisible();
 });
 
