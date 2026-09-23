@@ -42,6 +42,7 @@ import { localizedRoomTitle } from "@/i18n/game-data";
 import { useGameCatalog } from "@/i18n/game-data-client";
 
 export interface CompactScheduleViewProps {
+  noLayoutSkillOperators?: ReadonlySet<string>;
   rows: RoomRow[];
   layout: BaseBlueprint;
   eliteByOperator?: ReadonlyMap<string, number>;
@@ -76,6 +77,7 @@ function roomSlotCountFor(group: string) {
 }
 
 function CompactRoomCard({
+  noLayoutSkillOperators,
   row,
   layoutRoom,
   visual,
@@ -99,6 +101,7 @@ function CompactRoomCard({
   droneTargetRoomId,
   onDroneTargetChange,
 }: {
+  noLayoutSkillOperators?: ReadonlySet<string>;
   row: RoomRow;
   layoutRoom: BaseBlueprint["rooms"][number] | undefined;
   visual: ReturnType<typeof roomVisualFor>;
@@ -231,6 +234,7 @@ function CompactRoomCard({
     <OperatorSlot
       key={`${row.key}-${index}`}
       slot={slot}
+      highlightNoLayoutSkill={Boolean(slot && noLayoutSkillOperators?.has(slot.name))}
       elite={slot ? eliteByOperator?.get(slot.name) : undefined}
       operatorLevel={slot ? levelByOperator?.get(slot.name) : undefined}
       autofill={row.group === "dormitory" && row.autofill}
@@ -434,6 +438,10 @@ export function CompactScheduleView(props: CompactScheduleViewProps) {
   const power = getGroup("power");
   const dorms = getGroup("dormitory");
   const powerCount = power.length;
+  const overflowProductionRooms = [
+    ...workstations.slice(powerCount === 3 ? 6 : 7),
+    ...power.slice(powerCount === 3 ? 3 : 2),
+  ];
   const layoutRooms = new Map(layout.rooms.map((room) => [room.id, room]));
 
   function makeCard(row: RoomRow, widthPercent?: number) {
@@ -446,6 +454,7 @@ export function CompactScheduleView(props: CompactScheduleViewProps) {
       : Array.from({ length: slotCount }, (_, i) => ({ slot: row.slotAssignments ? row.slotAssignments[i] : row.operatorSlots[i] }));
     return (
       <CompactRoomCard
+        noLayoutSkillOperators={props.noLayoutSkillOperators}
         key={row.key}
         row={row}
         layoutRoom={layoutRoom!}
@@ -507,6 +516,11 @@ export function CompactScheduleView(props: CompactScheduleViewProps) {
             {workstations[6] && makeCard(workstations[6], 50)}
           </div>
         )}
+        {overflowProductionRooms.length > 0 ? (
+          <div className="grid grid-cols-2 gap-3">
+            {overflowProductionRooms.map((row) => makeCard(row))}
+          </div>
+        ) : null}
       </div>
 
       <div

@@ -1,5 +1,6 @@
 import { stripInternalFields } from "./internal-field-safety.ts";
-import type { MaaJson, MaaRoom, MaaRooms } from "./types.ts";
+import { maaRoomAutofill } from "./schedule-autofill.ts";
+import type { BaseBlueprint, MaaExecutionOrder, MaaJson, MaaRoom, MaaRooms } from "./types.ts";
 
 const MAA_ROOM_KINDS = [
   "trading",
@@ -53,15 +54,37 @@ export function sanitizeMaaJson<T extends MaaJson>(maa: T): T {
  * MAA uses `sort: true` to respect the operator order in each room's
  * `operators` array. The array already follows the order shown in the UI,
  * so preserve it exactly while removing runtime-only fields.
+ * Calculator exports also resolve dorm autofill using the displayed layout;
+ * manual exports omit calculatorLayout to preserve the user's explicit choices.
  */
 export function prepareMaaForExport<T extends MaaJson>(
   maa: T,
   strictOperatorOrder = true,
   allowReplacementOperatorSort = false,
+  calculatorLayout?: BaseBlueprint,
+  usePreExecutionOrder = false,
 ): T {
   const exported = sanitizeMaaJson(maa);
+  const layoutRooms = new Map(calculatorLayout?.rooms.map((room) => [room.id, room]));
 
   for (const plan of exported.plans) {
+    if (calculatorLayout) {
+      plan.rooms.dormitory?.forEach((room, index) => {
+        const occupiedSlots = (room.operators ?? []).filter((operator) => (
+          typeof operator === "string" ? operator.trim() : operator?.name?.trim()
+        )).length;
+        room.autofill = maaRoomAutofill(room.autofill, {
+          group: "dormitory",
+          skip: room.skip,
+          candidates: room.candidates,
+          occupiedSlots,
+          capacity: layoutRooms.get(`dorm_${index + 1}`)?.dorm_beds ?? 5,
+        });
+      });
+    }
+    const executionOrder: MaaExecutionOrder = usePreExecutionOrder ? "pre" : "post";
+    if (plan.Fiammetta) plan.Fiammetta.order = executionOrder;
+    if (plan.drones) plan.drones.order = executionOrder;
     for (const rooms of Object.values(plan.rooms)) {
       if (!rooms) continue;
       for (const room of rooms) {

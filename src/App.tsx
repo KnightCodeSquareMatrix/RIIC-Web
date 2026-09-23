@@ -1,4 +1,5 @@
 "use client";
+import { withDefaultDormAutofill } from "./automatic-dorm-defaults";
 import { localize as localize_App } from "./i18n/helpers/App.ts";
 import { useTranslations, useLocale } from "next-intl";
 
@@ -22,6 +23,7 @@ import { useAccountCloudWorkspace } from "account-cloud-workspace-bridge";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { FilingLinks } from "@/components/layout/FilingLinks";
 import { AppTopBar, SklandAccountControl } from "@/components/layout/AppTopBar";
+import { DotDistortionBackground } from "@/components/layout/DotDistortionBackground";
 import { AppMotionProvider } from "@/components/MotionProvider";
 import { PrimaryPageTransition } from "@/components/layout/PrimaryPageTransition";
 import { SetupDialogSkeleton } from "@/components/setup/SetupDialogSkeleton";
@@ -33,6 +35,8 @@ import { WorkbenchContext } from "@/workbench-context";
 import { WORKBENCH_PAGE_PATHS, workbenchHref, workbenchPageFromPathname, type AppPage } from "@/workbench-routes";
 import { useWebsiteSession } from "@/website-session";
 import { usePlanTask } from "@/hooks/use-plan-task";
+import type { SklandTrainingSyncOptions } from "@/hooks/use-skland-training-sync";
+import type { TrainingSyncSnapshot } from "@/components/workbench/SklandTrainingSyncBridge";
 import { LanguageSwitch } from "@/i18n/client";
 
 import {
@@ -68,6 +72,7 @@ import {
   type OnboardingPreference,
 } from "./onboarding";
 import { normalizeOperboxEntries } from "./operbox-normalization";
+import { droneStoragePlanIndex } from "./drone-plan-mapping";
 import { prepareMaaForExport } from "./maa-safety";
 import { upgradeSimulationBoxSource } from "./upgrade-simulation";
 import {
@@ -133,6 +138,7 @@ function bindingSummaryFromSession(session: Pick<SklandSessionData, "accounts" |
 const loadWebsiteAccountDialog = () => loadClientFeature("websiteAccountDialog");
 const loadSetupDialog = () => loadClientFeature("setupDialog");
 const loadComponents = () => loadClientFeature("sharedComponents");
+const SklandTrainingSyncBridge = lazy(() => import("@/components/workbench/SklandTrainingSyncBridge"));
 const ReleaseAnnouncement = lazy(() => import("@/components/changelog/ReleaseAnnouncement").then((module) => ({
   default: module.ReleaseAnnouncement,
 })));
@@ -408,7 +414,8 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   }, []);
 
   const planTask = usePlanTask({
-    onDone: (finalizedResult) => {
+    onDone: (rawResult) => {
+      const finalizedResult = withDefaultDormAutofill(rawResult);
       setCliReady(true);
       setActiveShift(0);
       automaticMaaRef.current = { diagnosticId: finalizedResult.diagnosticId, maa: structuredClone(finalizedResult.maa) };
@@ -456,6 +463,10 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     }
   }, [result, upgradeComparison]);
   const activePlan = scheduleResult?.maa.plans?.[activeShift];
+  const activeDronePlan = (() => {
+    const plans = scheduleResult?.maa.plans ?? [];
+    return plans[droneStoragePlanIndex(activeShift, plans.length)];
+  })();
   const activeRotationShift = scheduleResult?.rotation.shifts?.[activeShift];
   const activeTrainingRoomShift = scheduleResult?.trainingRoom?.shifts[activeShift];
   const [baseRows, setBaseRows] = useState<RoomRow[]>([]);
@@ -534,7 +545,39 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     && planRetryCountdown === 0
   );
   const sklandBindingCount = sklandBindingSummary.totalCount;
+  const sklandTrainingSyncOptions: SklandTrainingSyncOptions = {
+    enabled: Boolean(CLIENT_SKLAND_ENABLED && websiteSession?.user.id && boxSource === "skland" && activeSklandAccount && hasRestoredSession),
+    active: page === "training",
+    blocked: sklandBusy || sklandSessionLoading || loading || Boolean(planTask.taskId) || progressionAdjustmentActivity.loading || setupOpen,
+    identity: `${websiteSession?.user.id}:${activeSklandAccount?.accountId}:${activeSklandAccount?.selectedUid}`,
+    accountId: activeSklandAccount?.accountId ?? "",
+    uid: activeSklandAccount?.selectedUid ?? "",
+    layout,
+    operbox: operbox ?? [],
+    rotation: rotationProfile,
+    fiammettaEnabled,
+    resultId: result?.diagnosticId ?? null,
+    taskQueueEnabled,
+    failureMessage: intl("components_pages_TrainingAdvice.syncFailed"),
+    onSynced: (session) => {
+      // Refresh progression without replacing the user's layout or existing schedule.
+      if (!session.scheduleSnapshot || currentBoxSourceRef.current !== "skland" || currentOperboxRef.current !== operbox) return;
+      setSklandScheduleSnapshot(session.scheduleSnapshot);
+      setSklandStatusSnapshot(session.statusSnapshot ?? null);
+      setOperbox(normalizeOperboxEntries(session.scheduleSnapshot.operbox));
+      setFileName(session.scheduleSnapshot.sourceName);
+    },
+  };
   const websiteUserId = websiteSession?.user.id ?? null;
+  const [trainingSyncLoaded, setTrainingSyncLoaded] = useState(page === "training");
+  const [trainingSyncSnapshot, setTrainingSyncSnapshot] = useState<TrainingSyncSnapshot | null>(null);
+  useEffect(() => {
+    if (page === "training") setTrainingSyncLoaded(true);
+  }, [page]);
+  const sklandTrainingSync = sklandTrainingSyncOptions.enabled
+    && trainingSyncSnapshot?.identity === sklandTrainingSyncOptions.identity
+    && trainingSyncSnapshot.resultId === sklandTrainingSyncOptions.resultId
+    ? trainingSyncSnapshot.value : null;
   const accountCloudWorkspace = useAccountCloudWorkspace(CLIENT_ACCOUNT_CLOUD_SYNC_ENABLED ? {
     userId: websiteUserId,
     hasRestoredSession,
@@ -903,21 +946,21 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     };
   }, [intl, activeSklandAccount, locale, page, sklandError, sklandSessionLoading, sklandStatusReloadKey, sklandStatusSnapshot]);
 
-  async function handleFile(file: File): Promise<boolean> {
-    setInputError(null);
-    setResult(null);
-    clearIssueState();
+  async function handleFile(file: File, signal?: AbortSignal): Promise<void> {
     try {
       const { readOperboxFile } = await import("./operbox");
       const entries = await readOperboxFile(file);
+      signal?.throwIfAborted();
       setOperbox(entries);
       setFileName(file.name);
       setBoxSource("maa");
-      return true;
+      setInputError(null);
+      setResult(null);
+      clearIssueState();
     } catch (error) {
-      setInputError(localize_App.text(locale, "additional1", { choice1: (!(locale === "en")) && (error instanceof Error) ? "yes" : "no", value2: (!(locale === "en") && (error instanceof Error)) ? String(error.message) : "" }));
+      if (signal?.aborted) throw error;
       setInputErrorCode("AIC-BOX-1101");
-      return false;
+      throw new Error(localize_App.text(locale, "additional1", { choice1: (!(locale === "en")) && (error instanceof Error) ? "yes" : "no", value2: (!(locale === "en") && (error instanceof Error)) ? String(error.message) : "" }), { cause: error });
     }
   }
 
@@ -1181,6 +1224,8 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       scheduleResult.maa,
       userSettings.strictMaaOperatorOrder,
       userSettings.allowReplacementOperatorSort,
+      layout,
+      userSettings.usePreMaaExecutionOrder,
     ));
   }
 
@@ -1536,11 +1581,11 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       const group = room.kind === "trade_post" ? "trading" : "manufacture";
       const index = layout.rooms.filter((candidate) => candidate.kind === room.kind).findIndex((candidate) => candidate.id === room.id) + 1;
       const next = structuredClone(current);
-      const plan = next.maa.plans[activeShift];
+      const plan = next.maa.plans[droneStoragePlanIndex(activeShift, next.maa.plans.length)];
       if (!plan) return current;
       plan.drones = plan.drones?.room === group && plan.drones.index === index
         ? undefined
-        : { enable: true, room: group, index, rule: "all", order: plan.drones?.order ?? "pre" };
+        : { enable: true, room: group, index, rule: "all", order: "pre" };
       return next;
     });
   }
@@ -1554,9 +1599,11 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     setResult((current) => {
       if (!current || automaticMaaRef.current?.diagnosticId !== current.diagnosticId) return current;
       const next = structuredClone(current);
-      const plan = next.maa.plans[activeShift];
+      const automaticPlans = automaticMaaRef.current.maa.plans;
+      const planIndex = droneStoragePlanIndex(activeShift, next.maa.plans.length);
+      const plan = next.maa.plans[planIndex];
       if (!plan) return current;
-      plan.drones = structuredClone(automaticMaaRef.current.maa.plans[activeShift]?.drones);
+      plan.drones = structuredClone(automaticPlans[planIndex]?.drones);
       return next;
     });
   }
@@ -1565,10 +1612,11 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     applyPartialLocalLayoutEdit((current) => updateRoomLevel(current, roomId, level));
   }
 
-  async function handleLayoutFile(file: File) {
+  async function handleLayoutFile(file: File, signal?: AbortSignal) {
     try {
       const parsed = parseLayoutJson(JSON.parse(await file.text()));
       if (!parsed) throw new Error(intl("App.invalidLayoutFileCheckRoomNamesTypesAndFacility"));
+      signal?.throwIfAborted();
       setLayout(parsed);
       setLayoutDirty(true);
       setLayoutSource("local");
@@ -1576,8 +1624,9 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       clearPlanResult();
       setInputError(null);
     } catch (error) {
-      setInputError(localize_App.text(locale, "additional4", { choice1: ((locale === "en")) && (error instanceof Error) ? "yes" : "no", value2: ((locale === "en") && (error instanceof Error)) ? String(error.message) : "", choice3: (!(locale === "en")) && (error instanceof Error) ? "yes" : "no", value4: (!(locale === "en") && (error instanceof Error)) ? String(error.message) : "" }));
+      if (signal?.aborted) throw error;
       setInputErrorCode("AIC-LAYOUT-1201");
+      throw new Error(localize_App.text(locale, "additional4", { choice1: ((locale === "en")) && (error instanceof Error) ? "yes" : "no", value2: ((locale === "en") && (error instanceof Error)) ? String(error.message) : "", choice3: (!(locale === "en")) && (error instanceof Error) ? "yes" : "no", value4: (!(locale === "en") && (error instanceof Error)) ? String(error.message) : "" }), { cause: error });
     }
   }
 
@@ -1969,6 +2018,10 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   );
   const animateEmptyScheduleEntrance = page === "calculator" && hasRenderedCalculator.current;
   const workbenchContext = {
+    inventory: {
+      identityKey: JSON.stringify([websiteUserId, sklandActiveAccountId, activeSklandAccount?.selectedUid ?? null]),
+      pending: websiteSessionPending || !hasRestoredSession,
+    },
     calculator: {
       layout,
       result,
@@ -1976,6 +2029,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       activeShift,
       rows,
       activePlan,
+      activeDronePlan,
       closestComparison,
       resultClearNotice,
       feedbackResult,
@@ -2040,7 +2094,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       onScheduleVariantChange: setScheduleVariant,
       onUpgradeTrialReady: (trial: PublicPlanData) => {
         if (!result) return;
-        setUpgradeComparison({ baseline: result, trial });
+        setUpgradeComparison({ baseline: result, trial: withDefaultDormAutofill(trial) });
         setScheduleVariant("trial");
         setActiveShift(0);
       },
@@ -2051,9 +2105,9 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       onFactoryRecipeChange: handleScheduleFactoryRecipeChange,
       onTradeOrderChange: handleScheduleTradeOrderChange,
       onSwapOperators: handleSwapCalculatorOperators,
-      droneTargetRoomId: activePlan?.drones?.enable ? (() => {
-        const kind = activePlan.drones.room === "trading" ? "trade_post" : "factory";
-        return layout.rooms.filter((room) => room.kind === kind)[activePlan.drones.index - 1]?.id ?? null;
+      droneTargetRoomId: activeDronePlan?.drones?.enable ? (() => {
+        const kind = activeDronePlan.drones.room === "trading" ? "trade_post" : "factory";
+        return layout.rooms.filter((room) => room.kind === kind)[activeDronePlan.drones.index - 1]?.id ?? null;
       })() : null,
       onDroneTargetChange: handleScheduleDroneTargetChange,
       onEditManualSchedule: handleProtectedEditManualSchedule,
@@ -2069,8 +2123,10 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       showFeedback: userSettings.showFeedback,
       showImages: userSettings.showImages,
       allowReplacementOperatorSort: userSettings.allowReplacementOperatorSort,
+      highlightNoLayoutSkill: userSettings.highlightNoLayoutSkill,
     },
     manual: {
+      usePreMaaExecutionOrder: userSettings.usePreMaaExecutionOrder,
       layout,
       operbox: accountCanUseCurrentBox ? operbox : null,
       sourceName: accountCanUseCurrentBox ? fileName : null,
@@ -2085,6 +2141,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       onShiftStartTimeChange: setManualShiftStartTime,
       onScheduleModeChange: setManualScheduleMode,
       onImportedLayoutChange: handleManualImportedLayout,
+      showMower: userSettings.showMower,
       onFiammettaEnabledChange: setManualFiammettaEnabled,
       onOpenSetup: handleManualSetup,
       onFactoryRecipeChange: handleFactoryRecipeChange,
@@ -2099,8 +2156,9 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     training: {
       operbox: accountCanUseCurrentBox ? operbox : null,
       layout,
-      profile: accountCanUseCurrentBox ? result?.profile : null,
-      trainingAdvice: accountCanUseCurrentBox ? result?.trainingAdvice ?? null : null,
+      profile: accountCanUseCurrentBox ? sklandTrainingSync?.data?.profile ?? result?.profile : null,
+      trainingAdvice: accountCanUseCurrentBox ? (sklandTrainingSync?.data ? sklandTrainingSync.data.trainingAdvice ?? null : result?.trainingAdvice ?? null) : null,
+      sync: sklandTrainingSync ?? undefined,
       requiresAccount: !accountCanUseCurrentBox,
       onOpenCalculator: () => navigateToPage("calculator"),
     },
@@ -2196,8 +2254,14 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       }}
     >
     <SidebarProvider defaultOpen defaultOpenBreakpoint={1280}>
-      <AppSidebar page={page} onPageChange={handleAppPageChange} />
-      <SidebarInset>
+      {trainingSyncLoaded || page === "training" ? (
+        <Suspense fallback={null}>
+          <SklandTrainingSyncBridge options={sklandTrainingSyncOptions} onChange={setTrainingSyncSnapshot} />
+        </Suspense>
+      ) : null}
+      <AppSidebar page={page} onPageChange={handleAppPageChange} showMower={userSettings.showMower} />
+      <SidebarInset className="isolate">
+        <DotDistortionBackground />
         <AppTopBar />
         <LiveActivity
           activity={activity}

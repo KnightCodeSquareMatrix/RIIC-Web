@@ -3,7 +3,7 @@ import { localize as localize_components_pages_SklandStatus } from "../../i18n/h
 import { useTranslations, useLocale } from "next-intl";
 import { messageRecord } from "@/i18n/translate";
 
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -51,6 +51,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { RemoteAvatar } from "@/components/ui/remote-avatar";
+const InventoryPage = lazy(() => import("@/components/pages/InventoryPage"));
 import { Skeleton } from "@/components/ui/skeleton";
 import { SkeletonRouteFallback } from "@/components/ui/skeleton-swap";
 import { HoldToConfirm } from "@/components/ui/hold-to-confirm";
@@ -70,7 +71,7 @@ import { localizedOperatorName } from "@/i18n/game-data";
 import { useGameCatalog } from "@/i18n/game-data-client";
 import { operatorPortraitFor, operatorProfessionFor } from "@/operatorPortraits";
 import { roomGridTone } from "@/schedule-view-presentation";
-import { SklandLoginPanel } from "@/skland-components";
+const SklandLoginPanel = lazy(() => import("@/skland-components").then((module) => ({ default: module.SklandLoginPanel })));
 import {
   deriveSklandBuildingMetrics,
   sklandTradingOrderRewardLabel,
@@ -1470,12 +1471,14 @@ export function SklandStatus({
               <AlertDescription>{error.message}{intl("components_pages_SklandStatus.label", { code: error.code })}</AlertDescription>
             </Alert>
           ) : null}
+          <Suspense fallback={<Skeleton className="h-80 w-full max-w-4xl" />}>
           <SklandLoginPanel
             className="max-w-4xl"
             configured={configured}
             disabledReason={disabledReason}
             onAuthenticated={onAuthenticated}
           />
+          </Suspense>
         </div>
       </StatusCenterPage>
     );
@@ -1666,6 +1669,7 @@ export function SklandStatus({
             </DialogDescription>
           </DialogHeader>
           <DialogBody className="min-h-0 overflow-y-auto pb-5 pt-0 sm:pb-7">
+            <Suspense fallback={<Skeleton className="h-80 w-full" />}>
             <SklandLoginPanel
               className="max-w-none"
               configured={configured}
@@ -1676,6 +1680,7 @@ export function SklandStatus({
                 setAddAccountOpen(false);
               }}
             />
+            </Suspense>
           </DialogBody>
         </DialogContent>
       </Dialog>
@@ -1709,6 +1714,7 @@ export function SklandStatus({
           <div data-yeye-scroll="auto" className="-mx-3 min-w-0 overflow-x-auto overflow-y-hidden px-3 pb-1">
             <TabsList className="min-w-max" data-skland-view-tabs>
               <TabsTrigger value="overview">{intl("components_pages_SklandStatus.overview")}</TabsTrigger>
+              <TabsTrigger value="inventory">{en ? "Backpack" : "背包"}</TabsTrigger>
               <TabsTrigger value="infrastructure">{intl("components_pages_SklandStatus.infrastructure")}</TabsTrigger>
             </TabsList>
           </div>
@@ -1724,6 +1730,9 @@ export function SklandStatus({
         </TabsContent>
         <TabsContent value="infrastructure" className="pt-5">
           <InfrastructureTab snapshot={snapshot} />
+        </TabsContent>
+        <TabsContent value="inventory" className="pt-5">
+          <Suspense fallback={<Skeleton className="h-64 w-full" />}><InventoryPage /></Suspense>
         </TabsContent>
       </Tabs>
 

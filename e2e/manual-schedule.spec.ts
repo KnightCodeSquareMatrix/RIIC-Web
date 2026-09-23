@@ -193,6 +193,27 @@ test("mobile result actions explain both adjustment paths", async ({ page }) => 
   await expect(actions.getByRole("button", { name: /基于当前方案手动编辑/ })).toBeVisible();
 });
 
+test("manual MAA downloads preserve a disabled dorm autofill switch", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/manual");
+  await expect(page.locator('[data-workbench-hydrated="true"]')).toBeVisible();
+  const autofill = page.getByRole("button", { name: /宿舍 1.*自动补位/ });
+  await expect(autofill).toHaveAttribute("aria-pressed", "true");
+  await autofill.click();
+  await expect(autofill).toHaveAttribute("aria-pressed", "false");
+
+  const pending = page.waitForEvent("download");
+  await page.getByRole("button", { name: "导出到 MAA", exact: true }).click();
+  const download = await pending;
+  const stream = await download.createReadStream();
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+  const exported = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  expect(exported.plans[0].rooms.dormitory[0].autofill).toBe(false);
+  expect(exported.plans[0].rooms.dormitory[1].autofill).toBe(true);
+  expect(exported.plans[1].rooms.dormitory[0].autofill).toBe(true);
+});
+
 test("manual scheduling configures independent shifts, moves conflicts and enables dorm autofill", async ({ page }) => {
   test.slow();
   let planRequests = 0;
@@ -436,8 +457,11 @@ test("manual scheduling configures independent shifts, moves conflicts and enabl
   expect(exported).toMatchObject({ title: "手动排班 · 243", planTimes: "2班" });
   expect(exported.plans[0].period).toEqual([["09:00", "19:59"]]);
   expect(exported.plans[1].period).toEqual([["20:00", "23:59"], ["00:00", "08:59"]]);
-  expect(exported.plans[0].drones).toEqual({ enable: true, room: "manufacture", index: 1, rule: "all", order: "pre" });
-  expect(exported.plans[1].drones).toBeUndefined();
+  expect(exported.plans[0].drones).toBeUndefined();
+  expect(exported.plans[0].rooms.dormitory[0].autofill).toBe(false);
+  expect(exported.plans[0].rooms.dormitory[1].autofill).toBe(true);
+  expect(exported.plans[1].rooms.dormitory.every((room: { autofill: boolean }) => room.autofill === false)).toBe(true);
+  expect(exported.plans[1].drones).toEqual({ enable: true, room: "manufacture", index: 1, rule: "all", order: "post" });
   for (const plan of exported.plans) {
     for (const rooms of Object.values(plan.rooms) as Array<Array<{ operators: unknown[] }>>) {
       for (const room of rooms) expect(room.operators.every((operator) => typeof operator === "string")).toBe(true);
@@ -473,12 +497,18 @@ test("manual scheduling previews and imports an external MAA schedule file", asy
     ],
   };
   await expect(page.getByRole("button", { name: "导入排班文件" })).toBeVisible();
-  await page.getByLabel("选择 MAA 排班 JSON 文件").setInputFiles({
+  await page.getByRole("button", { name: "导入排班文件" }).click();
+  const upload = page.locator("[data-file-upload-dialog]");
+  await expect(upload).toHaveAccessibleName("导入排班文件");
+  const chooser = page.waitForEvent("filechooser");
+  await upload.getByRole("button", { name: "选择文件", exact: true }).click();
+  await (await chooser).setFiles({
     name: "external-schedule.json",
     mimeType: "application/json",
     buffer: Buffer.from(JSON.stringify(importedSchedule)),
   });
 
+  await expect(upload).toHaveCount(0);
   const preview = page.getByRole("dialog", { name: "导入这个 MAA 排班？" });
   await expect(preview).toContainText("external-schedule.json");
   await expect(preview).toContainText("干员位置：2 / 2");

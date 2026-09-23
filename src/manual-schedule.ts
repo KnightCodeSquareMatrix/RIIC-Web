@@ -18,6 +18,7 @@ import {
   MIN_MANUAL_SHIFT_COUNT,
 } from "./manual-schedule-config.ts";
 import { factoryRecipeFromMaaProduct, normalizeProductForLevel } from "./factory-recipes.ts";
+import { droneTargetShiftIndex } from "./drone-plan-mapping.ts";
 
 export {
   DEFAULT_MANUAL_SHIFT_DURATIONS,
@@ -530,7 +531,9 @@ export function createManualScheduleDraftFromCalculator(input: {
       : null;
     const drones = plan.drones;
     if (drones && drones.enable !== false && (drones.room === "trading" || drones.room === "manufacture")) {
-      shift.droneTargetRoomId = input.layout.rooms.filter(
+      const targetShift = draft.shifts[droneTargetShiftIndex(shiftIndex, draft.shifts.length)];
+      if (!targetShift) return;
+      targetShift.droneTargetRoomId = input.layout.rooms.filter(
         (room) => MAA_GROUP_BY_ROOM_KIND[room.kind] === drones.room,
       )[drones.index - 1]?.id ?? null;
     }
@@ -905,7 +908,8 @@ export function manualScheduleToMaa(
         : start + range.durationMinutes <= MINUTES_PER_DAY
           ? [[range.startTime, range.endTime]]
           : [[range.startTime, "23:59"], ["00:00", range.endTime]];
-      const droneRoom = layout.rooms.find((room) => room.id === shift.droneTargetRoomId);
+      const droneTargetShift = draft.shifts[droneTargetShiftIndex(shiftIndex, draft.shifts.length)];
+      const droneRoom = layout.rooms.find((room) => room.id === droneTargetShift?.droneTargetRoomId);
       const droneGroup = droneRoom ? MAA_GROUP_BY_ROOM_KIND[droneRoom.kind] : undefined;
       const droneIndex = droneGroup === "trading" || droneGroup === "manufacture"
         ? layout.rooms.filter((room) => MAA_GROUP_BY_ROOM_KIND[room.kind] === droneGroup).findIndex((room) => room.id === droneRoom?.id) + 1
@@ -924,10 +928,10 @@ export function manualScheduleToMaa(
         duration: range.durationMinutes,
         rooms,
         Fiammetta: fiammettaEnabled && shift.fiammettaTarget
-          ? { enable: true, target: shift.fiammettaTarget, order: "pre" as const }
-          : { enable: false, target: "", order: "pre" as const },
+          ? { enable: true, target: shift.fiammettaTarget, order: "post" as const }
+          : { enable: false, target: "", order: "post" as const },
         ...(droneIndex > 0 && (droneGroup === "trading" || droneGroup === "manufacture") ? {
-          drones: { enable: true, room: droneGroup, index: droneIndex, rule: "all", order: "pre" as const },
+          drones: { enable: true, room: droneGroup, index: droneIndex, rule: "all", order: "post" as const },
         } : {}),
       };
     }),

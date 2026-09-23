@@ -61,7 +61,7 @@
   "detail43": "Tools",
   "detail44": "Operator Recognition",
   "detail45": "Choose format and export",
-  "detail46": "Sign in with a verified website account, then upload the file under MAA. You can also expand “Paste JSON” and paste the complete content. The upload area accepts compatible XLSX files too.",
+  "detail46": "Sign in with a verified website account, open the upload dialog under MAA, then drag in the file or click “Choose files”. You can also expand “Paste JSON” and paste the complete content. The upload dialog accepts compatible XLSX / XLS files too.",
   "detail47": "Upload or paste MAA data",
   "detail48": "The upload area, Paste JSON action, and imported-source information.",
   "detail49": "MAA data import page with file upload and Paste JSON actions",

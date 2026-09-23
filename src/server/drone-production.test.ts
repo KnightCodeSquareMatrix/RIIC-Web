@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  applyDroneAllocationsToMaa,
   chooseDroneAllocations,
   droneProductionForShift,
   droneTradeOutputForEfficiency,
@@ -198,4 +199,59 @@ test("153 always accelerates experience and falls back to trade when no experien
     plans: [plan], shifts: [shift], dailyProduction: { lmd: 0, pure_gold: 0 },
   });
   assert.equal(fallback.target.product, "lmd");
+});
+
+test("automatic drone allocations store each target in the next plan with pre order", () => {
+  const layout = {
+    template: "153" as const,
+    drone_cap: 0,
+    scenario: {},
+    rooms: [
+      { id: "trade_1", kind: "trade_post" as const, level: 3, product: { trade: { order: "gold" as const } } },
+      { id: "power_1", kind: "power_plant" as const, level: 3 },
+    ],
+  };
+  const shift = (index: number) => ({
+    index,
+    duration_hours: 12,
+    active_teams: [],
+    resting_team: "",
+    weighted_trade: 0,
+    weighted_manu: 0,
+    weighted_power: 0,
+    scores: {
+      trade_score: 0,
+      manu_prod_sum: 0,
+      power_charge_sum: 0,
+      room_lines: [{ room_id: "power_1", equivalent_efficiency: 0.2 }],
+    },
+  });
+  const maa = {
+    title: "drone mapping",
+    plans: [
+      {
+        name: "A",
+        drones: { enable: true, room: "trading" as const, index: 1, order: "pre" as const },
+        rooms: { trading: [{ product: "LMD", operators: [] }], power: [{ operators: ["雷蛇"] }] },
+      },
+      {
+        name: "B",
+        drones: { enable: true, room: "trading" as const, index: 1, order: "pre" as const },
+        rooms: { trading: [{ product: "LMD", operators: [] }], power: [{ operators: ["雷蛇"] }] },
+      },
+    ],
+  };
+  const result = applyDroneAllocationsToMaa({
+    layout,
+    maa,
+    rotation: {
+      profile: "main_backup_12_12",
+      daily: { trade: null, manufacture: null, power: null, production: { lmd: 0, pure_gold: 0, battle_records: 0, originium_shards: 0, orundum: 0, equivalent_gold: 0 } },
+      shifts: [shift(0), shift(1)],
+    },
+  });
+
+  assert.deepEqual(maa.plans[0]?.drones, { enable: true, room: "trading", index: 1, order: "pre" });
+  assert.deepEqual(maa.plans[1]?.drones, { enable: true, room: "trading", index: 1, order: "pre" });
+  assert.deepEqual(result.plans.map((plan) => plan.drones?.order), ["pre", "pre"]);
 });

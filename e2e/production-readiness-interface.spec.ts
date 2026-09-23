@@ -38,7 +38,7 @@ test("drone selection updates exports and restores automatic allocation without 
     const stream = await (await pending).createReadStream();
     const chunks: Buffer[] = [];
     for await (const chunk of stream) chunks.push(Buffer.from(chunk));
-    return JSON.parse(Buffer.concat(chunks).toString("utf8")).plans[0].drones;
+    return JSON.parse(Buffer.concat(chunks).toString("utf8")).plans[1].drones;
   }
   const automatic = await exportedDrones();
   const automaticSwitch = page.getByRole("switch", { name: "自动分配无人机", exact: true });
@@ -64,6 +64,7 @@ test("drone selection updates exports and restores automatic allocation without 
   await picker.getByRole("button", { name: "贸易站 1", exact: true }).click();
   await expect(picker).toHaveCount(0);
   expect(await exportedDrones()).toMatchObject({ room: "trading", index: 1, enable: true });
+  await expect(page.locator('[data-plan-support="drones"]')).toContainText("贸易站 1");
   const selectedDrone = page.getByRole("button", { name: /贸易站 1.*无人机加速/ });
   await expect(selectedDrone).toHaveAttribute("aria-pressed", "true");
   await selectedDrone.hover();
@@ -520,11 +521,13 @@ test("setup exposes and persists only worker-supported rotation profiles", async
   const manualActions = manualPicker.locator("[data-manual-operbox-actions]");
   const manualActionButtons = [
     manualPicker.getByRole("button", { name: "只看已拥有", exact: true }),
-    manualPicker.getByRole("button", { name: "全选最高精英", exact: true }),
+    manualPicker.getByRole("button", { name: "全干员精二", exact: true }),
+    manualPicker.getByRole("button", { name: "已拥有全精英", exact: true }),
     manualPicker.getByRole("button", { name: "清空选择", exact: true }),
   ];
   await expectSetupAction(manualActionButtons[0]);
   await expectSetupAction(manualActionButtons[1]);
+  await expectSetupAction(manualActionButtons[2]);
   await expect(manualActionButtons[0]).toHaveAttribute("aria-pressed", "false");
   await manualActionButtons[0].click();
   await expect(manualActionButtons[0]).toHaveAttribute("aria-pressed", "true");
@@ -574,8 +577,8 @@ test("setup exposes and persists only worker-supported rotation profiles", async
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(manualApplyButtons.first()).toHaveCSS("height", "44px");
   const narrowActionBoxes = await Promise.all(manualActionButtons.map((button) => button.boundingBox()));
-  expect(new Set(narrowActionBoxes.map((box) => Math.round(box?.y ?? -1))).size).toBe(1);
-  expect(narrowActionBoxes.every((box) => box !== null && box.x >= 0 && box.x + box.width <= 390)).toBe(true);
+  expect(new Set(narrowActionBoxes.map((box) => Math.round(box?.y ?? -1))).size).toBe(2);
+  expect(narrowActionBoxes.every((box) => box !== null && box.x >= 0 && box.x + box.width <= 390), JSON.stringify(narrowActionBoxes)).toBe(true);
   await page.setViewportSize({ width: 1440, height: 900 });
   await manualApplyButtons.first().click();
   await expect(manualPicker).toHaveCount(0);
@@ -589,9 +592,15 @@ test("setup exposes and persists only worker-supported rotation profiles", async
   await expectSetupAction(importLayoutButton);
   await expect(dialog.getByRole("button", { name: "导入布局", exact: true })).toHaveCount(1);
   await expectSetupAction(dialog.getByRole("button", { name: "导出布局", exact: true }));
-  const fileChooserEvent = page.waitForEvent("filechooser");
   await importLayoutButton.click();
-  await fileChooserEvent;
+  const upload = page.locator("[data-file-upload-dialog]");
+  await expect(upload).toHaveAccessibleName("导入布局");
+  const fileChooserEvent = page.waitForEvent("filechooser");
+  await upload.getByRole("button", { name: "选择文件", exact: true }).click();
+  expect((await fileChooserEvent).isMultiple()).toBe(false);
+  await upload.getByRole("button", { name: "取消", exact: true }).click();
+  await expect(upload).toHaveCount(0);
+  await expect(importLayoutButton).toBeFocused();
 
   const selectedPreset = dialog.getByRole("button", { name: /^243/ });
   await expect(selectedPreset).toHaveAttribute("aria-pressed", "true");

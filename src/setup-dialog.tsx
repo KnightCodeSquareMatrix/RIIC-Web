@@ -30,7 +30,8 @@ import {
 import { DEFAULT_MANUAL_SHIFT_START_TIME, MAX_MANUAL_SETUP_SHIFT_COUNT } from "@/manual-schedule-config";
 
 import type { FactoryRecipe, PowerBudget, TradeOrder } from "./blueprint";
-import { FileDrop } from "@/components/setup/FileDrop";
+import { FileUploadDialog } from "@/components/FileUploadDialog";
+import { messageRecord } from "@/i18n/translate";
 import { LayoutEditor, PresetSelector } from "./components";
 import { countOwned } from "./operbox";
 import type { SetupStep } from "./onboarding";
@@ -64,7 +65,7 @@ type SetupDialogProps = {
   sklandDisabledReason?: string | null;
   onOpenSkland?: () => void;
   onUseSklandSnapshot?: () => void;
-  onMaaFile: (file: File) => Promise<boolean>;
+  onMaaFile: (file: File, signal?: AbortSignal) => Promise<void>;
   onMaaPaste: () => Promise<boolean>;
   onManualBox: (entries: OperBoxEntry[]) => void;
   onRequireWebsiteAccount: () => void;
@@ -83,7 +84,7 @@ type SetupDialogProps = {
   fiammettaEnabled: boolean;
   onFiammettaEnabledChange: (enabled: boolean) => void;
   onPresetSelect: (preset: PresetDef) => void;
-  onLayoutFile: (file: File) => Promise<void>;
+  onLayoutFile: (file: File, signal?: AbortSignal) => Promise<void>;
   onDownloadLayout: () => void;
   onRestoreResultClearWarning: () => void;
   storageNotice: DisplayError | null;
@@ -166,16 +167,18 @@ export function SetupDialog({
   const [maaChoices, setMaaChoices] = useState<Record<number, number>>({});
   const [reviewBusy, setReviewBusy] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
+  const maaReviewRef = useRef<HTMLElement>(null);
   const importedOwnedCount = operbox?.filter((entry) => entry.own).length ?? 0;
-  async function stageMaaReview(text: string, name: string) {
-    setMaaReview(null);
-    setMaaChoices({});
-    setReviewError(null);
+  async function stageMaaReview(text: string, name: string, signal?: AbortSignal) {
     try {
       const { inspectMaaProgress, normalizeMaaRarities } = await import("./maa-review");
       const rows = normalizeMaaRarities(JSON.parse(text));
       if (!Array.isArray(rows)) return false;
       const issues = inspectMaaProgress(rows);
+      signal?.throwIfAborted();
+      setMaaReview(null);
+      setMaaChoices({});
+      setReviewError(null);
       if (!issues.length) return false;
       setMaaReview({ rows, issues, name });
       return true;
@@ -191,12 +194,11 @@ export function SetupDialog({
         const { own, elite, level } = issue.choices[maaChoices[index]];
         return { ...row, rarity: issue.rarity, own, elite, level };
       });
-      if (await onMaaFile(new File([JSON.stringify(rows)], maaReview.name, { type: "application/json" }))) {
-        setMaaReview(null);
-        setNeedsFacilityReview(true);
-        setShowImportOptions(false);
-        goToBasics();
-      }
+      await onMaaFile(new File([JSON.stringify(rows)], maaReview.name, { type: "application/json" }));
+      setMaaReview(null);
+      setNeedsFacilityReview(true);
+      setShowImportOptions(false);
+      goToBasics();
     } catch (error) { setReviewError(error instanceof Error ? error.message : String(error)); }
     finally { setReviewBusy(false); }
   }
@@ -282,17 +284,18 @@ export function SetupDialog({
     focusPanel(facilitiesPanelRef);
   }
 
-  async function importMaaFile(file: File) {
+  async function importMaaFile(file: File, signal: AbortSignal) {
     if (!websiteSession) {
       onRequireWebsiteAccount();
       return;
     }
-    if (!/\.xlsx?$/i.test(file.name) && await stageMaaReview(await file.text(), file.name)) return;
-    if (await onMaaFile(file)) {
-      setNeedsFacilityReview(true);
-      setShowImportOptions(false);
-      goToBasics();
-    }
+    if (!/\.xlsx?$/i.test(file.name) && await stageMaaReview(await file.text(), file.name, signal)) return;
+    signal.throwIfAborted();
+    await onMaaFile(file, signal);
+    setMaaReview(null);
+    setNeedsFacilityReview(true);
+    setShowImportOptions(false);
+    goToBasics();
   }
 
   async function importMaaPaste() {
@@ -324,9 +327,9 @@ export function SetupDialog({
     onPresetSelect(nextPreset);
   }
 
-  async function handleLayoutFile(file: File) {
+  async function handleLayoutFile(file: File, signal: AbortSignal) {
+    await onLayoutFile(file, signal);
     setNeedsFacilityReview(true);
-    await onLayoutFile(file);
   }
 
   function handleOpenSkland() {
@@ -395,7 +398,7 @@ export function SetupDialog({
                 role="region"
                 aria-label={intl("setup_dialog.operatorData")}
                 tabIndex={-1}
-                className="grid w-full gap-4 px-4 py-4 outline-none sm:px-7 sm:py-6"
+                className="grid w-full min-w-0 grid-cols-1 gap-4 px-4 py-4 outline-none sm:px-7 sm:py-6"
                 initial={reducedMotion ? false : { x: stepDirection * 28, opacity: 0 }}
                 animate={{ x: 0, opacity: 1 }}
                 transition={reducedMotion ? { duration: 0 } : PANEL_TRANSITION}
@@ -502,7 +505,20 @@ export function SetupDialog({
                           </Alert>
                         ) : (
                           <>
-                            <FileDrop fileName={boxSource === "maa" ? fileName : null} onFile={(file) => void importMaaFile(file)} />
+                            <FileUploadDialog
+                              title={intl("FileUpload.rosterTitle")}
+                              description={intl("FileUpload.rosterDescription")}
+                              extensions={[".json", ".xlsx", ".xls"]}
+                              layer="nested"
+                              successFocus={() => maaReviewRef.current ?? basicsPanelRef.current ?? false}
+                              trigger={<SetupActionButton type="button" className="w-full"><Upload />{intl("components.uploadRosterJsonXlsx")}</SetupActionButton>}
+                              onFiles={([file], signal) => importMaaFile(file, signal)}
+                            >
+                              <div className="flex flex-wrap gap-1.5 text-xs" role="list" aria-label={intl("components.supportedMaaJsonLanguages")}>
+                                {messageRecord(en, "components_labels").map(language => <span key={language} role="listitem" className="rounded-full border border-border bg-muted/70 px-2 py-0.5">{language}</span>)}
+                              </div>
+                              <p className="text-xs leading-relaxed text-muted-foreground">{intl("components.dropAFileOrChooseOneNamesAreConverted")}</p>
+                            </FileUploadDialog>
                             <Button
                               type="button"
                               variant="ghost"
@@ -533,7 +549,7 @@ export function SetupDialog({
                           </div>
                         ) : null}
                       </TabsContent>
-                      <TabsContent value="manual" className="grid gap-3 pt-4">
+                      <TabsContent value="manual" className="grid min-w-0 grid-cols-1 gap-3 pt-4">
                         {!websiteSession ? (
                           <Alert>
                             <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -558,7 +574,7 @@ export function SetupDialog({
                       </TabsContent>
                     </Tabs>
                     {inputMode === "maa" && maaReview ? (
-                      <section className="mt-3 grid gap-2.5 rounded-lg border border-amber-500/35 bg-amber-50/60 p-3 dark:bg-amber-950/15" aria-label="导入异常确认">
+                      <section ref={maaReviewRef} tabIndex={-1} className="mt-3 grid gap-2.5 rounded-lg border border-amber-500/35 bg-amber-50/60 p-3 outline-none dark:bg-amber-950/15" aria-label="导入异常确认">
                         <div className="flex items-baseline justify-between gap-3"><h3 className="font-semibold">发现 {maaReview.issues.length} 项异常练度</h3><span className="text-xs text-muted-foreground">请选择修正方案</span></div>
                         <p className="text-sm text-muted-foreground">确认后才会导入；取消会保留原来的 Box。</p>
                         <p className="text-xs text-muted-foreground">星级会根据干员数据自动匹配，原 JSON 中填写的星级不一致时将自动修正。</p>
@@ -706,22 +722,14 @@ export function SetupDialog({
                     <details className="setup-quiet-details pt-1">
                       <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">{intl("setup_dialog.advancedTools")}</summary>
                       <div className="grid gap-2 py-3 sm:grid-cols-2">
-                        <SetupActionButton
-                          asLabel
-                          className="w-full cursor-pointer"
-                        >
-                          <Upload className="size-4" />{intl("setup_dialog.importLayout")}
-                          <input
-                            className="sr-only"
-                            type="file"
-                            accept="application/json,.json"
-                            onChange={(event) => {
-                              const file = event.target.files?.[0];
-                              if (file) void handleLayoutFile(file);
-                              event.currentTarget.value = "";
-                            }}
-                          />
-                        </SetupActionButton>
+                        <FileUploadDialog
+                          title={intl("setup_dialog.importLayout")}
+                          description={intl("FileUpload.layoutDescription")}
+                          extensions={[".json"]}
+                          layer="nested"
+                          trigger={<SetupActionButton type="button" className="w-full"><Upload />{intl("setup_dialog.importLayout")}</SetupActionButton>}
+                          onFiles={([file], signal) => handleLayoutFile(file, signal)}
+                        />
                         <SetupActionButton type="button" className="w-full" onClick={onDownloadLayout}>
                           <FileJson />{intl("setup_dialog.exportLayout")}
                         </SetupActionButton>

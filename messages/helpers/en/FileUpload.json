@@ -1,0 +1,17 @@
+{
+  "chooseFiles": "Choose files",
+  "dropNow": "Drop to select files",
+  "dropOrChoose": "Drag files here, or click to choose",
+  "singleFile": "Supports {formats}; one file at a time",
+  "multipleFiles": "Supports {formats}; multiple files allowed",
+  "singleFileOnly": "Import one file at a time. Please choose again.",
+  "tooManyFiles": "Choose up to {count} files at a time. Please choose again.",
+  "unsupportedFile": "“{name}” is not supported. Choose a {formats} file.",
+  "readFailed": "Could not read the file. Please choose again.",
+  "processing": "Reading and validating files…",
+  "cancel": "Cancel",
+  "rosterTitle": "Import operator data",
+  "rosterDescription": "Choose an MAA operator JSON or a compatible Yituliu Excel file.",
+  "layoutDescription": "Choose an exported base layout JSON file. A successful import updates your current layout.",
+  "scheduleDescription": "Choose an MAA schedule JSON file, up to 5 MiB. Review the import before replacing your draft."
+}
