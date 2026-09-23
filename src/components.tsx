@@ -1083,10 +1083,10 @@ export function OperatorSlot({
     ? `${occupantAriaLabel}${intl("components.focusToViewInfrastructureSkills")}`
     : occupantAriaLabel;
   const searchMatched = Boolean(slot && searchQuery && slot.name.toLocaleLowerCase("zh-CN").includes(searchQuery));
-  const frameClassName = highlightNoLayoutSkill
-    ? "border-[#F59E0B] bg-[#3C3C3C] shadow-[0_0_0_2px_rgba(245,158,11,0.45)]"
-    : sortSelected
+  const frameClassName = sortSelected
     ? "border-[#FFD800] bg-[#3C3C3C] ring-2 ring-[#FFD800]/70"
+    : highlightNoLayoutSkill
+    ? "border-[#F59E0B] bg-[#3C3C3C] shadow-[0_0_0_2px_rgba(245,158,11,0.45)]"
     : slot
     ? "border-[#7F7F7F] bg-[#3C3C3C] shadow-[inset_0_0_18px_rgba(255,255,255,0.16)]"
     : autofill
