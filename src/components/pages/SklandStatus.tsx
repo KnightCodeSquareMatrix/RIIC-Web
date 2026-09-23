@@ -51,6 +51,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { RemoteAvatar } from "@/components/ui/remote-avatar";
+import InventoryPage from "@/components/pages/InventoryPage";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SkeletonRouteFallback } from "@/components/ui/skeleton-swap";
 import { HoldToConfirm } from "@/components/ui/hold-to-confirm";
@@ -1709,6 +1710,7 @@ export function SklandStatus({
           <div data-yeye-scroll="auto" className="-mx-3 min-w-0 overflow-x-auto overflow-y-hidden px-3 pb-1">
             <TabsList className="min-w-max" data-skland-view-tabs>
               <TabsTrigger value="overview">{intl("components_pages_SklandStatus.overview")}</TabsTrigger>
+              <TabsTrigger value="inventory">{en ? "Backpack" : "背包"}</TabsTrigger>
               <TabsTrigger value="infrastructure">{intl("components_pages_SklandStatus.infrastructure")}</TabsTrigger>
             </TabsList>
           </div>
@@ -1724,6 +1726,9 @@ export function SklandStatus({
         </TabsContent>
         <TabsContent value="infrastructure" className="pt-5">
           <InfrastructureTab snapshot={snapshot} />
+        </TabsContent>
+        <TabsContent value="inventory" className="pt-5">
+          <InventoryPage />
         </TabsContent>
       </Tabs>
 

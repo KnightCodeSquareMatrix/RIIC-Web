@@ -9,15 +9,18 @@ import {
   type Client,
 } from "skland-kit";
 
-import type { SklandQrStatusResponse, SklandScheduleSnapshot, SklandStatusSnapshot } from "@/types";
+import type { SklandInventoryData, SklandQrStatusResponse, SklandScheduleSnapshot, SklandStatusSnapshot } from "@/types";
 import type { SklandPolicyConsentRequest } from "@/legal-policy";
 import { DeviceIdCache } from "./device-id-cache";
 import {
   SKLAND_TEENAGER_PATH,
+  mowerSklandSignedHeaders,
   sklandSignedHeaders,
   stableSklandUserIdFromResponse,
 } from "./credential";
 import { rolesFromBinding, snapshotFromPlayerInfo, snapshotsFromPlayerInfo } from "./normalize";
+import { inventoryItemsFromResponse } from "./inventory-parser";
+import { loadMowerInventory, mergeInventoryItems } from "./mower-inventory";
 import { sklandLayoutSuggestion } from "./layout-suggestion";
 import {
   SKLAND_SESSION_TTL_SECONDS,
@@ -503,6 +506,69 @@ export async function loadStatusSnapshot(payload: SklandSessionPayload): Promise
     return {
       session: { ...refreshed, selectedUid },
       snapshot: snapshotFromPlayerInfo(info, roles, selectedUid, sklandLayoutSuggestion(info)),
+    };
+  } catch (error) {
+    throw publicError(error);
+  }
+}
+
+export async function loadInventorySnapshot(payload: SklandSessionPayload): Promise<{
+  session: SklandSessionPayload;
+  inventory: SklandInventoryData;
+}> {
+  try {
+    assertUpstreamCapacity();
+    const client = await seedClient(payload);
+    const refreshed = await refreshedPayload(client, payload);
+    if (refreshed.token !== payload.token) await client.storage.setItem(STORAGE_OAUTH_TOKEN_KEY, refreshed.token);
+    if (!refreshed.selectedUid) throw new SklandServiceError("BAD_DATA", "森空岛没有可读取的角色。", 422);
+
+    const path = "/api/v1/game/cultivate/player";
+    const loadRawInventory = async (uid: string): Promise<{ code?: unknown; data?: unknown }> => {
+      const query = new URLSearchParams({ uid }).toString();
+      const response = await fetch(`https://zonai.skland.com${path}?${query}`, {
+        headers: mowerSklandSignedHeaders({
+          cred: refreshed.cred,
+          token: refreshed.token,
+          path,
+          query,
+        }),
+        signal: AbortSignal.timeout(30_000),
+      }).then(async (result) => {
+        const body = await result.json() as unknown;
+        if (!result.ok) throw new Error(`森空岛库存请求失败：${result.status}`);
+        return body;
+      });
+      return response && typeof response === "object" ? response as { code?: unknown; data?: unknown } : {};
+    };
+
+    let record = await loadRawInventory(refreshed.selectedUid);
+    if (Number(record.code) !== 0) throw new SklandServiceError("AUTH_EXPIRED", "森空岛库存读取失败，请重新授权。", 401);
+    let items = inventoryItemsFromResponse(record.data);
+
+    if (!items.some((item) => item.id === "4002" || item.id === "4003")) {
+      const binding = await client.collections.player.getBinding();
+      const alternateRoles = rolesFromBinding(binding).filter((role) => role.uid !== refreshed.selectedUid);
+      for (const role of alternateRoles) {
+        const alternateRecord = await loadRawInventory(role.uid);
+        if (Number(alternateRecord.code) !== 0) continue;
+        const alternateItems = inventoryItemsFromResponse(alternateRecord.data);
+        if (alternateItems.some((item) => item.id === "4002" || item.id === "4003")) {
+          record = alternateRecord;
+          items = alternateItems;
+          break;
+        }
+      }
+    }
+
+    if (items.length === 0) throw new SklandServiceError("BAD_DATA", "森空岛未返回有效库存数据。", 502);
+    const mowerItems = await loadMowerInventory();
+    return {
+      session: refreshed,
+      inventory: {
+        items: mergeInventoryItems(items, mowerItems),
+        fetchedAt: new Date().toISOString(),
+      },
     };
   } catch (error) {
     throw publicError(error);
