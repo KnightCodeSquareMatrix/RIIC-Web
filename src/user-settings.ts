@@ -5,6 +5,7 @@ export interface UserSettings {
   strictMaaOperatorOrder: boolean;
   showProgressionRecalculate: boolean;
   showManualScheduleEdit: boolean;
+  showMower: boolean;
   scheduleViewControl: "tabs" | "select";
   linkShiftViewControl: boolean;
   shiftViewControl: "tabs" | "select";
@@ -20,6 +21,7 @@ export const DEFAULT_USER_SETTINGS: UserSettings = {
   strictMaaOperatorOrder: true,
   showProgressionRecalculate: true,
   showManualScheduleEdit: true,
+  showMower: false,
   scheduleViewControl: "tabs",
   linkShiftViewControl: true,
   shiftViewControl: "tabs",

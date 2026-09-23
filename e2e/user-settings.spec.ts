@@ -62,6 +62,19 @@ test("settings dropdowns preserve independent choices and fit narrow screens", a
   await expect(pagination).toHaveValue("每十条点击加载");
 });
 
+test("Mower controls stay hidden by default and appear when enabled", async ({ page }) => {
+  await mockApis(page);
+  await seedV4Session(page);
+  await page.goto("/settings");
+  const mower = page.getByRole("switch", { name: /Mower/ });
+  await expect(mower).not.toBeChecked();
+  await mower.click();
+  await page.reload();
+  await expect(mower).toBeChecked();
+  await page.goto("/manual");
+  await expect(page.getByRole("button", { name: /Export Mower|导出 Mower/ })).toBeVisible();
+});
+
 test("one-shift image export preserves the selected shift", async ({ page }) => {
   await mockApis(page);
   await seedV4Session(page);
@@ -95,4 +108,24 @@ test("calculator room sorting is reflected in MAA export and stays within the ac
   const names = (operators: Array<string | { name: string }>) => operators.map((operator) => typeof operator === "string" ? operator : operator.name);
   expect(names(exported.plans[0].rooms.trading[0].operators)).toEqual(["凯尔希", "阿米娅", "贝洛内"]);
   expect(names(exported.plans[1].rooms.trading[0].operators)).toEqual(["阿米娅", "凯尔希", "贝洛内"]);
+});
+
+test("standalone Mower editor uses the shared schedule components", async ({ page }) => {
+  await page.goto("/mower");
+  await expect(page.locator("[data-mower-schedule-page]")).toBeVisible();
+  await expect(page.locator('[data-infra-technical-card][data-slot="mower-board"]')).toBeVisible();
+  await expect(page.locator("[data-mower-room]")).toHaveCount(18);
+  await page.locator('[data-mower-room="room_1_1"]').click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(page.getByRole("button", { name: "添加干员" })).toBeVisible();
+});
+
+test("Mower morale rules use the current Box picker", async ({ page }) => {
+  await mockApis(page);
+  await seedV4Session(page);
+  await page.goto("/mower");
+  await page.getByRole("button", { name: "需要回满心情的干员", exact: true }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(page.getByRole("dialog").getByRole("textbox", { name: "搜索当前 Box 干员" })).toBeVisible();
+  await expect(page.getByRole("dialog").getByRole("button", { name: /阿米娅|Amiya/ }).first()).toBeVisible();
 });
