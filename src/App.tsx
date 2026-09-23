@@ -33,7 +33,8 @@ import { WorkbenchContext } from "@/workbench-context";
 import { WORKBENCH_PAGE_PATHS, workbenchHref, workbenchPageFromPathname, type AppPage } from "@/workbench-routes";
 import { useWebsiteSession } from "@/website-session";
 import { usePlanTask } from "@/hooks/use-plan-task";
-import { useSklandTrainingSync } from "@/hooks/use-skland-training-sync";
+import type { SklandTrainingSyncOptions } from "@/hooks/use-skland-training-sync";
+import type { TrainingSyncSnapshot } from "@/components/workbench/SklandTrainingSyncBridge";
 import { LanguageSwitch } from "@/i18n/client";
 
 import {
@@ -137,6 +138,7 @@ function bindingSummaryFromSession(session: Pick<SklandSessionData, "accounts" |
 const loadWebsiteAccountDialog = () => loadClientFeature("websiteAccountDialog");
 const loadSetupDialog = () => loadClientFeature("setupDialog");
 const loadComponents = () => loadClientFeature("sharedComponents");
+const SklandTrainingSyncBridge = lazy(() => import("@/components/workbench/SklandTrainingSyncBridge"));
 const ReleaseAnnouncement = lazy(() => import("@/components/changelog/ReleaseAnnouncement").then((module) => ({
   default: module.ReleaseAnnouncement,
 })));
@@ -544,7 +546,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     && planRetryCountdown === 0
   );
   const sklandBindingCount = sklandBindingSummary.totalCount;
-  const sklandTrainingSync = useSklandTrainingSync({
+  const sklandTrainingSyncOptions: SklandTrainingSyncOptions = {
     enabled: Boolean(CLIENT_SKLAND_ENABLED && websiteSession?.user.id && boxSource === "skland" && activeSklandAccount && hasRestoredSession),
     active: page === "training",
     blocked: sklandBusy || sklandSessionLoading || loading || Boolean(planTask.taskId) || progressionAdjustmentActivity.loading || setupOpen,
@@ -566,8 +568,17 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       setOperbox(normalizeOperboxEntries(session.scheduleSnapshot.operbox));
       setFileName(session.scheduleSnapshot.sourceName);
     },
-  });
+  };
   const websiteUserId = websiteSession?.user.id ?? null;
+  const [trainingSyncLoaded, setTrainingSyncLoaded] = useState(page === "training");
+  const [trainingSyncSnapshot, setTrainingSyncSnapshot] = useState<TrainingSyncSnapshot | null>(null);
+  useEffect(() => {
+    if (page === "training") setTrainingSyncLoaded(true);
+  }, [page]);
+  const sklandTrainingSync = sklandTrainingSyncOptions.enabled
+    && trainingSyncSnapshot?.identity === sklandTrainingSyncOptions.identity
+    && trainingSyncSnapshot.resultId === sklandTrainingSyncOptions.resultId
+    ? trainingSyncSnapshot.value : null;
   const accountCloudWorkspace = useAccountCloudWorkspace(CLIENT_ACCOUNT_CLOUD_SYNC_ENABLED ? {
     userId: websiteUserId,
     hasRestoredSession,
@@ -2186,9 +2197,9 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     training: {
       operbox: accountCanUseCurrentBox ? operbox : null,
       layout,
-      profile: accountCanUseCurrentBox ? sklandTrainingSync.data?.profile ?? result?.profile : null,
-      trainingAdvice: accountCanUseCurrentBox ? (sklandTrainingSync.data ? sklandTrainingSync.data.trainingAdvice ?? null : result?.trainingAdvice ?? null) : null,
-      sync: boxSource === "skland" && activeSklandAccount && accountCanUseCurrentBox ? sklandTrainingSync : undefined,
+      profile: accountCanUseCurrentBox ? sklandTrainingSync?.data?.profile ?? result?.profile : null,
+      trainingAdvice: accountCanUseCurrentBox ? (sklandTrainingSync?.data ? sklandTrainingSync.data.trainingAdvice ?? null : result?.trainingAdvice ?? null) : null,
+      sync: sklandTrainingSync ?? undefined,
       requiresAccount: !accountCanUseCurrentBox,
       onOpenCalculator: () => navigateToPage("calculator"),
     },
@@ -2284,6 +2295,11 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       }}
     >
     <SidebarProvider defaultOpen defaultOpenBreakpoint={1280}>
+      {trainingSyncLoaded || page === "training" ? (
+        <Suspense fallback={null}>
+          <SklandTrainingSyncBridge options={sklandTrainingSyncOptions} onChange={setTrainingSyncSnapshot} />
+        </Suspense>
+      ) : null}
       <AppSidebar page={page} onPageChange={handleAppPageChange} showMower={userSettings.showMower} />
       <SidebarInset>
         <AppTopBar />

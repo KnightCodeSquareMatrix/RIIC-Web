@@ -1,13 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { computePlan, submitPlanTask, syncSklandTraining, toDisplayError } from "@/api";
 import { usePlanTask } from "./use-plan-task";
 import { effectiveFiammettaSetting } from "@/plan-presentation";
 import { refreshSklandTraining, trainingInputKey, trainingSyncDue, type TrainingData, type TrainingInput } from "@/skland-training-sync";
 import type { SklandSessionData } from "@/types";
 
-type Options = TrainingInput & {
+export type SklandTrainingSyncOptions = TrainingInput & {
   enabled: boolean;
   active: boolean;
   blocked: boolean;
@@ -19,7 +19,7 @@ type Options = TrainingInput & {
   onSynced: (session: SklandSessionData) => void;
 };
 
-export function useSklandTrainingSync(options: Options) {
+export function useSklandTrainingSync(options: SklandTrainingSyncOptions) {
   const { enabled, active, blocked, identity, resultId } = options;
   const key = trainingInputKey(options);
   const context = JSON.stringify([enabled, identity, key, resultId]);
@@ -157,7 +157,7 @@ export function useSklandTrainingSync(options: Options) {
 
   const requestRefresh = useCallback(() => setManualRequest((value) => value + 1), []);
   const current = enabled && state?.identity === identity && state.resultId === resultId ? state : null;
-  return {
+  return useMemo(() => ({
     data: current?.data ?? null,
     busy,
     disabled: blocked,
@@ -168,5 +168,5 @@ export function useSklandTrainingSync(options: Options) {
     resume: task.pollStopped ? task.resume : null,
     resumeDisabled: task.resumeDisabled,
     refresh: requestRefresh,
-  };
+  }), [current, busy, blocked, retryIn, task.pollStopped, task.resume, task.resumeDisabled, options.failureMessage, key, requestRefresh]);
 }

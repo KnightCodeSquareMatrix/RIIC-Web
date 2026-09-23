@@ -66,6 +66,15 @@ test("sync refreshes training advice, preserves the schedule and skips unchanged
   expect(saved.layoutDirty).toBe(true);
 
   const firstSyncs = syncs;
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.locator('[data-primary-navigation-page="calculator"]').click();
+  await expect(page.locator('[data-training-sync]')).toHaveCount(0);
+  await page.locator('[data-primary-navigation-page="training"]').click();
+  await expect(sync).toContainText("练度同步于");
+  await expect(sync.getByRole("button")).toBeDisabled();
+  await expect(page.locator('[data-training-advice-list] [data-slot="training-advice-card"]')).toHaveCount(0);
+  expect(syncs).toBe(firstSyncs);
+  expect(computes).toBe(1);
   await page.clock.fastForward(31_000);
   await sync.getByRole("button", { name: "立即同步" }).click();
   await expect.poll(() => syncs).toBe(firstSyncs + 1);

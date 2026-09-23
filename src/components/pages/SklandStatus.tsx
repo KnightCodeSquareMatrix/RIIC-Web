@@ -71,7 +71,7 @@ import { localizedOperatorName } from "@/i18n/game-data";
 import { useGameCatalog } from "@/i18n/game-data-client";
 import { operatorPortraitFor, operatorProfessionFor } from "@/operatorPortraits";
 import { roomGridTone } from "@/schedule-view-presentation";
-import { SklandLoginPanel } from "@/skland-components";
+const SklandLoginPanel = lazy(() => import("@/skland-components").then((module) => ({ default: module.SklandLoginPanel })));
 import {
   deriveSklandBuildingMetrics,
   sklandTradingOrderRewardLabel,
@@ -1471,12 +1471,14 @@ export function SklandStatus({
               <AlertDescription>{error.message}{intl("components_pages_SklandStatus.label", { code: error.code })}</AlertDescription>
             </Alert>
           ) : null}
+          <Suspense fallback={<Skeleton className="h-80 w-full max-w-4xl" />}>
           <SklandLoginPanel
             className="max-w-4xl"
             configured={configured}
             disabledReason={disabledReason}
             onAuthenticated={onAuthenticated}
           />
+          </Suspense>
         </div>
       </StatusCenterPage>
     );
@@ -1667,6 +1669,7 @@ export function SklandStatus({
             </DialogDescription>
           </DialogHeader>
           <DialogBody className="min-h-0 overflow-y-auto pb-5 pt-0 sm:pb-7">
+            <Suspense fallback={<Skeleton className="h-80 w-full" />}>
             <SklandLoginPanel
               className="max-w-none"
               configured={configured}
@@ -1677,6 +1680,7 @@ export function SklandStatus({
                 setAddAccountOpen(false);
               }}
             />
+            </Suspense>
           </DialogBody>
         </DialogContent>
       </Dialog>
