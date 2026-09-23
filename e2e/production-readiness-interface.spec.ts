@@ -521,11 +521,13 @@ test("setup exposes and persists only worker-supported rotation profiles", async
   const manualActions = manualPicker.locator("[data-manual-operbox-actions]");
   const manualActionButtons = [
     manualPicker.getByRole("button", { name: "只看已拥有", exact: true }),
-    manualPicker.getByRole("button", { name: "全选最高精英", exact: true }),
+    manualPicker.getByRole("button", { name: "全干员精二", exact: true }),
+    manualPicker.getByRole("button", { name: "已拥有全精英", exact: true }),
     manualPicker.getByRole("button", { name: "清空选择", exact: true }),
   ];
   await expectSetupAction(manualActionButtons[0]);
   await expectSetupAction(manualActionButtons[1]);
+  await expectSetupAction(manualActionButtons[2]);
   await expect(manualActionButtons[0]).toHaveAttribute("aria-pressed", "false");
   await manualActionButtons[0].click();
   await expect(manualActionButtons[0]).toHaveAttribute("aria-pressed", "true");
@@ -575,8 +577,8 @@ test("setup exposes and persists only worker-supported rotation profiles", async
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(manualApplyButtons.first()).toHaveCSS("height", "44px");
   const narrowActionBoxes = await Promise.all(manualActionButtons.map((button) => button.boundingBox()));
-  expect(new Set(narrowActionBoxes.map((box) => Math.round(box?.y ?? -1))).size).toBe(1);
-  expect(narrowActionBoxes.every((box) => box !== null && box.x >= 0 && box.x + box.width <= 390)).toBe(true);
+  expect(new Set(narrowActionBoxes.map((box) => Math.round(box?.y ?? -1))).size).toBe(2);
+  expect(narrowActionBoxes.every((box) => box !== null && box.x >= 0 && box.x + box.width <= 390), JSON.stringify(narrowActionBoxes)).toBe(true);
   await page.setViewportSize({ width: 1440, height: 900 });
   await manualApplyButtons.first().click();
   await expect(manualPicker).toHaveCount(0);

@@ -1491,6 +1491,17 @@ export interface SklandStatusData {
   snapshot?: SklandStatusSnapshot;
 }
 
+export interface SklandInventoryItem {
+  id: string;
+  count: number;
+}
+
+export interface SklandInventoryData {
+  identityKey: string;
+  items: SklandInventoryItem[];
+  fetchedAt: string;
+}
+
 export interface SklandQrStartData {
   scanId: string;
   scanUrl: string;

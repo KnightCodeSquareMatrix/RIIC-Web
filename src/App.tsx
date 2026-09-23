@@ -1,4 +1,5 @@
 "use client";
+import { withDefaultDormAutofill } from "./automatic-dorm-defaults";
 import { localize as localize_App } from "./i18n/helpers/App.ts";
 import { useTranslations, useLocale } from "next-intl";
 
@@ -33,6 +34,8 @@ import { WorkbenchContext } from "@/workbench-context";
 import { WORKBENCH_PAGE_PATHS, workbenchHref, workbenchPageFromPathname, type AppPage } from "@/workbench-routes";
 import { useWebsiteSession } from "@/website-session";
 import { usePlanTask } from "@/hooks/use-plan-task";
+import type { SklandTrainingSyncOptions } from "@/hooks/use-skland-training-sync";
+import type { TrainingSyncSnapshot } from "@/components/workbench/SklandTrainingSyncBridge";
 import { LanguageSwitch } from "@/i18n/client";
 
 import {
@@ -136,6 +139,7 @@ function bindingSummaryFromSession(session: Pick<SklandSessionData, "accounts" |
 const loadWebsiteAccountDialog = () => loadClientFeature("websiteAccountDialog");
 const loadSetupDialog = () => loadClientFeature("setupDialog");
 const loadComponents = () => loadClientFeature("sharedComponents");
+const SklandTrainingSyncBridge = lazy(() => import("@/components/workbench/SklandTrainingSyncBridge"));
 const ReleaseAnnouncement = lazy(() => import("@/components/changelog/ReleaseAnnouncement").then((module) => ({
   default: module.ReleaseAnnouncement,
 })));
@@ -413,7 +417,8 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   }, []);
 
   const planTask = usePlanTask({
-    onDone: (finalizedResult) => {
+    onDone: (rawResult) => {
+      const finalizedResult = withDefaultDormAutofill(rawResult);
       setCliReady(true);
       setActiveShift(0);
       automaticMaaRef.current = { diagnosticId: finalizedResult.diagnosticId, maa: structuredClone(finalizedResult.maa) };
@@ -543,7 +548,39 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     && planRetryCountdown === 0
   );
   const sklandBindingCount = sklandBindingSummary.totalCount;
+  const sklandTrainingSyncOptions: SklandTrainingSyncOptions = {
+    enabled: Boolean(CLIENT_SKLAND_ENABLED && websiteSession?.user.id && boxSource === "skland" && activeSklandAccount && hasRestoredSession),
+    active: page === "training",
+    blocked: sklandBusy || sklandSessionLoading || loading || Boolean(planTask.taskId) || progressionAdjustmentActivity.loading || setupOpen,
+    identity: `${websiteSession?.user.id}:${activeSklandAccount?.accountId}:${activeSklandAccount?.selectedUid}`,
+    accountId: activeSklandAccount?.accountId ?? "",
+    uid: activeSklandAccount?.selectedUid ?? "",
+    layout,
+    operbox: operbox ?? [],
+    rotation: rotationProfile,
+    fiammettaEnabled,
+    resultId: result?.diagnosticId ?? null,
+    taskQueueEnabled,
+    failureMessage: intl("components_pages_TrainingAdvice.syncFailed"),
+    onSynced: (session) => {
+      // Refresh progression without replacing the user's layout or existing schedule.
+      if (!session.scheduleSnapshot || currentBoxSourceRef.current !== "skland" || currentOperboxRef.current !== operbox) return;
+      setSklandScheduleSnapshot(session.scheduleSnapshot);
+      setSklandStatusSnapshot(session.statusSnapshot ?? null);
+      setOperbox(normalizeOperboxEntries(session.scheduleSnapshot.operbox));
+      setFileName(session.scheduleSnapshot.sourceName);
+    },
+  };
   const websiteUserId = websiteSession?.user.id ?? null;
+  const [trainingSyncLoaded, setTrainingSyncLoaded] = useState(page === "training");
+  const [trainingSyncSnapshot, setTrainingSyncSnapshot] = useState<TrainingSyncSnapshot | null>(null);
+  useEffect(() => {
+    if (page === "training") setTrainingSyncLoaded(true);
+  }, [page]);
+  const sklandTrainingSync = sklandTrainingSyncOptions.enabled
+    && trainingSyncSnapshot?.identity === sklandTrainingSyncOptions.identity
+    && trainingSyncSnapshot.resultId === sklandTrainingSyncOptions.resultId
+    ? trainingSyncSnapshot.value : null;
   const accountCloudWorkspace = useAccountCloudWorkspace(CLIENT_ACCOUNT_CLOUD_SYNC_ENABLED ? {
     userId: websiteUserId,
     hasRestoredSession,
@@ -1191,6 +1228,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       userSettings.strictMaaOperatorOrder,
       userSettings.allowReplacementOperatorSort,
       layout,
+      userSettings.usePreMaaExecutionOrder,
     ));
   }
 
@@ -2042,6 +2080,10 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   );
   const animateEmptyScheduleEntrance = page === "calculator" && hasRenderedCalculator.current;
   const workbenchContext = {
+    inventory: {
+      identityKey: JSON.stringify([websiteUserId, sklandActiveAccountId, activeSklandAccount?.selectedUid ?? null]),
+      pending: websiteSessionPending || !hasRestoredSession,
+    },
     calculator: {
       layout,
       result,
@@ -2114,7 +2156,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       onScheduleVariantChange: setScheduleVariant,
       onUpgradeTrialReady: (trial: PublicPlanData) => {
         if (!result) return;
-        setUpgradeComparison({ baseline: result, trial });
+        setUpgradeComparison({ baseline: result, trial: withDefaultDormAutofill(trial) });
         setScheduleVariant("trial");
         setActiveShift(0);
       },
@@ -2143,8 +2185,10 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       showFeedback: userSettings.showFeedback,
       showImages: userSettings.showImages,
       allowReplacementOperatorSort: userSettings.allowReplacementOperatorSort,
+      highlightNoLayoutSkill: userSettings.highlightNoLayoutSkill,
     },
     manual: {
+      usePreMaaExecutionOrder: userSettings.usePreMaaExecutionOrder,
       layout,
       operbox: accountCanUseCurrentBox ? operbox : null,
       sourceName: accountCanUseCurrentBox ? fileName : null,
@@ -2165,6 +2209,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       onShiftStartTimeChange: setManualShiftStartTime,
       onScheduleModeChange: setManualScheduleMode,
       onImportedLayoutChange: handleManualImportedLayout,
+      showMower: userSettings.showMower,
       onFiammettaEnabledChange: setManualFiammettaEnabled,
       onOpenSetup: handleManualSetup,
       onFactoryRecipeChange: handleFactoryRecipeChange,
@@ -2179,8 +2224,9 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     training: {
       operbox: accountCanUseCurrentBox ? operbox : null,
       layout,
-      profile: accountCanUseCurrentBox ? result?.profile : null,
-      trainingAdvice: accountCanUseCurrentBox ? result?.trainingAdvice ?? null : null,
+      profile: accountCanUseCurrentBox ? sklandTrainingSync?.data?.profile ?? result?.profile : null,
+      trainingAdvice: accountCanUseCurrentBox ? (sklandTrainingSync?.data ? sklandTrainingSync.data.trainingAdvice ?? null : result?.trainingAdvice ?? null) : null,
+      sync: sklandTrainingSync ?? undefined,
       requiresAccount: !accountCanUseCurrentBox,
       onOpenCalculator: () => navigateToPage("calculator"),
     },
@@ -2276,7 +2322,12 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       }}
     >
     <SidebarProvider defaultOpen defaultOpenBreakpoint={1280}>
-      <AppSidebar page={page} onPageChange={handleAppPageChange} />
+      {trainingSyncLoaded || page === "training" ? (
+        <Suspense fallback={null}>
+          <SklandTrainingSyncBridge options={sklandTrainingSyncOptions} onChange={setTrainingSyncSnapshot} />
+        </Suspense>
+      ) : null}
+      <AppSidebar page={page} onPageChange={handleAppPageChange} showMower={userSettings.showMower} />
       <SidebarInset>
         <AppTopBar />
         <LiveActivity
