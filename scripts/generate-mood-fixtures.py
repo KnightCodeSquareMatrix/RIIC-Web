@@ -75,5 +75,5 @@ for group in sets:
                                  "target": group[1][0], "points": points,
                                  "layouts": [{"time": float(a), "rooms": {str(i): [o.name for o in room.operators] for i, room in enumerate(world.facilities)}} for a, b, world in traj.segments]})
 out = Path(__file__).resolve().parents[1] / "src/mood-simulation/reference-fixtures.json"
-out.write_text(json.dumps({"rates": cases, "trajectories": trajectories}, ensure_ascii=False, separators=(",", ":"))+"\n", encoding="utf-8")
+out.write_text(json.dumps({"rates": cases, "trajectories": trajectories}, ensure_ascii=False, indent=2)+"\n", encoding="utf-8")
 print(f"Generated {len(cases)} rate cases and {len(trajectories)} trajectory cases")
