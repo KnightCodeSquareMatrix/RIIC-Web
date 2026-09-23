@@ -92,6 +92,9 @@ const nextConfig: NextConfig = {
   },
   turbopack: {
     resolveAlias: {
+      "workbench-inventory-route": isSklandFeatureEnabled()
+        ? "./src/components/pages/InventoryPage.tsx"
+        : "./src/components/workbench/InventoryRoute.disabled.tsx",
       "account-cloud-workspace-bridge": process.env.ACCOUNT_CLOUD_SYNC_ENABLED === "1"
         ? "./src/components/cloud/useAccountCloudWorkspace.tsx"
         : "./src/components/cloud/useAccountCloudWorkspace.disabled.ts",

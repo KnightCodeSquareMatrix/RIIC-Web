@@ -28,7 +28,8 @@ import { cn } from "@/lib/utils";
 import type { ShiftDirection } from "@/motion";
 import { onboardingStepStatuses, shouldShowAnonymousSampleTrial } from "@/onboarding";
 import type { RoomRow } from "@/schedule";
-import { buildingSkillPrefixFor, OPERATOR_CATALOG } from "@/operatorPortraits";
+import type { OperatorAssetRecord } from "@/operatorPortraits";
+import { operatorsWithoutLayoutSkills } from "@/layout-skill-highlight";
 import type {
   BaseBlueprint,
   FeedbackData,
@@ -396,8 +397,16 @@ export function InfraCalculator(props: InfraCalculatorProps) {
   const [imageExportFailed, setImageExportFailed] = useState(false);
   const [sortRoomId, setSortRoomId] = useState<string | null>(null);
   const [sortSelection, setSortSelection] = useState<{ roomId: string; slotIndex: number } | null>(null);
-  const layoutSkillPrefixes = useMemo(() => new Set(layout.rooms.map((room) => ({ control_center: "control", trade_post: "trade", factory: "manu", power_plant: "power", dormitory: "dormitory", office: "hire", meeting_room: "meet", workshop: "workshop", training_room: "train" } as Record<string, string>)[room.kind]).filter(Boolean)), [layout]);
-  const noLayoutSkillOperators = useMemo(() => new Set(OPERATOR_CATALOG.filter((operator) => !operator.buildingSkills.some((skill) => layoutSkillPrefixes.has(buildingSkillPrefixFor(skill.id)))).map((operator) => operator.name)), [layoutSkillPrefixes]);
+  const [highlightCatalog, setHighlightCatalog] = useState<readonly OperatorAssetRecord[]>([]);
+  useEffect(() => {
+    if (!highlightNoLayoutSkill) return;
+    let active = true;
+    void import("@/operatorPortraits").then(({ OPERATOR_CATALOG }) => {
+      if (active) setHighlightCatalog(OPERATOR_CATALOG);
+    }).catch(() => { /* Leave highlighting unavailable until the next toggle. */ });
+    return () => { active = false; };
+  }, [highlightNoLayoutSkill]);
+  const noLayoutSkillOperators = useMemo(() => operatorsWithoutLayoutSkills(highlightCatalog, layout.rooms), [highlightCatalog, layout.rooms]);
   const imageExportInFlight = useRef(false);
 
   function toggleSortMode(row: RoomRow) {

@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 
-import InventoryPage from "@/components/pages/InventoryPage";
+import InventoryPage from "workbench-inventory-route";
 
 export const dynamic = "force-dynamic";
 
