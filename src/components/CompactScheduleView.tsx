@@ -42,6 +42,7 @@ import { localizedRoomTitle } from "@/i18n/game-data";
 import { useGameCatalog } from "@/i18n/game-data-client";
 
 export interface CompactScheduleViewProps {
+  simulation?: { moods: Readonly<Record<string, number>>; selected: string; onSelect: (name: string) => void };
   noLayoutSkillOperators?: ReadonlySet<string>;
   rows: RoomRow[];
   layout: BaseBlueprint;
@@ -78,6 +79,7 @@ function roomSlotCountFor(group: string) {
 }
 
 function CompactRoomCard({
+  simulation,
   noLayoutSkillOperators,
   row,
   layoutRoom,
@@ -103,6 +105,7 @@ function CompactRoomCard({
   onDroneTargetChange,
   onManualSkillEfficiencyChange,
 }: {
+  simulation?: CompactScheduleViewProps["simulation"];
   noLayoutSkillOperators?: ReadonlySet<string>;
   row: RoomRow;
   layoutRoom: BaseBlueprint["rooms"][number] | undefined;
@@ -256,7 +259,9 @@ function CompactRoomCard({
       key={`${row.key}-${index}`}
       slot={slot}
       highlightNoLayoutSkill={Boolean(slot && noLayoutSkillOperators?.has(slot.name))}
-      elite={slot ? eliteByOperator?.get(slot.name) : undefined}
+      elite={simulation ? undefined : slot ? eliteByOperator?.get(slot.name) : undefined}
+      currentMorale={slot && simulation ? Math.round((simulation.moods[slot.name] ?? 24) * 100) / 100 : undefined}
+      selectionMode={Boolean(simulation)}
       operatorLevel={slot ? levelByOperator?.get(slot.name) : undefined}
       autofill={row.group === "dormitory" && row.autofill}
       compactView
@@ -265,8 +270,8 @@ function CompactRoomCard({
       transitionDelay={Math.min(index, 2) * 0.02}
       positionLabel={positionLabel}
       unavailable={row.unavailableSlotIndices?.includes(index)}
-      onActivate={onSlotClick ? () => onSlotClick(row, index) : undefined}
-      sortSelected={sortSelection?.roomId === row.roomId && sortSelection.slotIndex === index}
+      onActivate={simulation && slot ? () => simulation.onSelect(slot.name) : onSlotClick ? () => onSlotClick(row, index) : undefined}
+      sortSelected={simulation ? slot?.name === simulation.selected : sortSelection?.roomId === row.roomId && sortSelection.slotIndex === index}
       onSortActivate={sortMode && onSortSlotClick ? () => onSortSlotClick(row, index) : undefined}
     />
   ));
@@ -473,6 +478,7 @@ export function CompactScheduleView(props: CompactScheduleViewProps) {
       : Array.from({ length: slotCount }, (_, i) => ({ slot: row.slotAssignments ? row.slotAssignments[i] : row.operatorSlots[i] }));
     return (
       <CompactRoomCard
+        simulation={props.simulation}
         noLayoutSkillOperators={props.noLayoutSkillOperators}
         key={row.key}
         row={row}
