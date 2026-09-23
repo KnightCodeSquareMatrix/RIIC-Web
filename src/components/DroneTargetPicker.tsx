@@ -9,7 +9,7 @@ export function DroneTargetPicker({ rows, targetRoomId, manualSelection, onTarge
   targetRoomId?: string | null;
   manualSelection: boolean;
   onTargetChange?: (row: RoomRow) => void;
-  onAutoAllocation?: () => void;
+  onAutoAllocation: () => void;
   onOpenChange: (open: boolean) => void;
 }) {
   return <Dialog open onOpenChange={onOpenChange}>
@@ -23,7 +23,7 @@ export function DroneTargetPicker({ rows, targetRoomId, manualSelection, onTarge
         <Button type="button" variant="ghost" className="justify-start" onClick={() => { const current = rows.find(row => row.roomId === targetRoomId); if (current) onTargetChange?.(current); onOpenChange(false); }}>不使用无人机</Button>
       </div>
       <DialogFooter>
-        {manualSelection && onAutoAllocation ? <Button type="button" variant="outline" onClick={() => { onAutoAllocation(); onOpenChange(false); }}>恢复自动分配</Button> : null}
+        {manualSelection && <Button type="button" variant="outline" onClick={() => { onAutoAllocation(); onOpenChange(false); }}>恢复自动分配</Button>}
         <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>取消</Button>
       </DialogFooter>
     </DialogContent>

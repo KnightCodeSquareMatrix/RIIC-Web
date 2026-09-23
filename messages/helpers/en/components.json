@@ -56,7 +56,6 @@
   "levelMaximum": "Level {level}, maximum {value2}",
   "infrastructureSkillS": "Infrastructure skill S{index}: {name}, {unlockLabel}",
   "autoFill": "Auto-fill",
-  "paperSkillEfficiency": "Manual skill efficiency",
   "empty": "Empty",
   "slotLocked": "Locked",
   "label2": ": ",

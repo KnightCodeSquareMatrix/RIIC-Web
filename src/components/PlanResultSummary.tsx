@@ -12,9 +12,8 @@ import { ShiftComparisonDetails } from "@/components/ShiftComparisonCard";
 import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { type DailyProductionUnavailableReason } from "@/daily-production";
-import { type DailyProductionGroup, type ProductionDetailProduct } from "@/daily-production-presentation";
-import { createCalculatorProductionPresentation, type ProductionSummaryPresentation } from "@/production-summary-adapters";
+import { estimateDailyProduction, type DailyProductionUnavailableReason } from "@/daily-production";
+import { dailyProductionGroups, type DailyProductionGroup, type ProductionDetailProduct } from "@/daily-production-presentation";
 import { cn } from "@/lib/utils";
 
 const PRODUCT_KEYS = { experience: "productExperience", "lmd-orders": "productLmd", gold: "productGold", orundum: "productOrundum", shards: "productShards" } as const;
@@ -123,10 +122,6 @@ export function PlanResultSummary({
   onPerformanceIssue,
   feedbackDisabled = false,
   controlsSlot,
-  productionPresentation,
-  presentationTitle,
-  presentationSubtitle,
-  mode = "calculator",
 }: {
   profile?: UserProfile;
   rotation?: RotationJson;
@@ -142,11 +137,6 @@ export function PlanResultSummary({
   onPerformanceIssue?: () => void;
   feedbackDisabled?: boolean;
   controlsSlot?: ReactNode;
-  /** A manual page may supply an estimate-only presentation without entering solver data paths. */
-  productionPresentation?: ProductionSummaryPresentation;
-  presentationTitle?: ReactNode;
-  presentationSubtitle?: ReactNode;
-  mode?: "calculator" | "manual";
 }) {
   const intl = useTranslations();
   const locale = useLocale();
@@ -159,19 +149,14 @@ export function PlanResultSummary({
   useEffect(() => {
     if (animateOnMount && planRevision) onEntranceConsumed?.(planRevision);
   }, [animateOnMount, onEntranceConsumed, planRevision]);
-  if (!profile && !rotation && !productionPresentation) return null;
+  if (!profile && !rotation) return null;
 
-  const calculatorPresentation: ProductionSummaryPresentation = rotation
-    ? createCalculatorProductionPresentation({ layout, maa, rotation })
-    : { source: "pending", groups: [], detailsAvailable: false, solverProduction: null, droneProduction: undefined };
-  const activePresentation = productionPresentation ?? calculatorPresentation;
-  const solverDaily = activePresentation.solverProduction;
-  const productGroups = activePresentation.groups;
+  const solverDaily = rotation?.daily?.production ?? null;
+  const production = rotation ? estimateDailyProduction({ layout, maa, rotation }) : null;
+  const productGroups = dailyProductionGroups(production, solverDaily, rotation?.daily?.drone_production);
   const uncertainMaaOperators = maaUncertainOperators(maa);
   const adjustmentCount = countShiftPlacementAdjustments(comparison);
   const activeDetailSection = detailSection === "comparison" && comparison ? "comparison" : "efficiency";
-  const canOpenDetails = activePresentation.detailsAvailable;
-  const manual = mode === "manual";
   const openDetails = (section: DetailSection) => {
     setDetailSection(section);
     setDrawerOpen(true);
@@ -191,7 +176,8 @@ export function PlanResultSummary({
       <motion.section
         className="relative mb-5 overflow-hidden border border-[#313131]/18 bg-[#F3F1EA] text-[#313131] shadow-[0_12px_30px_rgba(35,38,39,0.10)]"
         aria-label={intl("components_PlanResultSummary.scheduleResultSummary")}
-        {...(manual ? { "data-manual-production-summary": "" } : { "data-plan-summary": "", "data-plan-result-summary": "" })}
+        data-plan-summary
+        data-plan-result-summary
         data-plan-revision={planRevision}
         data-plan-entrance={animateOnMount ? "animated" : "steady"}
         data-active-shift={activeShift}
@@ -212,15 +198,15 @@ export function PlanResultSummary({
           </div>
         ) : null}
         <div data-animation-revision={animationRevision} className="grid min-h-[84px] grid-cols-[minmax(10rem,1.05fr)_minmax(0,5fr)] items-stretch max-[820px]:grid-cols-1">
-          <motion.button type="button" className={cn("group relative flex min-w-0 items-center justify-between gap-3 overflow-hidden bg-[#272A2B] px-5 py-3 text-left text-white focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-[#FFD800] max-[820px]:row-span-1 max-sm:min-h-16", comparison && "row-span-2", !canOpenDetails && "cursor-default")} data-plan-details-trigger="efficiency" data-plan-primary-details-trigger disabled={!canOpenDetails} whileHover={canOpenDetails && !shouldReduceMotion ? { x: 2 } : undefined} whileTap={canOpenDetails && !shouldReduceMotion ? { scale: 0.985 } : undefined} onClick={() => { if (canOpenDetails) openDetails("efficiency"); }}>
+          <motion.button type="button" className={cn("group relative flex min-w-0 items-center justify-between gap-3 overflow-hidden bg-[#272A2B] px-5 py-3 text-left text-white focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-[#FFD800] max-[820px]:row-span-1 max-sm:min-h-16", comparison && "row-span-2")} data-plan-details-trigger="efficiency" data-plan-primary-details-trigger whileHover={shouldReduceMotion ? undefined : { x: 2 }} whileTap={shouldReduceMotion ? undefined : { scale: 0.985 }} onClick={() => openDetails("efficiency")}>
             <motion.span className="min-w-0" data-plan-metric initial={animateOnMount ? { opacity: 0, x: shouldReduceMotion ? 0 : -10 } : false} animate={{ opacity: 1, x: 0 }} transition={{ duration: shouldReduceMotion ? MOTION_DURATION.feedback : 0.36, delay: shouldReduceMotion ? 0 : 0.1, ease: MOTION_EASE_OUT }}>
-              <strong className="block truncate text-lg font-medium">{presentationTitle ?? <><span className="font-number">{layout.template}</span> {intl("components_PlanResultSummary.basePlan")}</>}</strong>
-              <span className="mt-1 block text-[10px] text-white/45">{presentationSubtitle ?? <>{intl("components_PlanResultSummary.generatedIn")} <span className="font-number">{en ? formatPlanDuration(durationMs).replace(" 秒", "s") : formatPlanDuration(durationMs)}</span> · {intl("components_PlanResultSummary.viewDetails")}</>}</span>
+              <strong className="block truncate text-lg font-medium"><span className="font-number">{layout.template}</span> {intl("components_PlanResultSummary.basePlan")}</strong>
+              <span className="mt-1 block text-[10px] text-white/45">{intl("components_PlanResultSummary.generatedIn")} <span className="font-number">{en ? formatPlanDuration(durationMs).replace(" 秒", "s") : formatPlanDuration(durationMs)}</span> · {intl("components_PlanResultSummary.viewDetails")}</span>
             </motion.span>
             <ChevronRight className="size-4 shrink-0 text-white/55 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
           </motion.button>
 
-          <div className={cn("grid min-w-0 max-sm:grid-cols-2", controlsSlot ? "grid-cols-5" : "grid-cols-3")} aria-label={intl("components_PlanResultSummary.estimatedDailyProduction")} data-daily-production-summary data-production-source={activePresentation.source}>
+          <div className={cn("grid min-w-0 max-sm:grid-cols-2", controlsSlot ? "grid-cols-5" : "grid-cols-3")} aria-label={intl("components_PlanResultSummary.estimatedDailyProduction")} data-daily-production-summary data-production-source={productGroups[0]?.source}>
             {productGroups.map((productGroup, index) => (
               <motion.button
                 key={productGroup.id}
@@ -229,8 +215,7 @@ export function PlanResultSummary({
                 data-plan-details-trigger="efficiency"
                 data-daily-product-group={productGroup.id}
                 whileTap={shouldReduceMotion ? undefined : { scale: 0.98 }}
-                disabled={!canOpenDetails}
-                onClick={() => { if (canOpenDetails) openDetails("efficiency"); }}
+                onClick={() => openDetails("efficiency")}
               >
                 <motion.span
                   className="relative z-10 block w-full min-w-0 self-start"
@@ -245,7 +230,7 @@ export function PlanResultSummary({
                       <span className="truncate text-[clamp(1rem,1.5vw,1.35rem)] font-semibold"><AnimatedNumber value={dailyNumber(productGroup.primary.amount.value)} drift={{ x: 0, y: shouldReduceMotion ? 0 : 8 }} /></span>
                       {productGroup.primary.amount.value === null ? null : <span className="shrink-0 text-[9px] font-medium text-[#313131]/45">{productUnit(productGroup.primary.unit, en)}</span>}
                     </strong>
-                    {productGroup.primary.amount.value === null && productGroup.primary.amount.unavailableReason ? <span className="mt-1 block truncate text-[10px] font-semibold text-amber-800">{unavailableReason(productGroup.primary.amount.unavailableReason, en)}</span> : null}
+                    {productGroup.primary.amount.value === null ? <span className="mt-1 block truncate text-[10px] font-semibold text-amber-800">{unavailableReason(productGroup.primary.amount.unavailableReason, en)}</span> : null}
                   </span>
                   {productGroup.supporting ? (
                     <span className="mt-2 flex min-w-0 items-center gap-1.5 bg-[#313131]/[0.045] px-1.5 py-1" data-daily-product={productGroup.supporting.id} data-product-role="supporting">
@@ -301,7 +286,7 @@ export function PlanResultSummary({
             <div data-yeye-scroll="auto" className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 pb-6" data-plan-details-section={activeDetailSection}>
               <TabsContent value="efficiency" className="m-0">
                 <motion.div initial={{ opacity: 0, x: shouldReduceMotion ? 0 : -12 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: shouldReduceMotion ? 0 : MOTION_DURATION.state, ease: MOTION_EASE_OUT }}>
-                  <EfficiencyDetails productGroups={productGroups} en={en} solverProduction={solverDaily} droneProduction={activePresentation.droneProduction} />
+                  <EfficiencyDetails productGroups={productGroups} en={en} solverProduction={solverDaily} droneProduction={rotation?.daily?.drone_production} />
                 </motion.div>
               </TabsContent>
               {comparison ? (

@@ -61,8 +61,5 @@
   "moveThisOperator": "Move this operator?",
   "isAlreadyAssignedToMoveThemToAndLeave": "{value1} is already assigned to {previousRoomTitle}. Move them to {nextRoomTitle} and leave the previous slot empty?",
   "cancel": "Cancel",
-  "moveOperator": "Move operator",
-  "evaluateBasedOnCurrentScheduleUnavailable": "Evaluation based on the current schedule is not available yet.",
-  "calculateBasedOnSchedule": "Calculate based on schedule",
-  "calculateBasedOnEfficiency": "Calculate based on efficiency"
+  "moveOperator": "Move operator"
 }

@@ -79,9 +79,7 @@ import {
   DEFAULT_MANUAL_SHIFT_START_TIME,
   MANUAL_SCHEDULE_STORAGE_KEY,
 } from "./manual-schedule-config";
-import { type ManualScheduleDraft, type ManualScheduleMode } from "./manual-schedule";
-import type { ManualPlanResult } from "./manual-plan-result";
-import { clearManualEvaluationCache, persistManualEvaluationCache } from "./manual-evaluation-cache";
+import type { ManualScheduleDraft, ManualScheduleMode } from "./manual-schedule";
 import { DEFAULT_USER_SETTINGS, loadUserSettings, persistUserSettings, USER_SETTINGS_CHANGED_EVENT, type UserSettings } from "./user-settings";
 import { effectiveFiammettaSetting, resolvePlanPresentationLayout } from "./plan-presentation";
 import {
@@ -310,8 +308,6 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   const [manualShiftStartTime, setManualShiftStartTime] = useState(DEFAULT_MANUAL_SHIFT_START_TIME);
   const [manualScheduleMode, setManualScheduleMode] = useState<ManualScheduleMode>("sequential");
   const [manualDraftHandoff, setManualDraftHandoff] = useState<ManualScheduleDraft | null>(null);
-  const [manualPlanResult, setManualPlanResult] = useState<ManualPlanResult | null>(null);
-  const [manualEvaluationPending, setManualEvaluationPending] = useState(false);
   const [pendingManualDraftReplacement, setPendingManualDraftReplacement] = useState<ManualScheduleDraft | null>(null);
   const [inputMode, setInputMode] = useState<"skland" | "maa" | "manual">(CLIENT_SKLAND_ENABLED ? "skland" : "maa");
   const [maaPaste, setMaaPaste] = useState("");
@@ -1263,42 +1259,8 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     await downloadScheduleImage(board, `arknights-infra-schedule-shift-${activeShift + 1}.png`);
   }
 
-  async function evaluateManualScheduleFromPage(input: {
-    draft: ManualScheduleDraft;
-  }) {
-    if (manualEvaluationPending) return;
-    setManualEvaluationPending(true);
-    try {
-      const { assemblePaperManualPlanResult } = await import("./manual-plan-result");
-      const result = assemblePaperManualPlanResult({ draft: input.draft, layout, operbox });
-      setManualPlanResult(result);
-      try {
-        persistManualEvaluationCache(window.localStorage, result);
-      } catch {
-        // The in-memory result remains available for the current workbench session.
-      }
-    } finally {
-      setManualEvaluationPending(false);
-    }
-  }
-
-  function restoreManualEvaluation(result: ManualPlanResult) {
-    setManualPlanResult(result);
-  }
-
-  function clearManualEvaluation() {
-    setManualPlanResult(null);
-    setManualEvaluationPending(false);
-    try {
-      clearManualEvaluationCache(window.localStorage);
-    } catch {
-      // Local storage can be unavailable while the in-memory state is still cleared.
-    }
-  }
-
   function openManualScheduleDraft(draft: ManualScheduleDraft) {
     setPendingManualDraftReplacement(null);
-    clearManualEvaluation();
     setManualShiftDurations(draft.shifts.map((shift) => shift.durationHours));
     setManualShiftStartTime(draft.startTime);
     setManualScheduleMode(draft.scheduleMode);
@@ -1958,7 +1920,6 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       setManualScheduleMode("sequential");
       setManualFiammettaEnabled(false);
       setManualDraftHandoff(null);
-      clearManualEvaluation();
       setLayoutDirty(false);
       setLayoutSource("local");
       setLocalLayoutBackup(null);
@@ -2173,12 +2134,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       scheduleMode: manualScheduleMode,
       fiammettaEnabled: effectiveManualFiammettaEnabled,
       initialDraft: accountCanUseCurrentBox ? manualDraftHandoff : null,
-      restorationReady: hasRestoredSession,
       onInitialDraftConsumed: () => setManualDraftHandoff(null),
-      result: manualPlanResult,
-      evaluationPending: manualEvaluationPending,
-      onEvaluate: evaluateManualScheduleFromPage,
-      onRestoreEvaluation: restoreManualEvaluation,
       onOpenCalculator: () => navigateToPage("calculator"),
       onShiftDurationsChange: setManualShiftDurations,
       onShiftStartTimeChange: setManualShiftStartTime,
