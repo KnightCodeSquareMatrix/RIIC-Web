@@ -32,6 +32,7 @@
     "assets:site-icon": "node scripts/generate-site-icons.mjs",
     "assets:check": "node scripts/generate-site-icons.mjs --check && node scripts/sync-arkntools-assets.mjs --check && node scripts/generate-mastery-data.mjs --check",
     "assets:mastery": "node scripts/generate-mastery-data.mjs",
+    "assets:gacha-up": "node scripts/sync-gacha-up.mjs",
     "test:mastery": "node --test --experimental-strip-types src/mastery.test.ts",
     "assets:recruitment": "node scripts/generate-recruitment-data.mjs",
     "test:recruitment": "node scripts/generate-recruitment-data.mjs --check && node --test --experimental-strip-types src/recruitment.test.ts",

@@ -72,6 +72,7 @@ import { useGameCatalog } from "@/i18n/game-data-client";
 import { operatorPortraitFor, operatorProfessionFor } from "@/operatorPortraits";
 import { roomGridTone } from "@/schedule-view-presentation";
 const SklandLoginPanel = lazy(() => import("@/skland-components").then((module) => ({ default: module.SklandLoginPanel })));
+const GachaHistoryTab = lazy(() => import("@/components/pages/GachaHistoryTab"));
 import {
   deriveSklandBuildingMetrics,
   sklandTradingOrderRewardLabel,
@@ -1445,6 +1446,7 @@ export function SklandStatus({
   const locale = useLocale();
   const en = locale === "en";
   const [addAccountOpen, setAddAccountOpen] = useState(false);
+  const [loginView, setLoginView] = useState("skland");
   const [accountQuery, setAccountQuery] = useState<string | null>(null);
   const bindingState = deriveSklandBindingState(bindingSummary, accounts.length);
   if (sessionLoading) return <LoadingState />;
@@ -1457,13 +1459,13 @@ export function SklandStatus({
         className="min-h-[calc(100dvh-7rem)] place-items-center py-8 sm:py-12"
         data-skland-page
       >
-        <div className="grid w-full max-w-4xl justify-items-center gap-7 text-center">
+        <div className={cn("grid w-full justify-items-center gap-7 text-center", loginView === "gacha" ? "max-w-7xl" : "max-w-4xl")}>
           <header className="grid max-w-lg gap-3" data-skland-login-copy>
             <p className="text-xs font-medium tracking-wide text-primary">{intl("components_pages_SklandStatus.sklandStatus")}</p>
-            <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">{loginTitle}</h2>
-            <p className="text-pretty text-sm leading-6 text-muted-foreground">{loginDescription}</p>
+            <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">{loginView === "gacha" ? (en ? "Headhunting history" : "寻访记录") : loginTitle}</h2>
+            <p className="text-pretty text-sm leading-6 text-muted-foreground">{loginView === "gacha" ? (en ? "Scan to authorize access to your Arknights headhunting history." : "扫码授权后查看明日方舟寻访记录，无需先连接森空岛状态数据。") : loginDescription}</p>
             <p className="text-xs leading-5 text-muted-foreground/80">
-              {intl("components_pages_SklandStatus.credentialsStayInThisBrowserAndExpireAfter7")}
+              {loginView === "gacha" ? (en ? "Credentials stay in server memory for one hour" : "寻访凭证仅在服务端内存保留一小时") : intl("components_pages_SklandStatus.credentialsStayInThisBrowserAndExpireAfter7")}
             </p>
           </header>
           {error ? (
@@ -1471,14 +1473,20 @@ export function SklandStatus({
               <AlertDescription>{error.message}{intl("components_pages_SklandStatus.label", { code: error.code })}</AlertDescription>
             </Alert>
           ) : null}
-          <Suspense fallback={<Skeleton className="h-80 w-full max-w-4xl" />}>
-          <SklandLoginPanel
-            className="max-w-4xl"
-            configured={configured}
-            disabledReason={disabledReason}
-            onAuthenticated={onAuthenticated}
-          />
-          </Suspense>
+          <Tabs value={loginView} onValueChange={setLoginView} className="w-full text-start">
+            <TabsList data-skland-view-tabs>
+              <TabsTrigger value="skland">{en ? "Skland" : "森空岛"}</TabsTrigger>
+              <TabsTrigger value="gacha">{en ? "Headhunting" : "寻访记录"}</TabsTrigger>
+            </TabsList>
+            <TabsContent value="skland" className="pt-5">
+              <Suspense fallback={<Skeleton className="h-80 w-full max-w-4xl" />}>
+                <SklandLoginPanel className="max-w-4xl" configured={configured} disabledReason={disabledReason} onAuthenticated={onAuthenticated} />
+              </Suspense>
+            </TabsContent>
+            <TabsContent value="gacha" className="pt-5">
+              <Suspense fallback={<Skeleton className="h-64 w-full" />}><GachaHistoryTab /></Suspense>
+            </TabsContent>
+          </Tabs>
         </div>
       </StatusCenterPage>
     );
@@ -1715,6 +1723,7 @@ export function SklandStatus({
             <TabsList className="min-w-max" data-skland-view-tabs>
               <TabsTrigger value="overview">{intl("components_pages_SklandStatus.overview")}</TabsTrigger>
               <TabsTrigger value="inventory">{en ? "Backpack" : "背包"}</TabsTrigger>
+              <TabsTrigger value="gacha">{en ? "Headhunting" : "寻访记录"}</TabsTrigger>
               <TabsTrigger value="infrastructure">{intl("components_pages_SklandStatus.infrastructure")}</TabsTrigger>
             </TabsList>
           </div>
@@ -1733,6 +1742,9 @@ export function SklandStatus({
         </TabsContent>
         <TabsContent value="inventory" className="pt-5">
           <Suspense fallback={<Skeleton className="h-64 w-full" />}><InventoryPage /></Suspense>
+        </TabsContent>
+        <TabsContent value="gacha" className="pt-5">
+          <Suspense fallback={<Skeleton className="h-64 w-full" />}><GachaHistoryTab uid={snapshot.player.uid} /></Suspense>
         </TabsContent>
       </Tabs>
 
