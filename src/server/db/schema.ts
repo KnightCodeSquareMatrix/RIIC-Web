@@ -28,6 +28,18 @@ export const user = pgTable("user", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+export const gameReport = pgTable("game_report", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  roleKey: text("role_key").notNull(),
+  sourceType: text("source_type").$type<"screenshot" | "manual">().notNull(),
+  days: jsonb("days").$type<import("../../game-report.ts").GameReportRecord["days"]>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index("game_report_user_role_created_idx").on(table.userId, table.roleKey, table.createdAt),
+  check("game_report_source_type_check", sql`${table.sourceType} IN ('screenshot', 'manual')`),
+]);
+
 export const session = pgTable("session", {
   id: text("id").primaryKey(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),

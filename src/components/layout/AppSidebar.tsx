@@ -5,6 +5,7 @@ import {
   Calculator,
   BookOpen,
   CircleHelp,
+  ClipboardCheck,
   Cloud,
   GraduationCap,
   Search,
@@ -103,6 +104,7 @@ export function AppSidebar({ page, onPageChange, showMower = false }: AppSidebar
         <SidebarGroup>
           <SidebarGroupLabel>{labels.progressionGroup}</SidebarGroupLabel>
           <SidebarMenu>
+            <AppNavigationItem page={page} target="account-health" label={locale === "en" ? "Account Health" : "账号体检"} icon={ClipboardCheck} onPageChange={onPageChange} />
             <AppNavigationItem page={page} target="mastery" label={labels.mastery} icon={BookOpen} onPageChange={onPageChange} />
             <AppNavigationItem page={page} target="recruitment" label={labels.recruitment} icon={UserRoundPlus} onPageChange={onPageChange} />
           </SidebarMenu>
