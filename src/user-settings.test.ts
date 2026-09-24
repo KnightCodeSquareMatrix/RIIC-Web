@@ -46,9 +46,8 @@ test("user settings persist and fall back to defaults", () => {
     showFeedback: false,
     showImages: false,
     allowReplacementOperatorSort: true,
-    usePreMaaExecutionOrder: false,
 });
-assert.equal(storage.getItem(USER_SETTINGS_STORAGE_KEY), "{\"strictMaaOperatorOrder\":false,\"showProgressionRecalculate\":false,\"showManualScheduleEdit\":false,\"showMower\":true,\"highlightNoLayoutSkill\":true,\"scheduleViewControl\":\"select\",\"linkShiftViewControl\":false,\"shiftViewControl\":\"select\",\"imageExportScope\":\"all\",\"loadEnglishResources\":false,\"skillPagination\":\"manual\",\"showFeedback\":false,\"showImages\":false,\"allowReplacementOperatorSort\":true,\"usePreMaaExecutionOrder\":false}");
+assert.equal(storage.getItem(USER_SETTINGS_STORAGE_KEY), "{\"strictMaaOperatorOrder\":false,\"showProgressionRecalculate\":false,\"showManualScheduleEdit\":false,\"showMower\":true,\"highlightNoLayoutSkill\":true,\"scheduleViewControl\":\"select\",\"linkShiftViewControl\":false,\"shiftViewControl\":\"select\",\"imageExportScope\":\"all\",\"loadEnglishResources\":false,\"skillPagination\":\"manual\",\"showFeedback\":false,\"showImages\":false,\"allowReplacementOperatorSort\":true}");
 assert.deepEqual(loadUserSettings(storage), {
   strictMaaOperatorOrder: false,
   showProgressionRecalculate: false,
@@ -64,6 +63,5 @@ assert.deepEqual(loadUserSettings(storage), {
   showFeedback: false,
   showImages: false,
   allowReplacementOperatorSort: true,
-  usePreMaaExecutionOrder: false,
 });
 });

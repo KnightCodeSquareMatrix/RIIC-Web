@@ -111,13 +111,6 @@ export function UserSettingsPage({ settings, onSettingsChange }: UserSettingsPag
               />
             </div>
             <div className="flex items-center justify-between gap-6 border-t border-white/12 pt-4">
-              <Label htmlFor="use-pre-maa-execution-order" className="grid min-w-0 gap-1">
-                <span>{en ? "Use pre execution order for MAA" : "MAA 改成 pre 执行顺序"}</span>
-                <span className="font-normal text-sm text-amber-200/80">{en ? "Default is post. If you do not know what this means, leave it unchanged." : "默认使用 post；如果你不知道这是什么，请不要改动。"}</span>
-              </Label>
-              <Switch className={SETTINGS_SWITCH_CLASS} id="use-pre-maa-execution-order" checked={settings.usePreMaaExecutionOrder} onCheckedChange={(checked) => onSettingsChange({ ...settings, usePreMaaExecutionOrder: checked })} aria-label={en ? "Use pre execution order for MAA" : "MAA 改成 pre 执行顺序"} />
-            </div>
-            <div className="flex items-center justify-between gap-6 border-t border-white/12 pt-4">
               <Label htmlFor="allow-replacement-operator-sort" className="grid min-w-0 gap-1">
                 <span>{en ? "Allow replacement operator sorting" : "替换排班允许调整干员顺序"}</span>
                 <span className="font-normal text-sm text-white/64">
