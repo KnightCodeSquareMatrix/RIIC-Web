@@ -106,6 +106,7 @@ const PRODUCT_LABELS: Record<string, string> = {
 const TRADE_PRODUCT_LABELS: Record<string, string> = {
   LMD: "龙门商法",
   gold: "龙门商法",
+  Orundum: "开采协力",
   "Originium Shard": "开采协力",
   originium: "开采协力",
 };
