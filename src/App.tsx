@@ -1229,7 +1229,6 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       userSettings.strictMaaOperatorOrder,
       userSettings.allowReplacementOperatorSort,
       layout,
-      userSettings.usePreMaaExecutionOrder,
     ));
   }
 
@@ -2189,7 +2188,6 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       highlightNoLayoutSkill: userSettings.highlightNoLayoutSkill,
     },
     manual: {
-      usePreMaaExecutionOrder: userSettings.usePreMaaExecutionOrder,
       layout,
       operbox: accountCanUseCurrentBox ? operbox : null,
       sourceName: accountCanUseCurrentBox ? fileName : null,

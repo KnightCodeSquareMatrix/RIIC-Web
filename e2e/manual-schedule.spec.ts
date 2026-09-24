@@ -464,7 +464,7 @@ test("manual scheduling configures independent shifts, moves conflicts and enabl
   expect(exported.plans[0].rooms.dormitory[0].autofill).toBe(false);
   expect(exported.plans[0].rooms.dormitory[1].autofill).toBe(true);
   expect(exported.plans[1].rooms.dormitory.every((room: { autofill: boolean }) => room.autofill === false)).toBe(true);
-  expect(exported.plans[1].drones).toEqual({ enable: true, room: "manufacture", index: 1, rule: "all", order: "post" });
+  expect(exported.plans[1].drones).toEqual({ enable: true, room: "manufacture", index: 1, rule: "all", order: "pre" });
   for (const plan of exported.plans) {
     for (const rooms of Object.values(plan.rooms) as Array<Array<{ operators: unknown[] }>>) {
       for (const room of rooms) expect(room.operators.every((operator) => typeof operator === "string")).toBe(true);
