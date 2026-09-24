@@ -95,7 +95,23 @@ function solverGroups(production: SolverDailyProduction, drone: NonNullable<Rota
   ];
 }
 
-function estimateGroups(production: DailyProductionEstimate): DailyProductionGroup[] {
+export function estimateGroups(
+  production: DailyProductionEstimate,
+  drone: NonNullable<RotationJson["daily"]["drone_production"]> = { lmd: 0, pure_gold: 0, battle_records: 0 },
+): DailyProductionGroup[] {
+  const amountWithDrones = (natural: DailyProductionAmount, drones: number): DailyProductionAmount => natural.value === null || natural.natural === null
+    ? { value: null, natural: null, drones: null, ...(natural.unavailableReason ? { unavailableReason: natural.unavailableReason } : {}) }
+    : { value: natural.natural + drones, natural: natural.natural, drones };
+  const lmdOrders = amountWithDrones(production.lmdOrders, drone.lmd);
+  const experience = amountWithDrones(production.experience, drone.battle_records);
+  const goldValue = amountWithDrones(production.gold, drone.pure_gold);
+  const goldUnits: DailyProductionAmount = goldValue.value === null || goldValue.natural === null || goldValue.drones === null
+    ? { value: null, natural: null, drones: null, ...(goldValue.unavailableReason ? { unavailableReason: goldValue.unavailableReason } : {}) }
+    : {
+        value: Math.floor(goldValue.value / 500),
+        natural: Math.floor(goldValue.natural / 500),
+        drones: Math.floor(goldValue.drones / 500),
+      };
   return [
     {
       id: "experience",
@@ -105,8 +121,8 @@ function estimateGroups(production: DailyProductionEstimate): DailyProductionGro
         label: "经验",
         unit: "经验",
         icon: PRODUCT_ICON_URLS.experience,
-        amount: production.experience,
-        rows: [["自然制造", production.experience.natural, "经验"], ["无人机制造", production.experience.drones, "经验"]],
+        amount: experience,
+        rows: [["自然制造", experience.natural, "经验"], ["无人机制造", experience.drones, "经验"]],
       },
     },
     {
@@ -117,16 +133,16 @@ function estimateGroups(production: DailyProductionEstimate): DailyProductionGro
         label: "龙门币",
         unit: "龙门币",
         icon: PRODUCT_ICON_URLS.lmdOrders,
-        amount: production.lmdOrders,
-        rows: [["自然订单", production.lmdOrders.natural, "龙门币"], ["无人机订单", production.lmdOrders.droneTrade, "龙门币"]],
+        amount: lmdOrders,
+        rows: [["自然订单", lmdOrders.natural, "龙门币"], ["无人机订单", lmdOrders.drones, "龙门币"]],
       },
       supporting: {
         id: "gold",
         label: "赤金",
         unit: "枚",
         icon: PRODUCT_ICON_URLS.gold,
-        amount: production.gold,
-        rows: [["自然制造", production.gold.natural, "枚"], ["无人机制造", production.gold.drones, "枚"]],
+        amount: goldUnits,
+        rows: [["自然制造", goldUnits.natural, "枚"], ["无人机制造", goldUnits.drones, "枚"]],
         relation: "订单原料",
       },
     },
@@ -191,5 +207,5 @@ export function dailyProductionGroups(
 ): DailyProductionGroup[] {
   if (solverProduction && estimate) return solverGroupsWithEstimate(solverProduction, estimate, droneProduction);
   if (solverProduction) return solverGroups(solverProduction, droneProduction);
-  return estimate ? estimateGroups(estimate) : [];
+  return estimate ? estimateGroups(estimate, droneProduction) : [];
 }

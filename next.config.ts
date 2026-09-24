@@ -17,6 +17,8 @@ const uncachedDocumentRoutes = [
   "/account/reset-password",
   "/admin/users",
   "/manual",
+  "/mower",
+  "/inventory",
   "/mastery",
   "/recruitment",
   "/privacy",
@@ -75,6 +77,10 @@ const nextConfig: NextConfig = {
         source: "/images/elite/:asset",
         headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
       },
+      {
+        source: "/wasm/:asset",
+        headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
+      },
     ];
   },
   async rewrites() {
@@ -90,6 +96,9 @@ const nextConfig: NextConfig = {
   },
   turbopack: {
     resolveAlias: {
+      "workbench-inventory-route": isSklandFeatureEnabled()
+        ? "./src/components/pages/InventoryPage.tsx"
+        : "./src/components/workbench/InventoryRoute.disabled.tsx",
       "account-cloud-workspace-bridge": process.env.ACCOUNT_CLOUD_SYNC_ENABLED === "1"
         ? "./src/components/cloud/useAccountCloudWorkspace.tsx"
         : "./src/components/cloud/useAccountCloudWorkspace.disabled.ts",

@@ -1,6 +1,8 @@
 import { factoryRecipeFor, tradeOrderFor } from "./blueprint.ts";
 import { manualRoomCapacity, type ManualScheduleDraft } from "./manual-schedule.ts";
 import { resolveManualManufactureRoom, resolveManualPowerRoom, resolveManualTradeRoom } from "./manual-room-efficiency-resolvers.ts";
+import { resolveGoldEquivalentEfficiency, resolveManualSpecialTradeOutput } from "./manual-trade-special-rules.ts";
+import type { CrossFacilityEfficiencyByShift } from "./manual-schedule-native-evaluator.ts";
 import type { BaseBlueprint, MaaJson, OperBoxEntry, RotationJson, RotationRoomLine, RotationShift } from "./types.ts";
 
 type Facility = "manufacture" | "trade" | "power";
@@ -30,6 +32,7 @@ export type ManualRoomEvaluation = {
   orderMultiplier: number;
   finalEfficiency: number;
   goldEquivalentEfficiency: number;
+  tradeEquivalentEfficiency?: number;
   dailyOutput: number | null;
   outputKind?: "lmd" | "pure_gold" | "battle_records" | "originium_shards" | "power";
 };
@@ -55,17 +58,26 @@ function roomEvaluation(input: {
   operatorNames: readonly string[];
   manualSkillEfficiencyPct?: number;
   tradeMembers?: Array<{ id?: string; name: string; elite?: number }>;
+  crossFacilityEfficiency?: number;
   warnings: ManualEvaluationWarning[];
 }): ManualRoomEvaluation {
-  const { roomId, facility, recipe, level, operatorNames, manualSkillEfficiencyPct, tradeMembers } = input;
+  const { roomId, facility, recipe, level, operatorNames, manualSkillEfficiencyPct, tradeMembers, crossFacilityEfficiency } = input;
   const resolution = facility === "trade"
     ? resolveManualTradeRoom({ activeMemberCount: operatorNames.length, manualSkillEfficiencyPct, level, order: recipe === "originium" ? "originium" : "gold", members: tradeMembers ?? [] })
     : facility === "manufacture"
       ? resolveManualManufactureRoom({ activeMemberCount: operatorNames.length, manualSkillEfficiencyPct })
       : resolveManualPowerRoom({ manualSkillEfficiencyPct });
-  const total = resolution.totalEfficiency;
+  const globalEfficiency = crossFacilityEfficiency ?? resolution.globalEfficiency;
+  const total = rounded(resolution.baseEfficiency + resolution.skillEfficiency + globalEfficiency);
   const orderMultiplier = resolution.orderMultiplier;
-  const final = resolution.finalEfficiency;
+  const final = rounded(total * orderMultiplier);
+  const goldEquivalentEfficiency = facility === "trade"
+    ? resolveGoldEquivalentEfficiency(total, resolveManualSpecialTradeOutput({
+        level,
+        order: recipe === "originium" ? "originium" : "gold",
+        members: tradeMembers ?? [],
+      }).goldUnitOutputPerDay)
+    : resolution.goldEquivalentEfficiency;
   const dailyOutput = facility === "trade"
     ? (recipe === "originium" ? 240 : (TRADE_BASE_DAILY[level] ?? TRADE_BASE_DAILY[3])) * final
     : facility === "manufacture" && recipe !== "all"
@@ -86,11 +98,11 @@ function roomEvaluation(input: {
     members: [...operatorNames],
     baseEfficiency: resolution.baseEfficiency,
     skillEfficiency: resolution.skillEfficiency,
-    globalEfficiency: resolution.globalEfficiency,
+    globalEfficiency,
     totalEfficiency: total,
     orderMultiplier,
     finalEfficiency: final,
-    goldEquivalentEfficiency: resolution.goldEquivalentEfficiency,
+    goldEquivalentEfficiency,
     dailyOutput: dailyOutput === null ? null : rounded(dailyOutput),
     outputKind,
   };
@@ -132,6 +144,7 @@ export function evaluateManualSchedule(input: {
   draft: ManualScheduleDraft;
   layout: BaseBlueprint;
   operbox?: readonly OperBoxEntry[] | null;
+  crossFacilityEfficiencyByShift?: CrossFacilityEfficiencyByShift;
 }): ManualScheduleEvaluation {
   const startedAt = performance.now();
   const warnings: ManualEvaluationWarning[] = [];
@@ -174,6 +187,7 @@ export function evaluateManualSchedule(input: {
         operatorNames,
         manualSkillEfficiencyPct: assignment?.manualSkillEfficiencyPct,
         tradeMembers,
+        crossFacilityEfficiency: input.crossFacilityEfficiencyByShift?.get(index)?.get(room.id),
         warnings,
       });
       rooms.push(evaluation);
@@ -220,7 +234,9 @@ export function evaluateManualSchedule(input: {
 
   warnings.push({
     code: "unsupported-rule",
-    message: "当前本地评估只按手填纸面技能效率和基础房间结算；未填写的纸面技能效率按 0 计算。中枢、跨设施投影、动态制造、订单倍率及特殊贸易组合尚未结算。",
+    message: input.crossFacilityEfficiencyByShift
+      ? "纸面技能效率使用手填值，跨设施效率由本地 WASM 按当前排班结算；未填写的纸面技能效率按 0 计算。"
+      : "当前本地评估只按手填纸面技能效率和基础房间结算；未填写的纸面技能效率按 0 计算。",
   });
 
   return {
