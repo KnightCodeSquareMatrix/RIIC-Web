@@ -247,6 +247,20 @@ test("MAA export includes contiguous minute periods, per-shift Fiammetta targets
   assert.equal("training" in (maa.plans[0]?.rooms ?? {}), false);
 });
 
+test("MAA export writes Orundum for originium trading orders and Originium Shard for shard factories", () => {
+  const originiumLayout: BaseBlueprint = {
+    ...layout,
+    rooms: layout.rooms.map((room) => {
+      if (room.id === "trade_1") return { ...room, product: { trade: { order: "originium" as const } } };
+      if (room.id === "manu_1") return { ...room, product: { factory: { recipe: "originium" as const } } };
+      return room;
+    }),
+  };
+  const maa = manualScheduleToMaa(createManualScheduleDraft([12]), originiumLayout, false);
+  assert.equal(maa.plans[0]?.rooms.trading?.[0]?.product, "Orundum");
+  assert.equal(maa.plans[0]?.rooms.manufacture?.[0]?.product, "Originium Shard");
+});
+
 test("calculator results become an editable manual draft with room order, shifts, Fiammetta and training room preserved", () => {
   const draft = createManualScheduleDraftFromCalculator({
     layout,

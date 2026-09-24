@@ -903,7 +903,7 @@ export function clearManualShift(
 function maaProduct(room: BlueprintRoom): string | undefined {
   if (room.kind === "trade_post") {
     const order = room.product && "trade" in room.product ? room.product.trade.order : "gold";
-    return order === "originium" ? "Originium Shard" : "LMD";
+    return order === "originium" ? "Orundum" : "LMD";
   }
   if (room.kind !== "factory") return undefined;
   const recipe = room.product && "factory" in room.product ? room.product.factory.recipe : "gold";
