@@ -2084,6 +2084,10 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       identityKey: JSON.stringify([websiteUserId, sklandActiveAccountId, activeSklandAccount?.selectedUid ?? null]),
       pending: websiteSessionPending || !hasRestoredSession,
     },
+    healthOperators: boxSource === "skland"
+      ? sklandStatusSnapshot && sklandStatusSnapshot.player.uid === activeSklandAccount?.selectedUid
+        ? { items: sklandStatusSnapshot.operators, source: "skland" as const } : undefined
+      : accountCanUseCurrentBox && operbox ? { items: operbox, source: boxSource } : undefined,
     calculator: {
       layout,
       result,

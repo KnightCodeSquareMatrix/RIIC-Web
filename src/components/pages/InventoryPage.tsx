@@ -7,6 +7,7 @@ import Image from "next/image";
 
 import { useWorkbench } from "@/workbench-context";
 import { trainingCost } from "@/inventory-estimates";
+import { estimateHeadhuntPulls, HEADHUNTING_STEPS, yellowCertificateExchange } from "@/headhunt-estimate";
 import { manualLevelFor, maxEliteForRarity } from "@/manual-operbox";
 import { getSklandInventory } from "@/api";
 import { Button } from "@/components/ui/button";
@@ -27,16 +28,9 @@ const BATTLE_RECORD_IDS = new Set(["2001", "2002", "2003", "2004"]);
 const COMMON_IDS = ["4002", "4003", "4001", "4004", "4005", "7004", "7003", "7001", "3141", "3003", "classic_normal_ticket", "classic_gacha"];
 const MANUAL_RESOURCE_IDS = ["4002", "4003", "4004", "4005", "7004", "7003", "7001", "classic_normal_ticket", "classic_gacha"];
 const MANUAL_STORAGE_KEY = "aic-skland-inventory-manual-resources-v1";
-const HEADHUNTING_STEPS = [
-  { tier: 1, content: "寻访凭证 x1", cost: 10, pulls: 1, average: 10 },
-  { tier: 2, content: "寻访凭证 x2", cost: 28, pulls: 3, average: 9.33 },
-  { tier: 3, content: "寻访凭证 x5", cost: 68, pulls: 8, average: 8.5 },
-  { tier: 4, content: "十连寻访凭证 x1", cost: 138, pulls: 18, average: 7.67 },
-  { tier: 5, content: "十连寻访凭证 x2", cost: 258, pulls: 38, average: 6.79 },
-] as const;
 const BATTLE_RECORD_EXP = { "2001": 200, "2002": 400, "2003": 1_000, "2004": 2_000 } as const;
-// Categories from ArkMowers/arknights-mower arknights_mower/utils/depot.py.
-const MATERIAL_GROUPS: Record<string, string[]> = {"稀有度5":["烧结核凝晶","晶体电子单元","D32钢","双极纳米片","聚合剂","重相位对映体"],"稀有度4":["提纯源岩","改量装置","聚酸酯块","糖聚块","异铁块","酮阵列","转质盐聚块","切削原液","精炼溶剂","晶体电路","炽合金块","聚合凝胶","白马醇","三水锰矿","五水研磨石","RMA70-24","环烃预制体","固化纤维板","手性屈光体"],"稀有度3":["固源岩组","全新装置","聚酸酯组","糖组","异铁组","酮凝集组","转质盐组","化合切削液","半自然溶剂","晶体元件","炽合金","凝胶","扭转醇","轻锰矿","研磨石","RMA70-12","环烃聚质","褐素纤维","类凝结核"],"稀有度2":["固源岩","装置","聚酸酯","糖","异铁","酮凝集"],"稀有度1":["源岩","破损装置","酯原料","代糖","异铁碎片","双酮"],"模组":["模组数据块","数据增补仪","数据增补条"],"技能书":["技巧概要·卷3","技巧概要·卷2","技巧概要·卷1"],"芯片相关":["重装双芯片","重装芯片组","重装芯片","狙击双芯片","狙击芯片组","狙击芯片","医疗双芯片","医疗芯片组","医疗芯片","术师双芯片","术师芯片组","术师芯片","先锋双芯片","先锋芯片组","先锋芯片","近卫双芯片","近卫芯片组","近卫芯片","辅助双芯片","辅助芯片组","辅助芯片","特种双芯片","特种芯片组","特种芯片","采购凭证","芯片助剂"]};
+// Categories from ArkMowers/arknights-mower arknights_mower/utils/depot.py; 液化/电极线材料为本地补充，上游暂未收录。
+const MATERIAL_GROUPS: Record<string, string[]> = {"稀有度5":["烧结核凝晶","晶体电子单元","D32钢","双极纳米片","聚合剂","重相位对映体"],"稀有度4":["提纯源岩","改量装置","聚酸酯块","糖聚块","异铁块","酮阵列","转质盐聚块","切削原液","精炼溶剂","晶体电路","炽合金块","聚合凝胶","白马醇","三水锰矿","五水研磨石","RMA70-24","环烃预制体","固化纤维板","手性屈光体","液化醚吸聚体","聚能动力单元"],"稀有度3":["固源岩组","全新装置","聚酸酯组","糖组","异铁组","酮凝集组","转质盐组","化合切削液","半自然溶剂","晶体元件","炽合金","凝胶","扭转醇","轻锰矿","研磨石","RMA70-12","环烃聚质","褐素纤维","类凝结核","液化高能气体","电极单元"],"稀有度2":["固源岩","装置","聚酸酯","糖","异铁","酮凝集"],"稀有度1":["源岩","破损装置","酯原料","代糖","异铁碎片","双酮"],"模组":["模组数据块","数据增补仪","数据增补条"],"技能书":["技巧概要·卷3","技巧概要·卷2","技巧概要·卷1"],"芯片相关":["重装双芯片","重装芯片组","重装芯片","狙击双芯片","狙击芯片组","狙击芯片","医疗双芯片","医疗芯片组","医疗芯片","术师双芯片","术师芯片组","术师芯片","先锋双芯片","先锋芯片组","先锋芯片","近卫双芯片","近卫芯片组","近卫芯片","辅助双芯片","辅助芯片组","辅助芯片","特种双芯片","特种芯片组","特种芯片","采购凭证","芯片助剂"]};
 
 export default function InventoryPage() {
   const { inventory } = useWorkbench();
@@ -133,30 +127,14 @@ function InventoryContent({ identityKey }: { identityKey: string }) {
     return groups;
   }, [items, itemCount]);
   const yellowCerts = manualValue("4004") ?? apiCountById.get("4004") ?? 0;
-  const exchange = useMemo(() => {
-    let selected: (typeof HEADHUNTING_STEPS)[number] | null = null;
-    for (const step of HEADHUNTING_STEPS) {
-      if (yellowCerts >= step.cost) selected = step;
-    }
-    return {
-      pulls: selected?.pulls ?? 0,
-      remaining: yellowCerts - (selected?.cost ?? 0),
-    };
-  }, [yellowCerts]);
-  const pullSummary = useMemo(() => {
-    const originium = itemCount("4002");
-    const orundum = itemCount("4003");
-    const singleTickets = itemCount("7003");
-    const tenPullTickets = itemCount("7004");
-    const convertedOrundum = orundum + originium * 180;
-    const currencyPulls = Math.floor(convertedOrundum / 600);
-    return {
-      total: currencyPulls + singleTickets + tenPullTickets * 10 + exchange.pulls,
-      remainingOrundum: convertedOrundum % 600,
-      currencyPulls,
-      ticketPulls: singleTickets + tenPullTickets * 10,
-    };
-  }, [exchange.pulls, itemCount]);
+  const exchange = useMemo(() => yellowCertificateExchange(yellowCerts), [yellowCerts]);
+  const pullSummary = useMemo(() => estimateHeadhuntPulls({
+    originium: itemCount("4002"),
+    orundum: itemCount("4003"),
+    singleTickets: itemCount("7003"),
+    tenPullTickets: itemCount("7004"),
+    yellowCertificates: yellowCerts,
+  }), [itemCount, yellowCerts]);
   const sixStarSummary = useMemo(() => {
     const targetCost = trainingCost(targetRarity, targetElite, targetLevel);
     const lmdCount = targetCost.lmd === 0 ? 0 : itemCount("4001") / targetCost.lmd;
@@ -196,7 +174,7 @@ function InventoryContent({ identityKey }: { identityKey: string }) {
           {!loading ? <>
             <div className="mt-5 grid gap-6">
               <div className="min-w-0">
-              <h3 className="mb-3 border-b border-border pb-3 text-xl font-medium">抽卡资源</h3>
+              <h3 className="mb-3 border-b border-border pb-3 text-lg font-semibold">抽卡资源</h3>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                 {commonItems.map((item) => {
                   const catalogItem = catalog[item.id];
@@ -219,8 +197,8 @@ function InventoryContent({ identityKey }: { identityKey: string }) {
                 })}
               </div>
               </div>
-              <div className="border-b border-border pb-5">
-                <h3 className="mb-3 border-b border-border pb-3 text-xl font-medium">钱书资源</h3>
+              <div className="min-w-0">
+                <h3 className="mb-3 border-b border-border pb-3 text-lg font-semibold">钱书资源</h3>
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                   {experienceItems.map((item) => {
                     const catalogItem = catalog[item.id];
@@ -251,7 +229,7 @@ function InventoryContent({ identityKey }: { identityKey: string }) {
               <div className="grid min-w-0 grid-rows-[24px_44px_56px_1fr_36px] gap-3 pb-5 sm:pb-0 sm:pr-6">
                 <h3 className="text-base font-semibold">寻访估算</h3>
                 <p className="flex items-center text-sm text-muted-foreground">当前资源可用寻访</p>
-                <p className="font-number text-4xl font-semibold leading-[56px]"><span className="text-[#FFD501]">{fmt(pullSummary.total)}</span> <span className="text-xl">抽</span></p>
+                <p className="font-number text-4xl font-semibold leading-[56px]"><span className="text-[#FFD501]">{fmt(pullSummary.totalPulls)}</span> <span className="text-xl">抽</span></p>
               <div className="grid content-start gap-3 border-t border-border/70 pt-3 text-xs text-muted-foreground">
                 <p className="flex justify-between gap-3"><span>源石与合成玉</span><strong className="font-number text-foreground">{fmt(pullSummary.currencyPulls)} 抽</strong></p>
                 <p className="flex justify-between gap-3"><span>寻访凭证</span><strong className="font-number text-foreground">{fmt(pullSummary.ticketPulls)} 抽</strong></p>
@@ -298,8 +276,8 @@ function InventoryContent({ identityKey }: { identityKey: string }) {
               </DialogContent>
             </Dialog>
             </div>
-            {materialGroups.map((group) => <section key={group.title} className="mt-7 border-t border-border pt-5">
-              <h3 className="mb-3 border-b border-border pb-2 text-lg font-semibold">{group.title}</h3>
+            {materialGroups.map((group) => <section key={group.title} className="mt-6">
+              <h3 className="mb-3 border-b border-border pb-3 text-lg font-semibold">{group.title}</h3>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
                 {group.items.map((item) => {
                   const catalogItem = catalog[item.id];

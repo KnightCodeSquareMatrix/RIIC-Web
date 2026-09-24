@@ -24,6 +24,7 @@ import type {
   SklandInventoryData,
 } from "./types";
 import type { SklandPolicyConsentRequest } from "./legal-policy";
+import type { GameReportRecord, GameReportSource } from "./game-report";
 
 const SKLAND_API_PREFIX = process.env.APP_CLIENT_SKLAND_API_PREFIX ?? "";
 
@@ -261,6 +262,18 @@ export function refreshSklandStatus(): Promise<SklandStatusData> {
 
 export function getSklandInventory(): Promise<SklandInventoryData> {
   return requestData(sklandApiPath("/inventory"));
+}
+
+export function getGameReport(): Promise<GameReportRecord | null> {
+  return requestData("/api/account/game-report");
+}
+
+export function postGameReport(days: GameReportRecord["days"], sourceType: GameReportSource): Promise<GameReportRecord> {
+  return requestData("/api/account/game-report", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ days, sourceType }),
+  });
 }
 
 export function pollSklandQr(scanId: string, signal?: AbortSignal): Promise<SklandQrStatusData> {

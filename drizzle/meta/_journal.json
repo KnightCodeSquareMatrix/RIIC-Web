@@ -120,6 +120,13 @@
       "when": 1788804426016,
       "tag": "0016_private_feedback_quality",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1790275587932,
+      "tag": "0017_past_weapon_omega",
+      "breakpoints": true
     }
   ]
 }
