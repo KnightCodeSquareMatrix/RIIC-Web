@@ -5,24 +5,23 @@ import { prepareMaaForExport } from "./maa-safety.ts";
 import { planToRows } from "./schedule.ts";
 import type { BaseBlueprint, MaaJson } from "./types.ts";
 
-test("MAA execution preference applies to every shift without changing source data", () => {
+test("MAA export fixes every action to pre without changing source data", () => {
   const maa: MaaJson = {
     title: "execution",
     plans: [0, 1].map(() => ({
       name: "Shift",
       rooms: {},
-      Fiammetta: { enable: true, target: "但书", order: "pre" },
-      drones: { enable: true, room: "trading", index: 1, rule: "all", order: "pre" },
+      Fiammetta: { enable: true, target: "但书", order: "post" },
+      drones: { enable: true, room: "trading", index: 1, rule: "all", order: "post" },
     })),
   };
-  for (const pre of [false, true]) {
-    const exported = prepareMaaForExport(maa, true, false, undefined, pre);
-    for (const plan of exported.plans) {
-      assert.equal(plan.Fiammetta?.order, pre ? "pre" : "post");
-      assert.equal(plan.drones?.order, pre ? "pre" : "post");
-    }
+  const exported = prepareMaaForExport(maa);
+  for (const plan of exported.plans) {
+    assert.equal(plan.Fiammetta?.order, "pre");
+    assert.equal(plan.drones?.order, "pre");
   }
-  assert.equal(maa.plans[0]!.Fiammetta!.order, "pre");
+  assert.equal(maa.plans[0]!.Fiammetta!.order, "post");
+  assert.equal(maa.plans[0]!.drones!.order, "post");
 });
 
 test("prepares MAA export with sort enabled and preserves displayed operator order", () => {
