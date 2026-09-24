@@ -965,10 +965,10 @@ export function manualScheduleToMaa(
         duration: range.durationMinutes,
         rooms,
         Fiammetta: fiammettaEnabled && shift.fiammettaTarget
-          ? { enable: true, target: shift.fiammettaTarget, order: "post" as const }
-          : { enable: false, target: "", order: "post" as const },
+          ? { enable: true, target: shift.fiammettaTarget, order: "pre" as const }
+          : { enable: false, target: "", order: "pre" as const },
         ...(droneIndex > 0 && (droneGroup === "trading" || droneGroup === "manufacture") ? {
-          drones: { enable: true, room: droneGroup, index: droneIndex, rule: "all", order: "post" as const },
+          drones: { enable: true, room: droneGroup, index: droneIndex, rule: "all", order: "pre" as const },
         } : {}),
       };
     }),
