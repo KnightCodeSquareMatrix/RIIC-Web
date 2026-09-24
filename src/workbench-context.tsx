@@ -12,6 +12,7 @@ import type { RecruitmentCalculatorProps } from "@/components/pages/RecruitmentC
 import type { UserSettings } from "@/user-settings";
 
 export interface WorkbenchContextValue {
+  inventory: { identityKey: string; pending: boolean };
   calculator: InfraCalculatorProps;
   manual: ManualSchedulePageProps;
   training: TrainingAdviceProps;

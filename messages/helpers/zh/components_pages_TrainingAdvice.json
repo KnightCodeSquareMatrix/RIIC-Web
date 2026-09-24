@@ -52,5 +52,13 @@
   "clearBlocked": "清除拉黑（{count}）",
   "noOwnedRecommendations": "已拥有的干员暂无培养建议，关闭筛选可查看全部建议。",
   "viewCurrentSchedule": "查看当前排班",
-  "generateASchedule": "前往生成排班"
+  "generateASchedule": "前往生成排班",
+  "autoSync": "浏览本页时，每 5 分钟同步森空岛练度并更新建议。",
+  "syncing": "正在同步森空岛练度并更新建议…",
+  "lastSynced": "练度同步于 {time} · 浏览本页时每 5 分钟自动同步",
+  "syncNow": "立即同步",
+  "syncCooldown": "{seconds} 秒后可同步",
+  "resumeSync": "继续查询",
+  "syncFailed": "更新未完成，暂时保留上次数据和建议，请稍后重试；登录过期时请重新登录森空岛。",
+  "syncStale": "练度或配置已变化，当前建议尚未更新。"
 }

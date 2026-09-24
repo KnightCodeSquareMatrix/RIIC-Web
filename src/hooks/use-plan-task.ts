@@ -33,6 +33,8 @@ type PlanTaskOptions = {
   onFailed: (message: string) => void;
   /** Disable persistence for secondary task flows that cannot be restored without their local context. */
   storageKey?: string | null;
+  /** Secondary flows can release their local wait when authentication expires. */
+  rejectOnAuthPause?: boolean;
 };
 
 function readStoredTaskId(storageKey: string | null): string | null {
@@ -65,7 +67,7 @@ function clearStoredTaskId(storageKey: string | null) {
   }
 }
 
-export function usePlanTask({ onDone, onFailed, storageKey }: PlanTaskOptions) {
+export function usePlanTask({ onDone, onFailed, storageKey, rejectOnAuthPause = false }: PlanTaskOptions) {
   const taskStorageKey = storageKey === undefined ? STORAGE_KEY : storageKey;
   const [state, setState] = useState<PlanTaskUiState>({
     taskId: null,
@@ -141,7 +143,7 @@ export function usePlanTask({ onDone, onFailed, storageKey }: PlanTaskOptions) {
     waiter?.reject(new Error(message));
   }, []);
 
-  const finish = useCallback((next: Partial<PlanTaskUiState> & { status: PlanTaskStatus }) => {
+  const finish = useCallback((next: Partial<PlanTaskUiState> & { status: PlanTaskStatus | null }) => {
     clearTimer();
     stopResumeCooldown();
     clearStoredTaskId(taskStorageKey);
@@ -158,6 +160,15 @@ export function usePlanTask({ onDone, onFailed, storageKey }: PlanTaskOptions) {
       ...next,
     }));
   }, [clearTimer, stopResumeCooldown, taskStorageKey]);
+
+  // Detach local observation only; this does not claim the server task was cancelled.
+  const detach = useCallback(() => {
+    if (!taskIdRef.current && !waiterRef.current) return;
+    finish({ status: null });
+    retryAfterUntilRef.current = 0;
+    manualQueryUntilRef.current = 0;
+    rejectWaiter("Task context changed.");
+  }, [finish, rejectWaiter]);
 
   const pollOnceRef = useRef<(taskId: string, attempt: number) => Promise<void>>(async () => undefined);
   const schedulePoll = useCallback((taskId: string, attempt: number, delayMs: number) => {
@@ -211,6 +222,11 @@ export function usePlanTask({ onDone, onFailed, storageKey }: PlanTaskOptions) {
         })),
         schedule: schedulePoll,
         pause: (message) => {
+          if (rejectOnAuthPause) {
+            finish({ status: "failed", error: message });
+            rejectWaiter(message);
+            return;
+          }
           clearTimer();
           networkStoppedRef.current = false;
           setState((current) => ({ ...current, error: message }));
@@ -223,7 +239,7 @@ export function usePlanTask({ onDone, onFailed, storageKey }: PlanTaskOptions) {
     } finally {
       inFlightRef.current.delete(taskId);
     }
-  }, [clearTimer, finish, rejectWaiter, resolveWaiter, schedulePoll, startResumeCooldown]);
+  }, [clearTimer, finish, rejectOnAuthPause, rejectWaiter, resolveWaiter, schedulePoll, startResumeCooldown]);
   useEffect(() => {
     pollOnceRef.current = pollOnce;
   }, [pollOnce]);
@@ -355,5 +371,6 @@ export function usePlanTask({ onDone, onFailed, storageKey }: PlanTaskOptions) {
     complete,
     resume,
     cancel,
+    detach,
   };
 }

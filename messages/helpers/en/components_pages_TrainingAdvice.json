@@ -52,5 +52,13 @@
   "clearBlocked": "Clear blocked ({count})",
   "noOwnedRecommendations": "No training recommendations for owned operators. Turn off the filter to see all recommendations.",
   "viewCurrentSchedule": "View current schedule",
-  "generateASchedule": "Generate a schedule"
+  "generateASchedule": "Generate a schedule",
+  "autoSync": "Skland progression and advice refresh every 5 minutes while this page is visible.",
+  "syncing": "Syncing Skland progression and updating advice…",
+  "lastSynced": "Progression synced at {time} · Refreshes every 5 minutes while this page is visible",
+  "syncNow": "Sync now",
+  "syncCooldown": "Sync in {seconds}s",
+  "resumeSync": "Resume query",
+  "syncFailed": "The update could not finish. Previous data and advice are retained. Retry later, or sign in to Skland again if your session expired.",
+  "syncStale": "Progression or settings have changed. This advice has not been updated yet."
 }

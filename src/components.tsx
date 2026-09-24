@@ -1026,6 +1026,7 @@ export function OperatorSlot({
   searchQuery = "",
   onActivate,
   unavailable = false,
+  highlightNoLayoutSkill = false,
   sortSelected = false,
   onSortActivate,
 }: {
@@ -1057,6 +1058,7 @@ export function OperatorSlot({
   searchQuery?: string;
   onActivate?: () => void;
   unavailable?: boolean;
+  highlightNoLayoutSkill?: boolean;
   sortSelected?: boolean;
   onSortActivate?: () => void;
 }) {
@@ -1083,6 +1085,8 @@ export function OperatorSlot({
   const searchMatched = Boolean(slot && searchQuery && slot.name.toLocaleLowerCase("zh-CN").includes(searchQuery));
   const frameClassName = sortSelected
     ? "border-[#FFD800] bg-[#3C3C3C] ring-2 ring-[#FFD800]/70"
+    : highlightNoLayoutSkill
+    ? "border-[#F59E0B] bg-[#3C3C3C] shadow-[0_0_0_2px_rgba(245,158,11,0.45)]"
     : slot
     ? "border-[#7F7F7F] bg-[#3C3C3C] shadow-[inset_0_0_18px_rgba(255,255,255,0.16)]"
     : autofill
@@ -1227,6 +1231,7 @@ export function OperatorSlot({
 }
 
 export function ScheduleBoard({
+  simulation,
   rows,
   layout,
   planRevision,
@@ -1260,7 +1265,10 @@ export function ScheduleBoard({
   onDroneTargetChange,
   renderListRoomActions,
   onManualSkillEfficiencyChange,
+  highlightNoLayoutSkill = false,
+  noLayoutSkillOperators,
 }: {
+  simulation?: { moods: Readonly<Record<string, number>>; selected: string; onSelect: (name: string) => void };
   rows: RoomRow[];
   layout: BaseBlueprint;
   planRevision?: string;
@@ -1296,6 +1304,8 @@ export function ScheduleBoard({
   onDroneTargetChange?: (row: RoomRow) => void;
   renderListRoomActions?: (row: RoomRow, position: "header" | "secondary" | "clear") => ReactNode;
   onManualSkillEfficiencyChange?: (row: RoomRow, value: number | null) => void;
+  highlightNoLayoutSkill?: boolean;
+  noLayoutSkillOperators?: ReadonlySet<string>;
 }) {
   const intl = useTranslations();
   const locale = useLocale();
@@ -1561,13 +1571,13 @@ export function ScheduleBoard({
                             </div>
                           ) : null}
                         </div>
-                        <RoomProductControls
+                        {!simulation && <RoomProductControls
                           row={row}
                           layoutRoom={layoutRoom}
                           onFactoryRecipeChange={onFactoryRecipeChange}
                           onTradeOrderChange={onTradeOrderChange}
-                        />
-                        {!efficiency && (row.group === "trading" || row.group === "manufacture" || row.group === "power") ? (
+                        />}
+                        {!simulation && !efficiency && (row.group === "trading" || row.group === "manufacture" || row.group === "power") ? (
                           <div className="font-technical text-xs tracking-[0.01em] text-white/38">
                             {intl("components_CompactScheduleView.awaitingSchedule")}
                           </div>
@@ -1620,7 +1630,9 @@ export function ScheduleBoard({
                           <OperatorSlot
                             key={`${row.key}-${index}`}
                             slot={slot}
-                            elite={slot ? eliteByOperator?.get(slot.name) : undefined}
+                            elite={simulation ? undefined : slot ? eliteByOperator?.get(slot.name) : undefined}
+                            currentMorale={slot && simulation ? Math.round((simulation.moods[slot.name] ?? 24) * 100) / 100 : undefined}
+                            selectionMode={Boolean(simulation)}
                             operatorLevel={slot ? levelByOperator?.get(slot.name) : undefined}
                             autofill={row.group === "dormitory" && row.autofill}
                             compactFactory={compactFactoryRoom}
@@ -1631,9 +1643,10 @@ export function ScheduleBoard({
                             searchQuery={normalizedQuery}
                             positionLabel={positionLabel}
                             unavailable={row.unavailableSlotIndices?.includes(index)}
-                            onActivate={onSlotClick ? () => onSlotClick(row, index) : undefined}
-                            sortSelected={sortSelection?.roomId === row.roomId && sortSelection.slotIndex === index}
+                            onActivate={simulation && slot ? () => simulation.onSelect(slot.name) : onSlotClick ? () => onSlotClick(row, index) : undefined}
+                            sortSelected={simulation ? slot?.name === simulation.selected : sortSelection?.roomId === row.roomId && sortSelection.slotIndex === index}
                             onSortActivate={sortRoomId === row.roomId && onSortSlotClick ? () => onSortSlotClick(row, index) : undefined}
+                            highlightNoLayoutSkill={highlightNoLayoutSkill && Boolean(slot) && noLayoutSkillOperators?.has(slot?.name ?? "")}
                           />
                         ))}
                       </div>
@@ -1698,7 +1711,7 @@ export function ScheduleBoard({
       })}
           </>
 
-  ), [rowGroups, en, layout, collapsedGroups, hiddenGroups, intl, locale, gameCatalog,
+  ), [simulation, highlightNoLayoutSkill, noLayoutSkillOperators, rowGroups, en, layout, collapsedGroups, hiddenGroups, intl, locale, gameCatalog,
     onSortToggle, sortRoomId, renderListRoomActions, shiftDirection, onFactoryRecipeChange,
     onTradeOrderChange, eliteByOperator, levelByOperator, onSlotClick, sortSelection,
     onSortSlotClick, onIssue, feedbackDisabled, normalizedQuery, onClearRoom, onManualSkillEfficiencyChange]);
@@ -1707,6 +1720,8 @@ export function ScheduleBoard({
         <SkeletonSwap ready={Boolean(CompactScheduleView) || compactScheduleLoadFailed} skeleton={<CompactScheduleLoading rows={visibleRows} />}>
           {CompactScheduleView ? (
             <CompactScheduleView
+              simulation={simulation}
+              noLayoutSkillOperators={highlightNoLayoutSkill ? noLayoutSkillOperators : undefined}
               rows={visibleRows}
               layout={layout}
               eliteByOperator={eliteByOperator}
@@ -1737,7 +1752,7 @@ export function ScheduleBoard({
           )}
         </SkeletonSwap>
 
-  ), [CompactScheduleView, visibleRows, layout, eliteByOperator, levelByOperator,
+  ), [simulation, highlightNoLayoutSkill, noLayoutSkillOperators, CompactScheduleView, visibleRows, layout, eliteByOperator, levelByOperator,
     activeShift, activePlan, shiftDirection, onIssue, feedbackDisabled, hideImages,
     onSlotClick, sortRoomId, sortSelection, onSortToggle, onSortSlotClick, onClearRoom,
     onDormAutofillChange, droneTargetRoomId, onDroneTargetChange, onManualSkillEfficiencyChange, compactScheduleLoadFailed, intl]);

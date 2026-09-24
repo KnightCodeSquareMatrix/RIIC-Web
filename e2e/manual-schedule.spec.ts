@@ -63,7 +63,7 @@ test("sidebar resumes an existing manual draft without invoking the solver", asy
   await page.getByRole("button", { name: "手动排班", exact: true }).click();
   await expect(page).toHaveURL(/\/manual$/);
   await expect(page.getByRole("tab", { name: /第 1 班.*24h/ })).toBeVisible();
-  await expect(page.locator('[data-room-title="贸易站 1"] [data-operator-identity="阿米娅"]')).toBeVisible();
+  await expect(page.locator('[data-manual-editor-board] [data-room-title="贸易站 1"] [data-operator-identity="阿米娅"]')).toBeVisible();
   expect(planRequests).toBe(0);
 });
 
@@ -133,8 +133,10 @@ test("calculator converts a solved schedule into editable manual assignments", a
 
   await expect(page).toHaveURL(/\/manual$/);
   await expect(page.locator('[data-manual-draft-source="baseline"]')).toContainText("基于「原方案」创建");
-  await expect(page.getByRole("tab", { name: /第 1 班.*12h/ })).toBeVisible();
-  await expect(page.locator('[data-room-title="加工站"] [data-operator-identity="阿米娅"]')).toBeVisible();
+  await expect(page.getByRole("tab", { name: /班次 1.*08:00至19:59.*12小时/ })).toBeVisible();
+  await expect(page.getByRole("tab", { name: /班次 2.*20:00至01:59.*6小时/ })).toBeVisible();
+  await expect(page.getByRole("tab", { name: /班次 3.*02:00至07:59.*6小时/ })).toBeVisible();
+  await expect(page.locator('[data-manual-editor-board] [data-room-title="加工站"] [data-operator-identity="阿米娅"]')).toBeVisible();
 });
 
 test("calculator protects a different manual draft before replacing it from a result", async ({ page }) => {
@@ -215,7 +217,8 @@ test("manual MAA downloads preserve a disabled dorm autofill switch", async ({ p
 });
 
 test("manual scheduling configures independent shifts, moves conflicts and enables dorm autofill", async ({ page }) => {
-  test.slow();
+  // This full editor workflow also refreshes the simulation after each edit.
+  test.setTimeout(180_000);
   let planRequests = 0;
   await page.route("**/api/plan", (route) => {
     planRequests += 1;
@@ -234,7 +237,7 @@ test("manual scheduling configures independent shifts, moves conflicts and enabl
   await expect(page.getByRole("tab", { name: /Shift 1.*12h/ })).toBeVisible();
   await page.getByRole("button", { name: "中文", exact: true }).click();
 
-  const scheduleToolbar = page.locator("[data-schedule-toolbar]");
+  const scheduleToolbar = page.locator("[data-manual-editor-board] [data-schedule-toolbar]");
   const layoutTabs = scheduleToolbar.getByRole("tablist", { name: "排班布局切换" });
   const shiftTabs = scheduleToolbar.locator("[data-manual-shift-actions] [data-shift-tabs]");
   await expect(layoutTabs).toHaveAttribute("data-slot", "tabs-list");
@@ -301,8 +304,8 @@ test("manual scheduling configures independent shifts, moves conflicts and enabl
   await page.keyboard.press("Escape");
 
 
-  const trade = page.locator('[data-room-title="贸易站 1"]');
-  const factory = page.locator('[data-room-title="制造站 1"]');
+  const trade = page.locator('[data-manual-editor-board] [data-room-title="贸易站 1"]');
+  const factory = page.locator('[data-manual-editor-board] [data-room-title="制造站 1"]');
   const tradeDrones = trade.getByRole("button", { name: "贸易站 1 无人机加速" });
   const factoryDrones = factory.getByRole("button", { name: "制造站 1 无人机加速" });
   await tradeDrones.click();
@@ -311,8 +314,8 @@ test("manual scheduling configures independent shifts, moves conflicts and enabl
   await expect(tradeDrones).toHaveAttribute("aria-pressed", "false");
   await expect(factoryDrones).toHaveAttribute("aria-pressed", "true");
   await page.setViewportSize({ width: 1100, height: 1000 });
-  await expect(page.locator('[data-schedule-view="list"]')).toBeVisible();
-  const listFactoryDrones = page.locator('[data-schedule-view="list"] [data-room-title="制造站 1"]').getByRole("button", { name: "制造站 1 无人机加速" });
+  await expect(page.locator('[data-manual-editor-board] [data-schedule-view="list"]')).toBeVisible();
+  const listFactoryDrones = page.locator('[data-manual-editor-board] [data-schedule-view="list"] [data-room-title="制造站 1"]').getByRole("button", { name: "制造站 1 无人机加速" });
   await listFactoryDrones.hover();
   await expect(listFactoryDrones).toHaveCSS("background-color", /0\.28/);
   await expect(page.getByText("取消当前班次无人机加速", { exact: true })).toBeVisible();
@@ -321,7 +324,7 @@ test("manual scheduling configures independent shifts, moves conflicts and enabl
   await listAutofill.hover();
   await expect(listAutofill).toHaveCSS("background-color", /0\.28/);
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await expect(page.locator('[data-schedule-view="compact"]')).toBeVisible();
+  await expect(page.locator('[data-manual-editor-board] [data-schedule-view="compact"]')).toBeVisible();
   await expect(trade.getByRole("button", { name: "空置" }).first()).toContainText("可编辑");
   await trade.getByRole("button", { name: "空置" }).first().click();
   let operatorPicker = page.getByRole("dialog");
@@ -410,7 +413,7 @@ test("manual scheduling configures independent shifts, moves conflicts and enabl
   await expect(factory.locator('[data-operator-identity="阿米娅"]')).toHaveCount(0);
   await expect(factoryDrones).toHaveAttribute("aria-pressed", "true");
 
-  const dorm = page.locator('[data-room-title="宿舍 1"]');
+  const dorm = page.locator('[data-manual-editor-board] [data-room-title="宿舍 1"]');
   await expect(dorm.locator('[data-operator-identity="autofill"]')).toHaveCount(5);
   const dormAutofill = dorm.getByRole("button", { name: /宿舍 1.*自动补位/ });
   await expect(dormAutofill).toHaveAttribute("aria-pressed", "true");
@@ -461,7 +464,7 @@ test("manual scheduling configures independent shifts, moves conflicts and enabl
   expect(exported.plans[0].rooms.dormitory[0].autofill).toBe(false);
   expect(exported.plans[0].rooms.dormitory[1].autofill).toBe(true);
   expect(exported.plans[1].rooms.dormitory.every((room: { autofill: boolean }) => room.autofill === false)).toBe(true);
-  expect(exported.plans[1].drones).toEqual({ enable: true, room: "manufacture", index: 1, rule: "all", order: "pre" });
+  expect(exported.plans[1].drones).toEqual({ enable: true, room: "manufacture", index: 1, rule: "all", order: "post" });
   for (const plan of exported.plans) {
     for (const rooms of Object.values(plan.rooms) as Array<Array<{ operators: unknown[] }>>) {
       for (const room of rooms) expect(room.operators.every((operator) => typeof operator === "string")).toBe(true);
@@ -515,11 +518,11 @@ test("manual scheduling previews and imports an external MAA schedule file", asy
   await preview.getByRole("button", { name: "导入并替换草稿" }).click();
 
   await expect(page.getByRole("tab", { name: /班次 1.*08:15至19:59.*11小时45分钟/ })).toBeVisible();
-  await expect(page.locator('[data-room-title="控制中枢"] [data-operator-identity="外部测试干员"]')).toBeVisible();
-  await expect(page.locator('[data-room-title="贸易站 1"]')).toContainText("开采协力");
-  await expect(page.locator('[data-room-title="制造站 1"]')).toContainText("作战记录");
+  await expect(page.locator('[data-manual-editor-board] [data-room-title="控制中枢"] [data-operator-identity="外部测试干员"]')).toBeVisible();
+  await expect(page.locator('[data-manual-editor-board] [data-room-title="贸易站 1"]')).toContainText("开采协力");
+  await expect(page.locator('[data-manual-editor-board] [data-room-title="制造站 1"]')).toContainText("作战记录");
   await page.getByRole("tab", { name: /班次 2.*20:00至08:14.*12小时15分钟/ }).click();
-  await expect(page.locator('[data-room-title="贸易站 1"] [data-operator-identity="锡兰"]')).toBeVisible();
+  await expect(page.locator('[data-manual-editor-board] [data-room-title="贸易站 1"] [data-operator-identity="锡兰"]')).toBeVisible();
 
   await page.getByRole("button", { name: "配置 Box 与布局" }).first().click();
   const setup = page.getByRole("dialog");

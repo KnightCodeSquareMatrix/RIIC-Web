@@ -5,6 +5,26 @@ import { prepareMaaForExport } from "./maa-safety.ts";
 import { planToRows } from "./schedule.ts";
 import type { BaseBlueprint, MaaJson } from "./types.ts";
 
+test("MAA execution preference applies to every shift without changing source data", () => {
+  const maa: MaaJson = {
+    title: "execution",
+    plans: [0, 1].map(() => ({
+      name: "Shift",
+      rooms: {},
+      Fiammetta: { enable: true, target: "但书", order: "pre" },
+      drones: { enable: true, room: "trading", index: 1, rule: "all", order: "pre" },
+    })),
+  };
+  for (const pre of [false, true]) {
+    const exported = prepareMaaForExport(maa, true, false, undefined, pre);
+    for (const plan of exported.plans) {
+      assert.equal(plan.Fiammetta?.order, pre ? "pre" : "post");
+      assert.equal(plan.drones?.order, pre ? "pre" : "post");
+    }
+  }
+  assert.equal(maa.plans[0]!.Fiammetta!.order, "pre");
+});
+
 test("prepares MAA export with sort enabled and preserves displayed operator order", () => {
   const maa: MaaJson = {
     title: "test",
@@ -63,7 +83,9 @@ test("calculator downloads preserve displayed dorm autofill across every shift",
   exported.plans.forEach((plan, index) => {
     const displayed = planToRows(maa.plans[index], undefined, layout)
       .filter((row) => row.group === "dormitory");
-    assert.deepEqual(plan.rooms.dormitory?.map((room) => room.autofill), [true, true, false, false, false, true, false]);
+    assert.deepEqual(plan.rooms.dormitory?.map((room) => room.autofill), plan === exported.plans[0]
+      ? [false, false, false, false, false, true, false]
+      : [true, true, false, false, false, true, false]);
     assert.deepEqual(plan.rooms.dormitory?.map((room) => room.autofill), displayed.map((row) => row.autofill));
     assert.deepEqual(plan.rooms.dormitory?.map((room) => room.operators), maa.plans[index]!.rooms.dormitory?.map((room) => room.operators));
     assert.deepEqual(plan.rooms.dormitory?.[6]?.candidates, ["芬"]);

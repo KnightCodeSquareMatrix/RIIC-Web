@@ -127,6 +127,38 @@ export function sklandSignedHeaders({
   };
 }
 
+export function mowerSklandSignedHeaders({
+  cred,
+  token,
+  path,
+  query = "",
+  now = Date.now(),
+}: {
+  cred: string;
+  token: string;
+  path: string;
+  query?: string;
+  now?: number;
+}): Record<string, string> {
+  const timestamp = String(Math.floor((now - 2_000) / 1_000));
+  const signatureHeaders = {
+    platform: "",
+    timestamp,
+    dId: "",
+    vName: "",
+  };
+  const payload = `${path}${query}${timestamp}${JSON.stringify(signatureHeaders)}`;
+  const hmac = createHmac("sha256", token).update(payload, "utf8").digest("hex");
+  return {
+    cred,
+    "user-agent": "Skland/1.53.0 (com.hypergryph.skland; build:105300018; Android 31; ) Okhttp/4.11.0",
+    "accept-encoding": "gzip",
+    connection: "close",
+    ...signatureHeaders,
+    sign: createHash("md5").update(hmac, "utf8").digest("hex"),
+  };
+}
+
 export function stableSklandUserIdFromResponse(value: unknown): string | null {
   if (!value || typeof value !== "object") return null;
   const response = value as {

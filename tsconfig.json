@@ -24,6 +24,9 @@
       }
     ],
     "paths": {
+      "workbench-inventory-route": [
+        "./src/components/pages/InventoryPage.tsx"
+      ],
       "@/*": [
         "./src/*"
       ],

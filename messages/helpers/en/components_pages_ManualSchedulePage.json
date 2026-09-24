@@ -1,4 +1,12 @@
 {
+  "exportMower": "Export Mower",
+  "chooseMowerOrMaaScheduleFile": "Choose an MAA or Mower schedule JSON file",
+  "invalidMowerOrMaaSchedule": "Choose a valid MAA schedule or Mower plan.json containing supported facilities.",
+  "importMowerScheduleQuestion": "Import this Mower schedule?",
+  "importMowerScheduleDetails": "Imports primary assignments for control, trading, manufacturing, power, dormitories, reception, office and workshop, including operators outside your Box. Free becomes an empty slot. Training, activity rooms, replacement groups, rest rules and backup plans are not preserved.",
+  "mowerExportQuestion": "Export the current shift to Mower?",
+  "mowerExportDetails": "Exports only shift {shift} as a basic assignment plan. Production rooms are mapped to B101 through B303 in trading, manufacturing, then power order. Check physical room positions and configure replacements and rest rules in Mower. Timing, drones, Fiammetta and training settings are not exported.",
+  "mowerExportFailed": "Export failed. Check the selected shift, the limit of 9 production rooms and 4 dormitories, and specify a product for every factory.",
   "portrait": "{displayName} portrait",
   "eLv": "E{elite} Lv.{level}",
   "hoverForInfrastructureSkills": "Hover for infrastructure skills",

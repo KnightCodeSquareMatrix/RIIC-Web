@@ -449,7 +449,7 @@ export function ManualOperboxPicker({
     : description;
 
   return (
-    <div className={cn("grid", compact ? "gap-2.5" : "gap-4")} data-manual-operbox-picker data-density={compact ? "compact" : "comfortable"}>
+    <div className={cn("grid min-w-0 grid-cols-1", compact ? "gap-2.5" : "gap-4")} data-manual-operbox-picker data-density={compact ? "compact" : "comfortable"}>
       <div className={cn("flex flex-wrap justify-between gap-3 border-b border-border/70", compact ? "items-center pb-2.5" : "items-start pb-4")}>
         <div className={cn("min-w-0", compact && "flex flex-1 flex-wrap items-baseline gap-x-3 gap-y-1 max-sm:w-full max-sm:flex-none")}>
           <h4 className="shrink-0 text-sm font-semibold">{title ?? (intl("components_setup_ManualOperboxPicker.buildYourOperatorBox"))}</h4>
@@ -485,9 +485,9 @@ export function ManualOperboxPicker({
         </div>
       ) : null}
 
-      <div className={cn("grid gap-2", compact ? "lg:grid-cols-[minmax(14rem,1fr)_auto]" : "sm:grid-cols-[minmax(0,1fr)_auto]")}>
+      <div className={cn("grid min-w-0 grid-cols-1 gap-2", compact ? "lg:grid-cols-[minmax(14rem,1fr)_auto]" : "sm:grid-cols-[minmax(0,1fr)_auto]")}>
         <OperatorSearch value={query} compact={compact} onChange={(value) => { setQuery(value); resetListView(); }} />
-        <div className={cn("flex flex-nowrap items-center", compact ? "gap-1.5" : "gap-2")} data-manual-operbox-actions>
+        <div className={cn("flex flex-nowrap items-center max-sm:grid max-sm:grid-cols-2", compact ? "gap-1.5" : "gap-2")} data-manual-operbox-actions>
           <OwnedOperatorFilter
             value={onlyOwned}
             onChange={toggleOwnedFilter}

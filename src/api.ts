@@ -21,6 +21,7 @@ import type {
   SklandQrStatusData,
   SklandSessionData,
   SklandStatusData,
+  SklandInventoryData,
 } from "./types";
 import type { SklandPolicyConsentRequest } from "./legal-policy";
 
@@ -258,6 +259,10 @@ export function refreshSklandStatus(): Promise<SklandStatusData> {
   return requestData(sklandApiPath("/status/refresh"), { method: "POST" });
 }
 
+export function getSklandInventory(): Promise<SklandInventoryData> {
+  return requestData(sklandApiPath("/inventory"));
+}
+
 export function pollSklandQr(scanId: string, signal?: AbortSignal): Promise<SklandQrStatusData> {
   return requestData(sklandApiPath("/auth/qr/status"), {
     method: "POST",
@@ -269,6 +274,10 @@ export function pollSklandQr(scanId: string, signal?: AbortSignal): Promise<Skla
 
 export function syncSkland(): Promise<SklandSessionData> {
   return requestData(sklandApiPath("/sync"), { method: "POST" });
+}
+
+export function syncSklandTraining(): Promise<SklandSessionData> {
+  return requestData(sklandApiPath("/training-sync"), { method: "POST" });
 }
 
 export function selectSklandRole(accountId: string, uid: string): Promise<SklandSessionData> {

@@ -16,6 +16,7 @@ import {
   SKLAND_UPSTREAM_COOLDOWN_MS,
 } from "./upstream-error.ts";
 import { publicCodeForSklandServiceError } from "./http-error.ts";
+import { inventoryItemsFromResponse } from "./inventory-parser.ts";
 
 const consent = {
   termsVersion: "terms-v1",
@@ -127,4 +128,39 @@ test("only missing configuration is reported as skland login being closed", () =
   assert.equal(publicCodeForSklandServiceError("NOT_CONFIGURED"), "AIC-AUTH-2003");
   assert.equal(publicCodeForSklandServiceError("UNAVAILABLE"), "AIC-SYS-5000");
   assert.equal(publicCodeForSklandServiceError("AUTH_EXPIRED"), "AIC-AUTH-2001");
+});
+
+test("inventory parser keeps synthetic orundum across Skland response shapes", () => {
+  assert.deepEqual(
+    inventoryItemsFromResponse({
+      items: [
+        { itemId: "4003", amount: "1200" },
+        { resource: { id: "4002" }, quantity: 3 },
+      ],
+      inventory: { "4003": 1200, "4002": 3 },
+    }),
+    [
+      { id: "4003", count: 1200 },
+      { id: "4002", count: 3 },
+    ],
+  );
+  assert.deepEqual(
+    inventoryItemsFromResponse({
+      resources: [
+        { type: "DIAMOND_SHD", value: 600 },
+        { type: "GOLD", total: 10000 },
+      ],
+    }),
+    [
+      { id: "4003", count: 600 },
+      { id: "4001", count: 10000 },
+    ],
+  );
+});
+
+test("inventory parser keeps zero-valued common resources for fixed inventory cards", () => {
+  assert.deepEqual(
+    inventoryItemsFromResponse({ items: [{ id: "4003", count: "0" }] }),
+    [{ id: "4003", count: 0 }],
+  );
 });

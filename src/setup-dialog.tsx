@@ -398,7 +398,7 @@ export function SetupDialog({
                 role="region"
                 aria-label={intl("setup_dialog.operatorData")}
                 tabIndex={-1}
-                className="grid w-full gap-4 px-4 py-4 outline-none sm:px-7 sm:py-6"
+                className="grid w-full min-w-0 grid-cols-1 gap-4 px-4 py-4 outline-none sm:px-7 sm:py-6"
                 initial={reducedMotion ? false : { x: stepDirection * 28, opacity: 0 }}
                 animate={{ x: 0, opacity: 1 }}
                 transition={reducedMotion ? { duration: 0 } : PANEL_TRANSITION}
@@ -549,7 +549,7 @@ export function SetupDialog({
                           </div>
                         ) : null}
                       </TabsContent>
-                      <TabsContent value="manual" className="grid gap-3 pt-4">
+                      <TabsContent value="manual" className="grid min-w-0 grid-cols-1 gap-3 pt-4">
                         {!websiteSession ? (
                           <Alert>
                             <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

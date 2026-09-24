@@ -5,6 +5,8 @@ export interface UserSettings {
   strictMaaOperatorOrder: boolean;
   showProgressionRecalculate: boolean;
   showManualScheduleEdit: boolean;
+  showMower: boolean;
+  highlightNoLayoutSkill: boolean;
   scheduleViewControl: "tabs" | "select";
   linkShiftViewControl: boolean;
   shiftViewControl: "tabs" | "select";
@@ -14,12 +16,15 @@ export interface UserSettings {
   showFeedback: boolean;
   showImages: boolean;
   allowReplacementOperatorSort: boolean;
+  usePreMaaExecutionOrder: boolean;
 }
 
 export const DEFAULT_USER_SETTINGS: UserSettings = {
   strictMaaOperatorOrder: true,
   showProgressionRecalculate: true,
   showManualScheduleEdit: true,
+  showMower: false,
+  highlightNoLayoutSkill: false,
   scheduleViewControl: "tabs",
   linkShiftViewControl: true,
   shiftViewControl: "tabs",
@@ -29,6 +34,7 @@ export const DEFAULT_USER_SETTINGS: UserSettings = {
   showFeedback: true,
   showImages: true,
   allowReplacementOperatorSort: false,
+  usePreMaaExecutionOrder: false,
 };
 
 type StorageLike = Pick<Storage, "getItem" | "setItem">;

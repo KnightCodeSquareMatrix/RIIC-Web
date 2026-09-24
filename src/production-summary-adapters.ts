@@ -57,12 +57,15 @@ export function createManualProductionPresentation(input: ManualPlanResult | nul
       };
     }
     const estimate = estimateDailyProduction({ layout: input.layout, maa: input.maa, rotation: input.evaluation.rotation });
+    const solverProduction = input.evaluation.rotation.daily.production ?? null;
+    const droneProduction = input.evaluation.rotation.daily.drone_production;
+    const groups = dailyProductionGroups(estimate, solverProduction, droneProduction);
     return {
-      source: "estimate",
-      groups: dailyProductionGroups(estimate, null),
+      source: groups[0]?.source ?? "estimate",
+      groups,
       detailsAvailable: true,
-      solverProduction: null,
-      droneProduction: undefined,
+      solverProduction,
+      droneProduction,
     };
   }
   const result = input;
@@ -80,14 +83,14 @@ export function createManualProductionPresentation(input: ManualPlanResult | nul
     maa: result.maa,
     rotation: result.rotation,
   });
-  const production = result.rotation.daily.production ?? null;
+  const solverProduction = result.rotation.daily.production ?? null;
   const droneProduction = result.rotation.daily.drone_production;
-  const groups = dailyProductionGroups(estimate, production, droneProduction);
+  const groups = dailyProductionGroups(estimate, solverProduction, droneProduction);
   return {
     source: groups[0]?.source ?? "estimate",
     groups,
     detailsAvailable: true,
-    solverProduction: production,
+    solverProduction,
     droneProduction,
   };
 }

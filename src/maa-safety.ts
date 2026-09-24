@@ -1,6 +1,6 @@
 import { stripInternalFields } from "./internal-field-safety.ts";
 import { maaRoomAutofill } from "./schedule-autofill.ts";
-import type { BaseBlueprint, MaaJson, MaaRoom, MaaRooms } from "./types.ts";
+import type { BaseBlueprint, MaaExecutionOrder, MaaJson, MaaRoom, MaaRooms } from "./types.ts";
 
 const MAA_ROOM_KINDS = [
   "trading",
@@ -62,6 +62,7 @@ export function prepareMaaForExport<T extends MaaJson>(
   strictOperatorOrder = true,
   allowReplacementOperatorSort = false,
   calculatorLayout?: BaseBlueprint,
+  usePreExecutionOrder = false,
 ): T {
   const exported = sanitizeMaaJson(maa);
   const layoutRooms = new Map(calculatorLayout?.rooms.map((room) => [room.id, room]));
@@ -81,6 +82,9 @@ export function prepareMaaForExport<T extends MaaJson>(
         });
       });
     }
+    const executionOrder: MaaExecutionOrder = usePreExecutionOrder ? "pre" : "post";
+    if (plan.Fiammetta) plan.Fiammetta.order = executionOrder;
+    if (plan.drones) plan.drones.order = executionOrder;
     for (const rooms of Object.values(plan.rooms)) {
       if (!rooms) continue;
       for (const room of rooms) {

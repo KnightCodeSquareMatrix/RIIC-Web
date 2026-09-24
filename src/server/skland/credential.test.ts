@@ -6,6 +6,7 @@ import { URL } from "node:url";
 import {
   createSklandRequestSignature,
   MAX_SKLAND_CREDENTIAL_BYTES,
+  mowerSklandSignedHeaders,
   parseSklandCredential,
   SklandCredentialFormatError,
   sklandSignedHeaders,
@@ -85,6 +86,22 @@ test("Skland signing matches the fixed request vector", () => {
   assert.equal(headers.timestamp, "1725000000");
   assert.equal(headers.sign, signature);
   assert.equal(headers.cred, "cred-fixture");
+});
+
+test("mower inventory signing keeps the legacy cultivate request shape", () => {
+  const headers = mowerSklandSignedHeaders({
+    cred: "cred-fixture",
+    token: "token-fixture",
+    path: "/api/v1/game/cultivate/player",
+    query: "uid=role-fixture",
+    now: 1_725_000_002_000,
+  });
+  assert.equal(headers.timestamp, "1725000000");
+  assert.equal(headers.platform, "");
+  assert.equal(headers.dId, "");
+  assert.equal(headers.vName, "");
+  assert.equal(headers.cred, "cred-fixture");
+  assert.match(headers.sign, /^[a-f0-9]{32}$/);
 });
 
 test("stable Skland identity requires the documented successful response shape", () => {

@@ -28,6 +28,8 @@ import { cn } from "@/lib/utils";
 import type { ShiftDirection } from "@/motion";
 import { onboardingStepStatuses, shouldShowAnonymousSampleTrial } from "@/onboarding";
 import type { RoomRow } from "@/schedule";
+import type { OperatorAssetRecord } from "@/operatorPortraits";
+import { operatorsWithoutLayoutSkills } from "@/layout-skill-highlight";
 import type {
   BaseBlueprint,
   FeedbackData,
@@ -348,6 +350,7 @@ export interface InfraCalculatorProps {
   showFeedback?: boolean;
   showImages?: boolean;
   allowReplacementOperatorSort?: boolean;
+  highlightNoLayoutSkill?: boolean;
   onClearResultNotice: () => void;
   onDismissResultClearWarning: () => void;
 }
@@ -368,7 +371,7 @@ export function InfraCalculator(props: InfraCalculatorProps) {
     onFactoryRecipeChange, onTradeOrderChange, droneTargetRoomId, onDroneTargetChange,
     onSwapOperators,
     onEditManualSchedule, onDownloadMaa, onDownloadImage, showProgressionRecalculate = true, showManualScheduleEdit = true, scheduleViewControl = "tabs", shiftViewControl = "tabs", imageExportScope = "single", showFeedback = true, showImages = true,
-    onClearResultNotice, onDismissResultClearWarning, allowReplacementOperatorSort = false,
+    onClearResultNotice, onDismissResultClearWarning, allowReplacementOperatorSort = false, highlightNoLayoutSkill = false,
   } = props;
 
   const eliteByOperator = useMemo(() => {
@@ -394,6 +397,16 @@ export function InfraCalculator(props: InfraCalculatorProps) {
   const [imageExportFailed, setImageExportFailed] = useState(false);
   const [sortRoomId, setSortRoomId] = useState<string | null>(null);
   const [sortSelection, setSortSelection] = useState<{ roomId: string; slotIndex: number } | null>(null);
+  const [highlightCatalog, setHighlightCatalog] = useState<readonly OperatorAssetRecord[]>([]);
+  useEffect(() => {
+    if (!highlightNoLayoutSkill) return;
+    let active = true;
+    void import("@/operatorPortraits").then(({ OPERATOR_CATALOG }) => {
+      if (active) setHighlightCatalog(OPERATOR_CATALOG);
+    }).catch(() => { /* Leave highlighting unavailable until the next toggle. */ });
+    return () => { active = false; };
+  }, [highlightNoLayoutSkill]);
+  const noLayoutSkillOperators = useMemo(() => operatorsWithoutLayoutSkills(highlightCatalog, layout.rooms), [highlightCatalog, layout.rooms]);
   const imageExportInFlight = useRef(false);
 
   function toggleSortMode(row: RoomRow) {
@@ -729,6 +742,8 @@ export function InfraCalculator(props: InfraCalculatorProps) {
               onSortSlotClick={allowReplacementOperatorSort && onSwapOperators ? handleSortSlotClick : undefined}
               viewModeControl={scheduleViewControl}
               hideImages={!showImages}
+              highlightNoLayoutSkill={highlightNoLayoutSkill}
+              noLayoutSkillOperators={noLayoutSkillOperators}
               droneTargetRoomId={droneTargetRoomId}
               onDroneTargetChange={manualDroneSelection ? onDroneTargetChange : undefined}
             /> : (

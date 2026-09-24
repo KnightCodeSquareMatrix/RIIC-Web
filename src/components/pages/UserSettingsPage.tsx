@@ -111,6 +111,13 @@ export function UserSettingsPage({ settings, onSettingsChange }: UserSettingsPag
               />
             </div>
             <div className="flex items-center justify-between gap-6 border-t border-white/12 pt-4">
+              <Label htmlFor="use-pre-maa-execution-order" className="grid min-w-0 gap-1">
+                <span>{en ? "Use pre execution order for MAA" : "MAA 改成 pre 执行顺序"}</span>
+                <span className="font-normal text-sm text-amber-200/80">{en ? "Default is post. If you do not know what this means, leave it unchanged." : "默认使用 post；如果你不知道这是什么，请不要改动。"}</span>
+              </Label>
+              <Switch className={SETTINGS_SWITCH_CLASS} id="use-pre-maa-execution-order" checked={settings.usePreMaaExecutionOrder} onCheckedChange={(checked) => onSettingsChange({ ...settings, usePreMaaExecutionOrder: checked })} aria-label={en ? "Use pre execution order for MAA" : "MAA 改成 pre 执行顺序"} />
+            </div>
+            <div className="flex items-center justify-between gap-6 border-t border-white/12 pt-4">
               <Label htmlFor="allow-replacement-operator-sort" className="grid min-w-0 gap-1">
                 <span>{en ? "Allow replacement operator sorting" : "替换排班允许调整干员顺序"}</span>
                 <span className="font-normal text-sm text-white/64">
@@ -267,6 +274,27 @@ export function UserSettingsPage({ settings, onSettingsChange }: UserSettingsPag
                 onCheckedChange={(checked) => onSettingsChange({ ...settings, showManualScheduleEdit: checked })}
                 aria-label={en ? "Show current plan editor" : "显示基于当前方案编辑"}
               />
+            </div>
+            <div className="flex items-center justify-between gap-6 border-t border-white/12 pt-4">
+              <Label htmlFor="show-mower" className="grid min-w-0 gap-1">
+                <span>{en ? "Show Mower" : "显示 Mower"}</span>
+                <span className="font-normal text-sm text-white/64">
+                  {en ? "Mower schedule import and export in manual scheduling. Off by default." : "在手动排班中显示 Mower 导入导出入口，默认关闭。"}
+                </span>
+              </Label>
+              <Switch className={SETTINGS_SWITCH_CLASS}
+                id="show-mower"
+                checked={settings.showMower}
+                onCheckedChange={(checked) => onSettingsChange({ ...settings, showMower: checked })}
+                aria-label={en ? "Show Mower" : "显示 Mower"}
+              />
+            </div>
+            <div className="flex items-center justify-between gap-6 border-t border-white/12 pt-4">
+              <Label htmlFor="highlight-no-layout-skill" className="grid min-w-0 gap-1">
+                <span>{en ? "Highlight operators without layout skills" : "高亮当前布局无功能干员"}</span>
+                <span className="font-normal text-sm text-white/64">{en ? "Highlight operators with no usable infrastructure skill in the current layout. Off by default." : "高亮当前基建布局内没有可用基建技能的干员，默认关闭。"}</span>
+              </Label>
+              <Switch className={SETTINGS_SWITCH_CLASS} id="highlight-no-layout-skill" checked={settings.highlightNoLayoutSkill} onCheckedChange={(checked) => onSettingsChange({ ...settings, highlightNoLayoutSkill: checked })} aria-label={en ? "Highlight operators without layout skills" : "高亮当前布局无功能干员"} />
             </div>
             <div className="flex items-center justify-between gap-6 border-t border-white/12 pt-4">
               <Label htmlFor="load-english-resources" className="grid min-w-0 gap-1">

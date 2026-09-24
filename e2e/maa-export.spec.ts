@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
-import { mockApis, planData, requestId, seedV4Session } from "./production-readiness.fixture";
+import { mockAnonymousWebsiteSession, mockApis, planData, requestId, seedV4Session } from "./production-readiness.fixture";
 import type { MaaJson } from "../src/types";
 
 for (const source of ["generated", "restored"] as const) {
@@ -23,6 +23,7 @@ for (const source of ["generated", "restored"] as const) {
         })),
       },
     };
+    await mockAnonymousWebsiteSession(page);
     await mockApis(page);
     await seedV4Session(page, source === "restored" ? result : null);
     await page.route("**/api/plan", (route) => route.fulfill({
@@ -35,9 +36,9 @@ for (const source of ["generated", "restored"] as const) {
       await page.getByRole("button", { name: "生成排班", exact: true }).click();
     }
     const dorms = page.locator('[data-compact-schedule-view] [data-room-group="dormitory"]');
-    await expect(dorms.nth(0).locator('[data-operator-identity="autofill"]')).toHaveCount(4);
+    await expect(dorms.nth(0).locator('[data-operator-identity="autofill"]')).toHaveCount(source === "generated" ? 4 : 0);
     await expect(dorms.nth(1).locator('[data-operator-identity="autofill"]')).toHaveCount(5);
-    await expect(dorms.nth(2).locator('[data-operator-identity="autofill"]')).toHaveCount(0);
+    await expect(dorms.nth(2).locator('[data-operator-identity="autofill"]')).toHaveCount(source === "generated" ? 5 : 0);
 
     const pending = page.waitForEvent("download");
     await page.locator('[data-calculator-export-actions="desktop"]')
@@ -47,7 +48,9 @@ for (const source of ["generated", "restored"] as const) {
     const exported = JSON.parse(await readFile((await download.path())!, "utf8")) as MaaJson;
     expect(exported.plans).toHaveLength(result.maa.plans.length);
     exported.plans.forEach((plan, index) => {
-      expect(plan.rooms.dormitory?.map((room) => room.autofill)).toEqual([true, true, false, false]);
+      expect(plan.rooms.dormitory?.map((room) => room.autofill)).toEqual(source === "generated"
+        ? [true, true, true, true]
+        : [false, true, false, false]);
       expect(plan.rooms.dormitory?.map((room) => room.operators))
         .toEqual(result.maa.plans[index]!.rooms.dormitory.map((room) => room.operators));
       expect(plan.rooms.dormitory?.[2]?.skip).toBe(true);
