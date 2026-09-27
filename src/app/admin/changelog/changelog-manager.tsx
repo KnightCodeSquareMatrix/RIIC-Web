@@ -1,4 +1,5 @@
 "use client";
+import { adminPageClass } from "../admin-page";
 
 import { useCallback, useEffect, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
@@ -12,7 +13,7 @@ import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, Dia
 import { AppMotionProvider } from "@/components/MotionProvider";
 import { ReleaseDialog } from "@/components/changelog/ReleaseDialog";
 import { ReleaseEntry } from "@/components/changelog/ReleaseEntry";
-import { requestAdminData } from "@/lib/admin-request";
+import { useAdminRequest } from "../admin-context";
 import type { AdminRelease, AdminReleaseList, ReleaseDraft } from "@/releases/types";
 import { parseReleaseDraft } from "@/releases/validation";
 import { ReleaseEditor } from "./release-editor";
@@ -24,6 +25,7 @@ type Confirmation = { action: "publish" | "withdraw" | "delete"; release: AdminR
   | { action: "discard"; target: AdminRelease | null };
 
 export function ChangelogManager() {
+  const requestAdminData = useAdminRequest();
   const t = useTranslations("AdminChangelog");
   const locale = useLocale();
   const en = locale === "en";
@@ -45,7 +47,7 @@ export function ChangelogManager() {
     try { setData(await requestAdminData<AdminReleaseList>("/api/admin/releases", undefined, t("loadError"))); }
     catch (cause) { setError(cause instanceof Error ? cause.message : t("loadError")); }
     finally { setLoading(false); }
-  }, [t]);
+  }, [t, requestAdminData]);
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
     if (!dirty) return;
@@ -107,7 +109,7 @@ export function ChangelogManager() {
   const publishChanged = selected?.published && JSON.stringify(selected.draft) !== JSON.stringify(selected.published);
   return (
     <AppMotionProvider>
-      <main id="admin-content" className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8" data-admin-changelog>
+      <main id="admin-content" className={adminPageClass} data-admin-changelog>
         <header className="flex flex-wrap items-end justify-between gap-4">
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-3"><h1 className="text-2xl font-semibold">{t("title")}</h1>{data ? <Badge variant="outline">{environment}</Badge> : null}</div>

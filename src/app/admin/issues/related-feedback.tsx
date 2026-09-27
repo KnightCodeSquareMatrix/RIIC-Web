@@ -1,19 +1,21 @@
 "use client";
+import { useAdminFetch } from "../admin-context";
 import { useEffect, useState } from "react";
 import { useLocale } from "next-intl";
 import { Button } from "@/components/ui/button";
 import type { AdminFeedbackRecordData, ApiResponse } from "@/types";
 type Related = { operators: string[]; matches: { feedback: AdminFeedbackRecordData; reason: string; operators: string[] }[]; links: { feedbackId: string; masterId: string }[] };
 export function RelatedFeedback({ item, onChanged }: { item: AdminFeedbackRecordData; onChanged: () => void }) {
+  const request = useAdminFetch();
   const en = useLocale() === "en";
   const [data, setData] = useState<Related | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  useEffect(() => { let active = true; void fetch(`/api/admin/quality?kind=related&id=${encodeURIComponent(item.id)}`, { cache: "no-store" }).then((response) => response.json()).then((body: ApiResponse<Related>) => { if (!active) return; if (body.success) setData(body.data); else setError(body.error.message); }).catch((error: Error) => { if (active) setError(error.message); }); return () => { active = false; }; }, [item.id]);
+  useEffect(() => { let active = true; void request(`/api/admin/quality?kind=related&id=${encodeURIComponent(item.id)}`, { cache: "no-store" }).then((response) => response.json()).then((body: ApiResponse<Related>) => { if (!active) return; if (body.success) setData(body.data); else setError(body.error.message); }).catch((error: Error) => { if (active) setError(error.message); }); return () => { active = false; }; }, [item.id, request]);
   async function link(masterId: string | null) {
     setBusy(true); setError("");
     try {
-      const response = await fetch("/api/admin/quality", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "link", id: item.id, masterId, expectedUpdatedAt: item.updatedAt }) });
+      const response = await request("/api/admin/quality", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "link", id: item.id, masterId, expectedUpdatedAt: item.updatedAt }) });
       const body = await response.json() as ApiResponse<unknown>;
       if (!body.success) throw new Error(body.error.message);
       onChanged();

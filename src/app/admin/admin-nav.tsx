@@ -1,56 +1,60 @@
 "use client";
-import { useTranslations, useLocale } from "next-intl";
-import { messageRecord } from "@/i18n/translate";
 
 import Link from "next/link";
-import { BookOpen, Bug, FlaskConical, Gauge, House, MessageSquareText, UsersRound } from "lucide-react";
 import { usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { ArrowUpRight, BookOpen, Bug, FlaskConical, Gauge, MessageSquareText, ShieldCheck, UsersRound } from "lucide-react";
+import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/components/ui/sidebar";
 
-import { buttonVariants } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-
-const ITEMS = [
-  { href: "/admin", zh: messageRecord("zh", "app_admin_admin_nav_content").value, en: messageRecord("en", "app_admin_admin_nav_content").value, icon: Gauge },
-  { href: "/admin/skills", zh: messageRecord("zh", "app_admin_admin_nav_content2").value, en: messageRecord("en", "app_admin_admin_nav_content2").value, icon: MessageSquareText },
-  { href: "/admin/changelog", zh: messageRecord("zh", "app_admin_admin_nav_content5").value, en: messageRecord("en", "app_admin_admin_nav_content5").value, icon: BookOpen },
-  { href: "/admin/issues", zh: messageRecord("zh", "app_admin_admin_nav_content3").value, en: messageRecord("en", "app_admin_admin_nav_content3").value, icon: Bug },
-  { href: "/admin/quality", zh: "复现测试", en: "Reproduction tests", icon: FlaskConical },
-  { href: "/admin/users", zh: messageRecord("zh", "app_admin_admin_nav_content4").value, en: messageRecord("en", "app_admin_admin_nav_content4").value, icon: UsersRound },
+export const ADMIN_NAVIGATION = [
+  { path: "", title: "overview", description: "overviewHint", icon: Gauge, adminOnly: false, group: "operations" },
+  { path: "/issues", title: "issues", description: "issuesHint", icon: Bug, adminOnly: false, group: "operations" },
+  { path: "/quality", title: "quality", description: "qualityHint", icon: FlaskConical, adminOnly: false, group: "operations" },
+  { path: "/skills", title: "skills", description: "skillsHint", icon: MessageSquareText, adminOnly: true, group: "management" },
+  { path: "/changelog", title: "changelog", description: "changelogHint", icon: BookOpen, adminOnly: true, group: "management" },
+  { path: "/users", title: "users", description: "usersHint", icon: UsersRound, adminOnly: true, group: "management" },
 ] as const;
 
-export function AdminNav({ isAdmin }: { isAdmin: boolean }) {
-  const intl = useTranslations();
+export function AdminNav({ isAdmin, name, basePath = "/admin" }: { isAdmin: boolean; name: string; basePath?: string }) {
+  const t = useTranslations("AdminWorkspace");
   const pathname = usePathname();
-  const locale = useLocale();
-  const en = locale === "en";
-  return (
-    <nav data-yeye-scroll="auto" aria-label={intl("app_admin_admin_nav.administrationNavigation")} className="flex min-w-0 items-center gap-1 overflow-x-auto">
-      {ITEMS.filter((item) => isAdmin || item.href === "/admin" || item.href === "/admin/issues" || item.href === "/admin/quality").map((item) => {
-        const active = item.href === "/admin"
-          ? pathname === item.href
-          : pathname === item.href || pathname.startsWith(`${item.href}/`);
-        const Icon = item.icon;
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            aria-current={active ? "page" : undefined}
-            data-motion-pressable=""
-            className={cn(buttonVariants({ variant: active ? "secondary" : "ghost", size: "lg" }), "shrink-0")}
-          >
-            <Icon aria-hidden="true" />
-            {en ? item.en : item.zh}
-          </Link>
-        );
-      })}
-      <Link
-        href="/"
-        data-motion-pressable=""
-        className={cn(buttonVariants({ variant: "ghost", size: "lg" }), "shrink-0 text-muted-foreground")}
-      >
-        <House aria-hidden="true" />
-        {intl("app_admin_admin_nav.backToScheduler")}
+  const { setOpenMobile } = useSidebar();
+  const items = ADMIN_NAVIGATION.filter(item => isAdmin || !item.adminOnly);
+  return <Sidebar collapsible="icon" mobileWidth="18rem" className="border-r-0">
+    <SidebarHeader className="h-16 justify-center px-3">
+      <Link href={basePath} onClick={() => setOpenMobile(false)} className="flex items-center gap-2.5 rounded-lg p-1 outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={t("workspace")}>
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground"><ShieldCheck className="size-5" aria-hidden="true" /></span>
+        <span className="grid min-w-0 group-data-[collapsible=icon]:hidden"><span className="text-sm font-semibold tracking-tight">RIIC Admin</span><span className="text-[11px] text-muted-foreground">{t("workspace")}</span></span>
       </Link>
-    </nav>
-  );
+    </SidebarHeader>
+    <SidebarContent>
+      <nav aria-label={t("navigation")}>
+        {(["operations", "management"] as const).map(group => {
+          const visible = items.filter(item => item.group === group);
+          return visible.length ? <SidebarGroup key={group} className="px-3">
+            <SidebarGroupLabel className="px-2 text-[11px]">{t(group)}</SidebarGroupLabel>
+            <SidebarMenu className="gap-1">
+              {visible.map(item => {
+                const href = basePath + item.path;
+                const active = item.path ? pathname === href || pathname.startsWith(href + "/") : pathname === href;
+                return <SidebarMenuItem key={item.path}>
+                  <SidebarMenuButton isActive={active} tooltip={t(item.title)} className="h-10 gap-3 rounded-lg data-[active=true]:bg-primary/8 data-[active=true]:font-semibold motion-safe:active:scale-[0.98]"
+                    render={<Link href={href} aria-current={active ? "page" : undefined} onClick={() => setOpenMobile(false)} />}>
+                    <item.icon aria-hidden="true" className="size-4" /><span>{t(item.title)}</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>;
+              })}
+            </SidebarMenu>
+          </SidebarGroup> : null;
+        })}
+      </nav>
+    </SidebarContent>
+    <SidebarFooter className="gap-3 px-3 pb-4">
+      <SidebarMenu><SidebarMenuItem><SidebarMenuButton tooltip={t("backToSite")} className="h-10" render={<Link href="/" />}><ArrowUpRight className="size-4" aria-hidden="true" /><span>{t("backToSite")}</span></SidebarMenuButton></SidebarMenuItem></SidebarMenu>
+      <div className="flex items-center gap-2.5 border-t pt-4">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold" aria-hidden="true">{name.slice(0, 2).toUpperCase()}</span>
+        <div className="grid min-w-0 group-data-[collapsible=icon]:hidden"><span className="truncate text-xs font-medium">{name}</span><span className="mt-0.5 text-[11px] text-muted-foreground">{t(isAdmin ? "administrator" : "reviewer")}</span></div>
+      </div>
+    </SidebarFooter>
+  </Sidebar>;
 }

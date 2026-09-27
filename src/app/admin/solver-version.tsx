@@ -33,7 +33,7 @@ export function SolverVersion({
   return (
     <section
       id="solver-version"
-      className="scroll-mt-24 overflow-hidden rounded-2xl border bg-card"
+      className="scroll-mt-24 overflow-hidden rounded-xl border bg-card"
       data-admin-solver-status
     >
       <header className="flex flex-wrap items-start justify-between gap-4 border-b px-5 py-5 sm:px-6">

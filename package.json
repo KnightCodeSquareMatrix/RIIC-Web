@@ -5,6 +5,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dev:admin-preview": "node scripts/start-admin-preview.mjs",
+    "test:admin-preview": "node --test --experimental-strip-types src/admin-preview-policy.test.ts src/admin-preview-data.test.ts",
     "dev": "next dev -H 0.0.0.0 -p 5174",
     "dev:full": "npm run dev",
     "build": "next build",

@@ -4,9 +4,10 @@ import { useEffect, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { DIAGNOSTIC_CATEGORIES, type DiagnosticReport } from "@/diagnostics";
-import { requestAdminData } from "@/lib/admin-request";
+import { useAdminRequest } from "./admin-context";
 
 export function DiagnosticsPanel() {
+  const requestAdminData = useAdminRequest();
   const t=useTranslations("diagnostics");
   const locale=useLocale();
   const [hours,setHours]=useState("1");
@@ -23,7 +24,7 @@ export function DiagnosticsPanel() {
       .catch(cause=>{if(!controller.signal.aborted) setError(cause instanceof Error ? cause.message : t("loadFailed"));})
       .finally(()=>{if(!controller.signal.aborted) setLoading(false);});
     return ()=>controller.abort();
-  },[hours,refresh,t]);
+  },[hours,refresh,t,requestAdminData]);
   const time=(value:string)=>new Intl.DateTimeFormat(locale,{month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",timeZone:"Asia/Shanghai",hour12:false}).format(new Date(value));
   const groups=report?.groups.filter(group=>category==="all" || group.category===category) ?? [];
   const recent=report?.recent.filter(row=>category==="all" || row.category===category) ?? [];

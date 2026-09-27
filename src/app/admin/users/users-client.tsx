@@ -1,7 +1,10 @@
 "use client";
+import { useAdminFetch } from "../admin-context";
 import { useTranslations, useLocale } from "next-intl";
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown, ChevronLeft, ChevronRight, Search, UsersRound } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -13,7 +16,16 @@ const CLIENT_SKLAND_ENABLED = process.env.APP_CLIENT_SKLAND_ENABLED === "1";
 type RoleChange = { userId: string; name: string; email: string; action: "grantAdmin" | "revokeAdmin" | "grantReviewer" | "revokeReviewer" };
 
 export function AdminUserManagement() {
+  const request = useAdminFetch();
   const intl = useTranslations();
+  const t = useTranslations("AdminWorkspace");
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [sort, setSort] = useState("newest");
+  const [page, setPage] = useState(1);
+  const [expandedUser, setExpandedUser] = useState<string | null>(null);
+  const loadController = useRef<AbortController | null>(null);
+  const [appliedQuery, setAppliedQuery] = useState("");
   const locale = useLocale();
   const en = locale === "en";
   const [users, setUsers] = useState<AdminUserData[]>([]);
@@ -27,24 +39,33 @@ export function AdminUserManagement() {
   const [sessionsByUser, setSessionsByUser] = useState<Record<string, AdminSessionData[] | undefined>>({});
 
   const load = useCallback(async (search: string) => {
+    loadController.current?.abort();
+    const controller = new AbortController();
+    loadController.current = controller;
     setLoading(true);
     setVerifiedUsers(null);
     try {
-      const response = await fetch(`/api/admin/users?q=${encodeURIComponent(search)}`, { cache: "no-store" });
+      const response = await request(`/api/admin/users?q=${encodeURIComponent(search)}`, { cache: "no-store", signal: controller.signal });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error?.message ?? (intl("app_admin_users_users_client.couldNotLoadUsers")));
+      if (controller.signal.aborted) return;
       setUsers(body.data.users);
+      setAppliedQuery(search);
+      setPage(1);
       setVerifiedUsers(body.data.summary.verifiedUsers);
       setCanManageAdminRoles(body.data.permissions.canManageAdminRoles);
+    } catch (error) {
+      if (!controller.signal.aborted) throw error;
     } finally {
-      setLoading(false);
+      if (loadController.current === controller) setLoading(false);
     }
-  }, [intl]);
+  }, [intl, request]);
 
   useEffect(() => {
     void load("").catch((error) => {
       setMessage(error instanceof Error ? error.message : (intl("app_admin_users_users_client.couldNotLoadUsers")));
     });
+    return () => loadController.current?.abort();
   }, [intl, load]);
 
   async function act(userId: string, action: AdminUserAction): Promise<boolean> {
@@ -53,8 +74,8 @@ export function AdminUserManagement() {
     try {
       const userPath = `/api/admin/users/${encodeURIComponent(userId)}`;
       const response = action === "revokeSessions"
-        ? await fetch(`${userPath}/sessions`, { method: "DELETE" })
-        : await fetch(userPath, {
+        ? await request(`${userPath}/sessions`, { method: "DELETE" })
+        : await request(userPath, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(action === "ban" || action === "unban"
@@ -69,7 +90,7 @@ export function AdminUserManagement() {
       if (action === "revokeSessions" || action === "ban") {
         setSessionsByUser((current) => ({ ...current, [userId]: [] }));
       }
-      await load(query.trim());
+      await load(appliedQuery);
       return true;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : (intl("app_admin_users_users_client.actionFailed")));
@@ -87,7 +108,7 @@ export function AdminUserManagement() {
     setBusyKey(`${userId}:sessions`);
     setMessage(null);
     try {
-      const response = await fetch(`/api/admin/users/${encodeURIComponent(userId)}/sessions`, { cache: "no-store" });
+      const response = await request(`/api/admin/users/${encodeURIComponent(userId)}/sessions`, { cache: "no-store" });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error?.message ?? (intl("app_admin_users_users_client.couldNotLoadSessions")));
       setSessionsByUser((current) => ({ ...current, [userId]: body.data.sessions }));
@@ -98,69 +119,71 @@ export function AdminUserManagement() {
     }
   }
 
+  const filteredUsers = useMemo(() => users.filter(entry => {
+    const roleMatches = roleFilter === "all" || (roleFilter === "admin" ? entry.isAdmin : roleFilter === "reviewer" ? entry.isReviewer : !entry.isAdmin && !entry.isReviewer);
+    const statusMatches = statusFilter === "all" || (statusFilter === "suspended" ? entry.banned : statusFilter === "unverified" ? !entry.emailVerified && !entry.banned : entry.emailVerified && !entry.banned);
+    return roleMatches && statusMatches;
+  }).sort((a, b) => sort === "name" ? a.name.localeCompare(b.name, locale) : (sort === "oldest" ? 1 : -1) * (Date.parse(a.createdAt) - Date.parse(b.createdAt))), [users, roleFilter, statusFilter, sort, locale]);
+  const pageCount = Math.max(1, Math.ceil(filteredUsers.length / 10));
+  const currentPage = Math.min(page, pageCount);
+  const visibleUsers = filteredUsers.slice((currentPage - 1) * 10, currentPage * 10);
+  const selectClass = "h-10 max-w-full rounded-lg border bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
   return (
-    <section id="users" className="scroll-mt-24 overflow-hidden rounded-2xl border bg-card" data-admin-user-management>
-      <header className="flex flex-col gap-5 border-b px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-        <div className="min-w-0">
-          <h2 className="text-lg font-semibold tracking-tight">{intl("app_admin_users_users_client.userManagement")}</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {intl("app_admin_users_users_client.searchSuspendInspectOrRevokeSessions")}
-            {canManageAdminRoles === true ? (intl("app_admin_users_users_client.theBootstrapAdministratorCanAlsoChangeAdministratorRoles")) : canManageAdminRoles === false ? (intl("app_admin_users_users_client.administratorRolesCanBeChangedOnlyByTheBootstrap")) : ""}
-          </p>
+    <section id="users" className="grid min-w-0 gap-4" data-admin-user-management>
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border bg-muted/20 px-4 py-4">
+        <div className="flex items-center gap-3">
+          <span className="flex size-10 items-center justify-center rounded-lg bg-background shadow-sm"><UsersRound className="size-5 text-muted-foreground" aria-hidden="true" /></span>
+          <dl data-admin-verified-users aria-busy={loading}>
+            <dt className="text-xs text-muted-foreground">{intl("app_admin_users_users_client.verifiedUsers")}</dt>
+            <dd className="mt-1 text-2xl font-semibold tabular-nums" aria-live="polite">{verifiedUsers === null ? "—" : new Intl.NumberFormat(locale).format(verifiedUsers)}</dd>
+            <dd className="text-xs text-muted-foreground">{intl("app_admin_users_users_client.verifiedUsersScope")}</dd>
+          </dl>
         </div>
-        <dl className="shrink-0 rounded-xl border bg-muted/30 px-5 py-3 sm:text-right" data-admin-verified-users aria-busy={loading}>
-          <dt className="text-sm text-muted-foreground">{intl("app_admin_users_users_client.verifiedUsers")}</dt>
-          <dd className="mt-1 font-number text-3xl font-semibold tabular-nums tracking-tight" aria-live="polite">
-            {verifiedUsers === null ? "—" : new Intl.NumberFormat(locale).format(verifiedUsers)}
-          </dd>
-          <dd className="mt-1 text-xs text-muted-foreground">{intl("app_admin_users_users_client.verifiedUsersScope")}</dd>
-        </dl>
-      </header>
-
-      <div className="grid gap-5 px-5 py-5 sm:px-6">
-        <form
-          className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]"
-          role="search"
-          onSubmit={(event) => {
-            event.preventDefault();
-            setMessage(null);
-            void load(query.trim()).catch((error) => {
-              setMessage(error instanceof Error ? error.message : (intl("app_admin_users_users_client.couldNotLoadUsers")));
-            });
-          }}
-        >
-          <Input value={query} onChange={(event) => setQuery(event.target.value)} maxLength={100} placeholder={intl("app_admin_users_users_client.searchByEmailOrName")} aria-label={intl("app_admin_users_users_client.searchByEmailOrName")} />
-          <Button type="submit" disabled={loading} className="sm:min-w-24">{intl("app_admin_users_users_client.search")}</Button>
-        </form>
-
-        {message ? <p role="status" className="text-sm text-muted-foreground">{message}</p> : null}
-        {loading ? <p role="status" className="text-sm text-muted-foreground">{intl("app_admin_users_users_client.loadingUsers")}</p> : null}
-
-        <div className="grid divide-y rounded-xl border">
-          {!loading && users.length === 0 ? <p className="p-5 text-sm text-muted-foreground">{intl("app_admin_users_users_client.noMatchingUsers")}</p> : null}
-          {users.map((entry) => {
-            const sessions = sessionsByUser[entry.id];
-            const actionBusy = busyKey?.startsWith(`${entry.id}:`) ?? false;
-            return (
-              <article key={entry.id} className="p-4 sm:p-5">
-                <div className="flex flex-wrap justify-between gap-4">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="font-medium">{entry.name}</h3>
-                      {entry.isAdmin ? <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">{entry.isBootstrapAdmin ? (intl("app_admin_users_users_client.bootstrapAdmin")) : (intl("app_admin_users_users_client.admin"))}</span> : null}
-                      {entry.isReviewer ? <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">{intl("adminReviewer.role")}</span> : null}
-                      {CLIENT_SKLAND_ENABLED ? (
-                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${entry.sklandActiveBindingCount > 0 ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300" : "bg-muted text-muted-foreground"}`}>
-                          {entry.sklandActiveBindingCount > 0 ? (intl("app_admin_users_users_client.sklandActive", { sklandActiveBindingCount: entry.sklandActiveBindingCount })) : (intl("app_admin_users_users_client.noActiveSklandAuthorization"))}
-                        </span>
-                      ) : null}
-                      {CLIENT_SKLAND_ENABLED && entry.sklandRenewalDueCount > 0 ? (
-                        <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-950/50 dark:text-amber-300">{intl("app_admin_users_users_client.renewalDue")} · {entry.sklandRenewalDueCount}</span>
-                      ) : null}
-                    </div>
-                    <p className="mt-1 break-all text-sm text-muted-foreground">{entry.email} · {entry.emailVerified ? (intl("app_admin_users_users_client.verified")) : (intl("app_admin_users_users_client.unverified"))}{entry.banned ? (intl("app_admin_users_users_client.suspended")) : ""}</p>
-                    {entry.banned && entry.banReason ? <p className="mt-1 text-xs text-destructive">{intl("app_admin_users_users_client.reason")}{entry.banReason}</p> : null}
+        <p className="max-w-md text-xs leading-5 text-muted-foreground">{canManageAdminRoles === true ? intl("app_admin_users_users_client.theBootstrapAdministratorCanAlsoChangeAdministratorRoles") : canManageAdminRoles === false ? intl("app_admin_users_users_client.administratorRolesCanBeChangedOnlyByTheBootstrap") : ""}</p>
+      </div>
+      <form className="flex flex-wrap gap-2" role="search" onSubmit={event => {
+        event.preventDefault();
+        setMessage(null);
+        setExpandedUser(null);
+        void load(query.trim()).catch(error => setMessage(error instanceof Error ? error.message : intl("app_admin_users_users_client.couldNotLoadUsers")));
+      }}>
+        <div className="relative min-w-0 flex-1 sm:max-w-sm"><Search className="pointer-events-none absolute top-3 left-3 size-4 text-muted-foreground" aria-hidden="true" /><Input className="h-10 pl-9" value={query} onChange={event => setQuery(event.target.value)} maxLength={100} placeholder={intl("app_admin_users_users_client.searchByEmailOrName")} aria-label={intl("app_admin_users_users_client.searchByEmailOrName")} /></div>
+        <Button type="submit" variant="outline" disabled={loading} className="h-10">{intl("app_admin_users_users_client.search")}</Button>
+        <select className={selectClass} aria-label={t("role")} value={roleFilter} onChange={event => { setRoleFilter(event.target.value); setPage(1); }}>
+          <option value="all">{t("allRoles")}</option><option value="admin">{t("administrator")}</option><option value="reviewer">{t("reviewer")}</option><option value="user">{t("regularUser")}</option>
+        </select>
+        <select className={selectClass} aria-label={t("status")} value={statusFilter} onChange={event => { setStatusFilter(event.target.value); setPage(1); }}>
+          <option value="all">{t("allStatuses")}</option><option value="active">{t("active")}</option><option value="suspended">{t("suspended")}</option><option value="unverified">{t("unverified")}</option>
+        </select>
+        <select className={selectClass} aria-label={t("sort")} value={sort} onChange={event => { setSort(event.target.value); setPage(1); }}>
+          <option value="newest">{t("newest")}</option><option value="oldest">{t("oldest")}</option><option value="name">{t("nameOrder")}</option>
+        </select>
+      </form>
+      {message && <p role="status" className="rounded-lg bg-muted px-4 py-3 text-sm">{message}</p>}
+      <p className="text-xs text-muted-foreground">{t("filterScope", { count: users.length })}</p>
+      <div className="min-w-0 overflow-x-auto rounded-xl border" data-yeye-scroll="auto">
+        <table className="w-full min-w-[720px] text-left text-sm" aria-label={t("users")} aria-busy={loading}>
+          <thead className="bg-muted/40 text-xs text-muted-foreground"><tr>{(["account", "role", "status", "createdAt", "actions"] as const).map(key => <th key={key} scope="col" className="px-4 py-3 font-medium last:text-right">{t(key)}</th>)}</tr></thead>
+          <tbody>
+            {loading ? Array.from({ length: 5 }, (_, index) => <tr key={index} className="border-t"><td colSpan={5} className="px-4 py-4"><Skeleton className="h-8 w-full" /></td></tr>) : visibleUsers.map(entry => {
+              const sessions = sessionsByUser[entry.id];
+              const actionBusy = busyKey?.startsWith(`${entry.id}:`) ?? false;
+              const expanded = expandedUser === entry.id;
+              return <Fragment key={entry.id}>
+                <tr className="border-t hover:bg-muted/30">
+                  <td className="max-w-80 px-4 py-3"><div className="flex items-center gap-3"><span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium" aria-hidden="true">{entry.name.slice(0, 2).toUpperCase()}</span><span className="min-w-0"><span className="block truncate font-medium">{entry.name}</span><span className="mt-0.5 block truncate text-xs text-muted-foreground">{entry.email}</span></span></div></td>
+                  <td className="px-4 py-3"><div className="flex flex-wrap gap-1">{entry.isAdmin && <span className="rounded-md border px-2 py-1 text-xs">{intl(entry.isBootstrapAdmin ? "app_admin_users_users_client.bootstrapAdmin" : "app_admin_users_users_client.admin")}</span>}{entry.isReviewer && <span className="rounded-md border px-2 py-1 text-xs">{t("reviewer")}</span>}{!entry.isAdmin && !entry.isReviewer && <span className="text-muted-foreground">{t("regularUser")}</span>}</div></td>
+                  <td className="px-4 py-3"><span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-1 text-xs ${entry.banned ? "bg-destructive/10 text-destructive" : !entry.emailVerified ? "bg-amber-50 text-amber-800 dark:bg-amber-950/50 dark:text-amber-200" : "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200"}`}><span className="size-1.5 rounded-full bg-current" aria-hidden="true" />{t(entry.banned ? "suspended" : !entry.emailVerified ? "unverified" : "active")}</span></td>
+                  <td className="whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">{new Intl.DateTimeFormat(locale, { year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(entry.createdAt))}</td>
+                  <td className="px-4 py-3 text-right"><Button type="button" variant="ghost" size="sm" aria-expanded={expanded} aria-controls={`user-detail-${entry.id}`} onClick={() => setExpandedUser(expanded ? null : entry.id)}>{t(expanded ? "closeDetails" : "details")}<ChevronDown className={expanded ? "rotate-180" : ""} aria-hidden="true" /></Button></td>
+                </tr>
+                {expanded && <tr className="border-t bg-muted/15"><td colSpan={5} className="p-4"><div id={`user-detail-${entry.id}`} className="grid gap-4" aria-label={entry.name}>
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><span className="break-all">{entry.email}</span><span>· {t(entry.emailVerified ? "verified" : "unverified")}</span>
+                    {CLIENT_SKLAND_ENABLED && <span>{entry.sklandActiveBindingCount > 0 ? intl("app_admin_users_users_client.sklandActive", { sklandActiveBindingCount: entry.sklandActiveBindingCount }) : intl("app_admin_users_users_client.noActiveSklandAuthorization")}</span>}
+                    {CLIENT_SKLAND_ENABLED && entry.sklandRenewalDueCount > 0 && <span className="text-amber-700">{intl("app_admin_users_users_client.renewalDue")} · {entry.sklandRenewalDueCount}</span>}
                   </div>
+                  {entry.banned && entry.banReason && <p className="text-xs text-destructive">{entry.banReason}</p>}
                   <div className="flex flex-wrap gap-2">
                     {canManageAdminRoles && !entry.isBootstrapAdmin ? (
                       <Button
@@ -190,7 +213,6 @@ export function AdminUserManagement() {
                     <Button type="button" size="sm" variant="outline" disabled={actionBusy} onClick={() => void act(entry.id, "revokeSessions")}>{intl("app_admin_users_users_client.revokeSessions")}</Button>
                     <Button type="button" size="sm" variant={entry.banned ? "outline" : "destructive"} disabled={actionBusy} onClick={() => void act(entry.id, entry.banned ? "unban" : "ban")}>{entry.banned ? (intl("app_admin_users_users_client.unsuspend")) : (intl("app_admin_users_users_client.suspend"))}</Button>
                   </div>
-                </div>
                 {sessions ? (
                   <div className="mt-4 grid gap-2 border-t pt-3">
                     {sessions.length ? sessions.map((current) => (
@@ -201,10 +223,17 @@ export function AdminUserManagement() {
                     )) : <p className="text-sm text-muted-foreground">{intl("app_admin_users_users_client.noActiveSessions")}</p>}
                   </div>
                 ) : null}
-              </article>
-            );
-          })}
-        </div>
+
+                </div></td></tr>}
+              </Fragment>;
+            })}
+            {!loading && !visibleUsers.length && <tr className="border-t"><td colSpan={5} className="px-4 py-12 text-center"><UsersRound className="mx-auto mb-3 size-6 text-muted-foreground" aria-hidden="true" /><p className="font-medium">{t("noResults")}</p><p className="mt-1 text-xs text-muted-foreground">{t("noResultsHint")}</p><Button type="button" variant="ghost" className="mt-3" onClick={() => { setRoleFilter("all"); setStatusFilter("all"); setPage(1); }}>{t("resetFilters")}</Button></td></tr>}
+          </tbody>
+        </table>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
+        <span role="status">{loading ? intl("app_admin_users_users_client.loadingUsers") : t("resultCount", { count: filteredUsers.length })}</span>
+        <div className="flex items-center gap-3"><span>{t("page", { page: currentPage, total: pageCount })}</span><Button variant="outline" size="icon" aria-label={t("previous")} disabled={loading || currentPage === 1} onClick={() => setPage(currentPage - 1)}><ChevronLeft aria-hidden="true" /></Button><Button variant="outline" size="icon" aria-label={t("next")} disabled={loading || currentPage === pageCount} onClick={() => setPage(currentPage + 1)}><ChevronRight aria-hidden="true" /></Button></div>
       </div>
 
       <Dialog
