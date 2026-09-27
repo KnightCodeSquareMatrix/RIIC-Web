@@ -1,4 +1,5 @@
 "use client";
+import { adminPageClass } from "../admin-page";
 import { localize as localize_app_admin_skills_skill_annotations_client } from "../../../i18n/helpers/app_admin_skills_skill_annotations_client.ts";
 import { useTranslations, useLocale } from "next-intl";
 
@@ -19,7 +20,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { requestAdminData as requestData } from "@/lib/admin-request";
+import { useAdminRequest } from "../admin-context";
 import {
   BUILDING_SKILL_CATALOG,
   OPERATOR_CATALOG,
@@ -80,6 +81,7 @@ function OperatorIdentity({ operator }: { operator: OperatorAssetRecord }) {
 }
 
 export function SkillAnnotationManager() {
+  const requestData = useAdminRequest();
   const intl = useTranslations();
   const locale = useLocale();
   const en = locale === "en";
@@ -110,7 +112,7 @@ export function SkillAnnotationManager() {
     } finally {
       if (!signal?.aborted) setLoading(false);
     }
-  }, [intl]);
+  }, [intl, requestData]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -225,7 +227,7 @@ export function SkillAnnotationManager() {
   }
 
   return (
-    <main id="admin-content" className="mx-auto grid max-w-7xl gap-6 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+    <main id="admin-content" className={adminPageClass}>
       <header className="flex flex-wrap items-start justify-between gap-4 border-b pb-5">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">{intl("app_admin_skills_skill_annotations_client.skillNotes")}</h1>

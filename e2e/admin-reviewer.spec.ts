@@ -86,6 +86,7 @@ test("reviewer sees only overview and issues, and direct admin routes remain pro
     await context.addCookies([{ name: "riic-locale", value: "zh", domain: new URL(baseURL!).hostname, path: "/" }]);
     await page.goto("/admin/users");
     await expect(page.locator("[data-admin-verified-users]")).toContainText("45,549");
+    await page.getByRole("button", { name: /管理账户|Manage account/, exact: true }).click();
     await page.getByRole("button", { name: /设为审阅人|Grant reviewer/, exact: true }).click();
     await page.getByRole("dialog").getByRole("button", { name: /确认设为审阅人|Confirm reviewer/, exact: true }).click();
     await expect(page.getByRole("button", { name: /撤销审阅人|Revoke reviewer/, exact: true })).toBeVisible();
