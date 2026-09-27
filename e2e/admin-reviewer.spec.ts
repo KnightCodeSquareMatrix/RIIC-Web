@@ -96,7 +96,7 @@ test("reviewer sees only overview and issues, and direct admin routes remain pro
     await expect(page.getByRole("button", { name: /设为审阅人|Grant reviewer/, exact: true })).toBeVisible();
     expect(isReviewer).toBe(false);
     verifiedUsers = 0;
-    await page.getByRole("button", { name: /搜索|Search/, exact: true }).click();
+    await page.getByRole("search").getByRole("button", { name: /^(搜索|Search)$/ }).click();
     await expect(page.locator("[data-admin-verified-users] dd").first()).toHaveText("0");
     await pool.query('UPDATE "user" SET role=$1 WHERE id=$2', ["user", id]);
     expect((await context.request.get("/api/admin/solver-metrics", { headers: apiHeaders })).status()).toBe(403);
