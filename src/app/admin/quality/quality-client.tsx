@@ -1,4 +1,6 @@
 "use client";
+import { useAdminFetch, useAdminHref } from "../admin-context";
+import { adminPageClass } from "../admin-page";
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useSearchParams } from "next/navigation";
@@ -19,16 +21,18 @@ import { DraftEditor } from "./draft-editor";
 import { BatchDetails, ResultPanel } from "./quality-results";
 import { Check, Choice, dateText, Panel, Status, useWorkbenchText, versionText } from "./workbench-ui";
 
-async function api<T>(query = "", body?: unknown): Promise<T> {
-  const response = await fetch(`/api/admin/quality${query}`, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : { cache: "no-store" });
-  const envelope = await response.json() as ApiResponse<T>;
-  if (!envelope.success) throw new Error(envelope.error.message);
-  return envelope.data;
-}
 type PreviewEntry = { id: string; name: string; error: string | null };
 type Overview = { versions: QualityVersion[]; batches: Omit<QualityBatchData, "cases">[]; drafts: Omit<QualityDraftData, "input" | "original">[]; isAdmin: boolean; worker: { at: string; syncError?: string } | null };
 
 export function QualityWorkbench() {
+  const request = useAdminFetch();
+  const adminHref = useAdminHref();
+  const api = useCallback(async <T,>(query = "", body?: unknown): Promise<T> => {
+    const response = await request(`/api/admin/quality${query}`, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : { cache: "no-store" });
+    const envelope = await response.json() as ApiResponse<T>;
+    if (!envelope.success) throw new Error(envelope.error.message);
+    return envelope.data;
+  }, [request]);
   const { en, t } = useWorkbenchText();
   const params = useSearchParams();
   const [overview, setOverview] = useState<Overview | null>(null);
@@ -72,7 +76,7 @@ export function QualityWorkbench() {
       setCandidate(current => data.versions.some(version => version.id === current) ? current : data.versions[0]?.id ?? "");
       setBaseline(current => data.versions.some(version => version.id === current) ? current : "");
     }
-  }, []);
+  }, [api]);
   useEffect(() => { void refresh().catch((error: Error) => setError(error.message)); const timer = setInterval(() => { void refresh().catch((error: Error) => setError(error.message)); }, 5000); return () => clearInterval(timer); }, [refresh]);
   const draftId = params.get("draft");
   const draftIds = params.get("drafts");
@@ -82,7 +86,7 @@ export function QualityWorkbench() {
     let active = true;
     void api<QualityDraftData>(`?kind=draft&id=${encodeURIComponent(draftId)}`).then(data => { if (active) { setDraft(data); setInput(data.input); setSelected([data.id]); } }).catch((error: Error) => { if (active) setError(error.message); });
     return () => { active = false; };
-  }, [draftId]);
+  }, [draftId, api]);
   const batchId = batch?.id;
   const batchStatus = batch?.status;
   useEffect(() => {
@@ -90,7 +94,7 @@ export function QualityWorkbench() {
     let active = true;
     const timer = setInterval(() => { void api<QualityBatchData>(`?kind=batch&id=${batchId}`).then(data => { if (active) setBatch(data); }).catch((error: Error) => { if (active) setError(error.message); }); }, 2000);
     return () => { active = false; clearInterval(timer); };
-  }, [batchId, batchStatus]);
+  }, [batchId, batchStatus, api]);
   useEffect(() => {
     if (!dirty) return;
     const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); };
@@ -107,7 +111,7 @@ export function QualityWorkbench() {
     clearPreview();
     const form = new FormData(); files.forEach(file => form.append("files", file));
     if (preset && uploadRotation) form.set("settings", JSON.stringify({ layout: PRESETS.find(entry => entry.label === preset)!.layout, rotation: uploadRotation, fiammetta_enable: uploadFiammetta }));
-    const response = await fetch("/api/admin/quality/import", { method: "POST", body: form });
+    const response = await request("/api/admin/quality/import", { method: "POST", body: form });
     const body = await response.json() as ApiResponse<{ entries: PreviewEntry[]; token: string }>;
     if (!body.success) throw new Error(body.error.message);
     setPreview(body.data.entries); setPreviewToken(body.data.token);
@@ -123,8 +127,8 @@ export function QualityWorkbench() {
   const runReason = !overview ? t("正在加载可用版本与草稿…", "Loading versions and drafts…") : !selected.length ? t("请先从团队草稿中选择至少一项。", "Select at least one team draft first.") : missingDrafts ? t("部分已选草稿已到期，请重新选择。", "Some selected drafts have expired. Select them again.") : dirty ? t("当前草稿有未保存的修改，请先保存或放弃修改。", "Save or discard the current draft's changes before running.") : !candidate ? t("暂无可用求解器版本，请联系管理员同步生产版本。", "No solver version is available. Ask an administrator to sync production.") : baseline === candidate ? t("对比版本需要与测试版本不同，或选择单版本测试。", "Choose a different comparison version, or run a single-version test.") : "";
   const workerReady = !!overview?.worker && checkedAt - Date.parse(overview.worker.at) < 15000;
   const versionOptions = overview?.versions.map((version, index) => ({ value: version.id, label: versionText(version, index, en) })) ?? [];
-  return <main id="admin-content" className="mx-auto grid min-w-0 max-w-7xl gap-6 px-4 py-6 sm:px-6">
-    <header className="flex flex-wrap items-start justify-between gap-4"><div><h1 className="flex items-center gap-2 text-2xl font-semibold"><FlaskConical aria-hidden="true" className="size-6" />{t("复现测试工作台", "Reproduction workbench")}</h1><p className="mt-2 max-w-2xl text-sm text-muted-foreground">{t("导入或选择复现草稿，运行测试，再回到反馈记录处理结论。", "Import or select reproduction drafts, run tests, then record your findings on the source feedback.")}</p></div><Link className="text-sm underline underline-offset-4" href="/admin/issues">{t("返回反馈审阅", "Back to feedback review")}</Link></header>
+  return <main id="admin-content" className={adminPageClass}>
+    <header className="flex flex-wrap items-start justify-between gap-4"><div><h1 className="flex items-center gap-2 text-2xl font-semibold"><FlaskConical aria-hidden="true" className="size-6" />{t("复现测试工作台", "Reproduction workbench")}</h1><p className="mt-2 max-w-2xl text-sm text-muted-foreground">{t("导入或选择复现草稿，运行测试，再回到反馈记录处理结论。", "Import or select reproduction drafts, run tests, then record your findings on the source feedback.")}</p></div><Link className="text-sm underline underline-offset-4" href={adminHref("/admin/issues")}>{t("返回反馈审阅", "Back to feedback review")}</Link></header>
     {error && <Alert variant="destructive"><AlertCircle aria-hidden="true" /><AlertTitle>{t("操作未完成", "Action not completed")}</AlertTitle><AlertDescription className="break-words">{error}</AlertDescription></Alert>}
     <div className="flex flex-wrap items-center gap-3"><Button variant="outline" onClick={() => reveal(historySection.current)}>{t("查看测试结果", "View test results")}{overview ? `（${overview.batches.length}）` : ""}</Button><p className="text-sm text-muted-foreground">{t("已运行的测试都保存在测试记录中，点击批次查看排班、收益或失败原因。", "Find previous runs in test history. Open a batch to see schedules, revenue, or failure details.")}</p></div>
     {notice && <Alert role="status"><CheckCircle2 aria-hidden="true" /><AlertDescription>{notice}</AlertDescription></Alert>}
