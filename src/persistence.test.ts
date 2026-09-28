@@ -278,6 +278,7 @@ test("expired and corrupted current sessions are removed", () => {
 
 test("quota failures surface without corrupting the previous session", () => {
   const storage = new MemoryStorage();
+  storage.setItem(SESSION_KEY_V5, "previous session");
   storage.failWrites = true;
   assert.throws(() => persistSession(storage, {
     presetLabel: "243",
@@ -291,6 +292,23 @@ test("quota failures surface without corrupting the previous session", () => {
     result: null,
     activeShift: 0,
   }));
+  assert.equal(storage.getItem(SESSION_KEY_V5), "previous session");
+});
+
+test("failed migration preserves each legacy session for a later retry", () => {
+  for (const legacyKey of [SESSION_KEY_V2, SESSION_KEY_V3, SESSION_KEY_V4]) {
+    const storage = new MemoryStorage();
+    const original = JSON.stringify({ layout, operbox, boxSource: "maa", result: null });
+    storage.setItem(legacyKey, original);
+    storage.failWrites = true;
+    assert.deepEqual(loadPersistedSession(storage)?.operbox, operbox);
+    assert.equal(storage.getItem(legacyKey), original);
+    assert.equal(storage.getItem(SESSION_KEY_V5), null);
+    storage.failWrites = false;
+    assert.deepEqual(loadPersistedSession(storage)?.operbox, operbox);
+    assert.equal(storage.getItem(legacyKey), null);
+    assert.ok(storage.getItem(SESSION_KEY_V5));
+  }
 });
 
 test("internal fields nested in persisted result data are stripped", () => {

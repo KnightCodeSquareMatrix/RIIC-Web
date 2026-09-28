@@ -728,3 +728,11 @@ test("versioned product assets receive immutable cache headers", async () => {
   assert.match(nextConfig, /key: "v", value: "\\\\d\+-\[0-9a-f\]\{12\}"/);
   assert.match(nextConfig, /public, max-age=31536000, immutable/);
 });
+
+test("building skill immutable cache headers require an asset version", async () => {
+  const nextConfig = await readRepoFile("next.config.ts");
+  const rules = [...nextConfig.matchAll(/source: "\/images\/building-skills\/:asset"([\s\S]*?)\n\s*},/g)];
+  assert.equal(rules.length, 1);
+  assert.match(rules[0][1], /has: \[\{ type: "query", key: "v", value: "\\\\d\+-\[0-9a-f\]\{12\}" }\]/);
+  assert.match(rules[0][1], /public, max-age=31536000, immutable/);
+});
