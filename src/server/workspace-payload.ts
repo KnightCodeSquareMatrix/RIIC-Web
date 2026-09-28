@@ -159,16 +159,25 @@ export function workspaceMatchesSavedPlanContext(
 }
 
 export type ValidatedWorkspacePutRequest =
-  | (ValidatedWorkspace & { baseRevision?: number })
-  | Extract<CloudWorkspacePutRequest, { restoreRevisionId: string }>;
+  | (ValidatedWorkspace & { baseRevision: number })
+  | (Extract<CloudWorkspacePutRequest, { restoreRevisionId: string }> & { baseRevision: number });
+
+export function assertWorkspaceRevision(baseRevision: number, currentRevision: number): void {
+  if (baseRevision !== currentRevision) throw new PublicApiError("AIC-DATA-8005");
+}
 
 export function validateWorkspacePutRequest(value: unknown): ValidatedWorkspacePutRequest {
   if (!isObject(value)) return invalidWorkspace("请求必须是对象。");
+  // Legacy clients may create a workspace, but cannot overwrite an existing one.
+  const baseRevision = value.baseRevision == null ? 0 : value.baseRevision;
+  if (typeof baseRevision !== "number" || !Number.isSafeInteger(baseRevision) || baseRevision < 0) {
+    return invalidWorkspace("同步版本无效。");
+  }
   if (typeof value.restoreRevisionId === "string") {
     if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(value.restoreRevisionId)) {
       return invalidWorkspace("工作区版本 ID 无效。");
     }
-    return { restoreRevisionId: value.restoreRevisionId };
+    return { restoreRevisionId: value.restoreRevisionId, baseRevision };
   }
   const state = validateWorkspaceState(value.state);
   let operbox: OperBoxEntry[] | null = null;
@@ -186,11 +195,5 @@ export function validateWorkspacePutRequest(value: unknown): ValidatedWorkspaceP
     ? null
     : normalizePersistedPlanData(value.result, state.rotationProfile);
   if (state.boxSource !== "skland" && value.result != null && !result) return invalidWorkspace("排班结果无效。");
-  const baseRevision = value.baseRevision === null || value.baseRevision === undefined
-    ? undefined
-    : Number(value.baseRevision);
-  if (baseRevision !== undefined && (!Number.isSafeInteger(baseRevision) || baseRevision < 0)) {
-    return invalidWorkspace("同步版本无效。");
-  }
   return { baseRevision, state, operbox, result };
 }

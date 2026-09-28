@@ -1053,6 +1053,7 @@ export type AppErrorCode =
   | "AIC-DATA-8002"
   | "AIC-DATA-8003"
   | "AIC-DATA-8004"
+  | "AIC-DATA-8005"
   | "AIC-RELEASE-9001"
   | "AIC-RELEASE-9002";
 
@@ -1213,7 +1214,7 @@ export type CloudWorkspacePutRequest =
       operbox: OperBoxEntry[] | null;
       result: PublicPlanData | null;
     }
-  | { restoreRevisionId: string };
+  | { restoreRevisionId: string; baseRevision?: number | null };
 
 export interface SavedPlanCalculationContext {
   presetLabel: string;

@@ -224,7 +224,9 @@ export function loadPersistedSession(storage: StorageLike, now = Date.now()): Pe
   const current = normalizeSession(parseJson(currentRaw), now);
   if (current) {
     if (currentRaw && currentRaw !== JSON.stringify(current)) {
-      storage.setItem(SESSION_KEY_V5, JSON.stringify(current));
+      try { storage.setItem(SESSION_KEY_V5, JSON.stringify(current)); } catch {
+        // Reading valid data must not depend on storage being writable.
+      }
     }
     return current;
   }
@@ -234,9 +236,16 @@ export function loadPersistedSession(storage: StorageLike, now = Date.now()): Pe
     const legacyRaw = storage.getItem(legacyKey);
     if (!legacyRaw) continue;
     const migrated = normalizeSession(parseJson(legacyRaw), now);
-    storage.removeItem(legacyKey);
-    if (!migrated) continue;
-    storage.setItem(SESSION_KEY_V5, JSON.stringify(migrated));
+    if (!migrated) {
+      storage.removeItem(legacyKey);
+      continue;
+    }
+    try {
+      storage.setItem(SESSION_KEY_V5, JSON.stringify(migrated));
+      storage.removeItem(legacyKey);
+    } catch {
+      // Keep the original and restore in memory; normal autosave reports write failures.
+    }
     return migrated;
   }
   return null;

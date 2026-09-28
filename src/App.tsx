@@ -2183,6 +2183,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       onSessionChanged: handleWebsiteSessionChanged,
       ...(CLIENT_ACCOUNT_CLOUD_SYNC_ENABLED ? {
         cloudWorkspace: accountCloudWorkspace.cloudWorkspaceData,
+        cloudSyncStatus: accountCloudWorkspace.cloudSyncStatus,
         onRestoreSavedPlan: (saved: SavedPlanData) => {
           const context = saved.calculationContext;
           if (!context) return;
