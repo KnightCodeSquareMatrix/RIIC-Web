@@ -21,6 +21,7 @@ import { agentKnowledgeDir } from "./config.ts";
 import { queryAgentSkills, inspectAgentOperators } from "./operator-tools.ts";
 import { observeMasteryEnvironment, type MasteryEnvironmentObservation } from "./mastery-environment.ts";
 import { buildCalculatorTools, type AgentOperatorPool } from "./calculator-tools.ts";
+import { buildHealthTools } from "./health-tools.ts";
 
 export interface AgentToolContext {
   request: Request;
@@ -169,7 +170,8 @@ async function resolveSolveDefaults(ctx: AgentToolContext): Promise<SolveDefault
   let boxSource: SolveDefaults["boxSource"] = "sample";
   try {
     const skland = await loadSklandSnapshot(ctx);
-    boxSource = "skland";
+    // 森空岛登录正常但干员池为空时不能作为求解干员来源，继续按 MAA → 示例降级。
+    if (skland.operbox.length > 0) boxSource = "skland";
     const label = skland.infrastructure.layoutLabel;
     if (label && PRESETS.some((preset) => preset.label === label)) {
       layoutPreset = label;
@@ -226,7 +228,7 @@ function applyScenario(
   if (scenario === "orundum") {
     const config = ORUNDUM_SCENARIOS[presetLabel];
     if (!config) {
-      return { layout, scenarioNote: `${presetLabel} 布局没有标准搓玉默认配置（贸易站不足以配两条线），已沿用布局默认配方；如需搓玉请换 243/333/342 布局。` };
+      return { layout, scenarioNote: `${presetLabel} 布局当前没有标准搓玉默认配置，已沿用布局默认配方；如需使用内置搓玉配置请换 243/333/342 布局。` };
     }
     let next = layout;
     for (const [roomId, level] of Object.entries(config.roomLevelOverrides ?? {})) {
@@ -277,6 +279,7 @@ export function buildAgentTools(ctx: AgentToolContext) {
   const loadPool = () => operatorPool ??= loadAgentOperatorPool(ctx);
   return {
     ...buildCalculatorTools(loadPool, (name, input, run) => guarded(ctx.userId, name, input, run)),
+    ...buildHealthTools(ctx, (name, input, run) => guarded(ctx.userId, name, input, run)),
     diagnose_account: tool({
       description:
         "账号诊断：查看当前用户的森空岛绑定状态、干员池概览（总数、精二数、稀有度分布、精二六星名单）、当前游戏内基建布局、最近保存的排班。可通过 operators 精确查询指定干员的 own/elite/level；示例池个人状态为未知。判断个人持有与练度时使用。",
@@ -322,7 +325,7 @@ export function buildAgentTools(ctx: AgentToolContext) {
       description:
         "排班配置预览：返回简化指令下 solve_schedule 将自动采用的默认配置（布局预设及推断来源、干员来源、换班节奏、菲亚梅塔、按场景的制造配方与贸易订单）。用户说「帮我排个班」「帮我搓玉」「纯产钱」这类没说全布局/换班/菲亚梅塔/产物的请求时，先调用本工具，把配置报给博士确认，确认后再调 solve_schedule。scene 选 orundum（搓玉）或 money（产钱）可预览对应场景默认配方。本工具只读配置，不占求解器算力。",
       inputSchema: z.object({
-        scene: z.enum(["balanced", "orundum", "money"]).optional().describe("场景：balanced=常规（默认配方）、orundum=搓玉（默认配齐碎片线+贸易线）、money=纯产钱（全龙门商法+全赤金）。省略为 balanced"),
+        scene: z.enum(["balanced", "orundum", "money"]).optional().describe("场景：balanced=常规（默认配方）、orundum=搓玉（仅 243/333/342 默认配齐碎片线+贸易线；153/252 无搓玉默认）、money=纯产钱（全龙门商法+全赤金）。省略为 balanced"),
       }).strict(),
       execute: async (input) => guarded(ctx.userId, "preview_solve_defaults", input, async () => {
         const defaults = await resolveSolveDefaults(ctx);
@@ -366,21 +369,21 @@ export function buildAgentTools(ctx: AgentToolContext) {
         return { type: "text", value: JSON.stringify(projection) };
       },
       description:
-        "排班求解：向站内求解器提交一次真正的排班计算，返回三班（或所选节奏）排班表、日产出与练卡建议。用户已给全配置、或已通过 preview_solve_defaults 报默认配置并经博士确认后调用；省略的参数服务端自动兜底（布局从游戏内基建/历史排班推断，干员按森空岛→MAA 上传→示例 Box 三级降级）。搓玉请求用 scene=orundum（默认配齐两条线），纯产钱用 scene=money（全龙门商法+全赤金），无需手写 manufactureRecipes/tradeOrders。计算耗时通常 10-60 秒。本工具只做计算，不做知识检索；机制解释类问题用 kb_route。",
+        "排班求解：向站内求解器提交一次真正的排班计算，返回三班（或所选节奏）排班表、日产出与练卡建议。用户已给全配置、或已通过 preview_solve_defaults 报默认配置并经博士确认后调用；省略的参数服务端自动兜底（布局从游戏内基建/历史排班推断，干员按森空岛→MAA 上传→示例 Box 三级降级）。搓玉请求用 scene=orundum（仅 243/333/342 布局默认配齐碎片线＋贸易线；153/252 无搓玉默认配置，沿用布局默认配方，需搓玉时必须显式传 manufactureRecipes/tradeOrders），纯产钱用 scene=money（全龙门商法+全赤金），其余情况无需手写 manufactureRecipes/tradeOrders。计算耗时通常 2-3 秒。本工具只做计算，不做知识检索；机制解释类问题用 kb_route。",
       inputSchema: z.object({
         layoutPreset: z.enum(["243", "153", "333", "252", "342"]).optional().describe("布局预设：贸易/制造/发电站数量。省略则自动推断（游戏内布局 → 最近排班 → 默认 243）"),
         boxSource: z.enum(["skland", "maa", "sample"]).optional().describe("干员数据来源：skland=用户森空岛同步，maa=最近上传的 MAA 文件，sample=243 全精二示例。省略则按森空岛 → MAA → 示例 Box 三级降级"),
-        scene: z.enum(["balanced", "orundum", "money"]).optional().describe("场景默认配方：balanced=常规（沿用布局默认配方）、orundum=搓玉（默认配齐碎片线+贸易线两条）、money=纯产钱（全贸易站龙门商法+全制造站赤金）。用户提到搓玉/合成玉必选 orundum；提到纯产钱/产龙门币必选 money。省略为 balanced"),
-        rotation: z.enum(["abc_12_6_6", "abc_12_12_12", "main_backup_12_12", "fiammetta_8_8_4_4", "abyssal_7_5_7_5"]).optional().describe(
-          "换班节奏，默认 abc_12_12_12（三班 12/12/12 小时，一天两换）"
+        scene: z.enum(["balanced", "orundum", "money"]).optional().describe("场景默认配方：balanced=常规（沿用布局默认配方）、orundum=搓玉（仅 243/333/342 默认配齐碎片线+贸易线两条；153/252 无搓玉默认，沿用布局默认配方且不含碎片线）、money=纯产钱（全贸易站龙门商法+全制造站赤金）。用户提到搓玉/合成玉必选 orundum；提到纯产钱/产龙门币必选 money。省略为 balanced"),
+        rotation: z.enum(["abc_12_6_6", "abc_12_12_12", "main_backup_12_12"]).optional().describe(
+          "换班节奏：abc_12_12_12=一天两换（三班 12/12/12 小时，默认）、abc_12_6_6=一天三换（三班 12/6/6 小时）、main_backup_12_12=主备轮换（两班 12/12 小时）。省略为 abc_12_12_12"
         ),
         manufactureRecipes: z.array(z.enum(["gold", "battle_record", "originium"])).optional().describe(
-          "制造站配方，按制造站顺序给定：gold=贵金属（产赤金）、battle_record=作战记录（产经验）、originium=源石碎片（搓玉用）。经典搓玉配置：[\"originium\",\"originium\",\"gold\",\"gold\"]（243 布局，两条碎片线＋两条赤金线）。省略则按场景或预设（243 为 2 赤金＋2 经验）。"
+          "制造站配方，按制造站顺序给定：gold=贵金属（产赤金）、battle_record=作战记录（产经验）、originium=源石碎片（搓玉用）。省略时按场景取默认：balanced 沿用布局默认配方（243 为 2 赤金＋2 作战记录）、money 全部产赤金、orundum 仅 243/333/342 有搓玉默认（依次为 2 赤金＋1 作战记录＋1 源石碎片、2 赤金＋1 源石碎片、3 赤金＋1 源石碎片；153/252 沿用布局默认配方、不含碎片线，需搓玉时必须显式传入）。"
         ),
         tradeOrders: z.array(z.enum(["gold", "originium"])).optional().describe(
-          "贸易站订单，按贸易站顺序给定：gold=龙门商法（订单产龙门币）、originium=开采协力（提交源石碎片换合成玉）。搓玉必须至少一座贸易站设为 originium，否则碎片换不成玉。243 布局示例：[\"originium\",\"gold\"]。注意 Lv.3 贸易站才能用开采协力。省略则按场景或预设。"
+          "贸易站订单，按贸易站顺序给定：gold=龙门商法（订单产龙门币）、originium=开采协力（提交源石碎片换合成玉）。搓玉必须至少一座贸易站设为 originium，否则碎片换不成玉。243 布局示例：[\"originium\",\"gold\"]。注意 Lv.3 贸易站才能用开采协力；等级不足 3 的贸易站会保持原订单且不报错，调用后需核对返回的 tradeOrders 确认已生效。省略则按场景或预设。"
         ),
-        fiammettaEnable: z.boolean().optional().describe("是否启用菲亚梅塔（焰尾）换班加成，默认 false"),
+        fiammettaEnable: z.boolean().optional().describe("是否启用菲亚梅塔换班加成，默认 false"),
       }),
       execute: async (input) => guarded(ctx.userId, "solve_schedule", input, async () => {
         const defaults = await resolveSolveDefaults(ctx);
@@ -485,7 +488,7 @@ export function buildAgentTools(ctx: AgentToolContext) {
     }),
 
     query_skills: tool({
-      description: "基建技能查询：按干员名或 id、技能名、关键词或标签查询游戏基建技能原文、持有者与解锁练度。返回后固定用 kb_route 定位隐性释义并 kb_read 阅读相关正文；组合用法按需继续读取。",
+      description: "基建技能查询：按干员名或 id、技能名、关键词或标签查询技能所属干员、游戏基建技能原文、标签与解锁练度；不判断用户个人是否持有。返回后固定用 kb_route 定位隐性释义并 kb_read 阅读相关正文；组合用法按需继续读取。",
       inputSchema: z.object({
         query: z.string().min(1).describe("干员名或 id、技能名或效果关键词，如 孑 订单效率 赤金 生产力"),
         tag: z.string().optional().describe("可选标签过滤，如 生产力 订单效率 心情消耗"),

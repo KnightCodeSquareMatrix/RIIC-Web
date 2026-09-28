@@ -41,6 +41,16 @@ function queryTerms(query: string): string[] {
 let catalogCache: { entries: KbCatalogEntry[]; loadedAt: number; root: string } | null = null;
 const CATALOG_CACHE_TTL_MS = 60_000;
 
+// 知识库文件读取失败时不把系统级错误（含绝对路径的 ENOENT 等）透传给模型，
+// 统一替换为不含内部路径的友好提示。
+async function readKbFile(relativePath: string, what: string): Promise<string> {
+  try {
+    return await readFile(path.join(agentKnowledgeDir(), relativePath), "utf-8");
+  } catch {
+    throw new Error(`知识库不可用：无法读取${what}，请检查 AGENT_KB_DIR 是否指向有效的 RIIC-knowledge 克隆。`);
+  }
+}
+
 async function loadCatalog(): Promise<KbCatalogEntry[]> {
   if (!agentKnowledgeDir()) {
     throw new Error("知识库目录未配置：请在环境变量 AGENT_KB_DIR 中指向本地克隆的 RIIC-knowledge 仓库（外部仓库，不随本仓库分发）。");
@@ -48,8 +58,7 @@ async function loadCatalog(): Promise<KbCatalogEntry[]> {
   if (catalogCache && catalogCache.root === agentKnowledgeDir() && Date.now() - catalogCache.loadedAt < CATALOG_CACHE_TTL_MS) {
     return catalogCache.entries;
   }
-  const filePath = path.join(agentKnowledgeDir(), "index", "标题清单.md");
-  const text = await readFile(filePath, "utf-8");
+  const text = await readKbFile("index/标题清单.md", "知识库索引");
   const entries: KbCatalogEntry[] = [];
   for (const line of text.split(/\r?\n/)) {
     const match = line.match(/^-\s+`([^`]+)`(?:（[^）]*）)?(.*)$/);
@@ -64,7 +73,7 @@ async function loadCatalog(): Promise<KbCatalogEntry[]> {
 
 export async function searchKnowledgeBase(query: string): Promise<KbRouteResult> {
   const entries = await loadCatalog();
-  const dictionary = JSON.parse(await readFile(path.join(agentKnowledgeDir(), "index/消歧字典.json"), "utf8")) as { normalized_keys?: Record<string, string>; substring_warnings?: Array<{ short: string; long: string; resolution: string }>; [key: string]: unknown };
+  const dictionary = JSON.parse(await readKbFile("index/消歧字典.json", "消歧字典")) as { normalized_keys?: Record<string, string>; substring_warnings?: Array<{ short: string; long: string; resolution: string }>; [key: string]: unknown };
   const compact = normalizeForMatch(query).replace(/[·・]/g, "");
   const canonical = Object.entries(dictionary.normalized_keys ?? {}).find(([key]) => normalizeForMatch(key) === compact)?.[1];
   const expanded = typeof canonical === "string" ? `${query} ${canonical}` : query;

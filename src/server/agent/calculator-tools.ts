@@ -24,7 +24,7 @@ export function buildCalculatorTools(loadPool: () => Promise<AgentOperatorPool>,
       execute: async (input) => guard("resolve_operator", input, async () => inspectMasteryTarget(await loadPool(), input.query)),
     }),
     calculate_mastery: tool({
-      description: "专精训练计算：按当前账号干员池生成简单、快速两套教官与换人时间线，无需基建排班。干员池自动按森空岛→MAA→全精二示例兜底。targetOperator 可传用户给出的名称、简称或 ID，由工具查站内目录和现有别名；目标未持有、持有未知或未精二时仍按已获得且精二的前提计算，成功结果附带警告；教官按原始干员池的持有与练度筛选。身份与支持范围以工具结果为准，歧义时请用户选候选，不凭记忆否认干员存在。追问“那某某呢”时继承上文 current/target；current 优先继承上下文，无上下文时省略从未专精开始，用户指定从专X开始则传 X。未指定中枢与环境参数时自动读取森空岛快照；无快照中枢默认 +5%、环境默认 0，换人余量默认 1 分钟。用户未明确设置时请省略 controlBonus/environment，不要用默认值覆盖自动读取。先调用出方案，末尾按 settings 简短汇报条件，不要先确认默认值。环境值为实际进驻人数或对应点数。",
+      description: "专精训练计算：按当前账号干员池生成简单、快速两套教官与换人时间线，无需基建排班。干员池自动按森空岛→MAA→全精二示例兜底。targetOperator 可传用户给出的名称、简称或 ID，由工具查站内目录和现有别名；目标未持有、持有未知或未精二时仍按已获得且精二的前提计算，成功结果附带警告；教官按原始干员池的持有与练度筛选。歧义时返回候选供用户选择。未指定中枢与环境参数时自动读取森空岛快照；无快照中枢默认 +5%、环境默认 0，换人余量默认 1 分钟；环境值为实际进驻人数或对应点数。",
       inputSchema: z.object({
         targetOperator: z.string().trim().min(1).describe("目标干员名称、简称或 ID；由工具解析，多候选时请用户选择"),
         current: z.union([z.literal(0), z.literal(1), z.literal(2)]).optional().describe("当前专精等级，省略从未专精（0）开始；用户说从专X开始时传 X"),
