@@ -910,19 +910,18 @@ export function restPreviousShiftOperators(
   const previous = draft.shifts[shiftIndex - 1]!;
   const current = draft.shifts[shiftIndex]!;
   const dormitories = layout.rooms.filter((room) => room.kind === "dormitory");
-  const working = (shift: typeof current) => new Set(
-    Object.entries(shift.rooms)
-      .filter(([roomId]) => layout.rooms.find((room) => room.id === roomId)?.kind !== "dormitory")
-      .flatMap(([, assignment]) => assignment?.operators ?? [])
+  const assignedOperators = (shift: typeof current) => new Set(
+    Object.values(shift.rooms)
+      .flatMap((assignment) => assignment?.operators ?? [])
       .filter((name): name is string => Boolean(name)),
   );
-  const currentWorkers = working(current);
+  const currentOperators = assignedOperators(current);
   const available: string[] = [];
   const seen = new Set<string>();
   for (const [roomId, assignment] of Object.entries(previous.rooms)) {
     if (layout.rooms.find((room) => room.id === roomId)?.kind === "dormitory") continue;
     for (const name of assignment?.operators ?? []) {
-      if (name && !currentWorkers.has(name) && !seen.has(name)) { seen.add(name); available.push(name); }
+      if (name && !currentOperators.has(name) && !seen.has(name)) { seen.add(name); available.push(name); }
     }
   }
   const next = structuredClone(draft);
