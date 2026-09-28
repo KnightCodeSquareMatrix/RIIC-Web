@@ -183,6 +183,7 @@ function ManualOperatorChoice({
   en,
   tooltipDisabled,
   onChoose,
+  onDragStart,
 }: {
   operator: OperBoxEntry;
   selected: boolean;
@@ -191,6 +192,7 @@ function ManualOperatorChoice({
   en: boolean;
   tooltipDisabled: boolean;
   onChoose: () => void;
+  onDragStart?: () => void;
 }) {
   const intl = useTranslations();
   const gameCatalog = useGameCatalog();
@@ -201,6 +203,8 @@ function ManualOperatorChoice({
       className={`relative flex min-h-[calc(var(--manual-picker-portrait-size)+2.5rem)] flex-col items-center justify-start rounded-[4px] py-1 transition-colors hover:bg-muted/45 [&_.infra-operator-slot]:[--operator-slot-size:var(--manual-picker-portrait-size)] ${selected ? "bg-[#FFD800]/12 ring-2 ring-[#FFD800] ring-offset-1 ring-offset-background" : ""}`}
       data-manual-operator-choice
       data-current-selection={selected ? "" : undefined}
+      draggable
+      onDragStart={onDragStart}
     >
       {selectionNumber ? <span className="absolute right-0 top-0 z-10 grid size-5 place-items-center rounded-full bg-[#FFD800] text-[11px] font-bold text-[#313131] shadow-sm">{selectionNumber}</span> : null}
       <span className={`mb-1 block h-4 max-w-full truncate text-center text-[11px] font-medium leading-4 ${assignmentLabel ? "text-popover-foreground" : "invisible"}`}>
@@ -270,6 +274,7 @@ export function ManualSchedulePage({
   const [dormShowcaseOpen, setDormShowcaseOpen] = useState(false);
   const [dormBatchSelection, setDormBatchSelection] = useState<string[]>([]);
   const [dormDragIndex, setDormDragIndex] = useState<number | null>(null);
+  const [dormDragOperator, setDormDragOperator] = useState<string | null>(null);
   const [pickerQuery, setPickerQuery] = useState("");
   const [maaImportPreview, setMaaImportPreview] = useState<MaaImportPreview | null>(null);
   const [maaImportError, setMaaImportError] = useState<string | null>(null);
@@ -500,6 +505,20 @@ export function ManualSchedulePage({
       next[fromIndex] = target;
       while (next.length > 0 && !next[next.length - 1]) next.pop();
       return next;
+    });
+  }
+
+  function placeDormBatchOperator(operator: string, toIndex: number) {
+    setDormBatchSelection((current) => {
+      if (toIndex < 0 || toIndex >= dormBatchCapacity) return current;
+      const next = current.filter((name) => name !== operator);
+      const displaced = next[toIndex];
+      next[toIndex] = operator;
+      if (displaced && displaced !== operator) {
+        const insertAt = Math.min(next.length, toIndex + 1);
+        next.splice(insertAt, 0, displaced);
+      }
+      return next.slice(0, dormBatchCapacity);
     });
   }
 
@@ -1133,6 +1152,10 @@ export function ManualSchedulePage({
                           en={en}
                           tooltipDisabled={pickerScrolling}
                           onChoose={() => toggleDormBatchOperator(operator.name)}
+                          onDragStart={() => {
+                            setDormDragOperator(operator.name);
+                            setDormDragIndex(null);
+                          }}
                         />
                       ))}
                       {visibleOperators.length === 0 ? <p className="pointer-events-none absolute inset-0 flex items-center justify-center text-center text-sm text-muted-foreground">{intl("components_pages_ManualSchedulePage.noMatchingOperators")}</p> : null}
@@ -1178,9 +1201,15 @@ export function ManualSchedulePage({
                                   className={`relative flex aspect-square min-h-0 min-w-0 items-center justify-center overflow-hidden border bg-[#303536]/75 transition ${name ? "cursor-grab border-[#ffd800] active:cursor-grabbing" : "border-white/15"} ${dormDragIndex === flatIndex ? "opacity-45" : ""}`}
                                   draggable={Boolean(name)}
                                   onDragStart={() => setDormDragIndex(flatIndex)}
-                                  onDragOver={(event) => { if (dormDragIndex !== null) event.preventDefault(); }}
-                                  onDrop={(event) => { event.preventDefault(); if (dormDragIndex !== null) moveDormBatchOperator(dormDragIndex, flatIndex); setDormDragIndex(null); }}
-                                  onDragEnd={() => setDormDragIndex(null)}
+                                  onDragOver={(event) => { if (dormDragIndex !== null || dormDragOperator !== null) event.preventDefault(); }}
+                                  onDrop={(event) => {
+                                    event.preventDefault();
+                                    if (dormDragOperator !== null) placeDormBatchOperator(dormDragOperator, flatIndex);
+                                    else if (dormDragIndex !== null) moveDormBatchOperator(dormDragIndex, flatIndex);
+                                    setDormDragIndex(null);
+                                    setDormDragOperator(null);
+                                  }}
+                                  onDragEnd={() => { setDormDragIndex(null); setDormDragOperator(null); }}
                                   title={name ? "拖动调整宿舍顺序" : "空位"}
                                 >
                                   {operator && presentation ? (
