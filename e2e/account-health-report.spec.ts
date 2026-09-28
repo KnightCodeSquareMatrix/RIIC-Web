@@ -42,6 +42,7 @@ test("screenshot recognition, correction and three-day average stay on account h
   await page.locator('[data-file-upload-dialog] input[type="file"]').setInputFiles(fixture("three-day.png"));
   await expect(page.getByLabel("贵金属价值 第 1 天")).toHaveValue("54000");
   await expect(page.getByLabel("合成玉 第 1 天")).toHaveValue("20");
+  await expect(page.getByRole("button", { name: "确认并保存" })).toBeEnabled();
   await page.getByRole("button", { name: "选择截图" }).click();
   await page.locator('[data-file-upload-dialog] input[type="file"]').setInputFiles(fixture("single-day.png"));
   await expect(page.getByLabel("贵金属价值 第 1 天")).toHaveValue("");

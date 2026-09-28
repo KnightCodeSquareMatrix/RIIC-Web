@@ -19,7 +19,7 @@ export async function latestGameReport(userId: string): Promise<GameReportRecord
     .where(and(eq(gameReport.userId, userId), eq(gameReport.roleKey, roleKey)))
     .orderBy(desc(gameReport.createdAt), desc(gameReport.id)).limit(1);
   if (!row) return null;
-  const days = parseGameReportDays(row.days);
+  const days = parseGameReportDays(row.days, false, true);
   if (!days) throw new Error("Stored game report has invalid day data");
   return { id: row.id, sourceType: row.sourceType, days, createdAt: row.createdAt.toISOString() };
 }

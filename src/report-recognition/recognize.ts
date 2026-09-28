@@ -26,6 +26,41 @@ const VALUE_PROBE_X1 = 300;
 const LABEL_X0 = 15;
 const LABEL_X1 = 360;
 
+type RecognitionProfile = {
+  id: "standard" | "wide-strip";
+  valueX0: number;
+  experienceX0: number;
+  valueProbeX0: number;
+  valueProbeX1: number;
+  orderX0: number;
+  orderX1: number;
+};
+
+const STANDARD_PROFILE: RecognitionProfile = {
+  id: "standard", valueX0: VALUE_X0, experienceX0: VALUE_X0_EXPERIENCE,
+  valueProbeX0: VALUE_PROBE_X0, valueProbeX1: VALUE_PROBE_X1,
+  orderX0: ORDER_X0, orderX1: ORDER_X1,
+};
+
+// The report strip exported by the desktop client is wider than 16:9. Its
+// columns move farther apart while the text stays at the icon's scale, and
+// the value column starts a little earlier than the 16:9 layout.
+const WIDE_STRIP_PROFILE: RecognitionProfile = {
+  id: "wide-strip", valueX0: 244, experienceX0: 240,
+  valueProbeX0: 224, valueProbeX1: 306,
+  orderX0: 410, orderX1: 472,
+};
+
+function profileForRatio(ratio: number): RecognitionProfile | undefined {
+  if (ratio >= 1.92 && ratio <= 2.35) return WIDE_STRIP_PROFILE;
+  if (ratio >= 1.55 && ratio < 1.92) return STANDARD_PROFILE;
+  return undefined;
+}
+
+export function recognitionProfileIdForRatio(ratio: number): "standard" | "wide-strip" | "fallback" {
+  return profileForRatio(ratio)?.id ?? "fallback";
+}
+
 type Rgba = { data: Uint8Array | Uint8ClampedArray; width: number; height: number };
 
 type Ink = { at(x: number, y: number): boolean; cyanAt(x: number, y: number): boolean; width: number; height: number; scale: number };
@@ -386,7 +421,7 @@ function bandHasInkBetween(ink: Ink, s: number, anchor: { x: number }, band: Ban
   return false;
 }
 
-function recognizePanel(ink: Ink, s: number, anchor: { x: number; y: number }): RecognizedDay {
+function recognizePanel(ink: Ink, s: number, anchor: { x: number; y: number }, profile: RecognitionProfile): RecognizedDay {
   const bands = labelBands(ink, s, anchor);
   // 极薄的横贯线（分隔线）不参与行分类。
   const content = bands.filter((band) => band.y1 - band.y0 + 1 > Math.round(6 * s));
@@ -398,7 +433,7 @@ function recognizePanel(ink: Ink, s: number, anchor: { x: number; y: number }): 
   const narrowWithValue = content.filter((band) =>
     !sentences.includes(band)
     && band.y0 >= anchor.y + 160 * s && band.y0 <= anchor.y + 330 * s
-    && bandHasInkBetween(ink, s, anchor, band, VALUE_PROBE_X0, VALUE_PROBE_X1, true));
+    && bandHasInkBetween(ink, s, anchor, band, profile.valueProbeX0, profile.valueProbeX1, true));
   const day: RecognizedDay = {};
   const experienceBand = sentences[0];
   const goldBand = sentences[1];
@@ -407,10 +442,10 @@ function recognizePanel(ink: Ink, s: number, anchor: { x: number; y: number }): 
   // 龙门币与合成玉两行实测间距约 41-46（基准宽度）；超过则说明中间缺行，宁缺勿错。
   const pairGapOk = !!(lmdBand && orundumBand && orundumBand.y0 - lmdBand.y1 <= 60 * s);
   const pairs: Array<[ReportMetricKey, Band | undefined, number]> = [
-    ["experience", experienceBand, VALUE_X0_EXPERIENCE - Math.max(0, Math.round((s - 1) * 10))],
-    ["goldValue", goldBand, VALUE_X0],
-    ["lmd", pairGapOk ? lmdBand : undefined, VALUE_X0],
-    ["orundum", orundumBand, VALUE_X0],
+    ["experience", experienceBand, profile.experienceX0 - Math.max(0, Math.round((s - 1) * 10))],
+    ["goldValue", goldBand, profile.valueX0],
+    ["lmd", pairGapOk ? lmdBand : undefined, profile.valueX0],
+    ["orundum", orundumBand, profile.valueX0],
   ];
   for (const [key, band, xStart] of pairs) {
     if (!band) continue;
@@ -418,7 +453,7 @@ function recognizePanel(ink: Ink, s: number, anchor: { x: number; y: number }): 
     if (value) day[key] = value;
   }
   if (pairGapOk && lmdBand) {
-    const orderCount = readRowValue(ink, s, anchor, lmdBand, ORDER_X0, ORDER_X1, false);
+    const orderCount = readRowValue(ink, s, anchor, lmdBand, profile.orderX0, profile.orderX1, false);
     if (orderCount) day.orderCount = orderCount;
   }
   return day;
@@ -431,17 +466,25 @@ export function recognizeReport(image: Rgba): ReportRecognitionOutcome {
   const s = ink.scale;
   const warnings: ReportRecognitionResult["warnings"] = [];
   const ratio = image.width / image.height;
-  if (Math.abs(ratio - 16 / 9) > 16 / 9 * 0.08) warnings.push("odd-aspect-ratio");
+  const profile = profileForRatio(ratio);
+  if (!profile) warnings.push("odd-aspect-ratio");
   if (image.width < 1400) warnings.push("low-resolution");
   const anchors = yellowAnchors(image, s);
   if (anchors.length === 0) return { ok: false, reason: "no-panel" };
   const usable = anchors.length >= 3 ? anchors.slice(-3) : anchors.slice(-1);
   if (anchors.length !== usable.length) warnings.push("panel-mismatch");
-  const panelScale = usable.length === 3 && (image.width < 1600 || warnings.includes("odd-aspect-ratio"))
-    ? (usable[2]!.x - usable[0]!.x) / (2 * 588)
-    : usable[0]!.scale;
-  const days = usable.map((anchor) => recognizePanel(ink, panelScale, anchor));
+  // Some game clients export a wide report strip (roughly 2:1) where the
+  // distance between panels grows but the panel typography stays at the
+  // same size.  Use the yellow icon height for those screenshots instead of
+  // deriving the text scale from the column spacing.
+  const medianAnchorScale = [...usable.map((anchor) => anchor.scale)].sort((a, b) => a - b)[Math.floor(usable.length / 2)] ?? usable[0]!.scale;
+  const panelScale = profile?.id === "wide-strip"
+    ? medianAnchorScale
+    : usable.length === 3 && image.width < 1600
+      ? (usable[2]!.x - usable[0]!.x) / (2 * 588)
+      : medianAnchorScale;
+  const days = usable.map((anchor) => recognizePanel(ink, panelScale, anchor, profile ?? STANDARD_PROFILE));
   const kind = usable.length === 3 ? "three-day" : "single-day";
   if (kind === "single-day") warnings.push("single-day-report");
-  return { panelCount: usable.length, kind, days, warnings };
+  return { panelCount: usable.length, profile: profile?.id ?? "fallback", kind, days, warnings };
 }

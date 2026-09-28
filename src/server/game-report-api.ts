@@ -25,7 +25,7 @@ export async function handlePostGameReport(request: Request) {
     assertSameOrigin(request);
     enforceRateLimit("game-report-write", requestClientIp(request), 12, 60 * 60_000);
     const body = await readJsonBody(request, 4 * 1024) as { sourceType?: unknown; days?: unknown } | null;
-    const days = parseGameReportDays(body?.days, true);
+    const days = parseGameReportDays(body?.days, false, true);
     if (!days || (body?.sourceType !== "screenshot" && body?.sourceType !== "manual")) throw new PublicApiError("AIC-REQ-1001");
     return successResponse(await saveGameReport(session.user.id, body.sourceType, days), requestId);
   } catch (error) { return failureResponse(error, requestId, ROUTE, startedAt); }

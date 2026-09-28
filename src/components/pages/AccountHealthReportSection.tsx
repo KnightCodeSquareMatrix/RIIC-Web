@@ -62,7 +62,11 @@ export function AccountHealthReportSection({ en, authenticated, onRecordChange }
       context.drawImage(bitmap, 0, 0);
       const result = recognizeReport(context.getImageData(0, 0, bitmap.width, bitmap.height));
       if (signal.aborted) return;
-      if ("ok" in result) throw new Error(en ? "Report panels were not found. Upload a complete screenshot." : "未找到简报面板，请上传完整原图。");
+      if ("ok" in result) {
+        throw new Error(result.reason === "decode"
+          ? (en ? "The image could not be decoded. Try exporting it as PNG or JPEG." : "图片无法解码，请重新导出为 PNG 或 JPEG 后重试。")
+          : (en ? "Report panels were not found. Upload a complete screenshot." : "未找到简报面板，请上传包含三列简报面板的完整截图。"));
+      }
       if (result.kind === "single-day") {
         setDraft([blankDay(), blankDay(), blankDay()]);
         setNotice(en ? "Please submit a three-day report." : "请提交三日报表。");
@@ -82,10 +86,24 @@ export function AccountHealthReportSection({ en, authenticated, onRecordChange }
       }) as [Draft, Draft, Draft];
       setDraft(next);
       setMode("screenshot");
+      const reviewReason = file.type === "image/jpeg"
+        ? (en ? "JPEG compression requires manual checking." : "JPEG 压缩可能影响数字，请人工核对空白项。")
+        : result.warnings.includes("low-resolution")
+          ? (en ? "The image is low resolution; check the blank fields." : "图片分辨率较低，请人工核对空白项。")
+          : result.warnings.includes("odd-aspect-ratio")
+            ? (en ? "This screenshot layout is not supported yet; check the blank fields." : "截图比例暂未匹配，请人工核对空白项。")
+            : (en ? "Check the blank fields before saving." : "请核对空白项后再保存。");
       setNotice(uncertain.length || result.warnings.length || file.type === "image/jpeg"
-        ? (en ? "Check the screenshot values and fill any empty fields before saving." : "请核对识别数值，补齐空白项后再保存。")
+        ? reviewReason
         : (en ? "Recognition complete. Check all values before saving." : "识别完成，请核对全部数值后保存。"));
       setError(null);
+    } catch (cause) {
+      if (!signal.aborted) {
+        const message = cause instanceof Error ? cause.message : (en ? "Could not recognize the report image." : "报表图片识别失败，请检查图片后重试。");
+        setNotice(null);
+        setError(message);
+      }
+      throw cause;
     } finally { bitmap.close(); }
   }
 
@@ -94,7 +112,8 @@ export function AccountHealthReportSection({ en, authenticated, onRecordChange }
     setDraft((current) => current.map((item, index) => index === day ? { ...item, [key]: value } : item) as [Draft, Draft, Draft]);
   }
 
-  const parsed = parseGameReportDays(draft.map((day) => Object.fromEntries(GAME_REPORT_KEYS.map((key) => [key, day[key] === "" ? null : Number(day[key])]))), true);
+  const parsed = parseGameReportDays(draft.map((day) => Object.fromEntries(GAME_REPORT_KEYS.map((key) => [key, day[key] === "" ? null : Number(day[key])]))), false, true);
+  const hasBlankFields = draft.some((day) => GAME_REPORT_KEYS.some((key) => day[key] === ""));
   async function save() {
     if (!parsed || !authenticated) return;
     setSaving(true);
@@ -103,7 +122,9 @@ export function AccountHealthReportSection({ en, authenticated, onRecordChange }
       setRecord(saved);
       onRecordChange(saved);
       setError(null);
-      setNotice(en ? "Three-day report saved." : "三日报表已保存。");
+      setNotice(hasBlankFields
+        ? (en ? "Three-day report saved. Empty fields are excluded from the analysis." : "三日报表已保存，空白项不会参与统计。")
+        : (en ? "Three-day report saved." : "三日报表已保存。"));
     } catch (cause) { setError(cause instanceof Error ? cause.message : (en ? "Could not save report" : "保存报表失败")); }
     finally { setSaving(false); }
   }
@@ -114,12 +135,12 @@ export function AccountHealthReportSection({ en, authenticated, onRecordChange }
     <Tabs value={mode} onValueChange={(value) => setMode(value as GameReportSource)} className="mt-4">
       <TabsList aria-label={en ? "Report entry method" : "报表录入方式"}><TabsTrigger value="screenshot">{en ? "Screenshot" : "上传截图识别"}</TabsTrigger><TabsTrigger value="manual">{en ? "Manual" : "手动填写"}</TabsTrigger></TabsList>
       <TabsContent value="screenshot" className="pt-4"><FileUploadDialog title={en ? "Upload base report" : "上传基建三日报表"} description={en ? "Use a complete, original screenshot." : "请上传完整原图。"} extensions={[".png", ".jpg", ".jpeg"]} onFiles={([file], signal) => handleImage(file!, signal)} trigger={<Button type="button" variant="outline"><Upload />{en ? "Choose screenshot" : "选择截图"}</Button>} /></TabsContent>
-      <TabsContent value="manual" className="pt-4"><p className="text-sm text-muted-foreground">{en ? "Enter the three days from left to right, oldest first." : "按游戏画面从左到右填写三天数据，最右侧为最新一天。"}</p></TabsContent>
+      <TabsContent value="manual" className="pt-4"><p className="text-sm text-muted-foreground">{en ? "Enter the three days from left to right, oldest first. Empty fields may be left blank." : "按游戏画面从左到右填写三天数据，最右侧为最新一天；未填写项可以留空。"}</p></TabsContent>
     </Tabs>
     {notice ? <p className="mt-3 text-sm text-amber-700 dark:text-amber-300" role="status">{notice}</p> : null}
     {error ? <p className="mt-3 text-sm text-destructive" role="alert">{error}</p> : null}
     <div className="mt-4 max-w-full overflow-x-auto"><table className="w-full min-w-[580px] border-collapse text-sm"><thead><tr className="border-b border-border"><th className="py-2 text-left font-medium">{en ? "Metric" : "指标"}</th>{[0, 1, 2].map((day) => <th key={day} className="px-2 py-2 text-left font-medium">{en ? `Day ${day + 1}` : `第 ${day + 1} 天`}</th>)}</tr></thead><tbody>{GAME_REPORT_KEYS.map((key) => <tr key={key} className="border-b border-border/60"><th scope="row" className="py-2 pr-3 text-left font-normal text-muted-foreground">{en ? LABELS[key][1] : LABELS[key][0]}</th>{draft.map((day, index) => <td key={index} className="px-2 py-2"><Input inputMode="numeric" pattern="[0-9]*" value={day[key]} onChange={(event) => update(index, key, event.target.value)} aria-label={`${en ? LABELS[key][1] : LABELS[key][0]} ${en ? `day ${index + 1}` : `第 ${index + 1} 天`}`} className="h-10 min-w-0" /></td>)}</tr>)}</tbody></table></div>
-    <div className="mt-4 flex flex-wrap items-center gap-3"><Button type="button" disabled={!parsed || saving || !authenticated} onClick={() => void save()}>{saving ? (en ? "Saving…" : "保存中…") : (en ? "Confirm and save" : "确认并保存")}</Button>{!authenticated ? <p className="text-sm text-muted-foreground">{en ? "Sign in to save this report." : "登录网站账号后可保存报表。"}</p> : null}</div>
+    <div className="mt-4 flex flex-wrap items-center gap-3"><Button type="button" disabled={!parsed || saving || !authenticated} onClick={() => void save()}>{saving ? (en ? "Saving…" : "保存中…") : (en ? "Confirm and save" : "确认并保存")}</Button>{parsed && hasBlankFields ? <p className="text-sm text-amber-700 dark:text-amber-300">{en ? "Blank fields will be skipped." : "空白项会跳过，不影响保存。"}</p> : null}{!authenticated ? <p className="text-sm text-muted-foreground">{en ? "Sign in to save this report." : "登录网站账号后可保存报表。"}</p> : null}</div>
     {record ? <div className="mt-6 border-t border-border/70 pt-4" data-game-report-average><p className="text-sm font-medium">{en ? "Latest saved report · daily average" : "最近保存的报表 · 三日日均"}</p><dl className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-5">{GAME_REPORT_KEYS.map((key) => <div key={key}><dt className="text-muted-foreground">{en ? LABELS[key][1] : LABELS[key][0]}</dt><dd className="mt-1 font-number text-lg tabular-nums">{average?.[key] === undefined ? "—" : Math.round(average[key]!)}</dd></div>)}</dl><p className="mt-3 text-xs text-muted-foreground">{new Date(record.createdAt).toLocaleString(en ? "en-US" : "zh-CN")} · {record.sourceType === "screenshot" ? (en ? "Screenshot" : "截图识别") : (en ? "Manual" : "手动填写")}</p></div> : loading ? <p className="mt-4 text-sm text-muted-foreground">{en ? "Loading saved report…" : "正在读取已存报表…"}</p> : null}
   </section>;
 }

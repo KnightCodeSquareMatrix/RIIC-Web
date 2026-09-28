@@ -1,4 +1,4 @@
-export type GameReportDay = { experience: number; goldValue: number; lmd: number; orundum: number; orderCount?: number };
+export type GameReportDay = { experience?: number; goldValue?: number; lmd?: number; orundum?: number; orderCount?: number };
 export type GameReportSource = "screenshot" | "manual";
 export type GameReportRecord = {
   id: string;
@@ -10,19 +10,30 @@ export type GameReportRecord = {
 export const GAME_REPORT_KEYS = ["experience", "goldValue", "lmd", "orderCount", "orundum"] as const;
 const LEGACY_REPORT_KEYS = ["experience", "goldValue", "lmd", "orundum"] as const;
 
-export function parseGameReportDays(value: unknown, requireOrderCount = false): GameReportRecord["days"] | null {
+/**
+ * Parse the three report columns. Existing stored reports use the strict
+ * four-metric shape; new UI submissions may intentionally leave cells blank
+ * and are normalized to omitted properties when allowPartial is true.
+ */
+export function parseGameReportDays(value: unknown, requireOrderCount = false, allowPartial = false): GameReportRecord["days"] | null {
   if (!Array.isArray(value) || value.length !== 3) return null;
   const days: GameReportDay[] = [];
   for (const raw of value) {
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
     const item = raw as Record<string, unknown>;
     if (Object.keys(item).some((key) => !GAME_REPORT_KEYS.includes(key as typeof GAME_REPORT_KEYS[number]))) return null;
-    if (LEGACY_REPORT_KEYS.some((key) => !Number.isSafeInteger(item[key]) || (item[key] as number) < 0 || (item[key] as number) > 99_999_999)) return null;
-    if ((requireOrderCount || item.orderCount !== undefined)
-      && (!Number.isSafeInteger(item.orderCount) || (item.orderCount as number) < 0 || (item.orderCount as number) > 99_999_999)) return null;
-    days.push({ experience: item.experience as number, goldValue: item.goldValue as number, lmd: item.lmd as number,
-      ...(item.orderCount !== undefined ? { orderCount: item.orderCount as number } : {}), orundum: item.orundum as number });
+    const parsed: GameReportDay = {};
+    for (const key of GAME_REPORT_KEYS) {
+      const rawValue = item[key];
+      if (rawValue === undefined || (allowPartial && rawValue === null)) continue;
+      if (!Number.isSafeInteger(rawValue) || (rawValue as number) < 0 || (rawValue as number) > 99_999_999) return null;
+      parsed[key] = rawValue as number;
+    }
+    if (!allowPartial && LEGACY_REPORT_KEYS.some((key) => parsed[key] === undefined)) return null;
+    if (requireOrderCount && parsed.orderCount === undefined) return null;
+    days.push(parsed);
   }
+  if (allowPartial && !days.some((day) => GAME_REPORT_KEYS.some((key) => day[key] !== undefined))) return null;
   return days as GameReportRecord["days"];
 }
 

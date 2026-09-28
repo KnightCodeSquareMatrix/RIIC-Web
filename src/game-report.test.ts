@@ -23,3 +23,17 @@ test("three integer days are required and daily averages preserve the exact mean
   });
   assert.equal(parseGameReportDays([{ ...withOrders[0], orderCount: 1.5 }, withOrders[1], withOrders[2]], true), null);
 });
+
+test("partial manual reports keep the three day shape and omit blank metrics", () => {
+  const partial = parseGameReportDays([
+    { experience: 31000, goldValue: null, lmd: 66400, orderCount: null, orundum: 0 },
+    { experience: 32000 },
+    { lmd: 63500 },
+  ], false, true);
+  assert.deepEqual(partial, [
+    { experience: 31000, lmd: 66400, orundum: 0 },
+    { experience: 32000 },
+    { lmd: 63500 },
+  ]);
+  assert.equal(parseGameReportDays([{}, {}, {}], false, true), null);
+});

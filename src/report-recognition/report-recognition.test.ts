@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import sharp from "sharp";
 import { fileURLToPath } from "node:url";
 
-import { recognizeReport } from "./recognize.ts";
+import { recognizeReport, recognitionProfileIdForRatio } from "./recognize.ts";
 import { RECOGNITION_CONFIDENT_DISTANCE, type ReportMetricKey } from "./types.ts";
 
 async function recognizeFixture(name: string) {
@@ -104,4 +104,18 @@ test("compressed screenshot still locates all three facility panels", async () =
   if ("ok" in result) return;
   assert.equal(result.kind, "three-day");
   assert.equal(result.panelCount, 3);
+});
+
+test("ratio profiles select the wide strip template without rejecting normal cropped reports", () => {
+  assert.equal(recognitionProfileIdForRatio(1763 / 991), "standard");
+  assert.equal(recognitionProfileIdForRatio(1807 / 872), "wide-strip");
+  assert.equal(recognitionProfileIdForRatio(1.2), "fallback");
+});
+
+test("normal report profile accepts the compressed three-day fixture", async () => {
+  const result = await recognizeFixture("compressed-three-day.jpg");
+  assert.ok(!("ok" in result));
+  if ("ok" in result) return;
+  assert.equal(result.profile, "standard");
+  assert.ok(!result.warnings.includes("odd-aspect-ratio"));
 });

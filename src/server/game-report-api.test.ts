@@ -10,7 +10,7 @@ const hook = registerHooks({
 });
 process.once("exit", () => hook.deregister());
 
-test("report API stores only complete integer days for the verified user", async (context) => {
+test("report API stores three integer days and permits blank metrics", async (context) => {
   const writes: unknown[] = [];
   await context.mock.module(new URL("./api-contract.ts", import.meta.url), { namedExports: {
     assertEmptyBody: async () => {},
@@ -38,8 +38,9 @@ test("report API stores only complete integer days for the verified user", async
   assert.equal((await handlePostGameReport(post({ sourceType: "manual", days: days.slice(0, 1) }))).status, 400);
   assert.equal((await handlePostGameReport(post({ sourceType: "manual", days: days.map((day) => ({
     experience: day.experience, goldValue: day.goldValue, lmd: day.lmd, orundum: day.orundum,
-  })) }))).status, 400);
+  })) }))).status, 200);
+  assert.equal((await handlePostGameReport(post({ sourceType: "manual", days: [{}, {}, {}] }))).status, 400);
   assert.equal((await handlePostGameReport(post({ sourceType: "screenshot", days: [{ ...days[0], lmd: 1.5 }, days[1], days[2]] }))).status, 400);
-  assert.equal(writes.length, 1);
+  assert.equal(writes.length, 2);
   assert.deepEqual((await (await handleGetGameReport(new Request("https://riic.test/api/account/game-report"))).json()).data, { userId: "verified-user" });
 });
