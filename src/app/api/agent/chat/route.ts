@@ -2,10 +2,13 @@ import { convertToModelMessages, stepCountIs, streamText, type UIMessage } from 
 
 import { assertSameOrigin, createRequestId, failureResponse, PublicApiError, successResponse } from "@/server/api-contract";
 import { websiteSession } from "@/server/auth";
+import { createAgentUsage, finalizeAgentUsage, getWallet } from "@/server/billing/service";
+import { SOLVE_TOOL_POINTS } from "@/server/billing/config";
 import { agentLlmSettings } from "@/server/agent/config";
 import { getAgentModel } from "@/server/agent/llm";
 import { buildAgentSystemPrompt } from "@/server/agent/persona";
 import { buildAgentTools } from "@/server/agent/tools";
+import { calculateAgentTokenCost } from "@/server/billing/pricing";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,7 +16,11 @@ export const dynamic = "force-dynamic";
 async function requireAgentAccess(request: Request) {
   const session = await websiteSession(request);
   if (!session?.user) throw new PublicApiError("AIC-AUTH-2008");
-  return { session };
+  const wallet = await getWallet(session.user.id);
+  if (wallet.totalPoints < SOLVE_TOOL_POINTS) {
+    throw new PublicApiError("AIC-BILLING-4101", { message: `请先购买积分，Agent 至少需要 ${SOLVE_TOOL_POINTS} 积分才能使用。` });
+  }
+  return { session, wallet };
 }
 
 export async function GET(request: Request) {
@@ -76,6 +83,62 @@ export async function POST(request: Request) {
       messages: await convertToModelMessages(body.messages, { tools }),
       tools,
       stopWhen: stepCountIs(12),
+      onFinish: async (event) => {
+        const usageIds = new Set<string>();
+        for (const candidate of event.toolResults ?? []) {
+          const output = (candidate as { output?: unknown }).output;
+          if (!output || typeof output !== "object") continue;
+          const billing = (output as { billing?: unknown }).billing;
+          if (!billing || typeof billing !== "object") continue;
+          const usageId = (billing as { usageId?: unknown }).usageId;
+          if (typeof usageId === "string") usageIds.add(usageId);
+        }
+        // A pure conversation has no tool fee, but its measured token usage is
+        // still billed as its own usage record.
+        if (usageIds.size === 0) {
+          usageIds.add(await createAgentUsage({
+            userId: session.user.id,
+            toolName: "agent_chat",
+            runId: requestId,
+            idempotencyKey: `agent_chat:${requestId}`,
+          }));
+        }
+        const usage = event.usage;
+        const model = String((event.model as { modelId?: unknown }).modelId ?? "unknown");
+        const usageIdList = [...usageIds];
+        const splitTokens = (total: number | undefined, index: number) => {
+          const normalized = Math.max(0, Math.floor(total ?? 0));
+          const count = Math.max(1, usageIdList.length);
+          return Math.floor(normalized / count) + (index < normalized % count ? 1 : 0);
+        };
+        for (const [index, usageId] of usageIdList.entries()) {
+          // Provider usage is reported at the model-step level. When one turn
+          // invokes multiple billable tools, split the step totals once so the
+          // same token usage is not charged repeatedly to every tool record.
+          const inputTokens = splitTokens(usage.inputTokens, index);
+          const outputTokens = splitTokens(usage.outputTokens, index);
+          const cachedInputTokens = Math.min(inputTokens, splitTokens(usage.inputTokenDetails.cacheReadTokens, index));
+          const pricing = calculateAgentTokenCost(model, {
+            inputTokens,
+            outputTokens,
+            cachedInputTokens,
+          });
+          await finalizeAgentUsage({
+            usageId,
+            inputTokens,
+            outputTokens,
+            cachedInputTokens,
+            upstreamCostRmbFen: pricing?.providerCostRmbFen,
+            chargedCostRmbFen: pricing?.chargedCostRmbFen,
+            chargedPoints: pricing?.chargedPoints,
+            metadata: {
+              model,
+              finishReason: event.finishReason,
+              pricing,
+            },
+          });
+        }
+      },
     });
     return result.toUIMessageStreamResponse({
       headers: { "X-Request-Id": requestId },

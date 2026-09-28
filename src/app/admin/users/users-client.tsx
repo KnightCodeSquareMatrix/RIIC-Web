@@ -194,6 +194,11 @@ export function AdminUserManagement() {
                     {CLIENT_SKLAND_ENABLED && <span>{entry.sklandActiveBindingCount > 0 ? intl("app_admin_users_users_client.sklandActive", { sklandActiveBindingCount: entry.sklandActiveBindingCount }) : intl("app_admin_users_users_client.noActiveSklandAuthorization")}</span>}
                     {CLIENT_SKLAND_ENABLED && entry.sklandRenewalDueCount > 0 && <span className="text-amber-700">{intl("app_admin_users_users_client.renewalDue")} · {entry.sklandRenewalDueCount}</span>}
                   </div>
+                  <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground" data-user-billing-summary>
+                    <span className="font-medium text-foreground">{en ? "Points" : "积分"} {entry.totalPoints}</span>
+                    <span>{en ? "Permanent" : "永久"} {entry.paidPoints}</span>
+                    <span>{en ? "Monthly" : "月卡"} {entry.monthlyPoints}{entry.monthlyExpiresAt ? ` · ${en ? "expires" : "到期"} ${new Date(entry.monthlyExpiresAt).toLocaleDateString(locale === "en" ? "en-US" : "zh-CN")}` : ""}</span>
+                  </div>
                   {entry.banned && entry.banReason && <p className="text-xs text-destructive">{entry.banReason}</p>}
                   <div className="flex flex-wrap gap-2">
                     {canManageAdminRoles && !entry.isBootstrapAdmin ? (

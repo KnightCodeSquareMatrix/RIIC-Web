@@ -1,5 +1,6 @@
 import "server-only";
 
+import { randomUUID } from "node:crypto";
 import { tool } from "ai";
 import { z } from "zod";
 
@@ -22,6 +23,8 @@ import { queryAgentSkills, inspectAgentOperators } from "./operator-tools.ts";
 import { observeMasteryEnvironment, type MasteryEnvironmentObservation } from "./mastery-environment.ts";
 import { buildCalculatorTools, type AgentOperatorPool } from "./calculator-tools.ts";
 import { buildHealthTools } from "./health-tools.ts";
+import { chargeAgentTool } from "@/server/billing/service";
+import { SOLVE_TOOL_POINTS } from "@/server/billing/config";
 
 export interface AgentToolContext {
   request: Request;
@@ -435,6 +438,16 @@ export function buildAgentTools(ctx: AgentToolContext) {
           operbox = sample.operbox as OperBoxEntry[];
           sourceName = sample.sourceName;
         }
+        // 求解器是首个计费工具：参数已经通过 schema 与布局/干员来源校验后再扣费，
+        // 避免用户因为格式错误消耗积分；后续 token 计量会在 agent stream 收尾时补写。
+        const runId = randomUUID();
+        const billing = await chargeAgentTool({
+          userId: ctx.userId,
+          toolName: "solve_schedule",
+          points: SOLVE_TOOL_POINTS,
+          idempotencyKey: `solve_schedule:${runId}`,
+          runId,
+        });
         const rotation = (input.rotation && ROTATION_PROFILES.includes(input.rotation) ? input.rotation : DEFAULT_ROTATION);
         const runResult = await withTimeout(
           runPlan({
@@ -481,6 +494,7 @@ export function buildAgentTools(ctx: AgentToolContext) {
           tradeOrders,
           boxSource,
           operatorCount: operbox.length,
+          billing: { pointsCharged: billing.charged, usageId: billing.usageId, remainingPoints: billing.wallet.totalPoints },
           workbenchSession,
           plan: projected,
         };

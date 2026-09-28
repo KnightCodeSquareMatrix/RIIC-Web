@@ -32,7 +32,7 @@ import { toAdminSessionData, toAdminUserData } from "./auth/admin-dto";
 import { requireWebsiteAdmin } from "./auth/authorization";
 import { configuredAdminIds } from "./auth/config";
 import { getDatabase } from "./db";
-import { session, user } from "./db/schema";
+import { billingWallet, session, user } from "./db/schema";
 import { sklandBindingSummariesByUserIds } from "./skland/bindings";
 
 type AdminUserRoute =
@@ -136,7 +136,10 @@ export async function handleListAdminUsers(request: Request, route: AdminUserRou
       banned: user.banned,
       banReason: user.banReason,
       createdAt: user.createdAt,
-    }).from(user).where(where).orderBy(desc(user.createdAt)).limit(100);
+      paidPoints: billingWallet.paidPoints,
+      monthlyPoints: billingWallet.monthlyPoints,
+      monthlyExpiresAt: billingWallet.monthlyExpiresAt,
+    }).from(user).leftJoin(billingWallet, eq(billingWallet.userId, user.id)).where(where).orderBy(desc(user.createdAt)).limit(100);
     const [summary] = await getDatabase().select({ verifiedUsers: count() })
       .from(user).where(eq(user.emailVerified, true));
     const bindingSummaries = await sklandBindingSummariesByUserIds(records.map((record) => record.id));

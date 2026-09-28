@@ -15,6 +15,9 @@ test("admin user DTO exposes role decisions without returning the raw database r
     sklandBindingCount: 2,
     sklandActiveBindingCount: 1,
     sklandRenewalDueCount: 1,
+    paidPoints: 110,
+    monthlyPoints: 300,
+    monthlyExpiresAt: new Date("2099-08-24T00:00:00.000Z"),
   }, new Set());
 
   assert.deepEqual(data, {
@@ -31,6 +34,10 @@ test("admin user DTO exposes role decisions without returning the raw database r
     sklandBindingCount: 2,
     sklandActiveBindingCount: 1,
     sklandRenewalDueCount: 1,
+    paidPoints: 110,
+    monthlyPoints: 300,
+    monthlyExpiresAt: "2099-08-24T00:00:00.000Z",
+    totalPoints: 410,
   });
   assert.equal("role" in data, false);
 });
