@@ -64,6 +64,25 @@ test("eligibility, target exclusion and no Box mutation", () => {
   assert.ok(trainers.some((t) => t.name === "黑"));
 });
 
+test("hypothetical E2 targets preserve webpage eligibility and actual trainer constraints", () => {
+  const value = input("至简", ["逻各斯", "艾丽妮"], { target: 1 });
+  const target = value.operbox[0]!;
+  value.operbox[1]!.elite = 1;
+  value.operbox[2]!.own = false;
+  for (const entries of [[], [{ ...target, own: false }], [{ ...target, elite: 0 }], [{ ...target, elite: 1 }]]) {
+    const operbox = [...entries, ...value.operbox.slice(1)];
+    const before = structuredClone(operbox);
+    const hypothetical = { ...value, operbox };
+    assert.equal(eligibleMasteryTargets(operbox).length, 0);
+    const trainers = masteryTrainers(hypothetical);
+    assert.deepEqual(trainers.map((t) => t.name), ["逻各斯"]);
+    assert.equal(trainers[0]!.halves, false);
+    assert.deepEqual(calculateMastery(hypothetical), calculateMastery({ ...value, operbox: [target, ...value.operbox.slice(1)] }));
+    assert.deepEqual(operbox, before);
+  }
+  assert.throws(() => calculateMastery({ ...value, targetId: box("芬")[0]!.id }));
+});
+
 test("empty trainer has no 5% placement bonus; ordinary owned trainer does", () => {
   const value = input("埃癸斯",[],{target:1,controlBonus:false});
   near(calculateMastery(value).fast.totalSeconds,8*3600);

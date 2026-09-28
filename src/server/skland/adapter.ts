@@ -19,6 +19,7 @@ import {
   stableSklandUserIdFromResponse,
 } from "./credential";
 import { rolesFromBinding, snapshotFromPlayerInfo, snapshotsFromPlayerInfo } from "./normalize";
+import { persistOperatorSnapshot } from "./operator-snapshot-store";
 import { inventoryItemsFromResponse } from "./inventory-parser";
 import { sklandLayoutSuggestion } from "./layout-suggestion";
 import {
@@ -187,6 +188,7 @@ async function scheduleWithClient(client: Client, payload: SklandSessionPayload)
     : roles.find((role) => role.isDefault)?.uid ?? roles[0].uid;
   const info = await client.collections.player.getInfo({ uid: selectedUid });
   const snapshots = snapshotsFromPlayerInfo(info, roles, selectedUid, sklandLayoutSuggestion(info));
+  void persistOperatorSnapshot(snapshots.statusSnapshot);
   return {
     payload: { ...payload, selectedUid },
     snapshot: snapshots.scheduleSnapshot,
@@ -222,6 +224,7 @@ async function completeOAuthLogin(
     policyConsent,
   };
   const snapshots = snapshotsFromPlayerInfo(info, roles, selectedUid, sklandLayoutSuggestion(info));
+  void persistOperatorSnapshot(snapshots.statusSnapshot);
   return {
     session,
     snapshot: snapshots.scheduleSnapshot,
@@ -310,6 +313,7 @@ export async function authenticateSklandCredential(
       policyConsent,
     };
     const snapshots = snapshotsFromPlayerInfo(info, roles, selectedUid, sklandLayoutSuggestion(info));
+    void persistOperatorSnapshot(snapshots.statusSnapshot);
     return {
       session,
       snapshot: snapshots.scheduleSnapshot,
