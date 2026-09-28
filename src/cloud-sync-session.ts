@@ -1,12 +1,13 @@
-import { cloudWorkspaceFingerprint, readCloudSyncMetadata, writeCloudSyncMetadata } from "./cloud-sync.ts";
+import { cloudWorkspaceFingerprint, readCloudSyncMetadata, writeCloudSyncMetadata, type CloudSyncMetadata, type CloudSyncStatus as SyncPhase } from "./cloud-sync.ts";
 import type { AccountDataConsentData, CloudWorkspaceData, CloudWorkspacePutRequest } from "./types.ts";
 
 export type CloudUpload = Exclude<CloudWorkspacePutRequest, { restoreRevisionId: string }>;
 export type CloudSyncStatus = {
   consentOpen: boolean;
   saving: boolean;
-  error: "consent" | "policy" | "invalid" | "retry" | "session" | "paused" | null;
+  error: "consent" | "policy" | "invalid" | "retry" | "session" | "paused" | "conflict" | null;
   errorCode: string | null;
+  sync: SyncPhase;
 };
 
 type Dependencies = {
@@ -38,9 +39,17 @@ export class CloudSyncSession {
   private blockedFingerprint: string | null = null;
   private retryAt = 0;
   private failures = 0;
-  private state: CloudSyncStatus = { consentOpen: false, saving: false, error: null, errorCode: null };
+  private metadata: CloudSyncMetadata | null;
+  private readonly initialFingerprint: string;
+  private edited = false;
+  private state: CloudSyncStatus = { consentOpen: false, saving: false, error: null, errorCode: null, sync: "idle" };
 
-  constructor(dependencies: Dependencies) { this.dependencies = dependencies; }
+  constructor(dependencies: Dependencies) {
+    this.dependencies = dependencies;
+    // Keep this page's acknowledged baseline even when another tab updates storage.
+    this.metadata = readCloudSyncMetadata(dependencies.storage, dependencies.userId);
+    this.initialFingerprint = cloudWorkspaceFingerprint(dependencies.local().workspace);
+  }
 
   start() {
     this.dependencies.changed(null);
@@ -48,7 +57,11 @@ export class CloudSyncSession {
     this.schedule(0);
   }
 
-  update() { this.schedule(1200); }
+  update() {
+    if (cloudWorkspaceFingerprint(this.dependencies.local().workspace) !== this.initialFingerprint) this.edited = true;
+    this.publish();
+    this.schedule(1200);
+  }
 
   refresh() {
     this.refreshRequested = true;
@@ -69,7 +82,7 @@ export class CloudSyncSession {
   }
 
   retry() {
-    if (this.busy || this.state.error === "session") return;
+    if (this.busy || this.state.error === "session" || this.state.error === "conflict") return;
     if (this.state.error === "consent") {
       this.state.consentOpen = true;
       this.publish();
@@ -95,7 +108,7 @@ export class CloudSyncSession {
       this.paused = false;
       this.blockedFingerprint = null;
       this.failures = 0;
-      this.state = { consentOpen: false, saving: false, error: null, errorCode: null };
+      this.state = { consentOpen: false, saving: false, error: null, errorCode: null, sync: "idle" };
     } catch (cause) {
       if (!this.controller.signal.aborted) this.failed(cause, null, true);
     } finally {
@@ -107,7 +120,50 @@ export class CloudSyncSession {
   }
 
   private publish() {
+    this.state.sync = this.state.error === "conflict" ? "conflict"
+      : this.state.error ? "error"
+      : this.busy ? "syncing"
+      : !this.initialized ? "idle"
+      : cloudWorkspaceFingerprint(this.dependencies.local().workspace) === this.fingerprint ? "synced" : "pending";
     if (!this.controller.signal.aborted) this.dependencies.status({ ...this.state });
+  }
+
+  async resolveConflict(choice: "local" | "remote") {
+    if (this.busy || this.controller.signal.aborted || this.state.error !== "conflict") return;
+    clearTimeout(this.timer);
+    this.busy = true;
+    this.state.saving = true;
+    this.publish();
+    const signal = this.controller.signal;
+    try {
+      const remote = await this.dependencies.getWorkspace(signal);
+      if (signal.aborted) return;
+      if (choice === "local") {
+        const workspace = this.dependencies.local().workspace;
+        const uploaded = await this.dependencies.putWorkspace({ ...workspace, baseRevision: remote.revision }, signal);
+        this.store(uploaded, cloudWorkspaceFingerprint(workspace));
+      } else {
+        if (!remote.exists || !remote.state) throw { code: "AIC-DATA-8005" };
+        this.dependencies.apply(remote);
+        this.store(remote, cloudWorkspaceFingerprint({ state: remote.state, operbox: remote.operbox, result: remote.result }));
+      }
+      if (signal.aborted) return;
+      this.initialized = true;
+      this.paused = false;
+      this.forceUpload = false;
+      this.failures = 0;
+      this.retryAt = 0;
+      this.blockedFingerprint = null;
+      this.state.error = null;
+      this.state.errorCode = null;
+    } catch (cause) {
+      if (!signal.aborted) this.failed(cause, null);
+    } finally {
+      this.busy = false;
+      this.state.saving = false;
+      this.publish();
+      this.schedule(1200);
+    }
   }
 
   private schedule(debounceMs: number) {
@@ -126,7 +182,10 @@ export class CloudSyncSession {
   private failed(cause: unknown, attemptedFingerprint: string | null, consentSubmission = false) {
     const failure = cause && typeof cause === "object" ? cause as { code?: string; retryable?: boolean; retryAfterSeconds?: number } : {};
     this.state.errorCode = typeof failure.code === "string" && /^AIC-[A-Z]+-\d{4}$/.test(failure.code) ? failure.code : null;
-    if (failure.code === "AIC-DATA-8001") {
+    if (failure.code === "AIC-DATA-8005") {
+      this.paused = true;
+      this.state.error = "conflict";
+    } else if (failure.code === "AIC-DATA-8001") {
       this.consentKnown = false;
       this.paused = true;
       this.state.error = "consent";
@@ -157,7 +216,8 @@ export class CloudSyncSession {
 
   private store(remote: CloudWorkspaceData, fingerprint: string) {
     if (this.controller.signal.aborted) return;
-    writeCloudSyncMetadata(this.dependencies.storage, this.dependencies.userId, { revision: remote.revision, fingerprint });
+    this.metadata = { revision: remote.revision, fingerprint };
+    try { writeCloudSyncMetadata(this.dependencies.storage, this.dependencies.userId, this.metadata); } catch { /* Acknowledged writes remain usable when storage is full. */ }
     this.fingerprint = fingerprint;
     this.dependencies.changed(remote);
   }
@@ -165,6 +225,7 @@ export class CloudSyncSession {
   private async synchronize() {
     if (this.busy || this.controller.signal.aborted) return;
     this.busy = true;
+    this.publish();
     let attemptedFingerprint: string | null = null;
     const signal = this.controller.signal;
     try {
@@ -189,17 +250,22 @@ export class CloudSyncSession {
         const { workspace, hasLocalSession } = this.dependencies.local();
         const localFingerprint = cloudWorkspaceFingerprint(workspace);
         attemptedFingerprint = localFingerprint;
-        const metadata = readCloudSyncMetadata(this.dependencies.storage, this.dependencies.userId);
-        if ((!metadata && (hasLocalSession || this.forceUpload)) || (metadata && metadata.fingerprint !== localFingerprint)) {
-          const uploaded = await this.dependencies.putWorkspace({ ...workspace, ...(metadata ? { baseRevision: metadata.revision } : {}) }, signal);
+        const metadata = this.metadata;
+        const remoteFingerprint = remote.exists && remote.state
+          ? cloudWorkspaceFingerprint({ state: remote.state, operbox: remote.operbox, result: remote.result }) : null;
+        const localChanged = metadata ? metadata.fingerprint !== localFingerprint : hasLocalSession || this.forceUpload || this.edited;
+        if (remoteFingerprint === localFingerprint) {
+          this.store(remote, localFingerprint);
+        } else if (localChanged) {
+          if (remote.revision !== (metadata?.revision ?? 0)) throw { code: "AIC-DATA-8005" };
+          const uploaded = await this.dependencies.putWorkspace({ ...workspace, baseRevision: metadata?.revision ?? 0 }, signal);
           this.store(uploaded, localFingerprint);
         } else if (remote.exists && (!metadata || remote.revision > metadata.revision)) {
           if (signal.aborted) return;
           this.dependencies.apply(remote);
           this.store(remote, cloudWorkspaceFingerprint({ state: remote.state!, operbox: remote.operbox, result: remote.result }));
         } else {
-          this.fingerprint = localFingerprint;
-          this.dependencies.changed(remote);
+          this.store(remote, localFingerprint);
         }
         if (signal.aborted) return;
         this.initialized = true;
@@ -208,7 +274,7 @@ export class CloudSyncSession {
         const { workspace } = this.dependencies.local();
         attemptedFingerprint = cloudWorkspaceFingerprint(workspace);
         if (attemptedFingerprint === this.fingerprint) return;
-        const remote = await this.dependencies.putWorkspace(workspace, signal);
+        const remote = await this.dependencies.putWorkspace({ ...workspace, baseRevision: this.metadata?.revision ?? 0 }, signal);
         this.store(remote, attemptedFingerprint);
       }
       if (signal.aborted) return;

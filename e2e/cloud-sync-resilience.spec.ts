@@ -14,6 +14,7 @@ for (const failure of [
   { code: "AIC-DATA-8001", status: 403 },
   { code: "AIC-RATE-6001", status: 429 },
   { code: "AIC-DATA-8003", status: 422 },
+  { code: "AIC-DATA-8005", status: 409 },
 ]) {
   test(`cloud sync shows ${failure.code} and does not repeatedly upload`, async ({ page }) => {
     await mockApis(page);

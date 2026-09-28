@@ -199,3 +199,63 @@ test("stale policy versions require refresh instead of repeated consent submissi
   assert.equal(h.statuses.at(-1)?.error, "policy");
   assert.equal(h.uploads.length, 0);
 });
+
+test("each upload uses this session's last acknowledged revision", async (context) => {
+  const h = sessionHarness(context);
+  h.session.start(); await h.tick(0);
+  h.edit(1); await h.tick(1200);
+  h.edit(2); await h.tick(1200);
+  assert.deepEqual(h.uploads.map(upload => upload.baseRevision), [0, 1, 2]);
+  assert.equal(h.statuses.at(-1)?.sync, "synced");
+});
+
+test("a new device with local data pauses before replacing an existing remote workspace", async (context) => {
+  const h = sessionHarness(context);
+  Object.assign(h.remote, { exists: true, revision: 5, state: { ...request.state, activeShift: 2 } });
+  h.session.start(); await h.tick(0);
+  assert.equal(h.statuses.at(-1)?.sync, "conflict");
+  h.session.retry(); h.edit(1); await h.tick(120_000);
+  assert.equal(h.uploads.length, 0);
+  await h.session.resolveConflict("local");
+  assert.equal(h.uploads[0].baseRevision, 5);
+  assert.equal(h.uploads[0].state.activeShift, 1);
+});
+
+test("choosing the remote version applies it without uploading local data", async (context) => {
+  const h = sessionHarness(context);
+  Object.assign(h.remote, { exists: true, revision: 5, state: { ...request.state, activeShift: 2 } });
+  h.session.start(); await h.tick(0);
+  await h.session.resolveConflict("remote"); await h.tick(1200);
+  assert.equal(h.uploads.length, 0);
+  assert.equal(h.statuses.at(-1)?.sync, "synced");
+  h.edit(1); await h.tick(1200);
+  assert.equal(h.uploads[0].baseRevision, 5);
+});
+
+test("another tab's metadata cannot advance this page's upload baseline", async (context) => {
+  const values = new Map<string, string>();
+  const storage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); } };
+  const h = sessionHarness(context, { storage });
+  h.session.start(); await h.tick(0);
+  writeCloudSyncMetadata(storage, "user-a", { revision: 99, fingerprint: "another tab" });
+  h.edit(1); await h.tick(1200);
+  assert.equal(h.uploads[1].baseRevision, 1);
+});
+
+test("a conflict during explicit replacement pauses again without automatic retry", async (context) => {
+  let attempts = 0;
+  const h = sessionHarness(context, { putWorkspace: async () => { attempts++; throw { code: "AIC-DATA-8005" }; } });
+  Object.assign(h.remote, { exists: true, revision: 5, state: { ...request.state, activeShift: 2 } });
+  h.session.start(); await h.tick(0);
+  await h.session.resolveConflict("local"); await h.tick(120_000);
+  assert.equal(attempts, 1);
+  assert.equal(h.statuses.at(-1)?.sync, "conflict");
+});
+
+test("full browser storage does not cause an acknowledged write to be uploaded again", async (context) => {
+  const h = sessionHarness(context, { storage: { getItem: () => null, setItem: () => { throw new Error("QuotaExceeded"); } } });
+  h.session.start(); await h.tick(0);
+  h.session.update(); await h.tick(1200);
+  assert.equal(h.uploads.length, 1);
+  assert.equal(h.statuses.at(-1)?.sync, "synced");
+});

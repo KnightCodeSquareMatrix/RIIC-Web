@@ -55,6 +55,7 @@ function useSidebar() {
 
 function SidebarProvider({
   defaultOpen = true,
+  cookieName = SIDEBAR_COOKIE_NAME,
   defaultOpenBreakpoint,
   open: openProp,
   onOpenChange: setOpenProp,
@@ -64,6 +65,7 @@ function SidebarProvider({
   ...props
 }: React.ComponentProps<"div"> & {
   defaultOpen?: boolean
+  cookieName?: string
   defaultOpenBreakpoint?: number
   open?: boolean
   onOpenChange?: (open: boolean) => void
@@ -79,13 +81,13 @@ function SidebarProvider({
   React.useEffect(() => {
     const cookie = document.cookie
       .split("; ")
-      .find((entry) => entry.startsWith(`${SIDEBAR_COOKIE_NAME}=`))
+      .find((entry) => entry.startsWith(`${cookieName}=`))
     if (cookie) {
       _setOpen(cookie.split("=")[1] === "true")
     } else if (defaultOpenBreakpoint !== undefined) {
       _setOpen(window.innerWidth >= defaultOpenBreakpoint)
     }
-  }, [defaultOpenBreakpoint])
+  }, [defaultOpenBreakpoint, cookieName])
   const open = openProp ?? _open
   const setOpen = React.useCallback(
     (value: boolean | ((value: boolean) => boolean)) => {
@@ -97,9 +99,9 @@ function SidebarProvider({
       }
 
       // This sets the cookie to keep the sidebar state.
-      document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
+      document.cookie = `${cookieName}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
     },
-    [setOpenProp, open]
+    [setOpenProp, open, cookieName]
   )
 
   // Helper to toggle the sidebar.
@@ -168,6 +170,7 @@ function Sidebar({
   side = "left",
   variant = "sidebar",
   collapsible = "offcanvas",
+  mobileWidth = SIDEBAR_WIDTH_MOBILE,
   className,
   children,
   dir,
@@ -176,6 +179,7 @@ function Sidebar({
   side?: "left" | "right"
   variant?: "sidebar" | "floating" | "inset"
   collapsible?: "offcanvas" | "icon" | "none"
+  mobileWidth?: string
 }) {
   const { isMobile, state, openMobile, setOpenMobile } = useSidebar()
 
@@ -205,7 +209,7 @@ function Sidebar({
           className="w-(--sidebar-width) bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden"
           style={
             {
-              "--sidebar-width": SIDEBAR_WIDTH_MOBILE,
+              "--sidebar-width": mobileWidth,
             } as React.CSSProperties
           }
           side={side}
