@@ -13,6 +13,7 @@ import {
   updateAccountSavedPlan,
 } from "@/api";
 import { cloudSyncMetadataKey } from "@/cloud-sync";
+import type { CloudSyncStatus } from "@/cloud-sync";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { HoldToConfirm } from "@/components/ui/hold-to-confirm";
@@ -34,11 +35,13 @@ function formatDate(value: string | null, en: boolean): string {
 export function CloudDataPanel({
   userId,
   workspace,
+  syncStatus = "idle",
   onRestorePlan,
   onCloudDataChanged,
 }: {
   userId: string;
   workspace?: CloudWorkspaceData | null;
+  syncStatus?: CloudSyncStatus;
   onRestorePlan?: (plan: SavedPlanData) => void;
   onCloudDataChanged?: () => void;
 }) {
@@ -106,9 +109,11 @@ export function CloudDataPanel({
         >
           {intl("components_cloud_CloudDataPanel.accountCloudWorkspace")}
         </InfraTechnicalHeading>
-        <p className="mt-4 max-w-3xl text-sm leading-6 text-white/64">
+        <p role="status" className="mt-4 max-w-3xl text-sm leading-6 text-white/64">
           {consent?.current
-            ? (intl("components_cloud_CloudDataPanel.syncedLastSync", { value1: (en) ? (formatDate(workspace?.syncedAt ?? null, true)) : "", value2: (en) ? "" : (formatDate(workspace?.syncedAt ?? null, false)) }))
+            ? syncStatus === "synced" && workspace?.exists
+              ? (intl("components_cloud_CloudDataPanel.syncedLastSync", { value1: (en) ? (formatDate(workspace?.syncedAt ?? null, true)) : "", value2: (en) ? "" : (formatDate(workspace?.syncedAt ?? null, false)) }))
+              : intl(`components_cloud_CloudDataSync.status.${syncStatus}`)
             : (intl("components_cloud_CloudDataPanel.localOnlyModeIsActiveExistingDataIsNot"))}
         </p>
         <p className="sr-only" role="status" aria-live="polite" aria-atomic="true" data-cloud-delete-status>{deleteAnnouncement}</p>

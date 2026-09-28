@@ -35,6 +35,7 @@ export function AdminUserManagement() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const busyRef = useRef(false);
   const [roleChange, setRoleChange] = useState<RoleChange | null>(null);
   const [sessionsByUser, setSessionsByUser] = useState<Record<string, AdminSessionData[] | undefined>>({});
 
@@ -57,7 +58,10 @@ export function AdminUserManagement() {
     } catch (error) {
       if (!controller.signal.aborted) throw error;
     } finally {
-      if (loadController.current === controller) setLoading(false);
+      if (loadController.current === controller) {
+        loadController.current = null;
+        setLoading(false);
+      }
     }
   }, [intl, request]);
 
@@ -69,6 +73,8 @@ export function AdminUserManagement() {
   }, [intl, load]);
 
   async function act(userId: string, action: AdminUserAction): Promise<boolean> {
+    if (busyRef.current || loadController.current) return false;
+    busyRef.current = true;
     setBusyKey(`${userId}:${action}`);
     setMessage(null);
     try {
@@ -96,15 +102,18 @@ export function AdminUserManagement() {
       setMessage(error instanceof Error ? error.message : (intl("app_admin_users_users_client.actionFailed")));
       return false;
     } finally {
+      busyRef.current = false;
       setBusyKey(null);
     }
   }
 
   async function toggleSessions(userId: string) {
+    if (busyRef.current || loadController.current) return;
     if (sessionsByUser[userId]) {
       setSessionsByUser((current) => ({ ...current, [userId]: undefined }));
       return;
     }
+    busyRef.current = true;
     setBusyKey(`${userId}:sessions`);
     setMessage(null);
     try {
@@ -115,6 +124,7 @@ export function AdminUserManagement() {
     } catch (error) {
       setMessage(error instanceof Error ? error.message : (intl("app_admin_users_users_client.couldNotLoadSessions")));
     } finally {
+      busyRef.current = false;
       setBusyKey(null);
     }
   }
@@ -144,12 +154,13 @@ export function AdminUserManagement() {
       </div>
       <form className="flex flex-wrap gap-2" role="search" onSubmit={event => {
         event.preventDefault();
+        if (busyRef.current) return;
         setMessage(null);
         setExpandedUser(null);
         void load(query.trim()).catch(error => setMessage(error instanceof Error ? error.message : intl("app_admin_users_users_client.couldNotLoadUsers")));
       }}>
         <div className="relative min-w-0 flex-1 sm:max-w-sm"><Search className="pointer-events-none absolute top-3 left-3 size-4 text-muted-foreground" aria-hidden="true" /><Input className="h-10 pl-9" value={query} onChange={event => setQuery(event.target.value)} maxLength={100} placeholder={intl("app_admin_users_users_client.searchByEmailOrName")} aria-label={intl("app_admin_users_users_client.searchByEmailOrName")} /></div>
-        <Button type="submit" variant="outline" disabled={loading} className="h-10">{intl("app_admin_users_users_client.search")}</Button>
+        <Button type="submit" variant="outline" disabled={loading || Boolean(busyKey)} className="h-10">{intl("app_admin_users_users_client.search")}</Button>
         <select className={selectClass} aria-label={t("role")} value={roleFilter} onChange={event => { setRoleFilter(event.target.value); setPage(1); }}>
           <option value="all">{t("allRoles")}</option><option value="admin">{t("administrator")}</option><option value="reviewer">{t("reviewer")}</option><option value="user">{t("regularUser")}</option>
         </select>
@@ -168,7 +179,7 @@ export function AdminUserManagement() {
           <tbody>
             {loading ? Array.from({ length: 5 }, (_, index) => <tr key={index} className="border-t"><td colSpan={5} className="px-4 py-4"><Skeleton className="h-8 w-full" /></td></tr>) : visibleUsers.map(entry => {
               const sessions = sessionsByUser[entry.id];
-              const actionBusy = busyKey?.startsWith(`${entry.id}:`) ?? false;
+              const actionBusy = loading || Boolean(busyKey);
               const expanded = expandedUser === entry.id;
               return <Fragment key={entry.id}>
                 <tr className="border-t hover:bg-muted/30">
@@ -239,7 +250,7 @@ export function AdminUserManagement() {
       <Dialog
         open={Boolean(roleChange)}
         onOpenChange={(open) => {
-          if (!open && !busyKey) setRoleChange(null);
+          if (!open && !busyRef.current) setRoleChange(null);
         }}
       >
         <DialogContent>
