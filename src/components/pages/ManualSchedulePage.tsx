@@ -2,7 +2,7 @@
 import { useTranslations, useLocale } from "next-intl";
 
 import { ArrowLeft, Download, Ellipsis, Search, Settings2, Sparkles, Trash2, Upload, X } from "lucide-react";
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
 import type { FactoryRecipe, TradeOrder } from "@/blueprint";
 import { filterOperators, ROOM_SKILL_TAGS, type BuildingRoomPrefix } from "@/building-rooms";
@@ -53,6 +53,7 @@ import {
   persistManualScheduleDraft,
   reconcileManualScheduleDraft,
   resizeManualScheduleDraft,
+  restPreviousShiftOperators,
   setManualDormAutofill,
   setManualDroneTarget,
   setManualRoomSkillEfficiency,
@@ -64,6 +65,16 @@ import {
 import { BUILDING_SKILL_CATALOG, OPERATOR_CATALOG, operatorPortraitFor, operatorPresentationFor } from "@/operatorPortraits";
 import { addOperatorPresentations } from "@/schedule-presentation";
 import { planToRows, type RoomRow } from "@/schedule";
+import {
+  COMPACT_CARD_CLASS,
+  COMPACT_DORM_OPERATOR_AREA_CLASS,
+  COMPACT_HEADER_CLASS,
+  COMPACT_ROOM_BACKGROUND_CLASS,
+  COMPACT_ROOM_BACKGROUND_STYLE,
+  COMPACT_ROOM_TITLE_CLASS,
+  roomGridTone,
+} from "@/schedule-view-presentation";
+import { roomVisualFor } from "@/room-visuals";
 import type { BaseBlueprint, MaaJson, MaaOperatorSlot, MaaRoom, OperBoxEntry } from "@/types";
 
 const ScrollArea = lazy(() => import("@/components/ui/scroll-area").then((module) => ({ default: module.ScrollArea })));
@@ -167,6 +178,7 @@ function countMaaAssignments(maa: MaaJson): number {
 function ManualOperatorChoice({
   operator,
   selected,
+  selectionNumber,
   assignmentLabel,
   en,
   tooltipDisabled,
@@ -174,6 +186,7 @@ function ManualOperatorChoice({
 }: {
   operator: OperBoxEntry;
   selected: boolean;
+  selectionNumber?: number;
   assignmentLabel?: string;
   en: boolean;
   tooltipDisabled: boolean;
@@ -185,10 +198,11 @@ function ManualOperatorChoice({
   const presentation = operatorPresentationFor({ name: operator.name, id: operator.id });
   return (
     <div
-      className="flex min-h-[calc(var(--manual-picker-portrait-size)+2.5rem)] flex-col items-center justify-start rounded-[4px] py-1 transition-colors hover:bg-muted/45 [&_.infra-operator-slot]:[--operator-slot-size:var(--manual-picker-portrait-size)]"
+      className={`relative flex min-h-[calc(var(--manual-picker-portrait-size)+2.5rem)] flex-col items-center justify-start rounded-[4px] py-1 transition-colors hover:bg-muted/45 [&_.infra-operator-slot]:[--operator-slot-size:var(--manual-picker-portrait-size)] ${selected ? "bg-[#FFD800]/12 ring-2 ring-[#FFD800] ring-offset-1 ring-offset-background" : ""}`}
       data-manual-operator-choice
       data-current-selection={selected ? "" : undefined}
     >
+      {selectionNumber ? <span className="absolute right-0 top-0 z-10 grid size-5 place-items-center rounded-full bg-[#FFD800] text-[11px] font-bold text-[#313131] shadow-sm">{selectionNumber}</span> : null}
       <span className={`mb-1 block h-4 max-w-full truncate text-center text-[11px] font-medium leading-4 ${assignmentLabel ? "text-popover-foreground" : "invisible"}`}>
         {assignmentLabel ?? intl("components_pages_ManualSchedulePage.unassigned")}
       </span>
@@ -252,6 +266,10 @@ export function ManualSchedulePage({
   const [moodSettingsOpen, setMoodSettingsOpen] = useState(false);
   const [restored, setRestored] = useState(false);
   const [picker, setPicker] = useState<PickerTarget | null>(null);
+  const [dormBatchOpen, setDormBatchOpen] = useState(false);
+  const [dormShowcaseOpen, setDormShowcaseOpen] = useState(false);
+  const [dormBatchSelection, setDormBatchSelection] = useState<string[]>([]);
+  const [dormDragIndex, setDormDragIndex] = useState<number | null>(null);
   const [pickerQuery, setPickerQuery] = useState("");
   const [maaImportPreview, setMaaImportPreview] = useState<MaaImportPreview | null>(null);
   const [maaImportError, setMaaImportError] = useState<string | null>(null);
@@ -357,6 +375,11 @@ export function ManualSchedulePage({
     trainer: trainingAssignment?.operators[1] ?? null,
   } : undefined, [trainingAssignment?.operators, trainingRoom]);
   const activeEvaluationShift = result?.rotation.shifts[activeShift];
+  const dormRooms = useMemo(() => layout.rooms.filter((room) => room.kind === "dormitory"), [layout.rooms]);
+  const dormBatchCapacity = useMemo(
+    () => dormRooms.reduce((total, room) => total + manualRoomCapacity(room), 0),
+    [dormRooms],
+  );
   const rows = useMemo(
     () => addOperatorPresentations(planToRows(activePlan, activeEvaluationShift, layout, activeTrainingRoomShift).map((row) => {
       const assignment = draft.shifts[activeShift]?.rooms[row.roomId];
@@ -445,6 +468,63 @@ export function ManualSchedulePage({
     setPickerRarity(null);
     setPickerPage(1);
     setPicker({ kind: "slot", roomId: row.roomId, slotIndex });
+  }
+
+  function openDormBatchPicker() {
+    const current = draft.shifts[activeShift];
+    const selected = dormRooms.flatMap((room) => current?.rooms[room.id]?.operators ?? []).filter(
+      (operator): operator is string => Boolean(operator),
+    );
+    setDormBatchSelection(selected);
+    setPickerQuery("");
+    setPickerRoomFilter(null);
+    setPickerSkillTag(null);
+    setPickerRarity(null);
+    setPickerPage(1);
+    setDormBatchOpen(true);
+  }
+
+  function toggleDormBatchOperator(operator: string) {
+    setDormBatchSelection((current) => current.includes(operator)
+      ? current.filter((name) => name !== operator)
+      : current.length >= dormBatchCapacity ? current : [...current, operator]);
+  }
+
+  function moveDormBatchOperator(fromIndex: number, toIndex: number) {
+    if (fromIndex === toIndex) return;
+    setDormBatchSelection((current) => {
+      if (!current[fromIndex] || toIndex < 0 || toIndex >= dormBatchCapacity) return current;
+      const next = [...current];
+      const target = next[toIndex];
+      next[toIndex] = next[fromIndex];
+      next[fromIndex] = target;
+      while (next.length > 0 && !next[next.length - 1]) next.pop();
+      return next;
+    });
+  }
+
+  function applyDormBatch() {
+    setDraft((current) => {
+      const next = structuredClone(current);
+      const shift = next.shifts[activeShift];
+      if (!shift) return current;
+      const selected = new Set(dormBatchSelection);
+      for (const room of Object.values(shift.rooms)) {
+        room.operators = room.operators.map((operator) => selected.has(operator ?? "") ? null : operator);
+      }
+      let offset = 0;
+      for (const room of dormRooms) {
+        const capacity = manualRoomCapacity(room);
+        shift.rooms[room.id] = {
+          ...shift.rooms[room.id],
+          operators: Array.from({ length: capacity }, (_, index) => dormBatchSelection[offset + index] ?? null),
+          autofill: false,
+        };
+        offset += capacity;
+      }
+      return next;
+    });
+    setDormBatchOpen(false);
   }
 
   function toggleSortMode(row: RoomRow) {
@@ -581,6 +661,12 @@ export function ManualSchedulePage({
     setClearShiftConfirmationOpen(false);
   }
 
+  function restPreviousShift() {
+    if (activeShift <= 0) return;
+    setDraft((current) => restPreviousShiftOperators(current, layout, activeShift));
+    setPicker(null);
+  }
+
   function setDormAutofill(row: RoomRow, enabled: boolean) {
     setDraft((current) => setManualDormAutofill(
       current,
@@ -699,9 +785,19 @@ export function ManualSchedulePage({
         activePlan={simulation ? undefined : activePlan}
         searchQuery={scheduleQuery}
         viewModeActionSlot={!simulation && (
-          <Button type="button" variant="destructive" size="sm" onClick={() => setClearShiftConfirmationOpen(true)}>
-            <Trash2 />{intl("components_pages_ManualSchedulePage.clearEveryFacilityInShift")}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {dormRooms.length > 0 ? (
+              <Button type="button" variant="outline" size="sm" onClick={openDormBatchPicker}>
+                宿舍批量编辑（{dormBatchCapacity}）
+              </Button>
+            ) : null}
+            <Button type="button" variant="outline" size="sm" disabled={activeShift <= 0} onClick={restPreviousShift}>
+              让上一班下班休息
+            </Button>
+            <Button type="button" variant="destructive" size="sm" onClick={() => setClearShiftConfirmationOpen(true)}>
+              <Trash2 />{intl("components_pages_ManualSchedulePage.clearEveryFacilityInShift")}
+            </Button>
+          </div>
         )}
         shiftInfoSlot={!simulation && hasFiammetta ? (
           <FiammettaTargetChip
@@ -969,6 +1065,153 @@ export function ManualSchedulePage({
           </DialogBody>
           </ScrollArea>
           </SkeletonSuspense>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={dormBatchOpen} onOpenChange={setDormBatchOpen}>
+        <DialogContent className={`grid max-h-[min(900px,calc(100svh-1rem))] w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden sm:w-[calc(100vw-2rem)] ${dormShowcaseOpen ? "sm:max-w-[min(1400px,calc(100vw-2rem))]" : "sm:max-w-[min(960px,calc(100vw-2rem))]"}`}>
+          <DialogHeader>
+            <DialogTitle>宿舍批量编辑</DialogTitle>
+            <DialogDescription>
+              一次选择最多 {dormBatchCapacity} 名干员，按宿舍顺序填入当前班次；未选位置留空。
+            </DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="min-h-0" viewportClassName="overflow-x-hidden">
+            <DialogBody className="block pt-1 pb-5 sm:pb-6">
+              <div className={dormShowcaseOpen ? "grid min-h-0 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(540px,0.95fr)]" : ""}>
+                <div className="min-w-0">
+                  <div className="mb-3 flex items-end justify-between gap-3">
+                    <OperatorSearch
+                      autoFocus
+                      value={pickerQuery}
+                      label="搜索可选干员"
+                      placeholder="搜索干员、技能或效果"
+                      onChange={(value) => {
+                        setPickerQuery(value);
+                        setPickerPage(1);
+                      }}
+                    />
+                    <div className="flex shrink-0 items-center gap-2">
+                      <span className="font-number text-xs text-muted-foreground">
+                        已选 {dormBatchSelection.length}/{dormBatchCapacity}
+                      </span>
+                      <Button type="button" variant={dormShowcaseOpen ? "secondary" : "outline"} size="sm" onClick={() => setDormShowcaseOpen((open) => !open)}>
+                        {dormShowcaseOpen ? "收起宿舍" : "展开宿舍"}
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="mb-2">
+                    <SkillFilterRow label={skillFilters("room")}>
+                      <SkillRoomTagBar selected={pickerRoomFilter} onChange={changePickerRoomFilter} />
+                    </SkillFilterRow>
+                  </div>
+                  <div className="mb-2">
+                    <SkillFilterRow label={skillFilters("tag")}>
+                      {availableSkillTags.length > 0
+                        ? <SkillTagBar tags={availableSkillTags} selected={pickerSkillTag} onChange={changePickerSkillTag} />
+                        : <div className="flex min-h-7 items-center text-xs text-muted-foreground">{intl("components_pages_ManualSchedulePage.noSkillTagsAvailable")}</div>}
+                    </SkillFilterRow>
+                  </div>
+                  <SkillFilterRow label={skillFilters("rarity")}>
+                    <OperatorRarityFilter
+                      value={pickerRarity === null ? "all" : String(pickerRarity)}
+                      onChange={(value) => {
+                        setPickerRarity(value === "all" ? null : Number(value));
+                        setPickerPage(1);
+                      }}
+                    />
+                  </SkillFilterRow>
+                  <TooltipProvider delay={0} timeout={0}>
+                    <div className="relative mt-2 grid grid-cols-[repeat(4,var(--manual-picker-portrait-size))] justify-between gap-x-2 gap-y-1 [--manual-picker-portrait-size:56px] min-[430px]:[--manual-picker-portrait-size:64px] sm:grid-cols-[repeat(8,var(--manual-picker-portrait-size))] min-[900px]:[--manual-picker-portrait-size:80px]">
+                      {visibleOperators.map((operator) => (
+                        <ManualOperatorChoice
+                          key={operator.id}
+                          operator={operator}
+                          selected={dormBatchSelection.includes(operator.name)}
+                          selectionNumber={dormBatchSelection.indexOf(operator.name) + 1 || undefined}
+                          assignmentLabel={dormBatchSelection.includes(operator.name) ? "已选" : undefined}
+                          en={en}
+                          tooltipDisabled={pickerScrolling}
+                          onChoose={() => toggleDormBatchOperator(operator.name)}
+                        />
+                      ))}
+                      {visibleOperators.length === 0 ? <p className="pointer-events-none absolute inset-0 flex items-center justify-center text-center text-sm text-muted-foreground">{intl("components_pages_ManualSchedulePage.noMatchingOperators")}</p> : null}
+                    </div>
+                  </TooltipProvider>
+                  <div className="mt-4 border-t border-border/60 pt-3">
+                    <Pagination page={pickerPage} pageCount={pickerPageCount} onPageChange={changePickerPage} alwaysVisible />
+                  </div>
+                </div>
+                {dormShowcaseOpen ? (
+                  <div className="flex min-h-0 min-w-0 flex-col border border-border/70 bg-[#1e2425] p-2 text-white shadow-inner" data-dorm-batch-showcase>
+                    <div className="mb-2 flex items-center justify-between border-b border-white/10 pb-1.5">
+                      <span className="text-sm font-semibold">宿舍预览</span>
+                      <span className="text-xs text-white/60">4 间 · 5 格</span>
+                    </div>
+                    <div className="grid min-h-0 flex-1 grid-rows-4 gap-2">
+                      {dormRooms.map((room, roomIndex) => (
+                        <div
+                          key={room.id}
+                          className={`${COMPACT_CARD_CLASS} h-full min-h-0 gap-1 px-2 py-1 ${COMPACT_DORM_OPERATOR_AREA_CLASS}`}
+                          style={{
+                            "--room-accent": roomVisualFor("dormitory").accent,
+                            "--room-grid-color": roomGridTone("dormitory").color,
+                            "--room-grid-opacity": roomGridTone("dormitory").opacity,
+                            "--room-grid-fade-start": roomGridTone("dormitory").fadeStart,
+                          } as CSSProperties}
+                        >
+                          <div className={COMPACT_ROOM_BACKGROUND_CLASS} style={{ ...COMPACT_ROOM_BACKGROUND_STYLE, backgroundImage: `url(${roomVisualFor("dormitory").background})` }} aria-hidden="true" />
+                          <div className={`${COMPACT_HEADER_CLASS} relative z-10`}>
+                            <span className="h-5 w-1 shrink-0 bg-[var(--room-accent)]" aria-hidden="true" />
+                            <span className={`${COMPACT_ROOM_TITLE_CLASS} font-number`}>宿舍 {roomIndex + 1}</span>
+                            <span className="ml-auto text-xs text-white/55">{Math.min(5, manualRoomCapacity(room))} 格</span>
+                          </div>
+                          <div className="relative z-10 grid min-h-0 w-full flex-1 grid-cols-[repeat(5,minmax(0,1fr))] gap-1.5">
+                            {Array.from({ length: 5 }, (_, slotIndex) => {
+                              const flatIndex = roomIndex * 5 + slotIndex;
+                              const name = dormBatchSelection[flatIndex];
+                              const operator = name ? ownedOperators.find((entry) => entry.name === name) : undefined;
+                              const presentation = operator ? operatorPresentationFor({ name: operator.name, id: operator.id }) : null;
+                              return (
+                                <div
+                                  key={`${room.id}-${slotIndex}`}
+                                  className={`relative flex aspect-square min-h-0 min-w-0 items-center justify-center overflow-hidden border bg-[#303536]/75 transition ${name ? "cursor-grab border-[#ffd800] active:cursor-grabbing" : "border-white/15"} ${dormDragIndex === flatIndex ? "opacity-45" : ""}`}
+                                  draggable={Boolean(name)}
+                                  onDragStart={() => setDormDragIndex(flatIndex)}
+                                  onDragOver={(event) => { if (dormDragIndex !== null) event.preventDefault(); }}
+                                  onDrop={(event) => { event.preventDefault(); if (dormDragIndex !== null) moveDormBatchOperator(dormDragIndex, flatIndex); setDormDragIndex(null); }}
+                                  onDragEnd={() => setDormDragIndex(null)}
+                                  title={name ? "拖动调整宿舍顺序" : "空位"}
+                                >
+                                  {operator && presentation ? (
+                                    <>
+                                      <button
+                                        type="button"
+                                        className="h-full w-full overflow-hidden outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#FFD800]"
+                                        aria-label={localizedOperatorName(operator.name, en ? "en" : "zh", gameCatalog)}
+                                        onClick={() => toggleDormBatchOperator(operator.name)}
+                                      >
+                                        <img src={presentation.portrait} alt="" className="h-full w-full object-cover object-top" draggable={false} />
+                                      </button>
+                                      <span className="absolute left-0.5 top-0.5 z-10 grid size-4 place-items-center rounded-full bg-[#FFD800] text-[9px] font-bold text-[#313131]">{flatIndex + 1}</span>
+                                    </>
+                                  ) : <span className="font-number text-xs text-white/35">{flatIndex + 1}</span>}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </DialogBody>
+          </ScrollArea>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setDormBatchOpen(false)}>取消</Button>
+            <Button type="button" onClick={applyDormBatch}>应用宿舍安排</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

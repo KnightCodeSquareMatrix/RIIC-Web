@@ -9,6 +9,7 @@ import { websiteAccountNameDatabaseHooks } from "./account-name-hooks";
 import { sendAuthEmail } from "./email";
 import { configuredAdminIds, requireAuthBaseUrl, requireAuthSecret } from "./config";
 import { passwordStrengthHook } from "./password-strength-hook";
+import { localTestSession } from "./local-test-account";
 
 function createAuth() {
   return betterAuth({
@@ -64,5 +65,7 @@ export function getAuth(): Auth {
 }
 
 export async function websiteSession(request: Request | Headers) {
+  const local = localTestSession(request);
+  if (local) return local;
   return getAuth().api.getSession({ headers: request instanceof Headers ? request : request.headers });
 }
