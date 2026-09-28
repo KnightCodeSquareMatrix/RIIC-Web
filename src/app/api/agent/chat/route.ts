@@ -1,4 +1,5 @@
 import { convertToModelMessages, stepCountIs, streamText, type UIMessage } from "ai";
+import { appendFile } from "node:fs/promises";
 
 import { assertSameOrigin, createRequestId, failureResponse, PublicApiError, successResponse } from "@/server/api-contract";
 import { websiteSession } from "@/server/auth";
@@ -9,6 +10,72 @@ import { buildAgentTools } from "@/server/agent/tools";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+// ── 临时监控（诊断"返回内容异常"用，问题定位后整段删除）──
+// 把每次 agent 请求的输入、模型逐步原始输出、工具调用结果、流错误
+// 追加写到 E:/arkriicinfra/result/agent-monitor/agent-io.jsonl，每行一个 JSON。
+const AGENT_MONITOR_LOG = "E:/arkriicinfra/result/agent-monitor/agent-io.jsonl";
+
+function monitorClip(value: unknown, max: number): unknown {
+  try {
+    const text = JSON.stringify(value) ?? "null";
+    if (text.length <= max) return value;
+    return `${text.slice(0, max)}…(截断，原文共 ${text.length} 字符)`;
+  } catch {
+    return "(不可序列化)";
+  }
+}
+
+function monitorPart(part: unknown): unknown {
+  if (!part || typeof part !== "object") return part;
+  const p = part as Record<string, unknown>;
+  switch (p.type) {
+    case "text":
+      return { type: "text", text: p.text };
+    case "reasoning":
+      return { type: "reasoning", text: monitorClip(p.text, 20_000) };
+    case "tool-call":
+      return { type: "tool-call", toolName: p.toolName, input: monitorClip(p.input, 20_000) };
+    case "tool-result":
+      return { type: "tool-result", toolName: p.toolName, input: monitorClip(p.input, 8_000), output: monitorClip(p.output, 120_000) };
+    case "file":
+      return { type: "file", filename: p.filename, mediaType: p.mediaType, urlLength: typeof p.url === "string" ? p.url.length : null };
+    default:
+      return { type: p.type, summary: monitorClip(p, 4_000) };
+  }
+}
+
+function monitorMessage(message: UIMessage): unknown {
+  return {
+    id: message.id,
+    role: message.role,
+    parts: Array.isArray(message.parts) ? message.parts.map(monitorPart) : [],
+  };
+}
+
+function monitorStep(step: unknown, index: number): unknown {
+  if (!step || typeof step !== "object") return step;
+  const s = step as Record<string, unknown>;
+  const response = s.response as Record<string, unknown> | undefined;
+  return {
+    index,
+    finishReason: s.finishReason,
+    usage: s.usage,
+    content: Array.isArray(s.content) ? s.content.map(monitorPart) : monitorClip(s.content, 20_000),
+    warnings: monitorClip(s.warnings, 8_000),
+    responseId: (response?.body as Record<string, unknown> | undefined)?.id ?? response?.id ?? null,
+    responseModel: (response?.body as Record<string, unknown> | undefined)?.model ?? response?.model ?? null,
+  };
+}
+
+async function monitorLog(entry: Record<string, unknown>): Promise<void> {
+  try {
+    await appendFile(AGENT_MONITOR_LOG, `${JSON.stringify({ ts: new Date().toISOString(), ...entry })}\n`, "utf-8");
+  } catch {
+    // 监控自身失败时静默，不影响正常请求
+  }
+}
+// ── 临时监控结束 ──
 
 async function requireAgentAccess(request: Request) {
   const session = await websiteSession(request);
@@ -70,12 +137,31 @@ export async function POST(request: Request) {
       }
     }
     const tools = buildAgentTools({ request, userId: session.user.id });
+    // 临时监控：记录本次请求的完整输入（含历史消息与附件元数据）
+    await monitorLog({
+      event: "agent_request",
+      requestId,
+      userId: session.user.id,
+      llm: { provider: settings.provider, baseURL: settings.baseURL, model: settings.model },
+      persona: typeof body.persona?.content === "string" ? { name: body.persona?.name, contentLength: body.persona.content.length } : null,
+      messages: body.messages.map(monitorMessage),
+    });
     const result = streamText({
       model: getAgentModel(),
       system: await buildAgentSystemPrompt(personaContent),
       messages: await convertToModelMessages(body.messages, { tools }),
       tools,
       stopWhen: stepCountIs(12),
+      onFinish: async (event) => {
+        // 临时监控：记录模型逐步原始输出（文本/推理/工具调用与结果/用量）
+        await monitorLog({
+          event: "agent_finish",
+          requestId,
+          finishReason: event.finishReason,
+          totalUsage: event.totalUsage,
+          steps: (await event.steps).map(monitorStep),
+        });
+      },
     });
     return result.toUIMessageStreamResponse({
       headers: { "X-Request-Id": requestId },
@@ -87,10 +173,26 @@ export async function POST(request: Request) {
           requestId,
           message,
         }));
+        // 临时监控：记录流内错误（含堆栈，便于定位"返回很怪"是否为流中断/解析失败）
+        void monitorLog({
+          event: "agent_stream_error",
+          requestId,
+          message,
+          stack: error instanceof Error ? error.stack : null,
+          name: error instanceof Error ? error.name : null,
+          cause: error instanceof Error && error.cause instanceof Error ? { message: error.cause.message, stack: error.cause.stack } : null,
+        });
         return `模型服务调用失败：${message}`;
       },
     });
   } catch (error) {
+    // 临时监控：记录请求级失败
+    void monitorLog({
+      event: "agent_request_error",
+      requestId,
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : null,
+    });
     return failureResponse(error, requestId, "/api/agent/chat", startedAt);
   }
 }
