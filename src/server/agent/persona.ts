@@ -34,6 +34,9 @@ const TOOL_GUIDE = `# 工具使用守则
 - 专精回复顺序：先给生成的方案、耗时和关键换人操作，保留减半启动/换人步骤；最后依据工具返回的 settings 汇报本次计算条件（起始及目标专精等级、中枢加成、环境参数、换人余量、干员池来源）。默认参数属于计算假设，不能表述为读取到的实际基建状态。示例结尾：“这个方案按默认条件生成，从未专精开始到专三，计入中枢 +5% 专精提速，环境参数均为 0，给你留了一分钟换人余量。如果环境加成变动，记得跟我说哦。”用户有自定义参数时按实际值汇报，不照抄默认状态。后续调整只改用户指定项，保留其余已采用参数并重新计算。
 
 - diagnose_account：账号诊断。可传 operators 查询指定干员的 own/elite/level；查看森空岛绑定状态、干员池概览（总数/精二/稀有度分布）、当前基建布局、最近保存的排班。回答"我的干员池怎么样""适合搓玉吗"之前必调。
+- analyze_stock_and_training：库存与培养分析。查看库存、培养画像、钱书需求比、库存缺口与赤金盈余。
+- analyze_daily_production：日产出分析。默认读取已保存的三日报表；用户提供 reportDays 时用口述数据覆盖保存数据，分析产能、钱书流和赤金盈亏。
+- diagnose_account_health：账号体检诊断。联合库存、培养画像、三日报表与基建使用偏好，给出账号概况、资源趋势和布局/产线/换班建议。
 - preview_solve_defaults：排班配置预览。返回简化指令下将采用的默认配置（布局、干员来源、换班、菲亚梅塔、按场景的配方与订单），只读不占算力。scene 选 orundum（搓玉）/ money（纯产钱）可预览对应场景配方。
 - solve_schedule：排班求解。提交一次真正的求解器计算，返回三班排班、日产出与练卡建议。省略的参数服务端自动兜底：布局按「游戏内基建 → 最近排班 → 243」推断；干员按「森空岛 → MAA 上传 → 示例 Box」三级降级；换班默认 abc_12_12_12；搓玉请求传 scene=orundum（自动配齐碎片线＋贸易线），纯产钱传 scene=money（全龙门商法＋全赤金）。返回的 defaultsApplied 会说明实际采用的配置。
 - query_skills：基建技能查询。按干员名或技能名/关键词/标签查技能效果原文及解锁条件。
@@ -43,6 +46,7 @@ const TOOL_GUIDE = `# 工具使用守则
 ## 路由规则（先判断意图，再选工具）
 
 - 简单操作请求直接调用对应工具，不查 KB、不加载任务指引。工具已有结果无需再检索佐证；排班遵守以下既有确认流程。
+- 只问干员持有、当前布局或森空岛状态时使用 diagnose_account；询问库存、培养缺口或钱书需求比时使用 analyze_stock_and_training；询问三日报表和日产出时使用 analyze_daily_production；询问账号整体状态、资源趋势或布局推荐时使用 diagnose_account_health。
 - 所有技能类问题固定先 query_skills 取得原文，再 kb_route 定位隐性释义并 kb_read 阅读相关正文。成功检索无特殊释义时正常按原文回答；用法、组合、培养建议按需继续读取正文，不汇报检索覆盖。
 - 复杂请求按本轮实际目标自主组合账号数据、计算、知识阅读和已启用任务指引；用户本轮已要求解释或取舍时本轮完成，不等待再次追问。仅需要操作结果时不主动追加长篇解释。
 
@@ -67,7 +71,8 @@ const TOOL_GUIDE = `# 工具使用守则
 let personaCache: { body: string; loadedAt: number } | null = null;
 const PERSONA_CACHE_TTL_MS = 60_000;
 
-async function loadPersonaBody(): Promise<string> {
+async function loadPersonaBody(override?: string): Promise<string> {
+  if (override?.trim()) return override.trim().slice(0, 36_000);
   const cardPath = process.env.AGENT_PERSONA_CARD?.trim();
   if (!cardPath) return FALLBACK_PERSONA;
   if (personaCache && Date.now() - personaCache.loadedAt < PERSONA_CACHE_TTL_MS) {
@@ -82,8 +87,8 @@ async function loadPersonaBody(): Promise<string> {
   }
 }
 
-export async function buildAgentSystemPrompt(): Promise<string> {
-  const persona = await loadPersonaBody();
+export async function buildAgentSystemPrompt(personaOverride?: string): Promise<string> {
+  const persona = await loadPersonaBody(personaOverride);
   const root = agentKnowledgeDir();
   const [policy, manifest] = await Promise.all([
     loadKnowledgePolicy(root).catch(() => "知识服务暂不可用。继续执行已有计算工具；需要知识核实的问题只说明暂时无法核实，不声称没有规则，不编造技能或数值。"),

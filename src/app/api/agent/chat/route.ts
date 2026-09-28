@@ -10,17 +10,30 @@ import { buildAgentTools } from "@/server/agent/tools";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  const settings = agentLlmSettings();
-  return successResponse(
-    {
-      enabled: settings.configured,
-      provider: settings.configured ? settings.provider : null,
-      model: settings.configured ? settings.model : null,
-      baseURL: settings.configured ? settings.baseURL : null,
-    },
-    createRequestId()
-  );
+async function requireAgentAccess(request: Request) {
+  const session = await websiteSession(request);
+  if (!session?.user) throw new PublicApiError("AIC-AUTH-2008");
+  return { session };
+}
+
+export async function GET(request: Request) {
+  const requestId = createRequestId();
+  const startedAt = performance.now();
+  try {
+    await requireAgentAccess(request);
+    const settings = agentLlmSettings();
+    return successResponse(
+      {
+        enabled: settings.configured,
+        provider: settings.configured ? settings.provider : null,
+        model: settings.configured ? settings.model : null,
+        baseURL: settings.configured ? settings.baseURL : null,
+      },
+      requestId
+    );
+  } catch (error) {
+    return failureResponse(error, requestId, "/api/agent/chat", startedAt, "AIC-SYS-5000", request);
+  }
 }
 
 export async function POST(request: Request) {
@@ -28,11 +41,7 @@ export async function POST(request: Request) {
   const startedAt = performance.now();
   try {
     assertSameOrigin(request);
-    const session = await websiteSession(request);
-    if (!session?.user) {
-      const response = failureResponse(new PublicApiError("AIC-AUTH-2008"), requestId, "/api/agent/chat", startedAt);
-      return new Response(response.body, { status: 401, headers: response.headers });
-    }
+    const { session } = await requireAgentAccess(request);
     const settings = agentLlmSettings();
     if (!settings.configured) {
       const response = failureResponse(
@@ -43,15 +52,27 @@ export async function POST(request: Request) {
       );
       return new Response(response.body, { status: 503, headers: response.headers });
     }
-    const body = (await request.json()) as { messages?: UIMessage[] };
+    const body = (await request.json()) as { messages?: UIMessage[]; persona?: { id?: unknown; name?: unknown; content?: unknown } };
     if (!Array.isArray(body.messages) || body.messages.length === 0) {
       const response = failureResponse(new Error("缺少对话消息。"), requestId, "/api/agent/chat", startedAt);
       return new Response(response.body, { status: 400, headers: response.headers });
     }
+    const personaContent = typeof body.persona?.content === "string" ? body.persona.content.trim().slice(0, 36_000) : undefined;
+    const fileParts = body.messages.flatMap((message) => message.parts.filter((part) => part.type === "file")).map((part) => part as unknown as { url?: unknown; mediaType?: unknown; filename?: unknown });
+    if (fileParts.length > 4) {
+      const response = failureResponse(new Error("一次最多发送 4 个附件。"), requestId, "/api/agent/chat", startedAt);
+      return new Response(response.body, { status: 413, headers: response.headers });
+    }
+    for (const part of fileParts) {
+      if (typeof part.url !== "string" || part.url.length > 12_000_000) {
+        const response = failureResponse(new Error("附件过大，请压缩后重试。"), requestId, "/api/agent/chat", startedAt);
+        return new Response(response.body, { status: 413, headers: response.headers });
+      }
+    }
     const tools = buildAgentTools({ request, userId: session.user.id });
     const result = streamText({
       model: getAgentModel(),
-      system: await buildAgentSystemPrompt(),
+      system: await buildAgentSystemPrompt(personaContent),
       messages: await convertToModelMessages(body.messages, { tools }),
       tools,
       stopWhen: stepCountIs(12),

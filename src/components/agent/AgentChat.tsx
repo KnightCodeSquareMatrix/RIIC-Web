@@ -3,9 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport } from "ai";
+import { convertFileListToFileUIParts, DefaultChatTransport, type FileUIPart } from "ai";
+import { Check, Copy, FileText, Loader2, Paperclip, Send, Square, Upload, X } from "lucide-react";
 
+import { MarkdownMessage } from "@/components/agent/MarkdownMessage";
 import { PlanArtifactView } from "@/components/agent/PlanArtifactView";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { AGENT_BROADCAST_CHANNEL, agentArtifactFromOutput, requestAgentArtifactOpen } from "@/agent-artifact-bridge";
 import type { AgentPlanProjection } from "@/server/agent/plan-artifact";
 
@@ -17,17 +22,80 @@ interface AgentRuntimeInfo {
   baseURL: string;
 }
 
+type PersonaCard = {
+  id: string;
+  name: string;
+  description: string;
+  content: string;
+  kind: "upload";
+  filename?: string;
+};
+
+const MAX_PERSONA_LENGTH = 36_000;
+const LOCAL_PERSONA_STORAGE_KEY = "riic.agent.persona.v1";
+const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
+const MAX_ATTACHMENTS = 4;
+const ACCEPTED_ATTACHMENT_TYPES = ["image/", "text/", "application/pdf", "application/json", "application/vnd.openxmlformats-officedocument", "application/vnd.ms-excel"];
+const ACCEPTED_ATTACHMENT_EXTENSIONS = [".md", ".markdown", ".txt", ".json", ".pdf", ".csv", ".xlsx"];
+
+function readLocalPersona(): PersonaCard | null {
+  try {
+    const raw = window.localStorage.getItem(LOCAL_PERSONA_STORAGE_KEY);
+    if (!raw) return null;
+    const value = JSON.parse(raw) as Record<string, unknown>;
+    if (value.version !== 1 || typeof value.content !== "string" || !value.content.trim() || value.content.length > MAX_PERSONA_LENGTH) return null;
+    return {
+      id: typeof value.id === "string" ? value.id : `local-${Date.now()}`,
+      name: typeof value.name === "string" && value.name.trim() ? value.name.slice(0, 40) : "自定义人格",
+      description: typeof value.description === "string" ? value.description.slice(0, 120) : "保存在此浏览器中的人格卡。",
+      content: value.content.slice(0, MAX_PERSONA_LENGTH),
+      kind: "upload",
+      filename: typeof value.filename === "string" ? value.filename.slice(0, 120) : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function saveLocalPersona(persona: PersonaCard) {
+  try {
+    window.localStorage.setItem(LOCAL_PERSONA_STORAGE_KEY, JSON.stringify({
+      version: 1,
+      id: persona.id,
+      name: persona.name,
+      description: persona.description,
+      content: persona.content,
+      filename: persona.filename,
+      savedAt: new Date().toISOString(),
+    }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function clearLocalPersona() {
+  try {
+    window.localStorage.removeItem(LOCAL_PERSONA_STORAGE_KEY);
+  } catch {
+    return;
+  }
+}
+
 const TOOL_LABELS: Record<string, string> = {
-  resolve_operator: "干员核实",
-  calculate_mastery: "专精训练",
-  calculate_recruitment: "公招词条计算",
+  resolve_operator: "干员身份核实",
+  calculate_mastery: "专精方案计算",
+  calculate_recruitment: "公招组合计算",
+  analyze_stock_and_training: "库存与培养分析",
+  analyze_daily_production: "日产出分析",
+  diagnose_account_health: "账号体检诊断",
   preview_solve_defaults: "排班配置预览",
-  diagnose_account: "账号诊断",
+  diagnose_account: "账号数据诊断",
   solve_schedule: "排班求解",
-  query_skills: "技能查询",
+  query_skills: "基建技能查询",
   kb_route: "知识库导诊",
   kb_read: "知识库阅读",
-  load_agent_skill: "任务指引",
+  load_agent_skill: "任务指引加载",
 };
 
 function toolLabel(name: string): string {
@@ -198,14 +266,55 @@ export function AgentToolCard({ part }: { part: AgentToolPartView }) {
   </div>;
 }
 
+function CopyButton({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+  return <Button
+    type="button"
+    variant="ghost"
+    size="icon"
+    className="size-7 text-muted-foreground"
+    aria-label={copied ? "已复制" : "复制回答"}
+    title={copied ? "已复制" : "复制回答"}
+    onClick={() => {
+      void navigator.clipboard?.writeText(value).then(() => {
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1600);
+      });
+    }}
+  >{copied ? <Check className="size-4 text-emerald-600" aria-hidden="true" /> : <Copy className="size-4" aria-hidden="true" />}</Button>;
+}
+
+function AttachmentPreview({ file, onRemove }: { file: FileUIPart; onRemove: () => void }) {
+  const image = file.mediaType.startsWith("image/");
+  return <div className="group relative flex min-w-0 items-center gap-2 rounded-xl border border-border/80 bg-background/80 px-2.5 py-2 text-xs shadow-sm">
+    {image ? <img src={file.url} alt={file.filename ?? "图片附件"} className="size-10 shrink-0 rounded-lg object-cover" /> : <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground"><FileText className="size-5" aria-hidden="true" /></span>}
+    <span className="min-w-0"><span className="block max-w-44 truncate font-medium">{file.filename ?? "未命名文件"}</span><span className="block text-[11px] text-muted-foreground">{image ? "图片" : file.mediaType || "文件"}</span></span>
+    <Button type="button" variant="ghost" size="icon-xs" aria-label={`移除 ${file.filename ?? "附件"}`} className="absolute -top-2 -right-2 size-5 rounded-full border bg-background text-muted-foreground opacity-0 shadow-sm transition-opacity group-hover:opacity-100 focus-visible:opacity-100" onClick={onRemove}><X className="size-3" aria-hidden="true" /></Button>
+  </div>;
+}
+
 export function AgentChat() {
   const [agentStatus, setAgentStatus] = useState<AgentStatus>("loading");
   const [agentInfo, setAgentInfo] = useState<AgentRuntimeInfo | null>(null);
   const [draft, setDraft] = useState("");
+  const [attachments, setAttachments] = useState<FileUIPart[]>([]);
+  const [activePersona, setActivePersona] = useState<PersonaCard | null>(null);
+  const [personaHydrated, setPersonaHydrated] = useState(false);
+  const [personaOpen, setPersonaOpen] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [personaError, setPersonaError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const personaInputRef = useRef<HTMLInputElement>(null);
   const { messages, sendMessage, status, error, stop } = useChat({
     transport: new DefaultChatTransport({ api: "/api/agent/chat" }),
   });
+
+  useEffect(() => {
+    const stored = readLocalPersona();
+    if (stored) setActivePersona(stored);
+    setPersonaHydrated(true);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -273,124 +382,100 @@ export function AgentChat() {
 
   const busy = status === "submitted" || status === "streaming";
 
-  const submit = (text: string) => {
+  const submit = async (text: string, files = attachments) => {
     const trimmed = text.trim();
-    if (!trimmed || busy || agentStatus !== "ready") return;
+    if (!personaHydrated || (!trimmed && files.length === 0) || busy || agentStatus !== "ready") return;
     setDraft("");
-    sendMessage({ text: trimmed });
+    setAttachments([]);
+    await sendMessage(
+      { text: trimmed, files },
+      activePersona?.kind === "upload" ? { body: { persona: { id: activePersona.id, name: activePersona.name, content: activePersona.content } } } : undefined,
+    );
   };
 
+  const addFiles = async (fileList: FileList | null) => {
+    if (!fileList?.length) return;
+    setUploadError(null);
+    const incoming = Array.from(fileList);
+    if (incoming.length + attachments.length > MAX_ATTACHMENTS) {
+      setUploadError(`最多同时发送 ${MAX_ATTACHMENTS} 个附件。`);
+      return;
+    }
+    const invalid = incoming.find((file) => file.size > MAX_ATTACHMENT_BYTES || !(ACCEPTED_ATTACHMENT_TYPES.some((type) => file.type.startsWith(type)) || ACCEPTED_ATTACHMENT_EXTENSIONS.some((extension) => file.name.toLowerCase().endsWith(extension))));
+    if (invalid) {
+      setUploadError(`${invalid.name} 不受支持，或超过 8 MB 大小限制。`);
+      return;
+    }
+    try {
+      const next = await convertFileListToFileUIParts(fileList);
+      setAttachments((current) => [...current, ...next].slice(0, MAX_ATTACHMENTS));
+    } catch {
+      setUploadError("读取附件失败，请重试或换一个文件。");
+    }
+  };
+
+  const importPersona = async (file: File) => {
+    setPersonaError(null);
+    if (file.size > MAX_PERSONA_LENGTH) {
+      setPersonaError("人格卡需要小于 36 KB。");
+      return;
+    }
+    try {
+      const raw = await file.text();
+      let content = raw.trim();
+      let name = file.name.replace(/\.(md|markdown|txt|json)$/i, "") || "自定义人格";
+      let description = "本次浏览器会话使用的自定义人格卡。";
+      if (file.name.toLowerCase().endsWith(".json")) {
+        try {
+          const value = JSON.parse(raw) as Record<string, unknown>;
+          name = typeof value.name === "string" ? value.name : name;
+          description = typeof value.description === "string" ? value.description : description;
+          content = [value.system, value.persona, value.content, value.prompt, value.scenario].find((item) => typeof item === "string") as string ?? raw;
+        } catch {
+          content = raw;
+        }
+      }
+      if (!content.trim()) throw new Error("人格卡内容为空");
+      const persona: PersonaCard = { id: `upload-${Date.now()}`, name: name.slice(0, 40), description, content: content.slice(0, MAX_PERSONA_LENGTH), kind: "upload", filename: file.name };
+      setActivePersona(persona);
+      if (!saveLocalPersona(persona)) setPersonaError("人格卡已应用，但浏览器拒绝了本地保存。");
+      setPersonaOpen(false);
+    } catch (error) {
+      setPersonaError(error instanceof Error ? error.message : "读取人格卡失败，请重试。");
+    }
+  };
+
+  const prompts = ["我想搓玉，但不知道自己干员池适不适合", "帮我看看账号现在什么水平", "帮我算能天使从未专精到专三的训练方案", "公招有高级资深干员、狙击干员、远程位，九小时怎么选？"];
   return (
-    <section className="mx-auto flex min-h-dvh w-full max-w-3xl flex-col gap-3 px-4 pb-28 pt-6" data-agent-chat>
-      <header className="flex items-center gap-2.5">
-        <span className="h-7 w-1.5 shrink-0 bg-[#FFD501]" aria-hidden="true" />
-        <div className="min-w-0">
-          <h1 className="truncate text-[21px] font-medium leading-none">可露希尔助理</h1>
-          <p className="mt-1 text-xs text-muted-foreground">实验性 agent 入口 · 账号诊断、排班、专精训练、公招计算与知识库</p>
-          {agentInfo ? (
-            <p className="mt-0.5 break-all font-number text-[11px] text-muted-foreground" data-agent-runtime-info>
-              {agentInfo.model}
-            </p>
-          ) : null}
+    <section className="mx-auto flex min-h-dvh w-full max-w-3xl flex-col gap-4 px-4 pb-36 pt-0" data-agent-chat>
+      <header className="fixed inset-x-0 top-0 z-30 border-b border-border bg-background/95 backdrop-blur">
+        <div className="mx-auto flex min-h-[84px] w-full max-w-3xl items-start justify-between gap-3 px-4 py-3">
+          <div className="flex min-w-0 items-start gap-2.5"><span className="h-7 w-1.5 shrink-0 bg-[#FFD501]" aria-hidden="true" /><div className="min-w-0"><h1 className="truncate text-[21px] font-medium leading-none">可露希尔助理</h1><p className="mt-1 truncate text-xs text-muted-foreground">实验性 agent 入口 · 账号诊断、排班、专精训练、公招计算与知识库</p>{agentInfo ? <p className="mt-0.5 truncate font-number text-[11px] text-muted-foreground" data-agent-runtime-info>{agentInfo.model}</p> : null}</div></div>
+          <Button type="button" variant="outline" size="sm" onClick={() => setPersonaOpen(true)}>人格卡：{activePersona?.name ?? "可露希尔"}</Button>
         </div>
       </header>
+      <div className="h-[84px] shrink-0" aria-hidden="true" />
 
-      {agentStatus === "loading" ? <p className="text-sm text-muted-foreground">正在检查助理配置……</p> : null}
-      {agentStatus === "unconfigured" ? (
-        <div className="rounded-lg border bg-muted/40 p-3 text-sm">
-          <p>助理的大模型接口尚未配置。在 <code className="rounded bg-muted px-1">riicweb/.env.local</code> 中设置：</p>
-          <pre className="mt-2 overflow-x-auto rounded bg-muted px-2 py-1 font-number text-xs">{`AGENT_LLM_PROVIDER=deepseek   # 或 glm
-AGENT_LLM_API_KEY=你的密钥`}</pre>
-          <p className="mt-2 text-xs text-muted-foreground">保存后重启开发服务即可。站点其他功能不受影响。</p>
-        </div>
-      ) : null}
-      {agentStatus === "unauthenticated" ? (
-        <div className="rounded-lg border bg-muted/40 p-3 text-sm">
-          <p>请先登录网站账号再使用助理。</p>
-          <a className="mt-2 inline-block text-sm underline underline-offset-4" href="/">返回首页登录</a>
-        </div>
-      ) : null}
+      {agentStatus === "loading" ? <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" />正在检查助理配置……</p> : null}
+      {agentStatus === "unconfigured" ? <div className="rounded-[4px] border bg-muted/40 p-3 text-sm"><p>助理的大模型接口尚未配置。在 <code className="rounded bg-muted px-1">riicweb/.env.local</code> 中设置：</p><pre className="mt-2 overflow-x-auto rounded-[4px] bg-muted px-2 py-1 font-number text-xs">{`AGENT_LLM_PROVIDER=deepseek\nAGENT_LLM_API_KEY=你的密钥`}</pre><p className="mt-2 text-xs text-muted-foreground">保存后重启开发服务即可。站点其他功能不受影响。</p></div> : null}
+      {agentStatus === "unauthenticated" ? <div className="rounded-[4px] border bg-muted/40 p-3 text-sm"><p>请先登录网站账号再使用助理。</p><a className="mt-2 inline-block text-sm underline underline-offset-4" href="/">返回首页登录</a></div> : null}
 
-      {messages.length === 0 && agentStatus === "ready" ? (
-        <div className="grid gap-2 rounded-lg border bg-muted/30 p-4">
-          <p className="text-sm text-muted-foreground">嘿，博士，需要我帮你算点什么？比如——</p>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {["我想搓玉，但不知道自己干员池适不适合", "帮我看看账号现在什么水平", "帮我算能天使从未专精到专三的训练方案", "公招有高级资深干员、狙击干员、远程位，九小时怎么选？"].map((prompt) => (
-              <button
-                key={prompt}
-                type="button"
-                className="rounded-lg border bg-background px-3 py-2 text-left text-sm transition-colors hover:bg-muted"
-                onClick={() => submit(prompt)}
-              >
-                {prompt}
-              </button>
-            ))}
-          </div>
-        </div>
-      ) : null}
+      {messages.length === 0 && agentStatus === "ready" ? <div className="grid gap-3 rounded-[4px] border border-border bg-card p-4 md:p-6"><p className="text-sm text-muted-foreground">嘿，博士，需要我帮你算点什么？比如——</p><div className="grid gap-2 sm:grid-cols-2">{prompts.map((prompt) => <Button key={prompt} type="button" variant="outline" className="h-auto min-h-10 justify-start whitespace-normal px-3 py-2 text-left text-sm font-normal" onClick={() => void submit(prompt)}>{prompt}</Button>)}</div></div> : null}
 
       <div className="grid gap-4">
-        {messages.map((message) => (
-          <div
-            key={message.id}
-            className={message.role === "user" ? "ml-auto max-w-[85%] rounded-lg bg-[#FFD501]/90 px-3 py-2 text-sm" : "grid gap-2"}
-          >
-            {message.role === "user" ? (
-              <p className="whitespace-pre-wrap">{message.parts.map((part) => (part.type === "text" ? part.text : "")).join("")}</p>
-            ) : (
-              message.parts.map((part, partIndex) => {
-                if (part.type === "text") {
-                  return part.text.trim() ? (
-                    <p key={partIndex} className="whitespace-pre-wrap rounded-lg border bg-muted/30 px-3 py-2 text-sm leading-6">
-                      {part.text}
-                    </p>
-                  ) : null;
-                }
-                if (isToolPart(part)) {
-                  return <AgentToolCard key={partIndex} part={part} />;
-                }
-                return null;
-              })
-            )}
-          </div>
-        ))}
-        {error ? <p className="rounded-lg border border-destructive/60 px-3 py-2 text-sm text-destructive">{error.message}</p> : null}
+        {messages.map((message) => {
+          const text = message.parts.filter((part) => part.type === "text").map((part) => part.text).join("");
+          if (message.role === "user") return <div key={message.id} className="ml-auto max-w-[85%] rounded-[4px] bg-[#FFD501]/90 px-3 py-2 text-sm text-black"><div className="mb-2 flex flex-wrap gap-2">{message.parts.filter((part) => part.type === "file").map((part, index) => <AttachmentPreview key={index} file={part} onRemove={() => undefined} />)}</div>{text ? <p className="whitespace-pre-wrap">{text}</p> : null}</div>;
+          return <div key={message.id} className="grid gap-2">{message.parts.map((part, partIndex) => { if (part.type === "text") return part.text.trim() ? <div key={partIndex} className="rounded-[4px] border border-border bg-card px-3 py-2 text-sm leading-6"><MarkdownMessage content={part.text} /><div className="mt-2 flex justify-end border-t border-border/60 pt-1"><CopyButton value={part.text} /></div></div> : null; if (isToolPart(part)) return <AgentToolCard key={partIndex} part={part} />; return null; })}</div>;
+        })}
+        {busy ? <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" />正在整理结果……</p> : null}
+        {error ? <p className="rounded-[4px] border border-destructive/60 px-3 py-2 text-sm text-destructive">{error.message}</p> : null}
         <div ref={bottomRef} />
       </div>
 
-      {agentStatus === "ready" ? (
-        <div className="fixed inset-x-0 bottom-0 border-t bg-background/95 backdrop-blur">
-          <div className="mx-auto flex w-full max-w-3xl items-end gap-2 px-4 py-3">
-            <textarea
-              className="max-h-40 min-h-11 w-full resize-none rounded-lg border bg-background px-3 py-2.5 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              placeholder="和可露希尔聊聊你的基建需求（Enter 发送，Shift+Enter 换行）"
-              rows={1}
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-                  event.preventDefault();
-                  submit(draft);
-                }
-              }}
-            />
-            {busy ? (
-              <button type="button" className="h-11 shrink-0 rounded-lg border px-4 text-sm hover:bg-muted" onClick={() => stop()}>
-                停止
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="h-11 shrink-0 rounded-lg bg-[#FFD501] px-4 text-sm font-medium text-black transition-opacity disabled:opacity-40"
-                disabled={!draft.trim()}
-                onClick={() => submit(draft)}
-              >
-                发送
-              </button>
-            )}
-          </div>
-        </div>
-      ) : null}
+      {agentStatus === "ready" ? <div className="fixed inset-x-0 bottom-0 border-t bg-background/95 backdrop-blur"><div className="mx-auto w-full max-w-3xl px-4 py-3"><div className="rounded-[4px] border border-border bg-card p-2" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); void addFiles(event.dataTransfer.files); }}>{attachments.length ? <div className="mb-2 flex gap-2 overflow-x-auto pb-1">{attachments.map((file, index) => <AttachmentPreview key={`${file.filename}-${index}`} file={file} onRemove={() => setAttachments((current) => current.filter((_, itemIndex) => itemIndex !== index))} />)}</div> : null}<Textarea className="max-h-40 min-h-16 resize-none border-0 bg-transparent px-2 py-1.5 shadow-none focus-visible:ring-0" placeholder="和可露希尔聊聊你的基建需求（Enter 发送，Shift+Enter 换行）" rows={2} value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void submit(draft); } }} /><div className="flex items-center justify-between gap-2 border-t border-border/60 px-1 pt-2"><div className="flex items-center gap-1"><input ref={fileInputRef} type="file" multiple accept="image/*,.md,.markdown,.txt,.json,.pdf,.csv,.xlsx" className="hidden" onChange={(event) => { void addFiles(event.target.files); event.currentTarget.value = ""; }} /><Button type="button" variant="ghost" size="sm" className="text-muted-foreground" onClick={() => fileInputRef.current?.click()}><Paperclip className="size-4" aria-hidden="true" />添加附件</Button><span className="hidden text-[11px] text-muted-foreground sm:inline">图片 / Markdown / PDF · 单个 ≤ 8 MB</span></div>{busy ? <Button type="button" variant="outline" size="sm" onClick={() => stop()}><Square className="size-3.5 fill-current" aria-hidden="true" />停止</Button> : <Button type="button" size="sm" disabled={!personaHydrated || (!draft.trim() && attachments.length === 0)} onClick={() => void submit(draft)}><Send className="size-4" aria-hidden="true" />发送</Button>}</div></div>{uploadError ? <p className="mt-1.5 px-1 text-xs text-destructive">{uploadError}</p> : <p className="mt-1.5 px-1 text-[10px] text-muted-foreground">附件会随本次消息发送；模型是否能读取图片或 PDF 取决于当前模型能力。</p>}</div></div> : null}
+
+      <Dialog open={personaOpen} onOpenChange={setPersonaOpen}><DialogContent><DialogHeader><DialogTitle>人格卡</DialogTitle><DialogDescription>只影响表达风格；站内工具、账号权限和事实规则仍由服务端控制。</DialogDescription></DialogHeader><DialogBody><div className="grid gap-2"><Button type="button" variant={!activePersona ? "secondary" : "outline"} className="h-auto justify-start px-3 py-2 text-left" onClick={() => { clearLocalPersona(); setActivePersona(null); setPersonaOpen(false); }}><span><span className="block font-medium">可露希尔</span><span className="mt-0.5 block text-xs text-muted-foreground">使用网站服务端当前配置的人格卡</span></span></Button>{activePersona?.kind === "upload" ? <div className="rounded-[4px] border border-[#FFD501] bg-[#FFD501]/10 px-3 py-2 text-sm"><p className="font-medium">{activePersona.name}</p><p className="mt-0.5 text-xs text-muted-foreground">{activePersona.filename} · 已保存在此浏览器，下次打开优先使用</p><Button type="button" variant="link" size="sm" className="mt-1 h-auto px-0 text-xs text-muted-foreground" onClick={() => { clearLocalPersona(); setActivePersona(null); }}>清除本地人格卡</Button></div> : null}<input ref={personaInputRef} type="file" accept=".md,.markdown,.txt,.json,text/markdown,text/plain,application/json" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importPersona(file); event.currentTarget.value = ""; }} /><Button type="button" variant="outline" className="h-auto justify-start px-3 py-2 text-left" onClick={() => personaInputRef.current?.click()}><Upload className="size-4" aria-hidden="true" /><span><span className="block font-medium">上传人格卡</span><span className="mt-0.5 block text-xs font-normal text-muted-foreground">Markdown / TXT / JSON，最大 36 KB</span></span></Button>{personaError ? <p className="text-xs text-destructive">{personaError}</p> : null}</div></DialogBody><DialogFooter><Button type="button" variant="ghost" onClick={() => setPersonaOpen(false)}>关闭</Button></DialogFooter></DialogContent></Dialog>
     </section>
   );
 }
