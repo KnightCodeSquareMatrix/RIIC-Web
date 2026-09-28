@@ -609,8 +609,7 @@ export function ManualSchedulePage({
       maa,
       strictMaaOperatorOrder,
       allowReplacementOperatorSort,
-      undefined,
-        ));
+    ));
   }
 
   async function prepareMaaImport(file: File, signal: AbortSignal) {
