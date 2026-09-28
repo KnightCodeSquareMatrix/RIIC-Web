@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 
 import { PRESETS } from "@/blueprint";
+import type { CloudSyncStatus } from "@/cloud-sync";
 import { normalizeOperboxEntries } from "@/operbox-normalization";
 import type {
   BaseBlueprint,
@@ -64,6 +65,7 @@ export function useAccountCloudWorkspace(value: AccountCloudWorkspaceInput | nul
     setRotationProfile,
   } = input;
   const [cloudWorkspaceData, setCloudWorkspaceData] = useState<CloudWorkspaceData | null>(null);
+  const [cloudSyncStatus, setCloudSyncStatus] = useState<CloudSyncStatus>("idle");
   const [refreshKey, setRefreshKey] = useState(0);
   const workspace = useMemo(() => ({
     state: {
@@ -119,16 +121,19 @@ export function useAccountCloudWorkspace(value: AccountCloudWorkspaceInput | nul
 
   return {
     cloudWorkspaceData,
+    cloudSyncStatus,
     applyWorkspace,
     refreshCloudData: () => setRefreshKey((current) => current + 1),
     syncElement: input.hasRestoredSession ? (
       <CloudDataSync
+        key={input.userId ?? "anonymous"}
         userId={input.userId}
         hasLocalSession={input.hasLocalSession}
         workspace={workspace}
         refreshKey={refreshKey}
         onApply={applyWorkspace}
         onWorkspaceChanged={handleWorkspaceChanged}
+        onStatusChanged={setCloudSyncStatus}
       />
     ) : null,
   };

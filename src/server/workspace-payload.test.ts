@@ -2,10 +2,26 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  assertWorkspaceRevision,
   validateSavedPlanCalculationContext,
   validateWorkspacePutRequest,
   workspaceMatchesSavedPlanContext,
 } from "./workspace-payload.ts";
+
+test("workspace writes reject stale, future and missing versions before replacing an existing workspace", () => {
+  const first = validateWorkspacePutRequest({ state: state("sample"), operbox: null, result: null });
+  assert.equal(first.baseRevision, 0);
+  assert.doesNotThrow(() => assertWorkspaceRevision(first.baseRevision, 0));
+  for (const baseRevision of [0, 1, 3]) {
+    assert.throws(() => assertWorkspaceRevision(baseRevision, 2), { code: "AIC-DATA-8005", status: 409 });
+  }
+  assert.doesNotThrow(() => assertWorkspaceRevision(2, 2));
+  for (const baseRevision of [-1, 0.5, "2", true, Number.MAX_SAFE_INTEGER + 1]) {
+    assert.throws(() => validateWorkspacePutRequest({ state: state("sample"), baseRevision }), { code: "AIC-DATA-8003" });
+  }
+  const restored = validateWorkspacePutRequest({ restoreRevisionId: "b267a2b4-0955-4a27-8539-22b08e3e2419", baseRevision: 2 });
+  assert.equal(restored.baseRevision, 2);
+});
 
 function state(boxSource: "maa" | "sample" | "skland" = "maa") {
   return {

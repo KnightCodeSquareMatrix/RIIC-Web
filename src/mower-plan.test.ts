@@ -54,3 +54,15 @@ test("uses Mower's native production product identifiers", () => {
   assert.equal(mower.plan1.room_1_2?.product, "exp3");
   assert.equal(mower.plan1.room_1_3?.product, "orirock");
 });
+
+test("imports Mower orundum trading posts as the MAA product Orundum", () => {
+  const maa = mowerPlanToMaa({
+    default: "plan1",
+    plan1: {
+      room_1_1: { name: "贸易站", product: "orundum", plans: [] },
+    },
+  });
+
+  assert.ok(maa);
+  assert.equal(maa.plans[0]?.rooms.trading?.[0]?.product, "Orundum");
+});

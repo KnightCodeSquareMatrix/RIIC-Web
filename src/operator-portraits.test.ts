@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import test from "node:test";
 
 import sourceManifest from "./generated/arkntools/source.json" with { type: "json" };
 import {
+  BUILDING_SKILL_CATALOG,
   OPERATOR_CATALOG,
   PROFESSION_LABELS,
   PROFESSION_LABELS_ENGLISH,
@@ -20,6 +22,22 @@ import {
 
 const PORTRAIT_VERSION = `${sourceManifest.version}-${sourceManifest.portraitsSource.commit.slice(0, 12)}`;
 const portraitPath = (shortId: string) => `/images/operator-portraits/${shortId}.webp?v=${PORTRAIT_VERSION}`;
+
+test("building skill icons use the source revision and resolve to existing public assets", () => {
+  const version = `${sourceManifest.version}-${sourceManifest.source.commit.slice(0, 12)}`;
+  assert.ok(Object.keys(BUILDING_SKILL_CATALOG).length > 0);
+  for (const skill of Object.values(BUILDING_SKILL_CATALOG)) {
+    const url = new URL(skill.icon, "https://example.test");
+    assert.match(url.pathname, /^\/images\/building-skills\/.+\.png$/);
+    assert.equal(url.searchParams.get("v"), version, skill.id);
+    assert.equal(url.searchParams.size, 1, skill.id);
+    assert.ok(existsSync(new URL(`../public${url.pathname}`, import.meta.url)), skill.icon);
+  }
+  assert.equal(
+    operatorPresentationFor({ name: "阿米娅", skill: 1 }).buildingSkill?.icon,
+    operatorBuildingSkillList("阿米娅")[0].icon,
+  );
+});
 
 test("resolves portraits by stable id before display name and keeps planner aliases", () => {
   const amiyaPortrait = portraitPath("002_amiya");
