@@ -204,7 +204,11 @@ function ManualOperatorChoice({
       data-manual-operator-choice
       data-current-selection={selected ? "" : undefined}
       draggable
-      onDragStart={onDragStart}
+      onDragStart={(event) => {
+        event.dataTransfer.effectAllowed = "copy";
+        event.dataTransfer.setData("text/plain", operator.name);
+        onDragStart?.();
+      }}
     >
       {selectionNumber ? <span className="absolute right-0 top-0 z-10 grid size-5 place-items-center rounded-full bg-[#FFD800] text-[11px] font-bold text-[#313131] shadow-sm">{selectionNumber}</span> : null}
       <span className={`mb-1 block h-4 max-w-full truncate text-center text-[11px] font-medium leading-4 ${assignmentLabel ? "text-popover-foreground" : "invisible"}`}>
@@ -1200,7 +1204,12 @@ export function ManualSchedulePage({
                                   key={`${room.id}-${slotIndex}`}
                                   className={`relative flex aspect-square min-h-0 min-w-0 items-center justify-center overflow-hidden border bg-[#303536]/75 transition ${name ? "cursor-grab border-[#ffd800] active:cursor-grabbing" : "border-white/15"} ${dormDragIndex === flatIndex ? "opacity-45" : ""}`}
                                   draggable={Boolean(name)}
-                                  onDragStart={() => setDormDragIndex(flatIndex)}
+                                  onDragStart={(event) => {
+                                    event.dataTransfer.effectAllowed = "move";
+                                    event.dataTransfer.setData("text/plain", name ?? "");
+                                    setDormDragOperator(null);
+                                    setDormDragIndex(flatIndex);
+                                  }}
                                   onDragOver={(event) => { if (dormDragIndex !== null || dormDragOperator !== null) event.preventDefault(); }}
                                   onDrop={(event) => {
                                     event.preventDefault();
