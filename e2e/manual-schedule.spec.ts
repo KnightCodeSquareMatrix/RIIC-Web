@@ -195,7 +195,7 @@ test("mobile result actions explain both adjustment paths", async ({ page }) => 
   await expect(actions.getByRole("button", { name: /基于当前方案手动编辑/ })).toBeVisible();
 });
 
-test("manual MAA downloads preserve a disabled dorm autofill switch", async ({ page }) => {
+test("manual MAA downloads normalize dorm autofill without changing the editor switch", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/manual");
   await expect(page.locator('[data-workbench-hydrated="true"]')).toBeVisible();
@@ -211,9 +211,13 @@ test("manual MAA downloads preserve a disabled dorm autofill switch", async ({ p
   const chunks: Buffer[] = [];
   for await (const chunk of stream) chunks.push(Buffer.from(chunk));
   const exported = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-  expect(exported.plans[0].rooms.dormitory[0].autofill).toBe(false);
-  expect(exported.plans[0].rooms.dormitory[1].autofill).toBe(true);
-  expect(exported.plans[1].rooms.dormitory[0].autofill).toBe(true);
+  for (const plan of exported.plans) {
+    for (const room of plan.rooms.dormitory) {
+      expect(room).toMatchObject({ autofill: true, skip: false });
+      expect(room).not.toHaveProperty("candidates");
+    }
+  }
+  await expect(autofill).toHaveAttribute("aria-pressed", "false");
 });
 
 test("manual scheduling configures independent shifts, moves conflicts and enables dorm autofill", async ({ page }) => {
@@ -461,9 +465,12 @@ test("manual scheduling configures independent shifts, moves conflicts and enabl
   expect(exported.plans[0].period).toEqual([["09:00", "19:59"]]);
   expect(exported.plans[1].period).toEqual([["20:00", "23:59"], ["00:00", "08:59"]]);
   expect(exported.plans[0].drones).toBeUndefined();
-  expect(exported.plans[0].rooms.dormitory[0].autofill).toBe(false);
-  expect(exported.plans[0].rooms.dormitory[1].autofill).toBe(true);
-  expect(exported.plans[1].rooms.dormitory.every((room: { autofill: boolean }) => room.autofill === false)).toBe(true);
+  for (const plan of exported.plans) {
+    for (const room of plan.rooms.dormitory) {
+      expect(room).toMatchObject({ autofill: true, skip: false });
+      expect(room).not.toHaveProperty("candidates");
+    }
+  }
   expect(exported.plans[1].drones).toEqual({ enable: true, room: "manufacture", index: 1, rule: "all", order: "pre" });
   for (const plan of exported.plans) {
     for (const rooms of Object.values(plan.rooms) as Array<Array<{ operators: unknown[] }>>) {
