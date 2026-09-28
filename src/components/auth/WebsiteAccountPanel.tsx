@@ -24,6 +24,7 @@ import {
 } from "@/account-name";
 import { accountOrbColor } from "@/account-orb";
 import { cloudSyncMetadataKey } from "@/cloud-sync";
+import type { CloudSyncStatus } from "@/cloud-sync";
 import { passwordConfirmationError } from "@/components/auth/password-confirmation";
 import { PasswordInput } from "@/components/auth/password-input";
 import { WebsiteAccountLoadingStatus } from "@/components/auth/WebsiteAccountDialogLoading";
@@ -62,6 +63,7 @@ interface WebsiteAccountPanelProps {
   onSessionChanged?: (authenticated: boolean) => void | Promise<void>;
   loadingMode?: "page" | "dialog";
   cloudWorkspace?: CloudWorkspaceData | null;
+  cloudSyncStatus?: CloudSyncStatus;
   onRestoreSavedPlan?: (plan: SavedPlanData) => void;
   onCloudDataChanged?: () => void;
 }
@@ -94,6 +96,7 @@ export function WebsiteAccountPanel({
   onSessionChanged,
   loadingMode = "page",
   cloudWorkspace,
+  cloudSyncStatus,
   onRestoreSavedPlan,
   onCloudDataChanged,
 }: WebsiteAccountPanelProps) {
@@ -409,6 +412,7 @@ export function WebsiteAccountPanel({
         <CloudDataPanel
           userId={session.user.id}
           workspace={cloudWorkspace}
+          syncStatus={cloudSyncStatus}
           onRestorePlan={onRestoreSavedPlan}
           onCloudDataChanged={onCloudDataChanged}
         />
