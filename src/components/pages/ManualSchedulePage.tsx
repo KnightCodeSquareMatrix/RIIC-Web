@@ -279,6 +279,7 @@ export function ManualSchedulePage({
   const [dormBatchSelection, setDormBatchSelection] = useState<string[]>([]);
   const [dormDragIndex, setDormDragIndex] = useState<number | null>(null);
   const [dormDragOperator, setDormDragOperator] = useState<string | null>(null);
+  const [dormRestOnly, setDormRestOnly] = useState(false);
   const [pickerQuery, setPickerQuery] = useState("");
   const [maaImportPreview, setMaaImportPreview] = useState<MaaImportPreview | null>(null);
   const [maaImportError, setMaaImportError] = useState<string | null>(null);
@@ -444,8 +445,24 @@ export function ManualSchedulePage({
       .filter((operator) => pickerRarity === null || operator.box.rarity === pickerRarity)
       .map((operator) => operator.box);
   }, [assignedOperatorNames, ownedOperators, picker?.kind, pickerQuery, pickerRarity, pickerRoomFilter, pickerSkillTag]);
+  const previousShiftOperatorNames = useMemo(() => new Set(
+    activeShift > 0
+      ? Object.values(draft.shifts[activeShift - 1]?.rooms ?? {}).flatMap((room) => room.operators.filter(Boolean))
+      : [],
+  ), [activeShift, draft.shifts]);
+  const currentShiftOperatorNames = useMemo(() => new Set(
+    Object.values(draft.shifts[activeShift]?.rooms ?? {}).flatMap((room) => room.operators.filter(Boolean)),
+  ), [activeShift, draft.shifts]);
+  const dormFilteredOperators = dormRestOnly
+    ? filteredOperators.filter((operator) => previousShiftOperatorNames.has(operator.name) && !currentShiftOperatorNames.has(operator.name))
+    : filteredOperators;
   const pickerPageCount = Math.max(1, Math.ceil(filteredOperators.length / MANUAL_PICKER_PAGE_SIZE));
+  const dormPickerPageCount = Math.max(1, Math.ceil(dormFilteredOperators.length / MANUAL_PICKER_PAGE_SIZE));
   const visibleOperators = filteredOperators.slice(
+    (pickerPage - 1) * MANUAL_PICKER_PAGE_SIZE,
+    pickerPage * MANUAL_PICKER_PAGE_SIZE,
+  );
+  const dormVisibleOperators = dormFilteredOperators.slice(
     (pickerPage - 1) * MANUAL_PICKER_PAGE_SIZE,
     pickerPage * MANUAL_PICKER_PAGE_SIZE,
   );
@@ -490,6 +507,7 @@ export function ManualSchedulePage({
     setPickerSkillTag(null);
     setPickerRarity(null);
     setPickerPage(1);
+    setDormRestOnly(false);
     setDormBatchOpen(true);
   }
 
@@ -1144,9 +1162,26 @@ export function ManualSchedulePage({
                       }}
                     />
                   </SkillFilterRow>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={dormRestOnly ? "secondary" : "outline"}
+                      disabled={activeShift === 0}
+                      aria-pressed={dormRestOnly}
+                      onClick={() => {
+                        if (activeShift === 0) return;
+                        setDormRestOnly((current) => !current);
+                        setPickerPage(1);
+                      }}
+                    >
+                      需要休息
+                    </Button>
+                    {dormRestOnly ? <span className="text-xs text-muted-foreground">上一班上班、本班次未上班</span> : null}
+                  </div>
                   <TooltipProvider delay={0} timeout={0}>
                     <div className="relative mt-2 grid grid-cols-[repeat(4,var(--manual-picker-portrait-size))] justify-between gap-x-2 gap-y-1 [--manual-picker-portrait-size:56px] min-[430px]:[--manual-picker-portrait-size:64px] sm:grid-cols-[repeat(8,var(--manual-picker-portrait-size))] min-[900px]:[--manual-picker-portrait-size:80px]">
-                      {visibleOperators.map((operator) => (
+                      {dormVisibleOperators.map((operator) => (
                         <ManualOperatorChoice
                           key={operator.id}
                           operator={operator}
@@ -1162,11 +1197,11 @@ export function ManualSchedulePage({
                           }}
                         />
                       ))}
-                      {visibleOperators.length === 0 ? <p className="pointer-events-none absolute inset-0 flex items-center justify-center text-center text-sm text-muted-foreground">{intl("components_pages_ManualSchedulePage.noMatchingOperators")}</p> : null}
+                      {dormVisibleOperators.length === 0 ? <p className="pointer-events-none absolute inset-0 flex items-center justify-center text-center text-sm text-muted-foreground">{intl("components_pages_ManualSchedulePage.noMatchingOperators")}</p> : null}
                     </div>
                   </TooltipProvider>
                   <div className="mt-4 border-t border-border/60 pt-3">
-                    <Pagination page={pickerPage} pageCount={pickerPageCount} onPageChange={changePickerPage} alwaysVisible />
+                    <Pagination page={pickerPage} pageCount={dormPickerPageCount} onPageChange={changePickerPage} alwaysVisible />
                   </div>
                 </div>
                 {dormShowcaseOpen ? (
