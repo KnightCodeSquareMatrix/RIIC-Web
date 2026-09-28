@@ -39,7 +39,10 @@ test("concurrent workspace writes have one winner and stale requests leave data 
     const input = {
       state: {
         presetLabel: "243",
-        layout: { template: "243", drone_cap: 235, scenario: {}, rooms: [{ id: "control", kind: "control_center", level: 5 }] },
+        layout: { template: "243", drone_cap: 235, scenario: {}, rooms: [
+          { id: "control", kind: "control_center", level: 5 },
+          { id: "power", kind: "power_plant", level: 3 },
+        ] },
         sourceName: null, boxSource: "sample", layoutDirty: false, layoutSource: "local",
         localLayoutBackup: null, rotationProfile: "abc_12_6_6", fiammettaEnabled: false, activeShift: 0,
       },
