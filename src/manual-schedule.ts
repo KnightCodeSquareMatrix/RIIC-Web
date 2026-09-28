@@ -910,12 +910,13 @@ export function restPreviousShiftOperators(
   const previous = draft.shifts[shiftIndex - 1]!;
   const current = draft.shifts[shiftIndex]!;
   const dormitories = layout.rooms.filter((room) => room.kind === "dormitory");
-  const assignedOperators = (shift: typeof current) => new Set(
-    Object.values(shift.rooms)
-      .flatMap((assignment) => assignment?.operators ?? [])
+  const workingOperators = (shift: typeof current) => new Set(
+    Object.entries(shift.rooms)
+      .filter(([roomId]) => layout.rooms.find((room) => room.id === roomId)?.kind !== "dormitory")
+      .flatMap(([, assignment]) => assignment?.operators ?? [])
       .filter((name): name is string => Boolean(name)),
   );
-  const currentOperators = assignedOperators(current);
+  const currentOperators = workingOperators(current);
   const available: string[] = [];
   const seen = new Set<string>();
   for (const [roomId, assignment] of Object.entries(previous.rooms)) {

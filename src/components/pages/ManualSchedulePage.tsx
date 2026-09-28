@@ -447,12 +447,16 @@ export function ManualSchedulePage({
   }, [assignedOperatorNames, ownedOperators, picker?.kind, pickerQuery, pickerRarity, pickerRoomFilter, pickerSkillTag]);
   const previousShiftOperatorNames = useMemo(() => new Set(
     activeShift > 0
-      ? Object.values(draft.shifts[activeShift - 1]?.rooms ?? {}).flatMap((room) => room.operators.filter(Boolean))
+      ? Object.entries(draft.shifts[activeShift - 1]?.rooms ?? {})
+        .filter(([roomId]) => layout.rooms.find((room) => room.id === roomId)?.kind !== "dormitory")
+        .flatMap(([, room]) => room.operators.filter(Boolean))
       : [],
-  ), [activeShift, draft.shifts]);
+  ), [activeShift, draft.shifts, layout.rooms]);
   const currentShiftOperatorNames = useMemo(() => new Set(
-    Object.values(draft.shifts[activeShift]?.rooms ?? {}).flatMap((room) => room.operators.filter(Boolean)),
-  ), [activeShift, draft.shifts]);
+    Object.entries(draft.shifts[activeShift]?.rooms ?? {})
+      .filter(([roomId]) => layout.rooms.find((room) => room.id === roomId)?.kind !== "dormitory")
+      .flatMap(([, room]) => room.operators.filter(Boolean)),
+  ), [activeShift, draft.shifts, layout.rooms]);
   const dormFilteredOperators = dormRestOnly
     ? filteredOperators.filter((operator) => previousShiftOperatorNames.has(operator.name) && !currentShiftOperatorNames.has(operator.name))
     : filteredOperators;
