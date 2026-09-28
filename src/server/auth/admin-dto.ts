@@ -13,6 +13,9 @@ type AdminUserRecord = {
   sklandBindingCount: number;
   sklandActiveBindingCount: number;
   sklandRenewalDueCount: number;
+  paidPoints?: number | null;
+  monthlyPoints?: number | null;
+  monthlyExpiresAt?: Date | null;
 };
 
 type AdminSessionRecord = {
@@ -26,6 +29,10 @@ type AdminSessionRecord = {
 
 export function toAdminUserData(record: AdminUserRecord, bootstrapAdminIds: Set<string>): AdminUserData {
   const access = websiteAdminAccess(record.id, record.role, bootstrapAdminIds);
+  const monthlyExpiresAt = record.monthlyExpiresAt ?? null;
+  const monthlyActive = monthlyExpiresAt !== null && monthlyExpiresAt.getTime() > Date.now();
+  const paidPoints = Math.max(0, Number(record.paidPoints ?? 0));
+  const monthlyPoints = monthlyActive ? Math.max(0, Number(record.monthlyPoints ?? 0)) : 0;
   return {
     id: record.id,
     name: record.name,
@@ -40,6 +47,10 @@ export function toAdminUserData(record: AdminUserRecord, bootstrapAdminIds: Set<
     sklandBindingCount: record.sklandBindingCount,
     sklandActiveBindingCount: record.sklandActiveBindingCount,
     sklandRenewalDueCount: record.sklandRenewalDueCount,
+    paidPoints,
+    monthlyPoints,
+    monthlyExpiresAt: monthlyActive ? monthlyExpiresAt.toISOString() : null,
+    totalPoints: paidPoints + monthlyPoints,
   };
 }
 

@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { AGENT_BROADCAST_CHANNEL, agentArtifactFromOutput, requestAgentArtifactOpen } from "@/agent-artifact-bridge";
 import type { AgentPlanProjection } from "@/server/agent/plan-artifact";
 
-type AgentStatus = "loading" | "ready" | "unconfigured" | "unauthenticated";
+type AgentStatus = "loading" | "ready" | "unconfigured" | "unauthenticated" | "payment_required";
 
 interface AgentRuntimeInfo {
   provider: string;
@@ -324,6 +324,10 @@ export function AgentChat() {
           if (!cancelled) setAgentStatus("unauthenticated");
           return;
         }
+        if (response.status === 402) {
+          if (!cancelled) setAgentStatus("payment_required");
+          return;
+        }
         const payload = (await response.json()) as {
           success?: boolean;
           data?: { enabled?: boolean; provider?: string | null; model?: string | null; baseURL?: string | null };
@@ -459,6 +463,7 @@ export function AgentChat() {
       {agentStatus === "loading" ? <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" />正在检查助理配置……</p> : null}
       {agentStatus === "unconfigured" ? <div className="rounded-[4px] border bg-muted/40 p-3 text-sm"><p>助理的大模型接口尚未配置。在 <code className="rounded bg-muted px-1">riicweb/.env.local</code> 中设置：</p><pre className="mt-2 overflow-x-auto rounded-[4px] bg-muted px-2 py-1 font-number text-xs">{`AGENT_LLM_PROVIDER=deepseek\nAGENT_LLM_API_KEY=你的密钥`}</pre><p className="mt-2 text-xs text-muted-foreground">保存后重启开发服务即可。站点其他功能不受影响。</p></div> : null}
       {agentStatus === "unauthenticated" ? <div className="rounded-[4px] border bg-muted/40 p-3 text-sm"><p>请先登录网站账号再使用助理。</p><a className="mt-2 inline-block text-sm underline underline-offset-4" href="/">返回首页登录</a></div> : null}
+      {agentStatus === "payment_required" ? <div className="rounded-[4px] border bg-muted/40 p-3 text-sm"><p>当前账号还没有可用积分，请先购买积分后使用 Agent。</p><a className="mt-2 inline-block text-sm underline underline-offset-4" href="/billing">前往积分与用量</a></div> : null}
 
       {messages.length === 0 && agentStatus === "ready" ? <div className="grid gap-3 rounded-[4px] border border-border bg-card p-4 md:p-6"><p className="text-sm text-muted-foreground">嘿，博士，需要我帮你算点什么？比如——</p><div className="grid gap-2 sm:grid-cols-2">{prompts.map((prompt) => <Button key={prompt} type="button" variant="outline" className="h-auto min-h-10 justify-start whitespace-normal px-3 py-2 text-left text-sm font-normal" onClick={() => void submit(prompt)}>{prompt}</Button>)}</div></div> : null}
 

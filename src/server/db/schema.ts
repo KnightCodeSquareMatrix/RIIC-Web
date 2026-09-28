@@ -464,3 +464,88 @@ export const agentPlanArtifact = appSchema.table("agent_plan_artifact", {
   index("agent_plan_artifact_user_created_at_idx").on(table.userId, table.createdAt),
   index("agent_plan_artifact_expires_at_idx").on(table.expiresAt),
 ]);
+
+/** Agent 计费原型：余额按永久积分与月卡积分分桶，账本记录每次变动。 */
+export const billingWallet = appSchema.table("billing_wallet", {
+  userId: text("user_id").primaryKey().references(() => user.id, { onDelete: "cascade" }),
+  paidPoints: integer("paid_points").notNull().default(0),
+  monthlyPoints: integer("monthly_points").notNull().default(0),
+  monthlyExpiresAt: timestamp("monthly_expires_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const billingOrder = appSchema.table("billing_order", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  productId: text("product_id").notNull(),
+  provider: text("provider").notNull().default("afdian"),
+  status: text("status").notNull().default("pending"),
+  amountFen: integer("amount_fen").notNull(),
+  points: integer("points").notNull(),
+  customOrderId: text("custom_order_id").notNull(),
+  idempotencyKey: text("idempotency_key").notNull(),
+  providerOrderId: text("provider_order_id"),
+  paymentUrl: text("payment_url"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  paidAt: timestamp("paid_at", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("billing_order_custom_order_uidx").on(table.customOrderId),
+  uniqueIndex("billing_order_idempotency_uidx").on(table.userId, table.idempotencyKey),
+  index("billing_order_user_created_idx").on(table.userId, table.createdAt),
+  index("billing_order_status_created_idx").on(table.status, table.createdAt),
+]);
+
+export const billingLedger = appSchema.table("billing_ledger", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(),
+  pointsDelta: integer("points_delta").notNull(),
+  paidPointsAfter: integer("paid_points_after").notNull(),
+  monthlyPointsAfter: integer("monthly_points_after").notNull(),
+  referenceType: text("reference_type"),
+  referenceId: text("reference_id"),
+  idempotencyKey: text("idempotency_key").notNull(),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("billing_ledger_idempotency_uidx").on(table.idempotencyKey),
+  index("billing_ledger_user_created_idx").on(table.userId, table.createdAt),
+]);
+
+export const agentUsage = appSchema.table("agent_usage", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  runId: text("run_id"),
+  toolName: text("tool_name").notNull(),
+  status: text("status").notNull(),
+  points: integer("points").notNull().default(0),
+  inputTokens: integer("input_tokens"),
+  outputTokens: integer("output_tokens"),
+  cachedInputTokens: integer("cached_input_tokens"),
+  upstreamCostRmbFen: integer("upstream_cost_rmb_fen"),
+  chargedCostRmbFen: integer("charged_cost_rmb_fen"),
+  idempotencyKey: text("idempotency_key").notNull(),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  finalizedAt: timestamp("finalized_at", { withTimezone: true }),
+}, (table) => [
+  uniqueIndex("agent_usage_idempotency_uidx").on(table.idempotencyKey),
+  index("agent_usage_user_created_idx").on(table.userId, table.createdAt),
+]);
+
+/** 一次性赠送 CDK：只存散列，明文仅在发放响应中显示一次。 */
+export const billingCdk = appSchema.table("billing_cdk", {
+  id: text("id").primaryKey(),
+  codeHash: text("code_hash").notNull(),
+  issuerUserId: text("issuer_user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  redeemerUserId: text("redeemer_user_id").references(() => user.id, { onDelete: "set null" }),
+  points: integer("points").notNull(),
+  status: text("status").notNull().default("issued"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  redeemedAt: timestamp("redeemed_at", { withTimezone: true }),
+}, (table) => [
+  uniqueIndex("billing_cdk_code_hash_uidx").on(table.codeHash),
+  index("billing_cdk_issuer_created_idx").on(table.issuerUserId, table.createdAt),
+]);
