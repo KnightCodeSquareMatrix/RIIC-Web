@@ -6,7 +6,9 @@ import { usePathname } from "next/navigation";
 
 export function TelemetryLoader() {
   const pathname = usePathname();
+  const isAdminPreview = pathname === "/admin-preview" || pathname.startsWith("/admin-preview/");
   useEffect(() => {
+    if (isAdminPreview) return;
     let disposed = false;
     let stop: (() => void) | undefined;
     void import("./TelemetryRuntime")
@@ -19,11 +21,12 @@ export function TelemetryLoader() {
       disposed = true;
       stop?.();
     };
-  }, []);
+  }, [isAdminPreview]);
   useEffect(() => {
+    if (isAdminPreview) return;
     void import("./TelemetryRuntime")
       .then(({ trackTelemetryPage }) => trackTelemetryPage(pathname))
       .catch(() => undefined);
-  }, [pathname]);
+  }, [pathname, isAdminPreview]);
   return null;
 }

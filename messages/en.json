@@ -336,6 +336,22 @@
     "theSignInInterfaceIsLoading": "The sign-in interface is loading."
   },
   "components_cloud_CloudDataSync": {
+    "status": {
+      "idle": "Not synced yet",
+      "pending": "Changes waiting to sync",
+      "syncing": "Syncing…",
+      "synced": "No changes waiting to upload",
+      "error": "Sync failed · Latest changes are not confirmed uploaded",
+      "conflict": "Version conflict · Automatic sync paused"
+    },
+    "conflict": "The cloud workspace differs from this page. Automatic sync is paused. Choose which version to keep.",
+    "useRemote": "Use cloud version",
+    "useLocal": "Keep local version",
+    "confirmRemote": "Replace this page's BOX, settings, and schedule with the latest cloud version. Unsynced changes on this page will be replaced.",
+    "confirmLocal": "Replace the cloud workspace with this page's BOX, settings, and schedule. If another device changes the cloud again, you will see another conflict.",
+    "retry": "Retry sync",
+    "cancel": "Cancel",
+    "confirm": "Confirm this version",
     "syncError_consent": "Cloud sync is paused until you accept the current terms and privacy policy. Your local data is unchanged.",
     "syncError_policy": "The terms or privacy policy have changed since this page was opened. Refresh to review the latest versions before consenting. Your local data is retained.",
     "syncError_invalid": "Cloud sync rejected this data and will not resend it unchanged. Check your operator progression or re-import your data. Your local copy is retained.",

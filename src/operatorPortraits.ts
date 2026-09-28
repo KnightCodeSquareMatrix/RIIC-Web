@@ -1,5 +1,6 @@
 import buildingSkillCatalogJson from "./generated/arkntools/building-skill-catalog.json" with { type: "json" };
 import operatorCatalogJson from "./generated/arkntools/operator-catalog.json" with { type: "json" };
+import sourceManifest from "./generated/arkntools/source.json" with { type: "json" };
 import { richTextPlainText } from "./components/skill-query/rich-text.ts";
 import { operatorProfessionPresentationForCode } from "./operator-presentation.ts";
 
@@ -114,9 +115,15 @@ const OPERATOR_NAME_ALIASES: Readonly<Record<string, string>> = {
 
 export const OPERATOR_CATALOG = operatorCatalogJson as OperatorAssetRecord[];
 
+const BUILDING_SKILL_VERSION = `${sourceManifest.version}-${sourceManifest.source.commit.slice(0, 12)}`;
+
 export const BUILDING_SKILL_CATALOG = Object.fromEntries(
   Object.entries(buildingSkillCatalogJson as Record<string, GeneratedBuildingSkillRecord>).map(
-    ([id, skill]) => [id, { ...skill, description: richTextPlainText(skill.descriptionRich) }],
+    ([id, skill]) => [id, {
+      ...skill,
+      icon: `${skill.icon}?v=${BUILDING_SKILL_VERSION}`,
+      description: richTextPlainText(skill.descriptionRich),
+    }],
   ),
 ) as Record<string, BuildingSkillRecord>;
 const OPERATOR_BY_ID = new Map(OPERATOR_CATALOG.map((operator) => [operator.id, operator]));

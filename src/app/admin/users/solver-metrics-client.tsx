@@ -1,4 +1,5 @@
 "use client";
+import { useAdminFetch } from "../admin-context";
 import { localize as localize_app_admin_users_solver_metrics_client } from "../../../i18n/helpers/app_admin_users_solver_metrics_client.ts";
 import { useTranslations, useLocale } from "next-intl";
 
@@ -68,6 +69,7 @@ function Metric({ label, value, detail, dataAttribute }: {
 }
 
 export function AdminSolverMetrics() {
+  const request = useAdminFetch();
   const intl = useTranslations();
   const locale = useLocale();
   const en = locale === "en";
@@ -82,7 +84,7 @@ export function AdminSolverMetrics() {
     requestRef.current = controller;
     setRefreshing(true);
     try {
-      const response = await fetch("/api/admin/solver-metrics", {
+      const response = await request("/api/admin/solver-metrics", {
         cache: "no-store",
         signal: controller.signal,
       });
@@ -100,7 +102,7 @@ export function AdminSolverMetrics() {
         setRefreshing(false);
       }
     }
-  }, [intl]);
+  }, [intl, request]);
 
   useEffect(() => {
     const refreshWhenVisible = () => {
@@ -124,7 +126,7 @@ export function AdminSolverMetrics() {
   const hasTrendData = metrics?.solver.trend.some((point) => point.completedCount > 0) ?? false;
 
   return (
-    <section id="solver-metrics" className="scroll-mt-24 overflow-hidden rounded-2xl border bg-card" data-admin-solver-metrics>
+    <section id="solver-metrics" className="scroll-mt-24 overflow-hidden rounded-xl border bg-card" data-admin-solver-metrics>
       <header className="flex flex-wrap items-start justify-between gap-4 border-b px-5 py-5 sm:px-6">
         <div>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">

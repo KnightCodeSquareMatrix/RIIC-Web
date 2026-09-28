@@ -89,7 +89,7 @@ function productForMaa(group: keyof MaaRooms, product: string | null | undefined
   const normalized = product.trim().toLocaleLowerCase("en-US");
   if (group === "trading") {
     if (["lmd", "gold", "pure gold", "龙门商法"].includes(normalized) || product === "LMD") return "LMD";
-    if (["oru", "orundum", "originium shard", "开采协力"].includes(normalized) || product === "Originium Shard") return "Originium Shard";
+    if (["oru", "orundum", "originium shard", "开采协力"].includes(normalized) || product === "Originium Shard") return "Orundum";
     return undefined;
   }
   if (group !== "manufacture") return undefined;

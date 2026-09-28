@@ -1,5 +1,6 @@
 "use client";
-import { localize as localize_app_admin_issues_issues_client } from "../../../i18n/helpers/app_admin_issues_issues_client.ts";
+import { useAdminRequest, useAdminHref } from "../admin-context";
+import { adminPageClass } from "../admin-page";
 import { useTranslations, useLocale } from "next-intl";
 import { messageRecord } from "@/i18n/translate";
 
@@ -43,7 +44,6 @@ import type {
   AdminPlanRunListData,
   AdminPlanRunRecordData,
   AdminReproductionData,
-  ApiResponse,
 } from "@/types";
 import { localizedOperatorName } from "@/i18n/game-data";
 import { useGameCatalog } from "@/i18n/game-data-client";
@@ -83,14 +83,6 @@ type DetailState = {
   reproduction: AdminReproductionData | null;
 };
 
-async function requestData<T>(url: string, init?: RequestInit, en = false): Promise<T> {
-  const response = await fetch(url, { cache: "no-store", ...init });
-  const body = await response.json() as ApiResponse<T>;
-  if (!response.ok || !body.success) {
-    throw new Error(body.success ? (localize_app_admin_issues_issues_client.text(en, "requestFailed")) : body.error.message);
-  }
-  return body.data;
-}
 
 function formatDate(value: string, en = false): string {
   return new Intl.DateTimeFormat((en ? "en-US" : "zh-CN"), {
@@ -327,6 +319,8 @@ function RunRow({
 }
 
 export function AdminIssues({ isAdmin = false }: { isAdmin?: boolean }) {
+  const requestData = useAdminRequest();
+  const adminHref = useAdminHref();
   const intl = useTranslations();
   const locale = useLocale();
   const en = locale === "en";
@@ -349,7 +343,7 @@ export function AdminIssues({ isAdmin = false }: { isAdmin?: boolean }) {
     const next = new URLSearchParams(searchParams);
     if (value && value !== "all") next.set(key, value); else next.delete(key);
     if (key !== "offset") next.delete("offset");
-    router.replace(`/admin/issues?${next}`, { scroll: false });
+    router.replace(adminHref(`/admin/issues?${next}`), { scroll: false });
   }
   const setFeedbackOffset = (value: number) => setFilter("offset", String(value));
   const setStatusFilter = (value: string) => setFilter("status", value);
@@ -392,7 +386,7 @@ export function AdminIssues({ isAdmin = false }: { isAdmin?: boolean }) {
     } finally {
       if (feedbackRequestRef.current === controller) setLoadingFeedback(false);
     }
-  }, [intl, en, facilityFilter, feedbackOffset, statusFilter, search, from, to, errorCode, solver]);
+  }, [intl, en, facilityFilter, feedbackOffset, statusFilter, search, from, to, errorCode, solver, requestData]);
 
   const loadRuns = useCallback(async () => {
     runRequestRef.current?.abort();
@@ -409,7 +403,7 @@ export function AdminIssues({ isAdmin = false }: { isAdmin?: boolean }) {
     } finally {
       if (runRequestRef.current === controller) setLoadingRuns(false);
     }
-  }, [intl, en, runOffset]);
+  }, [intl, en, runOffset, requestData]);
 
   useEffect(() => {
     void loadFeedback();
@@ -485,7 +479,7 @@ export function AdminIssues({ isAdmin = false }: { isAdmin?: boolean }) {
     try {
       const created = await requestData<{ id: string }[]>("/api/admin/quality", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "feedback", ids }) }, en);
       const drafts = created.map((draft) => draft.id);
-      router.push(`/admin/quality?${drafts.length === 1 ? `draft=${drafts[0]}` : `drafts=${drafts.join(",")}`}`);
+      router.push(adminHref(`/admin/quality?${drafts.length === 1 ? `draft=${drafts[0]}` : `drafts=${drafts.join(",")}`}`));
     } catch (error) { setError(error instanceof Error ? error.message : "Reproduction failed"); }
     finally { setBusyStatusId(null); }
   }
@@ -518,7 +512,7 @@ export function AdminIssues({ isAdmin = false }: { isAdmin?: boolean }) {
   const allVisibleSelected = visibleFeedback.length > 0 && visibleFeedback.every((item) => selected.has(item.id));
 
   return (
-    <main id="admin-content" className="mx-auto grid max-w-7xl gap-6 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+    <main id="admin-content" className={adminPageClass}>
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-[-0.012em]">{intl("app_admin_issues_issues_client.solverIssues")}</h1>
@@ -632,7 +626,7 @@ export function AdminIssues({ isAdmin = false }: { isAdmin?: boolean }) {
               })}
             </section>
           ))}
-          </div><aside className="grid gap-4 rounded-xl border bg-background p-4 lg:sticky lg:top-4" aria-label={en ? "Feedback detail" : "反馈详情"}>
+          </div><aside className="grid gap-4 rounded-xl border bg-background p-4 lg:sticky lg:top-20" aria-label={en ? "Feedback detail" : "反馈详情"}>
             {expanded?.startsWith("feedback:") && details[expanded] ? <>
               <div className="flex flex-wrap gap-2">{([-1, 1] as const).map((direction) => {
                 const index = visibleFeedback.findIndex((item) => `feedback:${item.id}` === expanded);
