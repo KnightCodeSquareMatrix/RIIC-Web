@@ -521,6 +521,12 @@ export function ManualSchedulePage({
       : current.length >= dormBatchCapacity ? current : [...current, operator]);
   }
 
+  function selectAllDormRestOperators() {
+    if (!dormRestOnly) return;
+    setDormBatchSelection(dormFilteredOperators.slice(0, dormBatchCapacity).map((operator) => operator.name));
+    setPickerPage(1);
+  }
+
   function moveDormBatchOperator(fromIndex: number, toIndex: number) {
     if (fromIndex === toIndex) return;
     setDormBatchSelection((current) => {
@@ -1182,6 +1188,15 @@ export function ManualSchedulePage({
                       需要休息
                     </Button>
                     {dormRestOnly ? <span className="text-xs text-muted-foreground">上一班上班、本班次未上班</span> : null}
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={!dormRestOnly || dormFilteredOperators.length === 0}
+                      onClick={selectAllDormRestOperators}
+                    >
+                      一键全选
+                    </Button>
                   </div>
                   <TooltipProvider delay={0} timeout={0}>
                     <div className="relative mt-2 grid grid-cols-[repeat(4,var(--manual-picker-portrait-size))] justify-between gap-x-2 gap-y-1 [--manual-picker-portrait-size:56px] min-[430px]:[--manual-picker-portrait-size:64px] sm:grid-cols-[repeat(8,var(--manual-picker-portrait-size))] min-[900px]:[--manual-picker-portrait-size:80px]">
