@@ -21,6 +21,8 @@ export interface RoomRow {
   positionSlots?: RoomPositionSlot[];
   autofill: boolean;
   efficiency?: RoomEfficiency;
+  /** Manual per-shift paper skill efficiency in percentage points. */
+  manualSkillEfficiencyPct?: number;
   efficiencyLabel?: string;
   rule: string;
   suspicious: boolean;

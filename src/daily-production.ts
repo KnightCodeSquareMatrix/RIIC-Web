@@ -1,3 +1,4 @@
+import { powerEfficiencyForShift } from "./drone-production-core.ts";
 import type {
   BaseBlueprint,
   BlueprintRoom,
@@ -142,23 +143,33 @@ function finalEfficiency(efficiency: RoomEfficiency | undefined): number | null 
   return finite(efficiency.final_efficiency) ? efficiency.final_efficiency : null;
 }
 
-function powerBonus(efficiency: RoomEfficiency | undefined): number | null {
-  const final = finalEfficiency(efficiency);
-  return final === null ? null : (final - 1) * 100;
-}
-
 function droneEquivalent(
   shift: RotationShift,
   powerRooms: BlueprintRoom[],
+  maaPowerRooms: MaaRoom[] | undefined,
   durationWeight: number
 ): number | null {
-  let bonusSum = 0;
-  for (const powerRoom of powerRooms) {
-    const bonus = powerBonus(roomLine(shift, powerRoom.id));
-    if (bonus === null) return null;
-    bonusSum += bonus;
+  const powerStations = powerRooms.map((room, index) => {
+    const efficiency = roomLine(shift, room.id);
+    const equivalentEfficiency = efficiency?.equivalent_efficiency;
+    if (!finite(equivalentEfficiency)) return null;
+    const operators = maaPowerRooms?.[index]?.operators ?? [];
+    return {
+      equivalentEfficiency,
+      working: operators.some((operator) => operator !== null)
+        && equivalentEfficiency > 0,
+    };
+  });
+  if (powerStations.some((station) => station === null)) {
+    let legacyBonusSum = 0;
+    for (const room of powerRooms) {
+      const final = finalEfficiency(roomLine(shift, room.id));
+      if (final === null) return null;
+      legacyBonusSum += (final - 1) * 100;
+    }
+    return ((1 + legacyBonusSum / 100) / 2) * durationWeight;
   }
-  return ((1 + bonusSum / 100) / 2) * durationWeight;
+  return powerEfficiencyForShift(powerStations.filter((station): station is NonNullable<typeof station> => station !== null)) / 2 * durationWeight;
 }
 
 function finalizedAmount(source: MutableAmount): DailyProductionAmount {
@@ -252,7 +263,7 @@ export function estimateDailyProduction({
 
     const drones = plan?.drones;
     if (!drones || drones.enable === false) return;
-    const equivalent = droneEquivalent(shift, powerRooms, durationWeight);
+    const equivalent = droneEquivalent(shift, powerRooms, plan?.rooms.power, durationWeight);
     if (equivalent === null) {
       if (drones.room === "trading") {
         const targetRoom = tradeRooms[drones.index - 1];

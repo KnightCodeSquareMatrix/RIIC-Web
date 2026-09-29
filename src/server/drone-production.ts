@@ -1,4 +1,5 @@
 import { droneStoragePlanIndex } from "../drone-plan-mapping.ts";
+import { droneProductionForShift as calculateDroneProductionForShift, powerEfficiencyForShift as calculatePowerEfficiencyForShift } from "../drone-production-core.ts";
 import type { BaseBlueprint, MaaJson, MaaPlan, MaaRoom, RotationJson, RotationShift } from "@/types";
 
 /** 每 1.0 生产效率、连续工作 24 小时的产出。 */
@@ -104,10 +105,7 @@ function positive(value: unknown): value is number {
 export function powerEfficiencyForShift(input: {
   powerStations: Array<{ equivalentEfficiency: number; working: boolean }>;
 }): number {
-  return 1 + input.powerStations.reduce(
-    (sum, station) => sum + (station.working ? 0.05 : 0) + (positive(station.equivalentEfficiency) ? station.equivalentEfficiency : 0),
-    0,
-  );
+  return calculatePowerEfficiencyForShift(input.powerStations);
 }
 
 /**
@@ -117,13 +115,7 @@ export function droneProductionForShift(input: {
   powerStations: Array<{ equivalentEfficiency: number; working: boolean }>;
   durationHours: number;
 }): DroneProduction {
-  const durationHours = positive(input.durationHours) ? input.durationHours : 0;
-  const powerEfficiency = powerEfficiencyForShift(input);
-  const drones = powerEfficiency / 6 * durationHours * 60;
-  return {
-    drones,
-    equivalentEfficiency: drones / 480,
-  };
+  return calculateDroneProductionForShift(input);
 }
 
 export function droneTradeOutputForEfficiency(
