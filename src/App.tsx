@@ -23,6 +23,7 @@ import { useAccountCloudWorkspace } from "account-cloud-workspace-bridge";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { FilingLinks } from "@/components/layout/FilingLinks";
 import { AppTopBar, SklandAccountControl } from "@/components/layout/AppTopBar";
+import { DotDistortionBackground } from "@/components/layout/DotDistortionBackground";
 import { AppMotionProvider } from "@/components/MotionProvider";
 import { PrimaryPageTransition } from "@/components/layout/PrimaryPageTransition";
 import { SetupDialogSkeleton } from "@/components/setup/SetupDialogSkeleton";
@@ -2408,7 +2409,8 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
         </Suspense>
       ) : null}
       <AppSidebar page={page} onPageChange={handleAppPageChange} showMower={userSettings.showMower} />
-      <SidebarInset>
+      <SidebarInset className="isolate">
+        <DotDistortionBackground />
         <AppTopBar />
         {agentArtifactNotice ? (
           <div className="flex flex-wrap items-center gap-3 border-b bg-[#FFD501]/15 px-4 py-2 text-sm" data-agent-artifact-banner>
