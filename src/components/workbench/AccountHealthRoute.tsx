@@ -1,9 +1,10 @@
 "use client";
+import { WorkbenchPageHeading } from "@/components/workbench/WorkbenchPageHeading";
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Activity, ArrowLeft, ClipboardCheck, PackageOpen, RefreshCw, UsersRound } from "lucide-react";
+import { Activity, ArrowLeft, ClipboardCheck, PackageOpen, RefreshCw, Settings2, UsersRound } from "lucide-react";
 import Link from "next/link";
-import { useLocale } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 
 import { getSklandInventory } from "@/api";
 import { extractAccountHealthInput } from "@/account-health-input";
@@ -11,7 +12,8 @@ import { loadHealthDemand, type HealthDemand } from "@/account-health-demand";
 import { buildHealthAdvice, holdsDurinGroup } from "@/account-health-advice";
 import { AccountHealthDemandSection } from "@/components/pages/AccountHealthDemandSection";
 import { AccountHealthReportSection } from "@/components/pages/AccountHealthReportSection";
-import { StatusCenterHeader, StatusCenterPage } from "@/components/pages/StatusCenterShell";
+import { InfraTechnicalCard, InfraTechnicalHeading } from "@/components/InfraTechnicalCard";
+import { SetupActionButton } from "@/components/setup/SetupActionButton";
 import { Button } from "@/components/ui/button";
 import { formatScaledAmount } from "@/resource-scale-display";
 import type { SklandInventoryData } from "@/types";
@@ -22,7 +24,7 @@ const fmt = (value: number) => value.toLocaleString("zh-CN");
 const ratio = (value: number | null) => value === null ? "—" : `${value.toFixed(2)} : 1`;
 const MANUAL_STORAGE_KEY = "aic-skland-inventory-manual-resources-v1";
 const GOLD_BAR_VALUE = 500;
-const MODULE_CARD = "min-w-0 rounded-[4px] border border-border bg-card p-4 sm:p-5";
+const MODULE_CARD = "min-w-0 rounded-[4px] border border-border bg-card p-3 md:p-6";
 
 export function AccountHealthRoute() {
   const { inventory } = useWorkbench();
@@ -31,8 +33,9 @@ export function AccountHealthRoute() {
 }
 
 function AccountHealthContent({ identityKey }: { identityKey: string }) {
-  const { account, healthOperators, skland } = useWorkbench();
+  const { account, healthOperators, skland, mastery } = useWorkbench();
   const en = useLocale() === "en";
+  const plannerText = useTranslations("components_pages_MasteryPlanner");
   const [inventory, setInventory] = useState<SklandInventoryData | null>(null);
   const [overrides, setOverrides] = useState<Record<string, number>>({});
   const [demand, setDemand] = useState<HealthDemand>();
@@ -100,22 +103,29 @@ function AccountHealthContent({ identityKey }: { identityKey: string }) {
   ), [en, healthOperators, input]);
   const adviceWan = (amount: number) => scaled(amount) ?? fmt(Math.round(amount));
 
-  return <StatusCenterPage data-account-health-page>
-    <StatusCenterHeader
-      identity={<div className="flex min-w-0 items-center gap-4"><div className="grid size-14 shrink-0 place-items-center rounded-md bg-primary/10 text-primary"><ClipboardCheck className="size-7" aria-hidden="true" /></div><div className="min-w-0"><h1 className="text-2xl font-semibold">{en ? "Account Health" : "账号体检"}</h1><p className="mt-1 text-sm text-muted-foreground">{en ? "Your resources and development profile" : "库存与培养习惯概览"}</p></div></div>}
-      actions={<Button nativeButton={false} variant="outline" className="h-11 w-full sm:w-auto" render={<Link href="/" />}><ArrowLeft />{en ? "Back to calculator" : "返回基建计算器"}</Button>}
-    />
+  return <section className="grid min-w-0 gap-3 pt-2 pb-8 md:gap-5 md:pt-5" aria-labelledby="account-health-heading" data-account-health-page>
+    <header className="flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <WorkbenchPageHeading page="account-health" id="account-health-heading">{en ? "Account Health" : "账号体检"}</WorkbenchPageHeading>
+        <p className="mt-1 text-xs leading-5 text-muted-foreground md:mt-2 md:text-sm">{en ? "Your resources and development profile" : "库存与培养习惯概览"}</p>
+      </div>
+      <SetupActionButton type="button" className="max-md:!h-11 max-md:w-11 max-md:!min-w-0 max-md:!px-0" variant="outline" onClick={mastery.onOpenSetup} disabled={mastery.pending} aria-label={plannerText("configureBox")} title={plannerText("configureBox")}>
+        <Settings2 className="size-4 md:hidden" aria-hidden="true" /><span className="max-md:hidden">{plannerText("configureBox")}</span>
+      </SetupActionButton>
+    </header>
 
-    <div className="grid gap-6 lg:grid-cols-2" data-account-health-input-status>
+    <div className="grid min-w-0 gap-3 md:gap-5 lg:grid-cols-2" data-account-health-input-status>
       <section className={MODULE_CARD} aria-labelledby="health-stock-heading">
-        <div className="flex items-center justify-between gap-3">
-          <h2 id="health-stock-heading" className="flex items-center gap-2 text-base font-semibold"><PackageOpen className="size-4" />{en ? "Resource snapshot" : "资源库存"}</h2>
-          <div className="flex min-w-0 items-center gap-2">
-            {stock ? <p className="truncate text-xs text-muted-foreground">{en ? "Skland" : "森空岛"} · {stock.fetchedAt ? new Date(stock.fetchedAt).toLocaleString(en ? "en-US" : "zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}{stock.manuallyOverriddenIds.length ? (en ? " · Manual entries" : " · 含手填") : ""}</p> : null}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 id="health-stock-heading" className="flex items-center gap-2 text-sm font-semibold"><PackageOpen className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />{en ? "Resource snapshot" : "资源库存"}</h2>
+            {stock ? <p className="mt-2 text-xs leading-5 text-muted-foreground">{en ? "Skland" : "森空岛"} · {stock.fetchedAt ? new Date(stock.fetchedAt).toLocaleString(en ? "en-US" : "zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}{stock.manuallyOverriddenIds.length ? (en ? " · Manual entries" : " · 含手填") : ""}</p> : null}
+          </div>
+          <div className="shrink-0">
             <Button size="icon" variant="ghost" aria-label={en ? "Refresh inventory" : "刷新库存"} title={en ? "Refresh inventory" : "刷新库存"} disabled={!hasSklandRole || loading} onClick={() => void loadInventory()}><RefreshCw className={loading ? "animate-spin" : ""} /></Button>
           </div>
         </div>
-        {stock ? <dl className="mt-4 grid grid-cols-2 gap-x-5 gap-y-4 text-sm sm:grid-cols-3">
+        {stock ? <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-5 border-t border-border pt-4 text-sm sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
           <Metric label={en ? "LMD" : "龙门币"} value={fmt(stock.lmd)} note={approx(stock.lmd)} />
           <Metric label={en ? "EXP" : "作战记录经验"} value={fmt(stock.experience)} note={approx(stock.experience)} />
           <Metric label={en ? "Gold bars" : "赤金"} value={fmt(stock.goldUnits)} note={approx(stock.goldUnits * GOLD_BAR_VALUE)} />
@@ -130,13 +140,13 @@ function AccountHealthContent({ identityKey }: { identityKey: string }) {
               : (en ? `EXP short ≈ ${gapText(gap.amount)}` : `缺经验 ≈ ${gapText(gap.amount)}`)
             : training?.representativeLmdToExperience != null ? (en ? "Balanced" : "钱书匹配") : "—"} emphasis={gap !== null} />
         </dl>
-          : <p className="mt-4 text-sm text-muted-foreground">{loading ? (en ? "Loading inventory…" : "正在读取库存…") : error ?? (en ? "Connect a Skland role to read inventory." : "绑定森空岛角色后可读取库存。")}</p>}
+          : <div className="mt-4 border-t border-border pt-4 text-sm leading-6 text-muted-foreground"><p role={error ? "alert" : "status"}>{loading ? (en ? "Loading inventory…" : "正在读取库存…") : error ?? (en ? "Connect a Skland role to read inventory." : "绑定森空岛角色后可读取库存。")}</p></div>}
       </section>
 
       <section className={MODULE_CARD} aria-labelledby="health-training-heading">
-        <h2 id="health-training-heading" className="flex items-center gap-2 text-base font-semibold"><UsersRound className="size-4" />{en ? "Development profile" : "培养画像"}</h2>
-        {training ? <><p className="mt-4 text-sm text-muted-foreground">{source} · {en ? `${e2} E2 operators, ${modules} modules opened` : `精二 ${e2} 人，已开启模组 ${modules} 个`}</p>
-          <dl className="mt-4 grid grid-cols-2 gap-4 text-sm"><Metric label={en ? "Including modules" : "含模组钱书比"} value={ratio(training.representativeLmdToExperience)} emphasis={training.representativeLmdToExperience != null} /><Metric label={en ? "Level cost LMD / EXP" : "等级消耗钱书比"} value={ratio(training.levelOnlyLmdToExperience)} /></dl>
+        <h2 id="health-training-heading" className="flex items-center gap-2 text-sm font-semibold"><UsersRound className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />{en ? "Development profile" : "培养画像"}</h2>
+        {training ? <><p className="mt-2 text-xs leading-5 text-muted-foreground">{source} · {en ? `${e2} E2 operators, ${modules} modules opened` : `精二 ${e2} 人，已开启模组 ${modules} 个`}</p>
+          <dl className="mt-4 grid grid-cols-2 gap-4 border-t border-border pt-4 text-sm"><Metric label={en ? "Including modules" : "含模组钱书比"} value={ratio(training.representativeLmdToExperience)} emphasis={training.representativeLmdToExperience != null} /><Metric label={en ? "Level cost LMD / EXP" : "等级消耗钱书比"} value={ratio(training.levelOnlyLmdToExperience)} /></dl>
           <p className="mt-4 text-xs text-muted-foreground">{!training.usableForPersonalAssessment ? (en ? "Sample data is excluded from personal ratios." : "示例干员池不用于个人需求比。") : e2 < 3 ? (en ? "At least 3 E2 operators are needed for a ratio." : "需要至少 3 名精二干员才能估算需求比。") : !training.moduleDataComplete ? (en ? "Module data is incomplete; the module ratio is unavailable." : "模组数据不完整，暂不计算含模组比例。") : (en ? "Learned from every promoted operator's actual cost." : "按全部精二干员的实际消耗逐人累计。")}</p>
         </> : <p className="mt-4 text-sm text-muted-foreground">{en ? "Import an operator Box or sync Skland to view your development profile." : "导入干员 Box 或同步森空岛后可查看培养画像。"}</p>}
       </section>
@@ -145,12 +155,16 @@ function AccountHealthContent({ identityKey }: { identityKey: string }) {
     <AccountHealthReportSection en={en} authenticated={account.authenticated} onRecordChange={setReport} />
     <AccountHealthDemandSection identityKey={identityKey} en={en} onChange={setDemand} />
 
-    <section className={MODULE_CARD} aria-labelledby="health-advice-heading" data-health-advice>
-      <h2 id="health-advice-heading" className="flex items-center gap-2 text-base font-semibold"><Activity className="size-4" />{en ? "Diagnosis and advice" : "诊断与建议"}</h2>
-      {advice.summary ? <p className="mt-3 text-sm font-medium">{advice.summary}</p> : null}
-      {advice.stock ? <div className="mt-4">
-        <h3 className="text-sm font-semibold">{en ? "Stock" : "库存情况"}</h3>
-        <ul className="mt-2 grid gap-1.5 text-sm text-muted-foreground">
+    <section className="grid min-w-0 gap-3 md:gap-4" aria-labelledby="health-advice-heading" data-health-advice>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 id="health-advice-heading" className="text-base font-semibold">{en ? "Diagnosis and advice" : "诊断与建议"}</h2>
+        <SetupActionButton nativeButton={false} variant="outline" className="max-md:!min-w-0 max-md:!px-3" render={<Link href="/" />}><ArrowLeft aria-hidden="true" />{en ? "Back to calculator" : "返回基建计算器"}</SetupActionButton>
+      </div>
+      <InfraTechnicalCard group="control" showEmblem={false} className="min-w-0 p-4 md:p-6" dataSlot="account-health-advice-card">
+      {advice.summary ? <p className="text-base font-medium leading-7 text-white/95">{advice.summary}</p> : null}
+      {advice.stock ? <div className="mt-4 border-t border-white/10 pt-4">
+        <InfraTechnicalHeading icon={<PackageOpen className="size-4" aria-hidden="true" />}>{en ? "Stock" : "库存情况"}</InfraTechnicalHeading>
+        <ul className="mt-3 grid gap-2 text-sm leading-6 text-white/70">
           <li>{en ? `LMD ${fmt(advice.stock.lmd)} · EXP ${fmt(advice.stock.experience)} · gold ${fmt(advice.stock.goldUnits)} bars` : `龙门币 ${fmt(advice.stock.lmd)} · 作战记录 ${fmt(advice.stock.experience)} · 赤金 ${fmt(advice.stock.goldUnits)} 根`}</li>
           {advice.stock.demandRatio !== null && (advice.stock.lmdShort !== null || advice.stock.expShort !== null)
             ? <li>{en
@@ -188,9 +202,9 @@ function AccountHealthContent({ identityKey }: { identityKey: string }) {
             : null}
         </ul>
       </div> : null}
-      {advice.production ? <div className="mt-4">
-        <h3 className="text-sm font-semibold">{en ? "Daily output" : "日产出"}</h3>
-        <ul className="mt-2 grid gap-1.5 text-sm text-muted-foreground">
+      {advice.production ? <div className="mt-4 border-t border-white/10 pt-4">
+        <InfraTechnicalHeading icon={<Activity className="size-4" aria-hidden="true" />}>{en ? "Daily output" : "日产出"}</InfraTechnicalHeading>
+        <ul className="mt-3 grid gap-2 text-sm leading-6 text-white/70">
           {advice.production.grade && (advice.production.capacityIndex ?? advice.production.lmdExpSum) !== null
             ? <li>{en
               ? `${advice.production.degraded ? "LMD+EXP sum (degraded, no gold data)" : "Capacity index"} ${adviceWan(advice.production.capacityIndex ?? advice.production.lmdExpSum!)} — ${advice.production.grade === "fail" ? "below par" : advice.production.grade === "pass" ? "adequate" : advice.production.grade}.`
@@ -222,30 +236,31 @@ function AccountHealthContent({ identityKey }: { identityKey: string }) {
             : null}
         </ul>
       </div> : null}
-      {advice.recommendation ? <div className="mt-4">
-        <h3 className="text-sm font-semibold">{en ? "Recommendation" : "推荐建议"}</h3>
-        <p className="mt-2 text-sm text-foreground">{advice.recommendation.headline}</p>
-        <ul className="mt-1.5 grid gap-1.5 text-sm text-muted-foreground">
+      {advice.recommendation ? <div className="mt-4 border-t border-white/10 pt-4">
+        <InfraTechnicalHeading icon={<ClipboardCheck className="size-4" aria-hidden="true" />}>{en ? "Recommendation" : "推荐建议"}</InfraTechnicalHeading>
+        <p className="mt-3 text-sm font-medium leading-6 text-white/95">{advice.recommendation.headline}</p>
+        <ul className="mt-2 grid gap-2 text-sm leading-6 text-white/70">
           {advice.recommendation.lines.map((line) => <li key={line}>{line}</li>)}
           <li>{en ? "Shifts: " : "换班方式："}{advice.recommendation.shifts.join(en ? " " : "；")}</li>
         </ul>
       </div> : null}
-      {advice.notes.length ? <ul className="mt-4 grid gap-1.5 text-sm text-muted-foreground">
+      {advice.notes.length ? <ul className="mt-4 grid gap-2 text-xs leading-5 text-white/60">
         {advice.notes.map((note) => <li key={note}>{note}</li>)}
       </ul> : null}
-      <details className="mt-4 text-xs text-muted-foreground">
-        <summary className="cursor-pointer select-none">{en ? "Capacity calculation rules" : "产能计算规则"}</summary>
-        <div className="mt-2 grid gap-1">
+      <details className="mt-4 border-t border-white/10 pt-1 text-xs leading-5 text-white/60 md:pt-4">
+        <summary className="min-h-11 cursor-pointer content-center select-none outline-none focus-visible:ring-2 focus-visible:ring-[#FFD800] md:min-h-0">{en ? "Capacity calculation rules" : "产能计算规则"}</summary>
+        <div className="mt-2 grid gap-2">
           <p>{en ? "Capacity index = trade × 0.5 + gold × 0.8 + EXP × 1 + orundum × 66.67 + 4000; graded below 90K / 90–100K / 100–110K / 110K+." : "产能指数 ＝ 贸易×0.5 ＋ 赤金×0.8 ＋ 经验×1 ＋ 合成玉×66.67 ＋ 4000；分档：低于 9 万不及格、9~10 万合格、10~11 万良好、11 万以上优秀。"}</p>
           <p>{en ? "Without gold data, degraded grading uses LMD+EXP sum: below 70K / 70–80K / 80–95K / 95K+." : "缺贵金属数据时按钱书和 ＝ 贸易＋经验 降级判读：低于 7 万不及格、7~8 万及格、8~9.5 万良好、9.5 万以上优秀。"}</p>
           <p>{en ? "Offline daily income ≈ 30K LMD + 30K EXP; six-star cost ratios run 1.20–1.29 level-only and 1.47–1.80 with modules." : "基建外每日常驻约 3 万龙门币＋3 万经验；六星练度钱书需求比纯等级约 1.20~1.29、带模组约 1.47~1.80。"}</p>
           <p>{en ? "Sources: knowledge base skill-8 output diagnosis, LMD/EXP value ratios, layout selection, orundum grinding." : "规则出处：知识库《skill-8 产出数值诊断》《钱书价值与价值比例》《布局选择》《搓玉》。"}</p>
         </div>
       </details>
+      </InfraTechnicalCard>
     </section>
-  </StatusCenterPage>;
+  </section>;
 }
 
 function Metric({ label, value, note, emphasis }: { label: string; value: string; note?: ReactNode; emphasis?: boolean }) {
-  return <div className="min-w-0"><dt className="text-muted-foreground">{label}</dt><dd className={`mt-1 flex flex-wrap items-baseline gap-x-1.5 font-number text-lg tabular-nums${emphasis ? " font-bold text-destructive" : ""}`}><span>{value}</span>{note ? <span className="text-sm font-normal text-muted-foreground">{note}</span> : null}</dd></div>;
+  return <div className="min-w-0"><dt className="text-xs leading-5 text-muted-foreground">{label}</dt><dd className={`mt-1 flex flex-wrap items-baseline gap-x-1.5 font-number text-lg leading-7 tabular-nums md:text-xl${emphasis ? " font-semibold" : ""}`}><span className="break-words">{value}</span>{note ? <span className="text-xs font-normal text-muted-foreground">{note}</span> : null}</dd></div>;
 }

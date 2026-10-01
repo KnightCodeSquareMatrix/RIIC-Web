@@ -369,6 +369,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     loading: boolean;
     completed: boolean;
     error: DisplayError | null;
+    maa?: MaaJson;
   }>({
     active: false,
     loading: false,
@@ -1253,7 +1254,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       setOperbox(normalizedTrialOperbox);
       setFileName(intl("App.progressionAdjustedBox"));
       setInputMode("manual");
-      setProgressionAdjustmentActivity({ active: true, loading: false, completed: true, error: null });
+      setProgressionAdjustmentActivity({ active: true, loading: false, completed: true, error: null, maa: response.maa });
       trackTelemetry({ type: "interaction", name: "upgrade_simulation_response", page: "calculator" });
       return response;
     } catch (error) {
@@ -2122,6 +2123,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       ? progressionAdjustmentPollError ?? progressionAdjustmentActivity.error
       : statusError,
     completed: progressionAdjustmentActivity.active ? progressionAdjustmentActivity.completed : planTask.status === "done",
+    completedMaa: progressionAdjustmentActivity.active ? progressionAdjustmentActivity.maa : planTask.result?.maa,
     kind: progressionAdjustmentActivity.active ? "progression-adjustment" : "schedule",
     queued: progressionAdjustmentActivity.active
       ? progressionAdjustmentActivity.loading && (
@@ -2402,7 +2404,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
         if (event.key === "Escape" && websiteAuthDialogOpen) handleWebsiteAuthDialogOpenChange(false);
       }}
     >
-    <SidebarProvider defaultOpen defaultOpenBreakpoint={1280}>
+    <SidebarProvider defaultOpen defaultOpenBreakpoint={1280} style={{ "--sidebar-width": "14rem", "--sidebar-width-icon": "3.25rem" } as React.CSSProperties}>
       {trainingSyncLoaded || page === "training" ? (
         <Suspense fallback={null}>
           <SklandTrainingSyncBridge options={sklandTrainingSyncOptions} onChange={setTrainingSyncSnapshot} />
@@ -2485,7 +2487,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       </WorkbenchContext.Provider>
       </div>
 
-      <footer className="app-content-track workbench-footer mt-auto flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border/70 py-5 text-xs text-muted-foreground">
+      {page !== "agent" ? <footer className="app-content-track workbench-footer mt-auto flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border/70 py-5 text-xs text-muted-foreground">
         <div className="w-full md:w-auto max-md:[&>div]:h-12 max-md:[&_button]:h-11 max-md:[&_button]:min-w-12 max-md:[&_span]:h-11"><LanguageSwitch /></div>
         <div className="flex w-full flex-wrap items-center gap-x-4 md:contents">
         <Link prefetch={false} className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/help" data-help-link>{intl("App.help")}</Link>
@@ -2517,7 +2519,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
             {locale === "en" ? null : <span className="block leading-none">提供云计算服务</span>}
           </a>
         </div>
-      </footer>
+      </footer> : null}
 
       {CLIENT_ACCOUNT_CLOUD_SYNC_ENABLED ? accountCloudWorkspace.syncElement : null}
       {hasRestoredSession ? <Suspense fallback={null}>

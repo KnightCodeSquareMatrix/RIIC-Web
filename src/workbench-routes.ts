@@ -1,4 +1,4 @@
-export type AppPage = "calculator" | "manual" | "mower" | "training" | "mastery" | "recruitment" | "inventory" | "skill-query" | "skland" | "account" | "account-health" | "settings";
+export type AppPage = "calculator" | "manual" | "mower" | "training" | "mastery" | "recruitment" | "inventory" | "skill-query" | "skland" | "account" | "account-health" | "settings" | "billing" | "agent";
 
 export const WORKBENCH_PAGE_PATHS: Record<AppPage, string> = {
   calculator: "/",
@@ -11,6 +11,8 @@ export const WORKBENCH_PAGE_PATHS: Record<AppPage, string> = {
   "skill-query": "/skills",
   skland: "/skland",
   account: "/account",
+  billing: "/billing",
+  agent: "/agent",
   "account-health": "/account-health",
   settings: "/settings",
 };
@@ -25,6 +27,8 @@ export function workbenchPageFromPathname(pathname: string): AppPage {
   if (pathname === WORKBENCH_PAGE_PATHS["skill-query"]) return "skill-query";
   if (pathname === WORKBENCH_PAGE_PATHS.skland) return "skland";
   if (pathname === WORKBENCH_PAGE_PATHS.account) return "account";
+  if (pathname === WORKBENCH_PAGE_PATHS.billing) return "billing";
+  if (pathname === WORKBENCH_PAGE_PATHS.agent) return "agent";
   if (pathname === WORKBENCH_PAGE_PATHS["account-health"]) return "account-health";
   if (pathname === WORKBENCH_PAGE_PATHS.settings) return "settings";
   return "calculator";

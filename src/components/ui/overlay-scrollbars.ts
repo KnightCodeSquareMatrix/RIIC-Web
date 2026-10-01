@@ -33,7 +33,10 @@ export function observeScrollbars(create: typeof OverlayScrollbars) {
   }
 
   function enhance(element: HTMLElement) {
-    if (!element.isConnected || isTouchViewport() || instances.has(element)) return;
+    const slotId = element.dataset.yeyeScrollSlot;
+    if (!element.isConnected || (isTouchViewport() && !slotId) || instances.has(element)) return;
+    const slot = slotId ? document.getElementById(slotId) : null;
+    if (slotId && !slot) return;
     const mode = element.dataset.yeyeScroll;
     if (mode === undefined) return;
     const styles = getComputedStyle(element);
@@ -46,6 +49,7 @@ export function observeScrollbars(create: typeof OverlayScrollbars) {
       const instance = create({
         target: element,
         elements: { viewport: element },
+        ...(slot ? { scrollbars: { slot }, cancel: { nativeScrollbarsOverlaid: false } } : {}),
       }, scrollbarOptions(direction));
       const { scrollbarHorizontal, scrollbarVertical } = instance.elements();
       for (const { scrollbar } of [scrollbarHorizontal, scrollbarVertical]) {
@@ -62,6 +66,14 @@ export function observeScrollbars(create: typeof OverlayScrollbars) {
   function collect(node: Element) {
     if (node instanceof HTMLElement && node.matches(selector)) pending.add(node);
     node.querySelectorAll<HTMLElement>(selector).forEach(element => pending.add(element));
+    // A portal slot can mount after its viewport. Retry only the matching surface.
+    const slots = [...node.querySelectorAll<HTMLElement>("[data-yeye-scroll-slot-host]")];
+    if (node instanceof HTMLElement && node.hasAttribute("data-yeye-scroll-slot-host")) slots.push(node);
+    for (const slot of slots) {
+      document.querySelectorAll<HTMLElement>(selector).forEach(element => {
+        if (element.dataset.yeyeScrollSlot === slot.id) pending.add(element);
+      });
+    }
   }
 
   function flush() {
@@ -104,7 +116,7 @@ export function observeScrollbars(create: typeof OverlayScrollbars) {
   narrow.addEventListener("change", refresh);
   observer.observe(document.body, {
     subtree: true, childList: true, attributes: true,
-    attributeFilter: ["data-yeye-scroll", "class"],
+    attributeFilter: ["data-yeye-scroll", "data-yeye-scroll-slot", "class"],
   });
   collect(document.body);
   flush();

@@ -1,0 +1,17 @@
+"use client";
+
+import { useEffect, useId, useState, type ComponentProps } from "react";
+import { createPortal } from "react-dom";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import styles from "./beautiful/Dialogue.module.css";
+
+/** Keep the conversation viewport intact while its shared scrollbar sits at the window edge. */
+export function AgentConversationScrollArea(props: ComponentProps<typeof ScrollArea>) {
+  const slotId = useId();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+  return <>
+    <ScrollArea {...props} scrollbarSlotId={slotId} />
+    {mounted ? createPortal(<div id={slotId} className={styles.pageScrollbar} data-yeye-scroll-slot-host data-agent-page-scrollbar aria-hidden="true" />, document.body) : null}
+  </>;
+}

@@ -1,4 +1,5 @@
 "use client";
+import { WorkbenchPageHeading } from "@/components/workbench/WorkbenchPageHeading";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Calculator, PackageOpen, RefreshCw, Search } from "lucide-react";
@@ -47,6 +48,7 @@ function InventoryContent({ identityKey }: { identityKey: string }) {
   const [error, setError] = useState<DisplayError | null>(null);
   const [loading, setLoading] = useState(true);
   const [manualCounts, setManualCounts] = useState<Record<string, string>>({});
+  const [manualSaveState, setManualSaveState] = useState<"idle" | "saved" | "error">("idle");
   const [targetRarity, setTargetRarity] = useState(6);
   const [targetElite, setTargetElite] = useState(2);
   const [targetLevel, setTargetLevel] = useState(60);
@@ -77,6 +79,7 @@ function InventoryContent({ identityKey }: { identityKey: string }) {
         if (typeof value === "string" && /^\d*$/.test(value)) next[id] = value;
       }
       setManualCounts(next);
+      setManualSaveState(Object.keys(next).length > 0 ? "saved" : "idle");
     } catch {
       setManualCounts({});
     }
@@ -84,11 +87,14 @@ function InventoryContent({ identityKey }: { identityKey: string }) {
 
   const setManualCount = (id: string, value: string) => {
     const normalized = value.replace(/\D/g, "").slice(0, 12);
-    setManualCounts((current) => {
-      const next = { ...current, [id]: normalized };
-      try { window.localStorage.setItem(storageKey, JSON.stringify(next)); } catch { /* keep session value */ }
-      return next;
-    });
+    const next = { ...manualCounts, [id]: normalized };
+    setManualCounts(next);
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify(next));
+      setManualSaveState("saved");
+    } catch {
+      setManualSaveState("error");
+    }
   };
 
   const items = useMemo(() => {
@@ -154,7 +160,7 @@ function InventoryContent({ identityKey }: { identityKey: string }) {
       <div className="flex w-full min-w-0 flex-col gap-5 pb-8 pt-5">
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <h1 className="flex items-center gap-2.5 text-lg font-semibold"><span className="h-6 w-1.5 bg-[#FFD501]" aria-hidden="true" />{locale === "en" ? "Inventory" : "查看库存"}</h1>
+            <WorkbenchPageHeading page="inventory">{locale === "en" ? "Inventory" : "查看库存"}</WorkbenchPageHeading>
             <span className="whitespace-nowrap text-sm text-muted-foreground">共 {items.length} 项</span>
           </div>
           <div className="flex items-center gap-2">
@@ -172,6 +178,13 @@ function InventoryContent({ identityKey }: { identityKey: string }) {
             <div className="mt-5 grid gap-6">
               <div className="min-w-0">
               <h3 className="mb-3 border-b border-border pb-3 text-lg font-semibold">抽卡资源</h3>
+              <p role="status" className={`mb-3 text-xs leading-5 ${manualSaveState === "error" ? "text-destructive" : "text-muted-foreground"}`}>
+                {manualSaveState === "error"
+                  ? (locale === "en" ? "Could not save to this browser. Your edits are available on this page only; allow browser storage and edit again to retry." : "浏览器保存失败，修改仅在当前页面有效；请允许浏览器存储后重新填写。")
+                  : manualSaveState === "saved"
+                    ? (locale === "en" ? "Manual amounts saved to this browser for the current account and character. They remain after a refresh." : "手填数量已保存到此浏览器，按当前账号和角色分别保留，刷新后仍有效。")
+                    : (locale === "en" ? "Manual amounts are automatically saved to this browser for each account and character." : "手填数量会自动保存到此浏览器，按账号和角色分别保留。")}
+              </p>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                 {commonItems.map((item) => {
                   const catalogItem = catalog[item.id];
