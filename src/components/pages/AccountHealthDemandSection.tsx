@@ -4,6 +4,7 @@ import { ClipboardList } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { loadHealthDemand, persistHealthDemand, type HealthDemand, type HealthDemandField } from "@/account-health-demand";
+import { Combobox, ComboboxContent, ComboboxInput, ComboboxItem, ComboboxList } from "@/components/ui/combobox";
 
 type Choice = { value: string; zh: string; en: string };
 type Field = { key: HealthDemandField; zh: string; en: string; choices: Choice[] };
@@ -54,26 +55,40 @@ export function AccountHealthDemandSection({ identityKey, en, hidden = false, on
 
   if (hidden) return null;
   return (
-    <section aria-labelledby="account-health-demand-title" data-account-health-demand className="min-w-0 rounded-[4px] border border-border bg-card p-4 sm:p-5">
-        <h2 id="account-health-demand-title" className="flex items-center gap-2 text-base font-semibold"><ClipboardList className="size-4" aria-hidden="true" />{en ? "Infrastructure usage preferences" : "基建使用偏好"}</h2>
-        <p className="mt-2 text-xs text-muted-foreground">{en ? "Only settled choices belong here; unset items fall back to neutral defaults and do not affect other answers." : "每项只保留已定的选择；尚未决定的项保持未设置即可，按中性默认处理，不影响其他判断。"}</p>
-        <div className="mt-5 grid gap-x-6 gap-y-5 sm:grid-cols-2 xl:grid-cols-3">
-          {FIELDS.map((field) => (
+    <section aria-labelledby="account-health-demand-title" data-account-health-demand className="min-w-0 rounded-[4px] border border-border bg-card p-3 md:p-6">
+        <h2 id="account-health-demand-title" className="flex items-center gap-2 text-sm font-semibold"><ClipboardList className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />{en ? "Infrastructure usage preferences" : "基建使用偏好"}</h2>
+        <p className="mt-2 text-xs leading-5 text-muted-foreground">{en ? "Only settled choices belong here; unset items fall back to neutral defaults and do not affect other answers." : "每项只保留已定的选择；尚未决定的项保持未设置即可，按中性默认处理，不影响其他判断。"}</p>
+        <div className="mt-4 grid gap-4 border-t border-border pt-4 sm:grid-cols-2 md:gap-x-6 md:gap-y-5 xl:grid-cols-3">
+          {FIELDS.map((field) => {
+            const options = [
+              { value: "", label: en ? "Not specified" : "未设置" },
+              ...field.choices.map((choice) => ({ value: choice.value, label: en ? choice.en : choice.zh })),
+            ];
+            const selected = options.find((option) => option.value === (demand[field.key] ?? "")) ?? options[0];
+            return (
             <div key={field.key} className="grid min-w-0 gap-2">
-              <label htmlFor={`health-demand-${field.key}`} className="text-sm font-medium text-foreground">
+              <label htmlFor={`health-demand-${field.key}`} className="text-xs text-muted-foreground">
                 {en ? field.en : field.zh}
               </label>
-              <select
-                id={`health-demand-${field.key}`}
-                value={demand[field.key] ?? ""}
-                onChange={(event) => update(field.key, event.target.value)}
-                className="h-10 w-full min-w-0 rounded-sm border border-border bg-background px-3 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              <Combobox
+                items={options}
+                filteredItems={options}
+                value={selected}
+                inputValue={selected.label}
+                itemToStringValue={(option) => option.label}
+                isItemEqualToValue={(option, current) => option.value === current.value}
+                onValueChange={(option) => { if (option) update(field.key, option.value); }}
               >
-                <option value="">{en ? "Not specified" : "未设置"}</option>
-                {field.choices.map((choice) => <option key={choice.value} value={choice.value}>{en ? choice.en : choice.zh}</option>)}
-              </select>
+                <ComboboxInput id={`health-demand-${field.key}`} readOnly className="h-11 w-full min-w-0 md:h-9" />
+                <ComboboxContent align="start">
+                  <ComboboxList>
+                    {(option) => <ComboboxItem key={option.value} value={option}>{option.label}</ComboboxItem>}
+                  </ComboboxList>
+                </ComboboxContent>
+              </Combobox>
             </div>
-          ))}
+            );
+          })}
         </div>
     </section>
   );

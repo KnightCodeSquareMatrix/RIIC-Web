@@ -1,6 +1,14 @@
 "use client";
+import { WorkbenchPageHeading } from "@/components/workbench/WorkbenchPageHeading";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ComponentProps } from "react";
+import { useLocale } from "next-intl";
+import Link from "next/link";
+import { ArrowUpRight, ChevronDown } from "lucide-react";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import dialogueStyles from "@/components/agent/beautiful/Dialogue.module.css";
+import styles from "./BillingPrototype.module.css";
 
 type Product = { id: string; name: string; amountFen: number; points: number; badge?: string; description: string; kind: string; checkoutConfigured: boolean };
 type BillingData = {
@@ -24,6 +32,31 @@ function orderStatus(status: string): { label: string; className: string } {
   return { label: "未付款 · 待支付", className: "text-amber-600" };
 }
 
+function BillingCard({ children, className = "", glass = false, ...props }: ComponentProps<"section"> & { glass?: boolean }) {
+  return <section className={`${styles.card} ${className}`} data-billing-card {...props}>
+    {glass ? <span aria-hidden="true" className={dialogueStyles.decoration} /> : null}
+    {children}
+  </section>;
+}
+
+function money(fen: number) {
+  return `￥${(fen / 100).toLocaleString("zh-CN", { minimumFractionDigits: fen % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
+}
+
+const toolLabels: Record<string, string> = {
+  agent_chat: "助理对话", solve_schedule: "基建排班", diagnose_account: "账号诊断",
+  analyze_stock_and_training: "库存与培养分析", analyze_daily_production: "日产出分析",
+  diagnose_account_health: "账号体检", query_skills: "基建技能查询",
+};
+const ledgerLabels: Record<string, string> = {
+  topup: "充值到账", monthly_grant: "月卡到账", cdk_issue: "赠送兑换码",
+  cdk_redeem: "兑换码到账", tool_charge: "工具扣费", token_settlement: "对话用量结算",
+};
+const usageStatusLabels: Record<string, string> = {
+  reserved: "待结算", completed: "已结算", completed_unsettled: "待补充积分",
+  pending: "处理中", failed: "未完成",
+};
+
 async function readBilling(): Promise<BillingData> {
   const response = await fetch("/api/billing", { credentials: "same-origin", cache: "no-store" });
   const payload = await response.json() as { data?: BillingData; error?: { message?: string } };
@@ -32,6 +65,9 @@ async function readBilling(): Promise<BillingData> {
 }
 
 export function BillingPrototype() {
+  const locale = useLocale();
+  const containerClass = `${styles.page} grid min-w-0 w-full content-start gap-4 pt-2 pb-8 md:gap-6 md:pt-5`;
+  const heading = <WorkbenchPageHeading page="billing">{locale === "en" ? "Payment plans" : "付费计划"}</WorkbenchPageHeading>;
   const [data, setData] = useState<BillingData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -81,7 +117,7 @@ export function BillingPrototype() {
       const payload = await response.json() as { data?: { paymentUrl?: string; customOrderId?: string }; error?: { message?: string } };
       if (!response.ok || !payload.data) throw new Error(payload.error?.message ?? "订单创建失败。");
       if (payload.data.paymentUrl) window.open(payload.data.paymentUrl, "_blank", "noopener,noreferrer");
-      setNotice(`订单 ${payload.data.customOrderId ?? ""} 已创建。完成爱发电支付后，等待回调即可；当前页面提供本地模拟到账按钮。`);
+      setNotice("订单已创建。请在爱发电完成支付，积分将自动到账。");
       await reload();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "订单创建失败。");
@@ -126,47 +162,108 @@ export function BillingPrototype() {
   };
 
   if (error && !data) {
-    return <main className="mx-auto grid min-h-dvh w-full max-w-4xl content-start gap-4 px-4 py-10"><h1 className="text-2xl font-medium">Agent 积分与用量</h1><div className="rounded-xl border border-destructive/40 bg-destructive/5 p-4 text-sm"><p>{error}</p><a className="mt-3 inline-block underline underline-offset-4" href="/">返回首页登录</a></div></main>;
+    return <section className={containerClass}>{heading}<div role="alert" className="rounded-xl border border-destructive/40 bg-destructive/5 p-4 text-sm"><p>{error}</p><Link className={buttonVariants({ variant: "outline", className: `${styles.pill} mt-3` })} href="/account">前往账号管理登录</Link></div></section>;
   }
-  if (!data) return <main className="mx-auto grid min-h-dvh w-full max-w-4xl place-items-center px-4 py-10 text-sm text-muted-foreground">正在加载积分账户……</main>;
+  if (!data) return <section className={containerClass}>{heading}<p role="status" className="py-8 text-center text-sm text-muted-foreground">正在加载积分账户……</p></section>;
 
   return (
-    <main className="mx-auto grid min-h-dvh w-full max-w-4xl content-start gap-5 px-4 py-8" data-billing-prototype>
+    <section className={containerClass} data-billing-prototype>
       <header className="flex flex-wrap items-end justify-between gap-3">
-        <div><p className="text-xs text-muted-foreground">可露希尔助理</p><h1 className="text-2xl font-medium">积分与用量</h1><p className="mt-1 text-sm text-muted-foreground">求解工具每次 1 积分 · 纯对话按 Token 实际用量计费 · 金额统一为人民币</p></div>
-        <a className="text-sm underline underline-offset-4" href="/agent">返回 Agent</a>
+        <div>{heading}<p className="mt-2 text-sm text-muted-foreground">求解工具每次 1 积分 · 纯对话按 Token 实际用量计费 · 金额统一为人民币</p></div>
+        <Link className={buttonVariants({ variant: "outline", className: styles.pill })} href="/agent">返回助理<ArrowUpRight className="size-3.5" /></Link>
       </header>
 
-      {notice ? <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300">{notice}</div> : null}
-      {error ? <div className="rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">{error}</div> : null}
+      {notice ? <div role="status" className="rounded-xl bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-300">{notice}</div> : null}
+      {error ? <div role="alert" className="rounded-xl bg-destructive/5 px-4 py-3 text-sm text-destructive">{error}</div> : null}
 
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-xl border bg-card p-4"><p className="text-xs text-muted-foreground">可用积分</p><p className="mt-1 font-number text-3xl">{data.wallet.totalPoints}</p></div>
-        <div className="rounded-xl border bg-card p-4"><p className="text-xs text-muted-foreground">永久积分</p><p className="mt-1 font-number text-2xl">{data.wallet.paidPoints}</p></div>
-        <div className="rounded-xl border bg-card p-4"><p className="text-xs text-muted-foreground">月卡积分</p><p className="mt-1 font-number text-2xl">{data.wallet.monthlyPoints}</p><p className="mt-1 text-xs text-muted-foreground">{data.wallet.monthlyExpiresAt ? `到期 ${new Date(data.wallet.monthlyExpiresAt).toLocaleDateString("zh-CN")}` : "暂无有效月卡"}</p></div>
-      </section>
+      <BillingCard className={styles.wallet} aria-label="积分余额">
+        <div className={styles.available}>
+          <h2 className={styles.caption}>可用积分</h2>
+          <p className={`${styles.balance} font-number`}>{data.wallet.totalPoints.toLocaleString()}<small>积分</small></p>
+          <p className={`${styles.caption} mt-3`}>可用于助理对话与基建排班</p>
+        </div>
+        <dl className={styles.walletDetails}>
+          <div>
+            <dt className={styles.caption}>永久积分</dt>
+            <dd className={`${styles.balance} font-number`}>{data.wallet.paidPoints.toLocaleString()}</dd>
+            <dd className={`${styles.caption} mt-2`}>长期有效</dd>
+          </div>
+          <div>
+            <dt className={styles.caption}>月卡积分</dt>
+            <dd className={`${styles.balance} font-number`}>{data.wallet.monthlyPoints.toLocaleString()}</dd>
+            <dd className={`${styles.caption} mt-2`}>{data.wallet.monthlyExpiresAt ? `到期 ${new Date(data.wallet.monthlyExpiresAt).toLocaleDateString("zh-CN")}` : "暂无有效月卡"}</dd>
+          </div>
+        </dl>
+      </BillingCard>
 
-      <section className="grid gap-3 sm:grid-cols-3">
+      <div className={styles.products} aria-label="积分套餐">
         {data.products.map((product) => (
-          <article key={product.id} className="grid gap-3 rounded-xl border bg-card p-4">
-            <div className="flex items-start justify-between gap-2"><div><h2 className="font-medium">{product.name}</h2><p className="mt-1 text-2xl font-number">￥{(product.amountFen / 100).toFixed( product.amountFen % 100 ? 1 : 0 )}</p></div>{product.badge ? <span className="rounded-full bg-[#FFD501] px-2 py-0.5 text-xs text-black">{product.badge}</span> : null}</div>
-            <p className="text-sm text-muted-foreground">{product.description}</p>
-            <button type="button" className="h-9 rounded-lg bg-[#FFD501] px-3 text-sm font-medium text-black disabled:opacity-50" disabled={busy !== null || !product.checkoutConfigured} onClick={() => void createOrder(product.id)}>{busy === product.id ? "创建中…" : product.checkoutConfigured ? "爱发电购买" : "待配置支付链接"}</button>
-          </article>
+          <BillingCard key={product.id} className={`${styles.product} ${product.id === "points_1_test" ? styles.testPack : product.kind === "monthly" ? styles.monthly : ""}`} glass>
+            <div>
+              <div className="flex items-start justify-between gap-3"><h2 className="text-sm font-semibold">{product.name}</h2>{product.badge ? <span className={`${styles.productBadge} shrink-0 rounded-full px-2.5 py-1 text-[10px] font-medium`}>{product.badge}</span> : null}</div>
+              <p className={`${styles.price} font-number`}>{money(product.amountFen)}</p>
+              <p className="mt-2 text-sm">{product.points.toLocaleString()} <span className="text-xs text-muted-foreground">积分</span></p>
+            </div>
+            <p className="text-xs leading-6 text-muted-foreground">{product.description}</p>
+            <Button type="button" className={`${styles.pill} ${styles.primary} w-full`} disabled={busy !== null || !product.checkoutConfigured} onClick={() => void createOrder(product.id)}>{busy === product.id ? "创建中…" : product.checkoutConfigured ? "爱发电购买" : "待配置支付链接"}</Button>
+          </BillingCard>
         ))}
-      </section>
+      </div>
 
-      {activeOrder ? <section className="rounded-xl border border-dashed p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-medium">最近订单</h2><p className="mt-1 text-sm text-muted-foreground">{activeOrder.productId} · {activeOrder.points} 积分 · {activeOrder.status === "paid" ? `到账于 ${formatMinute(activeOrder.paidAt ?? activeOrder.createdAt)}` : `创建于 ${formatMinute(activeOrder.createdAt)}`}</p></div><div className="flex flex-wrap items-center gap-2"><span className={`text-sm ${orderStatus(activeOrder.status).className}`}>{orderStatus(activeOrder.status).label}</span>{activeOrder.status === "pending" ? <button type="button" className="h-9 rounded-lg border px-3 text-sm hover:bg-muted disabled:opacity-50" disabled={busy !== null} onClick={() => void simulatePaid(activeOrder.id)}>{busy === activeOrder.id ? "处理中…" : "模拟爱发电回调到账"}</button> : null}</div></div><p className="mt-3 text-xs text-muted-foreground">爱发电付款成功后，积分会自动发放到当前登录账号，无需填写 CDK。CDK 仅用于赠送码核销。</p><div className="mt-3 grid gap-2 border-t pt-3 text-sm">{data.orders.slice(0, 6).map((order) => <div key={order.id} className="flex flex-wrap items-center justify-between gap-2"><span>{order.productId} · ￥{(order.amountFen / 100).toFixed(order.amountFen % 100 ? 1 : 0)} · {formatMinute(order.createdAt)}</span><span className={orderStatus(order.status).className}>{orderStatus(order.status).label}</span></div>)}</div></section> : null}
+      <BillingCard className={styles.redemption} aria-labelledby="billing-redeem-heading">
+        <div><h2 id="billing-redeem-heading" className="text-sm font-semibold">核销兑换码</h2><p className={`${styles.caption} mt-1`}>赠送码兑换后计入永久积分。爱发电购买无需兑换码。</p></div>
+        <form className={styles.redemptionForm} onSubmit={(event) => { event.preventDefault(); if (busy === null && cdkCode.trim()) void cdkAction(); }}>
+          <Input aria-label="积分兑换码" placeholder="RIIC-..." value={cdkCode} onChange={(event) => setCdkCode(event.target.value)} />
+          <Button type="submit" className={`${styles.pill} ${styles.primary}`} disabled={busy !== null || !cdkCode.trim()}>{busy === "cdk-redeem" ? "兑换中…" : "核销并入账"}</Button>
+        </form>
+      </BillingCard>
 
-      <section className="grid gap-4 rounded-xl border bg-card p-4">
-        <div className="grid content-start gap-2"><h2 className="font-medium">核销兑换码</h2><p className="text-sm text-muted-foreground">兑换成功后积分进入当前登录账号的永久余额。</p><input className="h-9 rounded-lg border bg-background px-3 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring" aria-label="积分兑换码" placeholder="RIIC-..." value={cdkCode} onChange={(event) => setCdkCode(event.target.value)} /><button type="button" className="h-9 w-fit rounded-lg bg-[#FFD501] px-3 text-sm font-medium text-black disabled:opacity-50" disabled={busy !== null || !cdkCode.trim()} onClick={() => void cdkAction()}>核销并入账</button></div>
-      </section>
+      <BillingCard aria-labelledby="billing-orders-heading" data-billing-orders>
+        <div className={styles.sectionHeading}><h2 id="billing-orders-heading">最近订单</h2><p className={styles.caption}>最近 6 笔 · 支付成功后自动到账</p></div>
+        {data.orders.length === 0 ? <p className={styles.empty}>还没有订单，购买积分套餐后会显示在这里。</p> : <ul className={styles.records}>
+          {data.orders.slice(0, 6).map((order) => {
+            const status = orderStatus(order.status);
+            return <li key={order.id} className={styles.row}>
+              <div><h3 className={styles.recordTitle}>{data.products.find((product) => product.id === order.productId)?.name ?? order.productId}</h3><p className={styles.meta}>{order.points.toLocaleString()} 积分<span aria-hidden="true"> · </span><time dateTime={order.createdAt}>{formatMinute(order.createdAt)}</time></p></div>
+              <div className="text-right"><p className={`${styles.amount} font-number`}>{money(order.amountFen)}</p><span className={`${styles.status} ${status.className}`}>{status.label}</span></div>
+            </li>;
+          })}
+        </ul>}
+        {activeOrder?.status === "pending" ? <div className={styles.recordFoot}><p className={styles.caption}>最近一笔订单待支付</p><Button type="button" variant="outline" className={styles.pill} disabled={busy !== null} onClick={() => void simulatePaid(activeOrder.id)}>{busy === activeOrder.id ? "处理中…" : "模拟爱发电回调到账"}</Button></div> : null}
+      </BillingCard>
 
-      <section className="grid gap-5 lg:grid-cols-2">
-        <div className="rounded-xl border bg-card p-4"><h2 className="font-medium">最近扣费</h2><div className="mt-3 grid gap-2 text-sm">{data.usage.length === 0 ? <p className="text-muted-foreground">还没有 Agent 工具消耗。</p> : data.usage.slice(0, 8).map((item) => <div key={item.id} className="flex items-center justify-between gap-3 border-b pb-2 last:border-0"><span>{item.toolName}<span className="ml-2 text-xs text-muted-foreground">{new Date(item.createdAt).toLocaleString("zh-CN")}</span>{item.inputTokens != null ? <span className="mt-0.5 block text-xs text-muted-foreground">输入 {item.inputTokens} · 输出 {item.outputTokens ?? 0} · 缓存命中 {item.cachedInputTokens ?? 0}</span> : null}{item.status === "completed_unsettled" ? <span className="mt-0.5 block text-xs text-amber-600">余额不足，部分费用待结算</span> : null}</span><span className="text-right"><span className="block font-number">-{item.points} 积分</span>{item.toolFeePoints != null || item.tokenPoints != null ? <span className="block text-xs text-muted-foreground">工具 {item.toolFeePoints ?? 0} · Token {item.tokenPoints ?? 0}</span> : null}{item.upstreamCostRmb != null ? <span className="block text-xs text-muted-foreground">上游 ￥{item.upstreamCostRmb.toFixed(2)}</span> : null}{item.chargedCostRmb != null ? <span className="block text-xs text-muted-foreground">本站 ￥{item.chargedCostRmb.toFixed(2)}</span> : null}</span></div>)}</div></div>
-        <div className="rounded-xl border bg-card p-4"><h2 className="font-medium">积分账本</h2><div className="mt-3 grid gap-2 text-sm">{data.ledger.length === 0 ? <p className="text-muted-foreground">充值或使用 Agent 后会显示在这里。</p> : data.ledger.slice(0, 8).map((item) => <div key={item.id} className="flex items-center justify-between gap-3 border-b pb-2 last:border-0"><span><span className="block">{item.kind === "topup" ? "充值到账" : item.kind === "monthly_grant" ? "月卡到账" : item.kind === "cdk_issue" ? "生成 CDK" : item.kind === "cdk_redeem" ? "CDK 核销" : "求解工具"}</span><span className="block text-xs text-muted-foreground">{formatMinute(item.createdAt)}</span></span><span className={`font-number ${item.pointsDelta > 0 ? "text-emerald-600" : "text-muted-foreground"}`}>{item.pointsDelta > 0 ? "+" : ""}{item.pointsDelta}</span></div>)}</div></div>
-      </section>
-      <p className="text-xs leading-5 text-muted-foreground">当前页面是支付联调原型：订单、账本、余额和重复回调幂等逻辑已经接通；正式上线前把爱发电签名校验、支付宝渠道与上游模型人民币单价配置补齐。</p>
-    </main>
+      <div className={styles.activity}>
+        <BillingCard aria-labelledby="billing-usage-heading" data-billing-usage>
+          <div className={styles.sectionHeading}><h2 id="billing-usage-heading">最近扣费</h2><p className={styles.caption}>最近 8 笔 · 点击查看明细</p></div>
+          {data.usage.length === 0 ? <p className={styles.empty}>还没有扣费记录，使用助理后会显示在这里。</p> : <ul className={styles.records}>
+            {data.usage.slice(0, 8).map((item) => <li key={item.id}>
+              <details className={styles.usage}>
+                <summary className={styles.row}>
+                  <div><p className={styles.recordTitle}>{toolLabels[item.toolName] ?? item.toolName}</p><p className={styles.meta}><time dateTime={item.createdAt}>{formatMinute(item.createdAt)}</time></p>{item.status === "completed_unsettled" ? <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-400">部分费用待结算</p> : null}</div>
+                  <div className={styles.usageTotal}><p className={`${styles.amount} font-number`}>{item.points > 0 ? "−" : ""}{item.points.toLocaleString()}<small>积分</small></p><ChevronDown className={styles.chevron} aria-hidden="true" /></div>
+                </summary>
+                <dl className={styles.breakdown}>
+                  {item.toolFeePoints != null ? <div><dt>工具扣费</dt><dd>{item.toolFeePoints.toLocaleString()} 积分</dd></div> : null}
+                  {item.tokenPoints != null ? <div><dt>Token 扣费</dt><dd>{item.tokenPoints.toLocaleString()} 积分</dd></div> : null}
+                  <div><dt>结算状态</dt><dd>{usageStatusLabels[item.status] ?? "未知状态"}</dd></div>
+                  {item.inputTokens != null ? <><div><dt>输入 Token</dt><dd>{item.inputTokens.toLocaleString()}</dd></div><div><dt>输出 Token</dt><dd>{(item.outputTokens ?? 0).toLocaleString()}</dd></div><div><dt>缓存命中</dt><dd>{(item.cachedInputTokens ?? 0).toLocaleString()}</dd></div></> : null}
+                  {item.chargedCostRmb != null ? <div><dt>计费金额</dt><dd>￥{item.chargedCostRmb.toFixed(2)}</dd></div> : null}
+                  {item.upstreamCostRmb != null ? <div><dt>模型成本</dt><dd>￥{item.upstreamCostRmb.toFixed(2)}</dd></div> : null}
+                </dl>
+              </details>
+            </li>)}
+          </ul>}
+        </BillingCard>
+        <BillingCard aria-labelledby="billing-ledger-heading" data-billing-ledger>
+          <div className={styles.sectionHeading}><h2 id="billing-ledger-heading">积分账本</h2><p className={styles.caption}>最近 8 笔 · 积分收支</p></div>
+          {data.ledger.length === 0 ? <p className={styles.empty}>充值或使用助理后，积分变动会显示在这里。</p> : <ul className={styles.records}>
+            {data.ledger.slice(0, 8).map((item) => <li key={item.id} className={styles.row}>
+              <div><h3 className={styles.recordTitle}>{ledgerLabels[item.kind] ?? "积分变动"}</h3><p className={styles.meta}><time dateTime={item.createdAt}>{formatMinute(item.createdAt)}</time></p></div>
+              <p className={`${styles.amount} font-number ${item.pointsDelta > 0 ? "text-emerald-700 dark:text-emerald-400" : ""}`}>{item.pointsDelta > 0 ? "+" : item.pointsDelta < 0 ? "−" : ""}{Math.abs(item.pointsDelta).toLocaleString()}<small>积分</small></p>
+            </li>)}
+          </ul>}
+        </BillingCard>
+      </div>
+    </section>
   );
 }

@@ -1,4 +1,4 @@
-import { convertToModelMessages, stepCountIs, streamText, type UIMessage } from "ai";
+import { convertToModelMessages, createUIMessageStreamResponse, stepCountIs, streamText, type UIMessage } from "ai";
 import { appendFile } from "node:fs/promises";
 
 import { assertSameOrigin, createRequestId, failureResponse, PublicApiError, successResponse } from "@/server/api-contract";
@@ -7,6 +7,7 @@ import { createAgentUsage, finalizeAgentUsage, getWallet } from "@/server/billin
 import { SOLVE_TOOL_POINTS } from "@/server/billing/config";
 import { agentLlmSettings } from "@/server/agent/config";
 import { getAgentModel } from "@/server/agent/llm";
+import { createAgentStreamPolicy } from "@/server/agent/stream-policy";
 import { buildAgentSystemPrompt } from "@/server/agent/persona";
 import { buildAgentTools } from "@/server/agent/tools";
 import { calculateAgentTokenCost } from "@/server/billing/pricing";
@@ -153,7 +154,9 @@ export async function POST(request: Request) {
       persona: typeof body.persona?.content === "string" ? { name: body.persona?.name, contentLength: body.persona.content.length } : null,
       messages: body.messages.map(monitorMessage),
     });
+    const streamPolicy = createAgentStreamPolicy(request.signal);
     const result = streamText({
+      ...streamPolicy.options,
       model: getAgentModel(),
       system: await buildAgentSystemPrompt(personaContent),
       messages: await convertToModelMessages(body.messages, { tools }),
@@ -224,8 +227,7 @@ export async function POST(request: Request) {
         }
       },
     });
-    return result.toUIMessageStreamResponse({
-      headers: { "X-Request-Id": requestId },
+    const stream = result.toUIMessageStream({
       onError: (error) => {
         const message = error instanceof Error ? error.message : String(error);
         console.error(JSON.stringify({
@@ -243,8 +245,12 @@ export async function POST(request: Request) {
           name: error instanceof Error ? error.name : null,
           cause: error instanceof Error && error.cause instanceof Error ? { message: error.cause.message, stack: error.cause.stack } : null,
         });
-        return `模型服务调用失败：${message}`;
+        return streamPolicy.errorText(error);
       },
+    });
+    return createUIMessageStreamResponse({
+      headers: { "X-Request-Id": requestId },
+      stream: stream.pipeThrough(streamPolicy.transform),
     });
   } catch (error) {
     // 临时监控：记录请求级失败

@@ -4,6 +4,7 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createAnthropic } from "@ai-sdk/anthropic";
 
 import { agentLlmSettings } from "./config.ts";
+import { withAgentModelTimeout } from "./stream-policy.ts";
 
 // Providers like DeepSeek and Zhipu expose two compatible surfaces:
 // an OpenAI-style endpoint (/chat/completions) and an Anthropic-style
@@ -21,12 +22,12 @@ export function getAgentModel() {
     const baseURL = /\/v\d+$/.test(settings.baseURL)
       ? settings.baseURL
       : `${settings.baseURL.replace(/\/+$/, "")}/v1`;
-    return createAnthropic({ baseURL, apiKey: settings.apiKey })(settings.model);
+    return withAgentModelTimeout(createAnthropic({ baseURL, apiKey: settings.apiKey })(settings.model));
   }
   const provider = createOpenAICompatible({
     name: `riic-agent-${settings.provider}`,
     baseURL: settings.baseURL,
     apiKey: settings.apiKey,
   });
-  return provider.chatModel(settings.model);
+  return withAgentModelTimeout(provider.chatModel(settings.model));
 }

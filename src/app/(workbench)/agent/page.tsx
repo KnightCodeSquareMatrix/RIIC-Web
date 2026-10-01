@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { AgentChat } from "@/components/agent/AgentChat";
+import { AgentRoute } from "@/components/workbench/AgentRoute";
 
 export const metadata: Metadata = {
   title: "可露希尔助理 · 可露希尔基建终端",
@@ -8,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function Page() {
-  return <AgentChat />;
+  return <AgentRoute />;
 }

@@ -2,12 +2,13 @@
 
 import { useLocale } from "next-intl";
 import Link from "next/link";
-import { ArrowLeft, Eye, RotateCcw, Settings2, SlidersHorizontal, Trash2 } from "lucide-react";
+import { ArrowLeft, Eye, RotateCcw, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { InfraTechnicalCard, InfraTechnicalHeading } from "@/components/InfraTechnicalCard";
-import { StatusCenterHeader, StatusCenterPage } from "@/components/pages/StatusCenterShell";
+import { StatusCenterPage } from "@/components/pages/StatusCenterShell";
+import { WorkbenchPageHeading } from "@/components/workbench/WorkbenchPageHeading";
 import { Combobox, ComboboxContent, ComboboxInput, ComboboxItem, ComboboxList } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -64,25 +65,16 @@ export function UserSettingsPage({ settings, onSettingsChange }: UserSettingsPag
     shiftViewControl: DEFAULT_USER_SETTINGS.shiftViewControl,
   });
   return (
-    <StatusCenterPage data-user-settings-page>
-      <StatusCenterHeader
-        identity={(
-          <div className="flex min-w-0 items-center gap-4">
-            <div className="grid size-14 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
-              <Settings2 className="size-7" aria-hidden="true" />
-            </div>
-            <div className="min-w-0">
-              <h1 className="text-2xl font-semibold tracking-tight">{en ? "Settings" : "设置"}</h1>
-              <p className="mt-1 text-sm text-muted-foreground">{en ? "Personalize scheduling and display. Changes are saved in this browser." : "调整排班与显示方式，修改自动保存在当前浏览器。"}</p>
-            </div>
-          </div>
-        )}
-        actions={(
-          <Button nativeButton={false} variant="outline" className="h-11 w-full sm:w-auto" render={<Link href="/" />}>
-            <ArrowLeft />{en ? "Back to calculator" : "返回基建计算器"}
-          </Button>
-        )}
-      />
+    <StatusCenterPage className="min-w-0 gap-3 pt-2 pb-8 sm:pb-8 md:gap-5 md:pt-5" data-user-settings-page>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <WorkbenchPageHeading page="settings">{en ? "Settings" : "设置"}</WorkbenchPageHeading>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground md:mt-2 md:text-sm">{en ? "Personalize scheduling and display. Changes are saved in this browser." : "调整排班与显示方式，修改自动保存在当前浏览器。"}</p>
+        </div>
+        <Button nativeButton={false} variant="outline" className="h-11 w-full sm:w-auto" render={<Link href="/" />}>
+          <ArrowLeft />{en ? "Back to calculator" : "返回基建计算器"}
+        </Button>
+      </header>
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)]" data-settings-cards>
         <InfraTechnicalCard group="control">
           <section aria-labelledby="settings-scheduling-title">

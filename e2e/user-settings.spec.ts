@@ -111,11 +111,11 @@ test("calculator room sorting is reflected in MAA export and stays within the ac
 });
 
 test("standalone Mower editor uses the shared schedule components", async ({ page }) => {
+  await page.setViewportSize({ width: 1000, height: 900 });
   await page.goto("/mower");
   await expect(page.locator("[data-mower-schedule-page]")).toBeVisible();
-  await expect(page.locator('[data-infra-technical-card][data-slot="mower-board"]')).toBeVisible();
-  await expect(page.locator("[data-mower-room]")).toHaveCount(18);
-  await page.locator('[data-mower-room="room_1_1"]').click();
+  await expect(page.locator("[data-plan-board]")).toBeVisible();
+  await page.getByRole("button", { name: "编辑贸易站 B101", exact: true }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await expect(page.getByRole("button", { name: "添加干员" })).toBeVisible();
 });
@@ -124,6 +124,7 @@ test("Mower morale rules use the current Box picker", async ({ page }) => {
   await mockApis(page);
   await seedV4Session(page);
   await page.goto("/mower");
+  await page.locator("[data-mower-rules] summary").click();
   await page.getByRole("button", { name: "需要回满心情的干员", exact: true }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await expect(page.getByRole("dialog").getByRole("textbox", { name: "搜索当前 Box 干员" })).toBeVisible();

@@ -1,4 +1,5 @@
 "use client";
+import { WorkbenchPageHeading } from "@/components/workbench/WorkbenchPageHeading";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Calculator, PackageOpen, RefreshCw, Search } from "lucide-react";
@@ -47,6 +48,7 @@ function InventoryContent({ identityKey }: { identityKey: string }) {
   const [error, setError] = useState<DisplayError | null>(null);
   const [loading, setLoading] = useState(true);
   const [manualCounts, setManualCounts] = useState<Record<string, string>>({});
+  const [manualSaveState, setManualSaveState] = useState<"idle" | "saved" | "error">("idle");
   const [targetRarity, setTargetRarity] = useState(6);
   const [targetElite, setTargetElite] = useState(2);
   const [targetLevel, setTargetLevel] = useState(60);
@@ -77,6 +79,7 @@ function InventoryContent({ identityKey }: { identityKey: string }) {
         if (typeof value === "string" && /^\d*$/.test(value)) next[id] = value;
       }
       setManualCounts(next);
+      setManualSaveState(Object.keys(next).length > 0 ? "saved" : "idle");
     } catch {
       setManualCounts({});
     }
@@ -84,11 +87,14 @@ function InventoryContent({ identityKey }: { identityKey: string }) {
 
   const setManualCount = (id: string, value: string) => {
     const normalized = value.replace(/\D/g, "").slice(0, 12);
-    setManualCounts((current) => {
-      const next = { ...current, [id]: normalized };
-      try { window.localStorage.setItem(storageKey, JSON.stringify(next)); } catch { /* keep session value */ }
-      return next;
-    });
+    const next = { ...manualCounts, [id]: normalized };
+    setManualCounts(next);
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify(next));
+      setManualSaveState("saved");
+    } catch {
+      setManualSaveState("error");
+    }
   };
 
   const items = useMemo(() => {
@@ -153,28 +159,32 @@ function InventoryContent({ identityKey }: { identityKey: string }) {
     <main className="w-full min-w-0 bg-background text-foreground">
       <div className="flex w-full min-w-0 flex-col gap-5 pb-8 pt-5">
         <header className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="flex items-center gap-2.5 text-lg font-semibold"><span className="h-6 w-1.5 bg-[#FFD501]" aria-hidden="true" />{locale === "en" ? "Inventory" : "查看库存"}</h1>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <WorkbenchPageHeading page="inventory">{locale === "en" ? "Inventory" : "查看库存"}</WorkbenchPageHeading>
+            <span className="whitespace-nowrap text-sm text-muted-foreground">共 {items.length} 项</span>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => setEstimateOpen(true)} disabled={loading}><Calculator className="size-4" />资源估算</Button>
             <Button variant="outline" onClick={() => void load()} disabled={loading} aria-label="刷新库存"><RefreshCw className={loading ? "size-4 animate-spin" : "size-4"} />刷新</Button>
-            <Link href="/" aria-label="返回基建终端" className="grid size-11 place-items-center border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"><ArrowLeft className="size-5" /></Link>
+            <Button nativeButton={false} variant="outline" size="icon" render={<Link href="/" />} aria-label="返回基建终端"><ArrowLeft /></Button>
           </div>
         </header>
 
         <section className="w-full min-w-0">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
-            <div className="flex items-center gap-2"><PackageOpen className="size-5 text-[#FFD501]" /><h2 className="text-xl font-semibold">背包物品</h2></div>
-            <span className="text-sm text-muted-foreground">共 {items.length} 项</span>
-          </div>
-          <div className="relative mt-4 max-w-md"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索物品名称" className="h-9 pl-9" aria-label="搜索库存" /></div>
+          <div className="relative max-w-md"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索物品名称" className="h-9 pl-9" aria-label="搜索库存" /></div>
           {error ? <div className="mt-5 border border-amber-400/40 bg-amber-50/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-200">{error.message || "库存读取失败，请稍后重试。"} 手工填写仍可用于估算；未读取的数量按 0 处理。</div> : null}
           {!error && loading ? <div className="py-16 text-center text-sm text-muted-foreground">正在读取森空岛库存...</div> : null}
           {!loading ? <>
             <div className="mt-5 grid gap-6">
               <div className="min-w-0">
               <h3 className="mb-3 border-b border-border pb-3 text-lg font-semibold">抽卡资源</h3>
+              <p role="status" className={`mb-3 text-xs leading-5 ${manualSaveState === "error" ? "text-destructive" : "text-muted-foreground"}`}>
+                {manualSaveState === "error"
+                  ? (locale === "en" ? "Could not save to this browser. Your edits are available on this page only; allow browser storage and edit again to retry." : "浏览器保存失败，修改仅在当前页面有效；请允许浏览器存储后重新填写。")
+                  : manualSaveState === "saved"
+                    ? (locale === "en" ? "Manual amounts saved to this browser for the current account and character. They remain after a refresh." : "手填数量已保存到此浏览器，按当前账号和角色分别保留，刷新后仍有效。")
+                    : (locale === "en" ? "Manual amounts are automatically saved to this browser for each account and character." : "手填数量会自动保存到此浏览器，按账号和角色分别保留。")}
+              </p>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                 {commonItems.map((item) => {
                   const catalogItem = catalog[item.id];

@@ -7,7 +7,7 @@ import { URL, pathToFileURL, fileURLToPath } from "node:url";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-// Compile only the real card, replacing unrelated chat transport and plan UI imports.
+// Compile the real card and result summaries; browser E2E covers chip disclosure and motion.
 test("agent cards group sources, expose only knowledge subjects, and render failures once", async () => {
   const root = fileURLToPath(new URL("../../../", import.meta.url));
   const temporary = await mkdtemp(path.join(root, ".agent-card-test-"));
@@ -15,8 +15,27 @@ test("agent cards group sources, expose only knowledge subjects, and render fail
     const outfile = path.join(temporary, "card.mjs");
     await build({ entryPoints: [path.join(root, "src/components/agent/AgentChat.tsx")], outfile, bundle: true,
       platform: "node", format: "esm", packages: "external", jsx: "automatic", plugins: [{ name: "card-only", setup(builder) {
-        builder.onResolve({ filter: /^(@ai-sdk\/react|ai|@\/)/ }, (args) => ({ path: args.path, namespace: "stub" }));
-        builder.onLoad({ filter: /.*/, namespace: "stub" }, () => ({ contents: "export const useChat=()=>({}); export const convertFileListToFileUIParts=async()=>[]; export const DefaultChatTransport=class{}; export const PlanArtifactView=()=>null; export const MarkdownMessage=()=>null; export const Button=({children})=>children; export const Textarea=()=>null; export const Dialog=({children})=>children; export const DialogBody=({children})=>children; export const DialogContent=({children})=>children; export const DialogDescription=({children})=>children; export const DialogFooter=({children})=>children; export const DialogHeader=({children})=>children; export const DialogTitle=({children})=>children; export const AGENT_BROADCAST_CHANNEL='test'; export const requestAgentArtifactOpen=()=>{}; export const agentArtifactFromOutput=(output)=>output?.workbenchSession ? {session:output.workbenchSession,preset:'243'} : null;" }));
+        builder.onResolve({ filter: /^react$/, namespace: "stub" }, (args) => ({ path: args.path, external: true }));
+        builder.onResolve({ filter: /^(@ai-sdk\/react|ai$|next\/link$|@\/|\.\/)/ }, (args) => ({ path: args.path, namespace: "stub" }));
+        builder.onLoad({ filter: /.*/, namespace: "stub" }, () => ({ contents: `
+          import { createElement } from "react";
+          export default {};
+          export const useChat=()=>({});
+          export const convertFileListToFileUIParts=async()=>[];
+          export const useAgentRuntime=()=>({});
+          export const useAgentHistory=()=>({});
+          export const accountOrbColor=()=>"";
+          export const parsePersonaAvatar=()=>undefined;
+          export const readPersonaAvatar=()=>undefined;
+          export const buildAgentDisplayTurns=()=>[];
+          export const hasActiveAgentContent=()=>false;
+          export const agentChatErrorMessage=()=>"";
+          export const ToolChip=({label,children})=>createElement("div",null,label,children);
+          export const AGENT_BROADCAST_CHANNEL="test";
+          export const requestAgentArtifactOpen=()=>{};
+          export const agentArtifactFromOutput=(output)=>output?.workbenchSession ? {session:output.workbenchSession,preset:"243"} : null;
+          ${["PlanArtifactView", "MarkdownMessage", "WorkbenchPageHeading", "FluidOrb", "PersonaAvatar", "AgentCreditBalance", "AgentConversationScrollArea", "ChatBubble", "ChatPanel", "LoadingState", "PromptBar", "StreamingText", "ThinkingState", "Button", "Dialog", "DialogBody", "DialogContent", "DialogDescription", "DialogFooter", "DialogHeader", "DialogTitle"].map((name) => `export const ${name}=({children})=>children ?? null;`).join("\n")}
+        ` }));
       } }] });
     const { AgentToolCard, formatEnvironmentSummary } = await import(pathToFileURL(outfile).href);
     assert.equal(formatEnvironmentSummary({ fireworks: 0, sami: 1, abyssal: 2, knights: 0 }, { fireworks: "默认值（未自动推导）", sami: "森空岛自动读取", abyssal: "森空岛自动读取", knights: "手动指定" }), "默认：人间烟火 0；森空岛自动读取：萨米 1、深海猎人 2；用户指定：骑士 0");

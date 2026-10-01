@@ -1,5 +1,6 @@
 import { localize as localize_components_pages_TrainingAdvice } from "../../i18n/helpers/components_pages_TrainingAdvice.ts";
 import { useTranslations, useLocale } from "next-intl";
+import { WorkbenchPageHeading } from "@/components/workbench/WorkbenchPageHeading";
 import { messageRecord } from "@/i18n/translate";
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { CircleAlert, ChevronDown, GraduationCap } from "lucide-react";
@@ -137,11 +138,11 @@ function CollapsibleSection({
           aria-expanded={!collapsed}
           onClick={onToggle}
         >
-          <span className={`h-7 w-1.5 shrink-0 ${accent}`} aria-hidden="true" />
-          <h2 className="truncate text-[21px] font-medium leading-none text-[#313131]">{title}</h2>
-          <span className="font-number text-xs text-[#313131]/52">{count}</span>
+          <span className={`h-6 w-1.5 shrink-0 ${accent}`} aria-hidden="true" />
+          <h2 className="truncate text-lg font-semibold text-foreground">{title}</h2>
+          <span className="font-number text-xs text-muted-foreground">{count}</span>
           <motion.span
-            className="flex size-4 shrink-0 items-center justify-center text-[#313131]/45"
+            className="flex size-4 shrink-0 items-center justify-center text-muted-foreground"
             animate={{ rotate: collapsed ? -90 : 0 }}
             transition={{ duration: MOTION_DURATION.fast, ease: MOTION_EASE_IN_OUT }}
             aria-hidden="true"
@@ -219,8 +220,7 @@ export function TrainingAdvice({
       <div className="flex w-full flex-col gap-5 pt-5" data-training-page>
         <section className="min-w-0" aria-label={intl("components_pages_TrainingAdvice.trainingAdviceOverview")}>
           <div className="mb-2 flex min-w-0 items-center gap-2.5">
-            <span className="h-7 w-1.5 shrink-0 bg-[#FFD501]" aria-hidden="true" />
-            <h1 className="truncate text-[21px] font-medium leading-none text-[#313131]">{intl("components_pages_TrainingAdvice.trainingAdvice")}</h1>
+            <WorkbenchPageHeading page="training">{intl("components_pages_TrainingAdvice.trainingAdvice")}</WorkbenchPageHeading>
           </div>
           <InfraTechnicalCard group="training" className="min-h-[248px]" dataSlot="training-account-required" showEmblem={false}>
             <div className="grid min-h-[216px] place-content-center text-center">
@@ -258,9 +258,8 @@ export function TrainingAdvice({
       ) : null}
       <section className="min-w-0" aria-label={intl("components_pages_TrainingAdvice.trainingAdviceOverview")}>
         <div className="mb-2 flex min-w-0 items-center gap-2.5">
-          <span className="h-7 w-1.5 shrink-0 bg-[#FFD501]" aria-hidden="true" />
-          <h1 className="truncate text-[21px] font-medium leading-none text-[#313131]">{intl("components_pages_TrainingAdvice.trainingAdvice")}</h1>
-          <span className="font-number text-xs text-[#313131]/52">
+          <WorkbenchPageHeading page="training">{intl("components_pages_TrainingAdvice.trainingAdvice")}</WorkbenchPageHeading>
+          <span className="font-number text-xs text-muted-foreground">
             {advice ? recommendations.length : actions.length}
           </span>
         </div>
