@@ -14,6 +14,8 @@ const savedUpload = { version: 1, id: "upload-existing", name: "原有人格", c
 
 async function prepare(page: Page, available = true) {
   await mockApis(page);
+  await page.route("**/api/account/data-consent", route => route.fulfill({ json: { success: true, data: { current: false, cloudSyncEnabled: false } } }));
+  await page.route("**/api/billing", route => route.fulfill({ json: { data: { wallet: { totalPoints: 100 } } } }));
   await page.route("**/api/auth/get-session", route => route.fulfill({ json: {
     user: { id: "persona-user", name: "博士", email: "persona@example.test" },
     session: { expiresAt: "2099-01-01T00:00:00Z" },
@@ -108,7 +110,7 @@ test("a missing private card explains why sending is blocked and permits switchi
   await expect(page.getByRole("button", { name: "发送", exact: true })).toBeEnabled();
 });
 
-test("five plush characters share a renderer, SilverAsh reacts and reduced motion stays still", async ({ page }) => {
+test("five plush characters share a single WebGL renderer", async ({ page }) => {
   await prepare(page);
   await page.addInitScript(() => {
     const original = HTMLCanvasElement.prototype.getContext;
@@ -137,6 +139,17 @@ test("five plush characters share a renderer, SilverAsh reacts and reduced motio
   await tiger.scrollIntoViewIfNeeded();
   await expect(tiger).toHaveAttribute("data-fur-ready", "true");
   expect(await page.evaluate(() => (window as typeof window & { personaWebglContexts: number }).personaWebglContexts)).toBe(1);
+});
+
+test("SilverAsh reacts to pointer input, settles, and respects reduced motion", async ({ page }) => {
+  await prepare(page);
+  await page.addInitScript(() => localStorage.setItem("riic.agent.persona.selection.v1", "silverash"));
+  await page.goto("/agent");
+  const input = page.getByRole("textbox", { name: "发给银灰的消息" });
+  await input.fill("你好");
+  await input.press("Enter");
+  const silverash = page.locator('[data-speaker="assistant"] [data-silverash-fur-avatar]');
+  await expect(silverash).toHaveAttribute("data-fur-ready", "true");
   const canvas = silverash.locator("canvas");
   const resting = await canvas.evaluate((element: HTMLCanvasElement) => element.toDataURL());
   await silverash.hover({ position: { x: 8, y: 20 } });
@@ -144,7 +157,7 @@ test("five plush characters share a renderer, SilverAsh reacts and reduced motio
   await page.mouse.down();
   await page.mouse.move(400, 280, { steps: 8 });
   await page.mouse.up();
-  await page.getByRole("dialog").getByRole("heading", { name: "人格卡", exact: true }).hover();
+  await input.hover();
   await expect(silverash).toHaveAttribute("data-fur-motion", "idle");
   await page.emulateMedia({ reducedMotion: "reduce" });
   await expect(silverash).toHaveAttribute("data-fur-motion", "still");
