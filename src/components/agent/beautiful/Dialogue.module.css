@@ -123,6 +123,11 @@
 :global(.dark) .decoration, :global(.dark) .promptDecoration { opacity: .25; }
 
 @media (max-width: 767px) {
+  :global(body:has([data-agent-chat]) [data-cloud-sync-error]) {
+    bottom: calc(max(6px, env(safe-area-inset-bottom)) + 68px);
+    max-height: calc(100dvh - 140px);
+    overflow-y: auto;
+  }
   .chat { height: var(--agent-viewport-height, 100dvh); gap: 0; padding-top: max(4px, env(safe-area-inset-top)); padding-bottom: max(6px, env(safe-area-inset-bottom)); }
   .headerSlot { display: grid; grid-template-rows: 1fr; opacity: 1; transition: grid-template-rows 180ms ease-out, opacity 140ms ease-out; }
   .headerSlot[data-hidden="true"] { grid-template-rows: 0fr; opacity: 0; pointer-events: none; }
