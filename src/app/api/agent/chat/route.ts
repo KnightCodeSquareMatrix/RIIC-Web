@@ -9,6 +9,7 @@ import { agentLlmSettings, agentModelChoices } from "@/server/agent/config";
 import { getAgentModel } from "@/server/agent/llm";
 import { createAgentStreamPolicy } from "@/server/agent/stream-policy";
 import { buildAgentSystemPrompt } from "@/server/agent/persona";
+import { listBuiltinAgentPersonas, resolveAgentPersonaContent } from "@/server/agent/persona-catalog";
 import { buildAgentTools } from "@/server/agent/tools";
 import { calculateAgentTokenCost } from "@/server/billing/pricing";
 
@@ -102,6 +103,7 @@ export async function GET(request: Request) {
         enabled: settings.configured,
         provider: settings.configured ? settings.provider : null,
         model: settings.configured ? settings.model : null,
+        personas: await listBuiltinAgentPersonas(),
         models: agentModelChoices(),
       },
       requestId
@@ -117,7 +119,7 @@ export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
     const { session } = await requireAgentAccess(request);
-    const body = (await request.json()) as { model?: unknown; messages?: UIMessage[]; persona?: { id?: unknown; name?: unknown; content?: unknown } };
+    const body = (await request.json()) as { model?: unknown; messages?: UIMessage[]; persona?: { id?: unknown; kind?: unknown; name?: unknown; content?: unknown } };
     if (body.model !== undefined && body.model !== "deepseek" && body.model !== "glm") {
       throw new PublicApiError("AIC-REQ-1001", { message: "请选择可用的模型。" });
     }
@@ -135,7 +137,11 @@ export async function POST(request: Request) {
       const response = failureResponse(new Error("缺少对话消息。"), requestId, "/api/agent/chat", startedAt);
       return new Response(response.body, { status: 400, headers: response.headers });
     }
-    const personaContent = typeof body.persona?.content === "string" ? body.persona.content.trim().slice(0, 36_000) : undefined;
+    let personaContent: string | undefined;
+    try { personaContent = await resolveAgentPersonaContent(body.persona); }
+    catch (error) {
+      return failureResponse(new PublicApiError("AIC-REQ-1001", { message: "所选人格卡暂不可用，请重新选择。", cause: error }), requestId, "/api/agent/chat", startedAt);
+    }
     const fileParts = body.messages.flatMap((message) => message.parts.filter((part) => part.type === "file")).map((part) => part as unknown as { url?: unknown; mediaType?: unknown; filename?: unknown });
     if (fileParts.length > 4) {
       const response = failureResponse(new Error("一次最多发送 4 个附件。"), requestId, "/api/agent/chat", startedAt);
