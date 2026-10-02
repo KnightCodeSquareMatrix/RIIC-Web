@@ -36,6 +36,22 @@ async function emit(page: Page, parts: unknown[], done = false) {
   }, { parts, done });
 }
 
+test("revoking feature access removes navigation and stops the active conversation", async ({ page }) => {
+  await prepare(page);
+  let allowed = true;
+  await page.route("**/api/account/feature-access", (route) => route.fulfill({ json: { agent: allowed, billing: allowed } }));
+  await page.goto("/agent");
+  const input = page.getByRole("textbox", { name: "发给可露希尔的消息" });
+  await input.fill("等待权限检查");
+  await input.press("Enter");
+  await expect.poll(() => page.evaluate(() => (window as typeof window & { agentTestRequests: number }).agentTestRequests)).toBe(1);
+  allowed = false;
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(page.locator("[data-agent-chat]")).toHaveCount(0);
+  await expect(page.locator('[data-primary-navigation-page="agent"], [data-primary-navigation-page="billing"], [data-agent-history]')).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => (window as typeof window & { agentTestAborts: number }).agentTestAborts)).toBe(1);
+});
+
 test("Agent keeps streaming across routes, restores its live request, and saves while away", async ({ page }) => {
   await prepare(page);
   await page.goto("/agent");

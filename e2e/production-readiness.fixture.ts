@@ -876,6 +876,8 @@ export async function mockApis(
     dismissSolverWarning?: boolean;
   } = {}
 ) {
+  // UI fixtures use the explicit public rollout in playwright.config.ts.
+  await page.route("**/api/account/feature-access", (route) => route.fulfill({ json: { agent: true, billing: true } }));
   if (options.dismissSolverWarning !== false) {
     // Result tests continue after acknowledging the new solver notice.
     // Its own coverage opts out and verifies the full dialog interaction.

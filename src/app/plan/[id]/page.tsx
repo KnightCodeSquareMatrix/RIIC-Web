@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 
 import { PlanArtifactView } from "@/components/agent/PlanArtifactView";
-import { websiteSession } from "@/server/auth";
+import { requireFeatureSession } from "@/server/auth/feature-access";
 import { getAgentPlanArtifact } from "@/server/agent/plan-artifact";
 
 export const metadata: Metadata = {
@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 
 export default async function PlanArtifactPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const session = await websiteSession(await headers());
+  const session = await requireFeatureSession(await headers(), "agent").catch(() => null);
   if (!session?.user) notFound();
   const artifact = await getAgentPlanArtifact(id, session.user.id).catch(() => null);
   if (!artifact) notFound();

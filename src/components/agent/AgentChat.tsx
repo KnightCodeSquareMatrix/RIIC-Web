@@ -285,7 +285,7 @@ function AttachmentPreview({ file, onRemove }: { file: FileUIPart; onRemove?: ()
   </div>;
 }
 
-export function AgentChat({ conversationId, initialMessages, userName, userId }: { conversationId: string; initialMessages: UIMessage[]; userName?: string; userId?: string }) {
+export function AgentChat({ conversationId, initialMessages, userName, userId, billingAllowed = false }: { conversationId: string; initialMessages: UIMessage[]; userName?: string; userId?: string; billingAllowed?: boolean }) {
   const en = useLocale() === "en";
   const { store: historyStore, error: historyError } = useAgentHistory();
   const [agentStatus, setAgentStatus] = useState<AgentStatus>("loading");
@@ -512,7 +512,7 @@ export function AgentChat({ conversationId, initialMessages, userName, userId }:
           <p className="mt-2 text-xs text-muted-foreground">{en ? "Your account, base and training — in one conversation." : "从了解账号到安排基建，把想做的事交给可露希尔。"}</p>
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-3">
-        <AgentCreditBalance enabled={agentStatus === "ready" || agentStatus === "payment_required" || agentStatus === "unconfigured"} busy={busy} en={en} />
+        <AgentCreditBalance enabled={billingAllowed && (agentStatus === "ready" || agentStatus === "payment_required" || agentStatus === "unconfigured")} busy={busy} en={en} />
         <Button type="button" variant="outline" size="sm" className={dialogueStyles.newConversation} disabled={busy || messages.length === 0} onClick={() => { runtime.flush(); historyStore.startNew(); }}>
           <Plus className="size-4" aria-hidden="true" />{en ? "New conversation" : "新对话"}
         </Button>
@@ -559,7 +559,7 @@ export function AgentChat({ conversationId, initialMessages, userName, userId }:
           {agentStatus === "unconfigured" ? <div className="my-auto grid justify-items-start gap-3 text-sm"><Bot className="size-6 text-muted-foreground" aria-hidden="true" /><h2 className="font-medium">{en ? "Assistant is not available yet" : "助理暂未就绪"}</h2><p className="text-muted-foreground">{en ? "The model connection needs to be configured. Please try again later." : "大模型连接尚未配置，请稍后重试。"}</p></div> : null}
           {agentStatus === "unavailable" ? <div role="alert" className="my-auto grid justify-items-start gap-3 text-sm"><h2 className="font-medium">{en ? "Could not connect to the assistant" : "暂时无法连接助理"}</h2><p className="text-muted-foreground">{en ? "Please refresh the page and try again." : "请刷新页面后重试。"}</p></div> : null}
           {agentStatus === "unauthenticated" ? <div className="my-auto grid justify-items-start gap-3 text-sm"><Bot className="size-6 text-muted-foreground" aria-hidden="true" /><h2 className="font-medium">{en ? "Sign in to meet Closure" : "登录后，与可露希尔开始对话"}</h2><p className="text-muted-foreground">{en ? "Use your website account to access the assistant." : "使用网站账号登录，即可让助理帮你诊断账号、规划基建。"}</p><Button nativeButton={false} render={<Link href="/account" />} size="sm">{en ? "Sign in" : "前往账号管理登录"}</Button></div> : null}
-          {agentStatus === "payment_required" ? <div className="my-auto grid justify-items-start gap-3 text-sm"><h2 className="font-medium">{en ? "Add credits to get started" : "补充积分，开始对话"}</h2><p className="text-muted-foreground">{en ? "You need at least 1 credit to use the assistant." : "当前账号需至少有 1 积分才能使用助理。"}</p><Button nativeButton={false} render={<Link href="/billing" />} size="sm">{en ? "View payment plans" : "查看付费计划"}</Button></div> : null}
+          {agentStatus === "payment_required" ? <div className="my-auto grid justify-items-start gap-3 text-sm"><h2 className="font-medium">{en ? "Add credits to get started" : "补充积分，开始对话"}</h2><p className="text-muted-foreground">{en ? "You need at least 1 credit to use the assistant." : "当前账号需至少有 1 积分才能使用助理。"}</p>{billingAllowed ? <Button nativeButton={false} render={<Link href="/billing" />} size="sm">{en ? "View payment plans" : "查看付费计划"}</Button> : null}</div> : null}
 
           {messages.length === 0 && agentStatus === "ready" ? <div className="my-auto grid gap-7 py-4 sm:py-8">
             <div className="grid gap-3"><p className="flex items-center gap-2 text-xs text-muted-foreground"><Bot className="size-4" aria-hidden="true" />{en ? "CLOSURE / RHODES ISLAND" : "可露希尔 / 罗德岛"}</p><h2 className="text-2xl font-medium tracking-tight sm:text-3xl">{en ? "Doctor, where shall we start?" : "博士，今天从哪里开始？"}</h2><p className="max-w-lg text-sm leading-6 text-muted-foreground">{en ? "Tell me what you want to improve. I can check your account, calculate a plan and send the result to your workbench." : "说说你想改善什么。我可以检查账号、计算方案，再把结果交给你的工作台。"}</p></div>

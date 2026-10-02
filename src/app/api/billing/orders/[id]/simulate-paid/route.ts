@@ -1,5 +1,6 @@
 import { assertSameOrigin, createRequestId, failureResponse, successResponse, PublicApiError } from "@/server/api-contract";
-import { requireWebsiteSession } from "@/server/auth/authorization";
+import { requireFeatureSession } from "@/server/auth/feature-access";
+import { requireWebsiteAdmin } from "@/server/auth/authorization";
 import { BillingError, fulfillBillingOrder, getOrder } from "@/server/billing/service";
 
 export const runtime = "nodejs";
@@ -13,7 +14,9 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       throw new PublicApiError("AIC-AUTH-2007");
     }
     assertSameOrigin(request);
-    const session = await requireWebsiteSession(request);
+    const session = await requireFeatureSession(request, "billing");
+    // Test crediting must never become public when billing is launched.
+    await requireWebsiteAdmin(request);
     const { id } = await context.params;
     const current = await getOrder(session.user.id, id);
     if (!current) throw new PublicApiError("AIC-BILLING-4103", { message: "订单不存在。" });

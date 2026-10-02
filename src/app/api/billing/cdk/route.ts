@@ -1,5 +1,5 @@
 import { assertSameOrigin, createRequestId, failureResponse, readJsonBody, successResponse, PublicApiError } from "@/server/api-contract";
-import { requireWebsiteSession } from "@/server/auth/authorization";
+import { requireFeatureSession } from "@/server/auth/feature-access";
 import { BillingError, issueGiftCdk, redeemGiftCdk } from "@/server/billing/service";
 
 export const runtime = "nodejs";
@@ -10,7 +10,7 @@ export async function POST(request: Request) {
   const startedAt = performance.now();
   try {
     assertSameOrigin(request);
-    const session = await requireWebsiteSession(request);
+    const session = await requireFeatureSession(request, "billing");
     const body = await readJsonBody(request, 8 * 1024) as { action?: unknown; points?: unknown; code?: unknown };
     if (body.action === "issue" && typeof body.points === "number") {
       return successResponse(await issueGiftCdk(session.user.id, body.points), requestId, 201);

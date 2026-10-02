@@ -2,7 +2,7 @@ import { convertToModelMessages, createUIMessageStreamResponse, stepCountIs, str
 import { appendFile } from "node:fs/promises";
 
 import { assertSameOrigin, createRequestId, failureResponse, PublicApiError, successResponse } from "@/server/api-contract";
-import { websiteSession } from "@/server/auth";
+import { requireFeatureSession } from "@/server/auth/feature-access";
 import { createAgentUsage, finalizeAgentUsage, getWallet } from "@/server/billing/service";
 import { SOLVE_TOOL_POINTS } from "@/server/billing/config";
 import { agentLlmSettings } from "@/server/agent/config";
@@ -82,8 +82,7 @@ async function monitorLog(entry: Record<string, unknown>): Promise<void> {
 // ── 临时监控结束 ──
 
 async function requireAgentAccess(request: Request) {
-  const session = await websiteSession(request);
-  if (!session?.user) throw new PublicApiError("AIC-AUTH-2008");
+  const session = await requireFeatureSession(request, "agent");
   const wallet = await getWallet(session.user.id);
   if (wallet.totalPoints < SOLVE_TOOL_POINTS) {
     throw new PublicApiError("AIC-BILLING-4101", { message: `请先购买积分，Agent 至少需要 ${SOLVE_TOOL_POINTS} 积分才能使用。` });

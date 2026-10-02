@@ -22,6 +22,7 @@ import { createContext, lazy, Suspense, useContext, useId, useState, type ReactN
 import { LayoutGroup, motion, useReducedMotion } from "motion/react";
 import styles from "./AppSidebar.module.css";
 import { useWebsiteSession } from "@/website-session";
+import { useFeatureAccess } from "@/components/workbench/FeatureAccessProvider";
 
 import {
   Sidebar,
@@ -100,6 +101,7 @@ function AppNavigationItem({
 export function AppSidebar({ page, onPageChange, showMower = false }: AppSidebarProps) {
   const locale = useLocale();
   const { data: websiteSession } = useWebsiteSession();
+  const features = useFeatureAccess();
   const labels = messageRecord(locale, "components_layout_AppSidebar_labels");
   const billingLabel = locale === "en" ? "Payment plans" : "付费计划";
   const [hovered, setHovered] = useState<string | null>(null);
@@ -136,14 +138,14 @@ export function AppSidebar({ page, onPageChange, showMower = false }: AppSidebar
             <AppNavigationItem page={page} target="skill-query" label={labels.skills} icon={Search} onPageChange={onPageChange} />
           </SidebarMenu>
         </SidebarGroup>
-        <SidebarGroup>
+        {features.agent ? <SidebarGroup>
           <SidebarGroupLabel>{locale === "en" ? "AI Assistant" : "智能助理"}</SidebarGroupLabel>
           <SidebarMenu>
             <AppNavigationItem page={page} target="agent" label={locale === "en" ? "Closure Assistant" : "可露希尔助理"} icon={Bot} onPageChange={onPageChange}>
               {websiteSession ? <Suspense fallback={null}><AgentHistoryNavigation active={page === "agent"} /></Suspense> : null}
             </AppNavigationItem>
           </SidebarMenu>
-        </SidebarGroup>
+        </SidebarGroup> : null}
         <SidebarGroup>
           <SidebarGroupLabel>{labels.personalGroup}</SidebarGroupLabel>
           <SidebarMenu>
@@ -151,7 +153,7 @@ export function AppSidebar({ page, onPageChange, showMower = false }: AppSidebar
               <AppNavigationItem page={page} target="skland" label={labels.skland} icon={Cloud} onPageChange={onPageChange} />
             ) : null}
             <AppNavigationItem page={page} target="account" label={labels.account} icon={UserRound} onPageChange={onPageChange} />
-            <AppNavigationItem page={page} target="billing" label={billingLabel} icon={CreditCard} onPageChange={onPageChange} />
+            {features.billing ? <AppNavigationItem page={page} target="billing" label={billingLabel} icon={CreditCard} onPageChange={onPageChange} /> : null}
             <AppNavigationItem page={page} target="settings" label={labels.settings} icon={Settings2} onPageChange={onPageChange} />
           </SidebarMenu>
         </SidebarGroup>
