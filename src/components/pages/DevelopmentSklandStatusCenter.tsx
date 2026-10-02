@@ -1,12 +1,15 @@
 "use client";
 import { useTranslations } from "next-intl";
+import { lazy, Suspense } from "react";
 
 import { LogIn, UserRound } from "lucide-react";
 
-import { SklandStatus, type SklandStatusProps } from "@/components/pages/SklandStatus";
+import type { SklandStatusProps } from "@/components/pages/SklandStatus";
 import { StatusCenterLoading, StatusCenterPage } from "@/components/pages/StatusCenterShell";
 import { Button } from "@/components/ui/button";
 import type { SklandBindingSummary } from "@/types";
+
+const SklandStatus = lazy(() => import("@/components/pages/SklandStatus").then((module) => ({ default: module.SklandStatus })));
 
 export interface DevelopmentSklandStatusCenterProps {
   websiteAuthenticated: boolean;
@@ -65,5 +68,7 @@ export function DevelopmentSklandStatusCenter({
 
   if (!websiteAuthenticated) return <WebsiteLoginRequired onOpenAccount={onOpenAccount} />;
 
-  return <SklandStatus {...skland} bindingSummary={bindingSummary} />;
+  return <Suspense fallback={<StatusCenterPage data-skland-page><StatusCenterLoading label={intl("components_pages_DevelopmentSklandStatusCenter.restoringWebsiteAccount")} /></StatusCenterPage>}>
+    <SklandStatus {...skland} bindingSummary={bindingSummary} />
+  </Suspense>;
 }

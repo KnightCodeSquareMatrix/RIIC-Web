@@ -18,10 +18,10 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { createContext, useContext, useId, useState, type ReactNode } from "react";
+import { createContext, lazy, Suspense, useContext, useId, useState, type ReactNode } from "react";
 import { LayoutGroup, motion, useReducedMotion } from "motion/react";
 import styles from "./AppSidebar.module.css";
-import { AgentHistoryNavigation } from "@/components/agent/AgentHistoryNavigation";
+import { useWebsiteSession } from "@/website-session";
 
 import {
   Sidebar,
@@ -40,6 +40,7 @@ import { workbenchHref, type AppPage } from "@/workbench-routes";
 import { useLocale } from "next-intl";
 
 const CLIENT_SKLAND_ENABLED = process.env.APP_CLIENT_SKLAND_ENABLED === "1";
+const AgentHistoryNavigation = lazy(() => import("@/components/agent/AgentHistoryNavigation").then((module) => ({ default: module.AgentHistoryNavigation })));
 const SidebarHighlight = createContext<{ target: string; setHovered: (target: string | null) => void }>({ target: "", setHovered: () => undefined });
 
 interface AppSidebarProps {
@@ -98,6 +99,7 @@ function AppNavigationItem({
 
 export function AppSidebar({ page, onPageChange, showMower = false }: AppSidebarProps) {
   const locale = useLocale();
+  const { data: websiteSession } = useWebsiteSession();
   const labels = messageRecord(locale, "components_layout_AppSidebar_labels");
   const billingLabel = locale === "en" ? "Payment plans" : "付费计划";
   const [hovered, setHovered] = useState<string | null>(null);
@@ -138,7 +140,7 @@ export function AppSidebar({ page, onPageChange, showMower = false }: AppSidebar
           <SidebarGroupLabel>{locale === "en" ? "AI Assistant" : "智能助理"}</SidebarGroupLabel>
           <SidebarMenu>
             <AppNavigationItem page={page} target="agent" label={locale === "en" ? "Closure Assistant" : "可露希尔助理"} icon={Bot} onPageChange={onPageChange}>
-              <AgentHistoryNavigation active={page === "agent"} />
+              {websiteSession ? <Suspense fallback={null}><AgentHistoryNavigation active={page === "agent"} /></Suspense> : null}
             </AppNavigationItem>
           </SidebarMenu>
         </SidebarGroup>
