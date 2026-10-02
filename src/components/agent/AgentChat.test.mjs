@@ -32,6 +32,14 @@ test("agent cards group sources, expose only knowledge subjects, and render fail
           export const buildAgentDisplayTurns=()=>[];
           export const hasActiveAgentContent=()=>false;
           export const agentChatErrorMessage=()=>"";
+          export const Combobox=({children})=>children ?? null;
+          export const ComboboxContent=({children})=>children ?? null;
+          export const ComboboxInput=()=>null;
+          export const ComboboxTrigger=()=>null;
+          export const SidebarTrigger=()=>null;
+          export const AgentComposerMenu=()=>null;
+          export const ComboboxItem=({children})=>children ?? null;
+          export const ComboboxList=()=>null;
           export const ToolChip=({label,children})=>createElement("div",null,label,children);
           export const AGENT_BROADCAST_CHANNEL="test";
           export const requestAgentArtifactOpen=()=>{};
