@@ -2417,7 +2417,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       <SidebarInset className="isolate">
         <DotDistortionBackground />
         <AppTopBar />
-        {agentArtifactNotice ? (
+        {agentArtifactNotice && page !== "agent" ? (
           <div className="flex flex-wrap items-center gap-3 border-b bg-[#FFD501]/15 px-4 py-2 text-sm" data-agent-artifact-banner>
             <span className="min-w-0">
               {intl("App.agentArtifactBannerText", { preset: agentArtifactNotice.preset ? `（${agentArtifactNotice.preset}）` : "" })}

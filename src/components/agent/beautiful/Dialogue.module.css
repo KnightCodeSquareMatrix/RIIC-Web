@@ -10,6 +10,8 @@
   cursor: not-allowed;
 }
 .newConversation { border-radius: 9999px; padding-inline: 16px; height: 36px; background: color-mix(in srgb, var(--dialogue-accent) 18%, var(--background)); border-color: color-mix(in srgb, var(--dialogue-accent) 65%, var(--border)); }
+.newConversation:enabled { background: var(--dialogue-accent); border-color: var(--dialogue-accent); color: #302710; font-weight: 600; }
+.newConversation:enabled:hover { background: color-mix(in srgb, var(--dialogue-accent) 95%, black); }
 .sendButton { background: var(--dialogue-accent); color: #302710; }
 .sendButton:enabled:hover { filter: brightness(1.04); }
 .assistantTurn { display: grid; min-width: 0; flex-shrink: 0; gap: 8px; align-content: start; }
@@ -76,6 +78,9 @@
   overflow: hidden;
   background: var(--card);
 }
+
+.row[data-speaker="assistant"]:has([data-closure-fur-avatar]) { padding-left: 6px; }
+.avatar:has([data-closure-fur-avatar]) { position: relative; z-index: 1; overflow: visible; }
 
 .bubble {
   position: relative;
