@@ -7,7 +7,7 @@ import { Chat, useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, convertFileListToFileUIParts, type FileUIPart, type UIMessage } from "ai";
 import { ArrowUpRight, BookOpen, Bot, ClipboardCheck, FileText, Paperclip, Plus, RotateCcw, Settings2, Upload, UsersRound, X } from "lucide-react";
 import Link from "next/link";
-import { useLocale } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 
 import { PlanArtifactView } from "@/components/agent/PlanArtifactView";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,8 @@ import { AgentConversationScrollArea } from "./AgentConversationScrollArea";
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ChatBubble, ChatPanel, LoadingState, PromptBar, StreamingText, ThinkingState, ToolChip } from "./beautiful/ChatPrimitives";
 import dialogueStyles from "./beautiful/Dialogue.module.css";
+import billingStyles from "@/components/billing/BillingPrototype.module.css";
+import personaStyles from "./PersonaPreview.module.css";
 import { AgentCreditBalance } from "./AgentCreditBalance";
 import { PersonaAvatar, readPersonaAvatar } from "./PersonaAvatar";
 import { parsePersonaAvatar } from "@/agent-persona-avatar";
@@ -43,7 +45,6 @@ type PersonaCard = {
 
 const MAX_PERSONA_LENGTH = 36_000;
 const LOCAL_PERSONA_STORAGE_KEY = "riic.agent.persona.v1";
-const DEFAULT_PERSONA_AVATAR_KEY = "riic.agent.persona.closure.avatar.v1";
 const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
 const MAX_ATTACHMENTS = 4;
 const ACCEPTED_ATTACHMENT_TYPES = ["image/", "text/", "application/pdf", "application/json", "application/vnd.openxmlformats-officedocument", "application/vnd.ms-excel"];
@@ -149,7 +150,7 @@ function MasteryWarnings({ warnings }: { warnings: unknown }) {
   })}</>;
 }
 
-export function ToolResultSummary({ name, output }: { name: string; output: unknown }) {
+export function ToolResultSummary({ name, output, openLabel = "在工作台中打开" }: { name: string; output: unknown; openLabel?: string }) {
   const [handoffError, setHandoffError] = useState<string | null>(null);
   const handoff = agentArtifactFromOutput(output);
   const record = asRecord(output);
@@ -171,17 +172,18 @@ export function ToolResultSummary({ name, output }: { name: string; output: unkn
         </div>
         {handoff ? (
           <div className="flex flex-wrap items-center gap-3">
-            <button
+            <Button
               type="button"
-              className="w-fit rounded-md bg-[#FFD501] px-3 py-1.5 text-xs font-medium text-black transition-opacity hover:opacity-90"
+              size="sm"
+              className="w-fit"
               onClick={() => {
                 setHandoffError(null);
                 try { requestAgentArtifactOpen(handoff); }
                 catch (error) { setHandoffError(error instanceof Error ? error.message : "临时交接失败，请重试。"); }
               }}
             >
-              在工作台中打开 →
-            </button>
+              {openLabel}<ArrowUpRight className="size-3.5" aria-hidden="true" />
+            </Button>
             {handoffError ? <p role="alert" className="text-destructive">{handoffError}</p> : null}
           </div>
         ) : null}
@@ -289,6 +291,7 @@ function AttachmentPreview({ file, onRemove }: { file: FileUIPart; onRemove?: ()
 
 export function AgentChat({ conversationId, initialMessages, userName, userId, billingAllowed = false }: { conversationId: string; initialMessages: UIMessage[]; userName?: string; userId?: string; billingAllowed?: boolean }) {
   const en = useLocale() === "en";
+  const intl = useTranslations();
   const { store: historyStore, error: historyError } = useAgentHistory();
   const [agentStatus, setAgentStatus] = useState<AgentStatus>("loading");
   const [modelChoices, setModelChoices] = useState<AgentModelChoice[]>([]);
@@ -296,7 +299,6 @@ export function AgentChat({ conversationId, initialMessages, userName, userId, b
   const [draft, setDraft] = useState("");
   const [attachments, setAttachments] = useState<FileUIPart[]>([]);
   const [activePersona, setActivePersona] = useState<PersonaCard | null>(null);
-  const [defaultPersonaAvatar, setDefaultPersonaAvatar] = useState<string>();
   const [avatarSaving, setAvatarSaving] = useState(false);
   const [personaHydrated, setPersonaHydrated] = useState(false);
   const [personaOpen, setPersonaOpen] = useState(false);
@@ -321,7 +323,6 @@ export function AgentChat({ conversationId, initialMessages, userName, userId, b
   useEffect(() => {
     const stored = readLocalPersona();
     if (stored) setActivePersona(stored);
-    try { setDefaultPersonaAvatar(parsePersonaAvatar(window.localStorage.getItem(DEFAULT_PERSONA_AVATAR_KEY))); } catch { /* Use the built-in operator portrait when storage is unavailable. */ }
     setPersonaHydrated(true);
   }, []);
 
@@ -485,21 +486,15 @@ export function AgentChat({ conversationId, initialMessages, userName, userId, b
   };
 
   const updatePersonaAvatar = (avatarUrl?: string) => {
+    if (!activePersona) return;
     setPersonaError(null);
-    if (activePersona) {
-      const next = { ...activePersona, avatarUrl };
-      if (!saveLocalPersona(next)) { setPersonaError("头像未能保存，请检查浏览器存储空间后重试。"); return; }
-      setActivePersona(next);
-    } else {
-      try {
-        if (avatarUrl) window.localStorage.setItem(DEFAULT_PERSONA_AVATAR_KEY, avatarUrl);
-        else window.localStorage.removeItem(DEFAULT_PERSONA_AVATAR_KEY);
-        setDefaultPersonaAvatar(avatarUrl);
-      } catch { setPersonaError("头像未能保存，请检查浏览器存储空间后重试。"); }
-    }
+    const next = { ...activePersona, avatarUrl };
+    if (!saveLocalPersona(next)) { setPersonaError("头像未能保存，请检查浏览器存储空间后重试。"); return; }
+    setActivePersona(next);
   };
 
   const importPersonaAvatar = async (file: File) => {
+    if (!activePersona) return;
     setAvatarSaving(true);
     setPersonaError(null);
     try { updatePersonaAvatar(await readPersonaAvatar(file)); }
@@ -576,7 +571,7 @@ export function AgentChat({ conversationId, initialMessages, userName, userId, b
           {agentStatus === "unconfigured" ? <div className="my-auto grid justify-items-start gap-3 text-sm"><Bot className="size-6 text-muted-foreground" aria-hidden="true" /><h2 className="font-medium">{en ? "Assistant is not available yet" : "助理暂未就绪"}</h2><p className="text-muted-foreground">{en ? "The model connection needs to be configured. Please try again later." : "大模型连接尚未配置，请稍后重试。"}</p></div> : null}
           {agentStatus === "unavailable" ? <div role="alert" className="my-auto grid justify-items-start gap-3 text-sm"><h2 className="font-medium">{en ? "Could not connect to the assistant" : "暂时无法连接助理"}</h2><p className="text-muted-foreground">{en ? "Please refresh the page and try again." : "请刷新页面后重试。"}</p></div> : null}
           {agentStatus === "unauthenticated" ? <div className="my-auto grid justify-items-start gap-3 text-sm"><Bot className="size-6 text-muted-foreground" aria-hidden="true" /><h2 className="font-medium">{en ? "Sign in to meet Closure" : "登录后，与可露希尔开始对话"}</h2><p className="text-muted-foreground">{en ? "Use your website account to access the assistant." : "使用网站账号登录，即可让助理帮你诊断账号、规划基建。"}</p><Button nativeButton={false} render={<Link href="/account" />} size="sm">{en ? "Sign in" : "前往账号管理登录"}</Button></div> : null}
-          {agentStatus === "payment_required" ? <div className="my-auto grid justify-items-start gap-3 text-sm"><h2 className="font-medium">{en ? "Add credits to get started" : "补充积分，开始对话"}</h2><p className="text-muted-foreground">{en ? "You need at least 1 credit to use the assistant." : "当前账号需至少有 1 积分才能使用助理。"}</p>{billingAllowed ? <Button nativeButton={false} render={<Link href="/billing" />} size="sm">{en ? "View payment plans" : "查看付费计划"}</Button> : null}</div> : null}
+          {agentStatus === "payment_required" ? <div className="my-auto grid justify-items-start gap-3 text-sm"><h2 className="font-medium">{en ? "Add credits to get started" : "补充积分，开始对话"}</h2><p className="text-muted-foreground">{en ? "You need at least 1 credit to use the assistant." : "当前账号需至少有 1 积分才能使用助理。"}</p>{billingAllowed ? <Button nativeButton={false} render={<Link href="/billing" />} size="sm" className={billingStyles.pill}>{en ? "View payment plans" : "查看付费计划"}</Button> : null}</div> : null}
 
           {messages.length === 0 && agentStatus === "ready" ? <div className="my-auto grid gap-7 py-4 sm:py-8">
             <div className="grid gap-3"><p className="flex items-center gap-2 text-xs text-muted-foreground"><Bot className="size-4" aria-hidden="true" />{en ? "CLOSURE / RHODES ISLAND" : "可露希尔 / 罗德岛"}</p><h2 className="text-2xl font-medium tracking-tight sm:text-3xl">{en ? "Doctor, where shall we start?" : "博士，今天从哪里开始？"}</h2><p className="max-w-lg text-sm leading-6 text-muted-foreground">{en ? "Tell me what you want to improve. I can check your account, calculate a plan and send the result to your workbench." : "说说你想改善什么。我可以检查账号、计算方案，再把结果交给你的工作台。"}</p></div>
@@ -599,11 +594,25 @@ export function AgentChat({ conversationId, initialMessages, userName, userId, b
               {turn.messages.flatMap((message) => {
                 const active = turn.pending && status !== "submitted" && message.id === messages.at(-1)?.id;
                 const animate = !restoredMessageIds.has(message.id);
+                const activeAvatarIndex = active ? message.parts.reduce((last, part, index) =>
+                  (part.type === "text" && !!part.text.trim()) || (isToolPart(part) && part.type === "tool-solve_schedule" && part.state === "output-available" && !!agentArtifactFromOutput(part.output)) ? index : last, -1) : -1;
                 return message.parts.map((part, partIndex) => {
                 const key = `${message.id}:${partIndex}`;
-                if (part.type === "text") return part.text.trim() ? <ChatBubble key={key} speaker="assistant" name={activePersona?.name ?? (en ? "Closure" : "可露希尔")} label={en ? "Closure reply" : "可露希尔的回答"} avatar={<PersonaAvatar name={activePersona?.name ?? "可露希尔"} src={activePersona ? activePersona.avatarUrl : defaultPersonaAvatar} />}><StreamingText content={part.text} running={active && part.state === "streaming"} animate={animate} previousParts={message.parts.slice(0, partIndex).filter((previous) => previous.type === "text").map((previous) => previous.text)} /></ChatBubble> : null;
+                if (part.type === "text") return part.text.trim() ? <ChatBubble key={key} speaker="assistant" name={activePersona?.name ?? (en ? "Closure" : "可露希尔")} label={en ? "Closure reply" : "可露希尔的回答"} avatar={<PersonaAvatar name={activePersona?.name ?? "可露希尔"} src={activePersona?.avatarUrl} active={partIndex === activeAvatarIndex} />}><StreamingText content={part.text} running={active && part.state === "streaming"} animate={animate} previousParts={message.parts.slice(0, partIndex).filter((previous) => previous.type === "text").map((previous) => previous.text)} /></ChatBubble> : null;
                 if (part.type === "reasoning") return part.text.trim() || (active && part.state === "streaming") ? <div key={key} className={dialogueStyles.activity}><ThinkingState label={en ? "Thinking" : "思考过程"} activeLabel={en ? "Thinking…" : "正在思考…"} running={active && part.state === "streaming"} animate={animate}>{part.text}</ThinkingState></div> : null;
-                if (isToolPart(part)) return <div key={key} className={dialogueStyles.activity}><AgentToolCard part={part} active={active} animate={animate} /></div>;
+                if (isToolPart(part)) {
+                  // Keep every completed schedule in its original conversation position,
+                  // including restored history, with an action that can be used again.
+                  const output = asRecord(part.output);
+                  const handoff = part.type === "tool-solve_schedule" && part.state === "output-available" && !output?.error && output?.plan ? agentArtifactFromOutput(part.output) : null;
+                  if (handoff) {
+                    return <ChatBubble key={key} speaker="assistant" name={activePersona?.name ?? (en ? "Closure" : "可露希尔")} label={en ? "Generated schedule" : "已生成的排班"} avatar={<PersonaAvatar name={activePersona?.name ?? "可露希尔"} src={activePersona?.avatarUrl} active={partIndex === activeAvatarIndex} />}>
+                      <p className="mb-3 text-sm leading-6">{intl("App.agentArtifactBannerText", { preset: handoff.preset ? `（${handoff.preset}）` : "" })}</p>
+                      <ToolResultSummary name="solve_schedule" output={part.output} openLabel={intl("App.agentArtifactOpen")} />
+                    </ChatBubble>;
+                  }
+                  return <div key={key} className={dialogueStyles.activity}><AgentToolCard part={part} active={active} animate={animate} /></div>;
+                }
                 return null;
                 });
               })}
@@ -615,35 +624,56 @@ export function AgentChat({ conversationId, initialMessages, userName, userId, b
       </ChatPanel>
 
       <Dialog open={personaOpen} onOpenChange={(open) => { if (!avatarSaving) setPersonaOpen(open); }}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-[min(880px,calc(100vw-2rem))]">
           <DialogHeader><DialogTitle>人格卡</DialogTitle><DialogDescription>只影响表达风格；站内工具、账号权限和事实规则仍由服务端控制。</DialogDescription></DialogHeader>
           <DialogBody>
             <div className="grid gap-3">
-              <div className="flex items-center gap-3 rounded-xl bg-muted/60 p-3" data-persona-avatar-settings>
-                <div className="size-12 shrink-0 overflow-hidden rounded-full" aria-hidden="true"><PersonaAvatar name={activePersona?.name ?? "可露希尔"} src={activePersona ? activePersona.avatarUrl : defaultPersonaAvatar} size={48} /></div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{activePersona?.name ?? "可露希尔"}的头像</p>
-                  <p className="mt-1 text-xs text-muted-foreground">保存在当前浏览器 · PNG / JPEG / WebP，最大 2 MB</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <Button type="button" variant="outline" size="sm" disabled={avatarSaving} onClick={() => personaAvatarInputRef.current?.click()}>{avatarSaving ? "正在保存…" : "上传头像"}</Button>
-                    <Button type="button" variant="ghost" size="sm" disabled={avatarSaving || !(activePersona ? activePersona.avatarUrl : defaultPersonaAvatar)} onClick={() => updatePersonaAvatar()}>重置头像</Button>
+              <div className={personaStyles.cards}>
+              {[null, ...(activePersona ? [activePersona] : [])].map((persona) => {
+                const selected = persona === activePersona;
+                return <section key={persona?.id ?? "default"} className={`${billingStyles.card} ${billingStyles.product} ${personaStyles.preview} ${!persona ? personaStyles.closure : ""}`} aria-label={selected ? "当前人格卡预览" : "可露希尔人格卡"} data-persona-avatar-settings={selected ? "" : undefined}>
+                <span aria-hidden="true" className={dialogueStyles.decoration} />
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs font-medium text-muted-foreground">{selected ? "当前使用" : "可选人格"}</p>
+                  <span className={`${billingStyles.productBadge} shrink-0 rounded-full px-2.5 py-1 text-[10px] font-medium`}>{persona ? "本地人格" : "默认人格"}</span>
+                </div>
+                <div className={personaStyles.identity}>
+                  <div className={personaStyles.portrait} aria-hidden="true"><PersonaAvatar name={persona?.name ?? "可露希尔"} src={persona?.avatarUrl} size={80} /></div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className={personaStyles.name}>{persona?.name ?? "可露希尔"}</h3>
+                    <p className={personaStyles.description}>{persona?.description || "罗德岛的基建搭档"}</p>
                   </div>
                 </div>
-              </div>
-              <input ref={personaAvatarInputRef} aria-label="上传人格卡头像" type="file" accept="image/png,image/jpeg,image/webp" className="hidden" disabled={avatarSaving} onChange={(event) => { const file = event.target.files?.[0]; if (file) void importPersonaAvatar(file); event.currentTarget.value = ""; }} />
-              <Button type="button" variant={!activePersona ? "secondary" : "outline"} disabled={avatarSaving} className="h-auto justify-start px-3 py-2 text-left" onClick={() => { clearLocalPersona(); setActivePersona(null); setPersonaOpen(false); }}>
-                <span className="size-9 shrink-0 overflow-hidden rounded-full" aria-hidden="true"><PersonaAvatar name="可露希尔" src={defaultPersonaAvatar} size={36} /></span>
-                <span><span className="block font-medium">可露希尔</span><span className="mt-0.5 block text-xs text-muted-foreground">使用网站服务端当前配置的人格卡</span></span>
-              </Button>
-              {activePersona?.kind === "upload" ? <div className="rounded-[4px] border border-[#FFD501] bg-[#FFD501]/10 px-3 py-2 text-sm">
-                <div className="flex items-center gap-3">
-                  <span className="size-9 shrink-0 overflow-hidden rounded-full" aria-hidden="true"><PersonaAvatar name={activePersona.name} src={activePersona.avatarUrl} size={36} /></span>
-                  <div className="min-w-0"><p className="font-medium">{activePersona.name}</p><p className="mt-0.5 text-xs text-muted-foreground">{activePersona.filename} · 已保存在此浏览器，下次打开优先使用</p></div>
+                {persona ? <div>
+                  <p className={billingStyles.caption}>头像保存在当前浏览器<br />PNG / JPEG / WebP，最大 2 MB</p>
+                  <div className={personaStyles.actions}>
+                    <Button type="button" className={`${billingStyles.pill} ${billingStyles.primary}`} disabled={avatarSaving} onClick={() => personaAvatarInputRef.current?.click()}><Upload className="size-3.5" aria-hidden="true" />{avatarSaving ? "正在保存…" : "上传头像"}</Button>
+                    <Button type="button" variant="ghost" className={billingStyles.pill} disabled={avatarSaving || !persona.avatarUrl} onClick={() => updatePersonaAvatar()}>重置头像</Button>
+                  </div>
+                    <p className={`${billingStyles.caption} mt-3 break-words`}>{persona.filename} · 已保存在此浏览器，下次打开优先使用</p>
+                    <Button type="button" variant="link" size="sm" disabled={avatarSaving} className="mt-1 h-auto px-0 text-xs text-muted-foreground" onClick={() => { clearLocalPersona(); setActivePersona(null); }}>清除本地人格卡</Button>
+                </div> : <div>
+                  <p className={billingStyles.caption}>使用网站服务端当前配置的人格卡</p>
+                  <Button type="button" disabled={avatarSaving || selected} className={`${billingStyles.pill} ${billingStyles.primary} mt-3 w-full`} aria-label="可露希尔 · 使用网站服务端当前配置的人格卡" onClick={() => { clearLocalPersona(); setActivePersona(null); setPersonaOpen(false); }}>{selected ? "正在使用" : "使用可露希尔"}</Button>
+                </div>}
+              </section>;
+              })}
+              {!activePersona ? <section className={`${billingStyles.card} ${billingStyles.product} ${personaStyles.preview}`} aria-label="导入人格卡">
+                <span aria-hidden="true" className={dialogueStyles.decoration} />
+                <div>
+                  <Upload className="mb-5 size-6 text-muted-foreground" aria-hidden="true" />
+                  <h3 className="text-lg font-semibold">添加你的人格卡</h3>
+                  <p className={personaStyles.description}>导入喜欢的表达风格，打造自己的基建搭档。</p>
                 </div>
-                <Button type="button" variant="link" size="sm" disabled={avatarSaving} className="mt-1 h-auto px-0 text-xs text-muted-foreground" onClick={() => { clearLocalPersona(); setActivePersona(null); }}>清除本地人格卡</Button>
-              </div> : null}
+                <div>
+                  <p className={billingStyles.caption}>Markdown / TXT / JSON，最大 36 KB<br />保存在当前浏览器</p>
+                  <Button type="button" variant="outline" className={`${billingStyles.pill} mt-3 w-full`} disabled={avatarSaving} onClick={() => personaInputRef.current?.click()}><Upload className="size-4" aria-hidden="true" />上传人格卡</Button>
+                </div>
+              </section> : null}
+              </div>
+              {activePersona ? <input ref={personaAvatarInputRef} aria-label="上传人格卡头像" type="file" accept="image/png,image/jpeg,image/webp" className="hidden" disabled={avatarSaving} onChange={(event) => { const file = event.target.files?.[0]; if (file) void importPersonaAvatar(file); event.currentTarget.value = ""; }} /> : null}
               <input ref={personaInputRef} aria-label="上传人格卡文件" type="file" accept=".md,.markdown,.txt,.json,text/markdown,text/plain,application/json" className="hidden" disabled={avatarSaving} onChange={(event) => { const file = event.target.files?.[0]; if (file) void importPersona(file); event.currentTarget.value = ""; }} />
-              <Button type="button" variant="outline" disabled={avatarSaving} className="h-auto justify-start px-3 py-2 text-left" onClick={() => personaInputRef.current?.click()}><Upload className="size-4" aria-hidden="true" /><span><span className="block font-medium">上传人格卡</span><span className="mt-0.5 block text-xs font-normal text-muted-foreground">Markdown / TXT / JSON，最大 36 KB</span></span></Button>
+              {activePersona ? <Button type="button" variant="outline" disabled={avatarSaving} className={`${billingStyles.pill} justify-self-start`} onClick={() => personaInputRef.current?.click()}><Upload className="size-4" aria-hidden="true" />上传人格卡</Button> : null}
               {personaError ? <p role="alert" className="text-xs text-destructive">{personaError}</p> : null}
             </div>
           </DialogBody>
