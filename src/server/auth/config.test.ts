@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { canChangeWebsiteAdminRole, canModerateWebsiteUser, isEligibleForWebsiteAdmin, websiteAdminAccess } from "./admin-access.ts";
-import { configuredAdminIds, requireAuthBaseUrl, requireAuthSecret } from "./config.ts";
+import { configuredAdminIds, localAuthTrustedOrigins, requireAuthBaseUrl, requireAuthSecret } from "./config.ts";
 
 test("Better Auth secret must contain at least 32 UTF-8 bytes", () => {
   assert.throws(() => requireAuthSecret("short"), /32 bytes/);
@@ -20,6 +20,21 @@ test("Better Auth base URL must be an HTTPS origin outside local development", (
 test("administrator ids are explicit, trimmed Better Auth user ids", () => {
   assert.deepEqual([...configuredAdminIds(" user-one, user-two, user-one, ,")], ["user-one", "user-two"]);
   assert.equal(configuredAdminIds("").size, 0);
+});
+
+test("local development trusts only loopback aliases on the configured protocol and port", () => {
+  for (const hostname of ["localhost", "127.0.0.1"]) {
+    assert.deepEqual(localAuthTrustedOrigins(`http://${hostname}:5174`, "development", "local"), [
+      "http://localhost:5174", "http://127.0.0.1:5174",
+    ]);
+  }
+  assert.deepEqual(localAuthTrustedOrigins("https://localhost:5175", "development", "local"), [
+    "https://localhost:5175", "https://127.0.0.1:5175",
+  ]);
+  assert.deepEqual(localAuthTrustedOrigins("http://localhost:5174", "production", "local"), []);
+  assert.deepEqual(localAuthTrustedOrigins("http://localhost:5174", "development", "production"), []);
+  assert.deepEqual(localAuthTrustedOrigins("https://riic.autos", "development", "local"), []);
+  assert.deepEqual(localAuthTrustedOrigins("https://localhost.evil.test:5174", "development", "local"), []);
 });
 
 test("all administrators can assign roles while bootstrap administrators remain protected", () => {

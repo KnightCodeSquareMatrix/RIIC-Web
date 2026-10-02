@@ -52,8 +52,13 @@ test("revoking feature access removes navigation and stops the active conversati
   await expect.poll(() => page.evaluate(() => (window as typeof window & { agentTestAborts: number }).agentTestAborts)).toBe(1);
 });
 
-test("Closure animates only the latest reply avatar and settles when stopped", async ({ page }) => {
+for (const variant of ["closure", "silverash"]) {
+test(`${variant} animates only the latest reply avatar and settles when stopped`, async ({ page }) => {
   await prepare(page);
+  if (variant === "silverash") {
+    await page.route("**/api/agent/chat", route => route.fulfill({ json: { success: true, data: { enabled: true, personas: [{ id: "silverash" }] } } }));
+    await page.addInitScript(() => localStorage.setItem("riic.agent.persona.selection.v1", "silverash"));
+  }
   await page.addInitScript(() => {
     const original = HTMLCanvasElement.prototype.getContext;
     const allocated = new WeakSet<HTMLCanvasElement>();
@@ -67,7 +72,7 @@ test("Closure animates only the latest reply avatar and settles when stopped", a
     } as typeof original;
   });
   await page.goto("/agent");
-  const input = page.getByRole("textbox", { name: "发给可露希尔的消息" });
+  const input = page.getByRole("textbox", { name: variant === "silverash" ? "发给银灰的消息" : "发给可露希尔的消息" });
   await input.fill("帮我排班");
   await input.press("Enter");
   await expect(page.getByRole("button", { name: "停止", exact: true })).toBeVisible();
@@ -75,7 +80,7 @@ test("Closure animates only the latest reply avatar and settles when stopped", a
     { type: "start", messageId: "fur-answer" }, { type: "start-step" },
     { type: "text-start", id: "fur-first" }, { type: "text-delta", id: "fur-first", delta: "先确认你的干员池。" },
   ]);
-  const avatars = page.locator('[data-speaker="assistant"] [data-closure-fur-avatar]');
+  const avatars = page.locator(`[data-speaker="assistant"] [data-fur-avatar="${variant}"]`);
   await expect(avatars).toHaveCount(1);
   await expect(avatars.first()).toHaveAttribute("data-fur-motion", "animated");
   await emit(page, [
@@ -92,6 +97,7 @@ test("Closure animates only the latest reply avatar and settles when stopped", a
   await input.fill("停止后可以继续输入");
   expect(await avatars.last().locator("canvas").evaluate((canvas: HTMLCanvasElement) => canvas.toDataURL())).toBe(stopped);
 });
+}
 
 test("Agent keeps streaming across routes, restores its live request, and saves while away", async ({ page }) => {
   await prepare(page);
@@ -160,7 +166,7 @@ test("A timeout in the background clears loading and retries the same question, 
   await page.goto("/agent");
   await expect(page.getByRole("button", { name: "人格卡：重试人格" })).toBeVisible();
   await page.locator('input[aria-label="上传附件"]').setInputFiles({ name: "问题.txt", mimeType: "text/plain", buffer: Buffer.from("附件内容") });
-  const input = page.getByRole("textbox", { name: "发给可露希尔的消息" });
+  const input = page.getByRole("textbox", { name: "发给重试人格的消息" });
   await input.fill("超时测试问题");
   await input.press("Enter");
   await expect(page.locator('[data-agent-history] a[aria-label="超时测试问题"] [data-agent-history-loading]')).toBeVisible();

@@ -57,7 +57,7 @@ test("Persona portraits keep Closure fixed and persist uploaded persona avatars"
   await avatarInput.setInputFiles({ name: "invalid.svg", mimeType: "image/svg+xml", buffer: Buffer.from("<svg/>") });
   await expect(page.getByRole("dialog").getByRole("alert")).toContainText("PNG、JPEG 或 WebP");
   await expect(preview.locator("img")).toHaveAttribute("src", customAvatar!);
-  await page.getByRole("button", { name: "关闭", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
   await page.reload();
   await expect(assistantAvatar.locator("img")).toHaveAttribute("src", customAvatar!);
   await page.getByRole("button", { name: /人格卡：/ }).click();
@@ -68,10 +68,9 @@ test("Persona portraits keep Closure fixed and persist uploaded persona avatars"
   await page.getByRole("button", { name: /可露希尔.*使用网站服务端/ }).click();
   await expect(assistantAvatar.locator("[data-closure-fur-avatar]")).toHaveAttribute("data-fur-ready", "true");
   await expect(assistantAvatar.locator("img")).toHaveCount(0);
-  await page.getByRole("button", { name: /人格卡：/ }).click();
-  await expect(avatarInput).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "上传头像", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "重置头像", exact: true })).toHaveCount(0);
+  await expect(avatarInput).toHaveCount(1);
+  await expect(page.locator('[data-persona-card="default"]')).toHaveAttribute("data-selected", "true");
+  await expect(page.locator('[data-persona-card^="upload-"]')).toContainText("测试人格");
   await expect(preview.locator("[data-closure-fur-avatar]")).toHaveAttribute("data-fur-ready", "true");
 });
 
@@ -89,7 +88,7 @@ for (const width of [1440, 375]) {
     const ring = page.locator('[data-speaker="assistant"] [data-agent-avatar]');
     const mascot = ring.locator("[data-closure-fur-avatar]");
     await expect(mascot).toHaveAttribute("data-fur-ready", "true");
-    await expect(ring).toHaveCSS("border-top-color", "rgb(255, 216, 0)");
+    await expect(ring).toHaveCSS("border-top-color", "rgb(189, 53, 75)");
     await expect(ring).toHaveCSS("width", width === 375 ? "32px" : "44px");
     await expect(mascot).toHaveAttribute("data-fur-motion", "idle");
     await expect(ring).toHaveCSS("overflow", "visible");
@@ -215,7 +214,7 @@ for (const width of [1440, 375]) {
     await expect(page.getByRole("button", { name: "人格卡：测试人格" })).toBeVisible();
     if (width < 768) await page.keyboard.press("Escape");
     await page.getByRole("button", { name: /账号体检.*帮我看看/ }).click();
-    const input = page.getByRole("textbox", { name: "发给可露希尔的消息" });
+    const input = page.getByRole("textbox", { name: "发给测试人格的消息" });
     await expect(input).toBeFocused();
     await expect(input).toHaveValue("帮我看看账号现在什么水平");
     await expect(page.getByRole("button", { name: "发送", exact: true })).toBeEnabled();
