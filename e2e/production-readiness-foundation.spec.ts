@@ -1387,6 +1387,7 @@ for (const viewport of [
     await page.setViewportSize(viewport);
     await page.goto("/");
 
+    await expect(page.locator('[data-workbench-hydrated="true"]')).toBeVisible();
     if (viewport.width < 768) await page.getByRole("button", { name: "Toggle Sidebar" }).click();
     const accountNavigation = page.getByRole("button", { name: "账号管理", exact: true });
     await expect(accountNavigation.locator(".lucide-user-round")).toBeVisible();

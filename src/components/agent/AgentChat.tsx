@@ -3,8 +3,8 @@ import { WorkbenchPageHeading } from "@/components/workbench/WorkbenchPageHeadin
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { useChat } from "@ai-sdk/react";
-import { convertFileListToFileUIParts, type FileUIPart, type UIMessage } from "ai";
+import { Chat, useChat } from "@ai-sdk/react";
+import { DefaultChatTransport, convertFileListToFileUIParts, type FileUIPart, type UIMessage } from "ai";
 import { ArrowUpRight, BookOpen, Bot, ClipboardCheck, FileText, Paperclip, Plus, RotateCcw, Settings2, Upload, UsersRound, X } from "lucide-react";
 import Link from "next/link";
 import { useLocale } from "next-intl";
@@ -305,7 +305,8 @@ export function AgentChat({ conversationId, initialMessages, userName, userId }:
   const personaAvatarInputRef = useRef<HTMLInputElement>(null);
   const [restoredMessageIds] = useState(() => new Set(initialMessages.map((message) => message.id)));
   const runtime = useAgentRuntime();
-  const [runtimeConversation] = useState(() => runtime.getConversation(userId ?? "anonymous", conversationId, initialMessages, historyStore.save));
+  const [runtimeConversation] = useState(() => runtime.getConversation(userId ?? "anonymous", conversationId, initialMessages, historyStore.save,
+    () => new Chat({ id: conversationId, messages: initialMessages, transport: new DefaultChatTransport({ api: "/api/agent/chat" }) })));
   const { messages, sendMessage, status, error, stop, clearError, regenerate } = useChat({
     chat: runtimeConversation.chat,
     throttle: 50,
