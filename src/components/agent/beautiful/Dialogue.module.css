@@ -4,13 +4,19 @@
   --dialogue-avatar-size: 44px;
   --dialogue-avatar-gap: 24px;
 }
+.theme[data-agent-persona="silverash"] {
+  --dialogue-accent: var(--billing-monthly-accent);
+  --dialogue-name: var(--billing-monthly-foreground);
+}
 .theme button:disabled, .theme button[aria-disabled="true"] {
   opacity: 1;
   filter: saturate(.12);
   cursor: not-allowed;
 }
 .newConversation { border-radius: 9999px; padding-inline: 16px; height: 36px; background: color-mix(in srgb, var(--dialogue-accent) 18%, var(--background)); border-color: color-mix(in srgb, var(--dialogue-accent) 65%, var(--border)); }
-.sendButton { background: var(--dialogue-accent); color: #302710; }
+.newConversation:enabled { background: var(--dialogue-accent); border-color: var(--dialogue-accent); color: var(--billing-accent-foreground, #302710); font-weight: 600; }
+.newConversation:enabled:hover { background: color-mix(in srgb, var(--dialogue-accent) 95%, black); }
+.sendButton { background: var(--dialogue-accent); color: var(--billing-accent-foreground, #302710); }
 .sendButton:enabled:hover { filter: brightness(1.04); }
 .assistantTurn { display: grid; min-width: 0; flex-shrink: 0; gap: 8px; align-content: start; }
 .assistantTurn[data-pending="true"] { min-height: 28px; }
@@ -77,6 +83,9 @@
   background: var(--card);
 }
 
+.row[data-speaker="assistant"]:has([data-fur-avatar]) { padding-left: 6px; }
+.avatar:has([data-fur-avatar]) { position: relative; z-index: 1; overflow: visible; }
+
 .bubble {
   position: relative;
   isolation: isolate;
@@ -103,6 +112,8 @@
 .signal { position: absolute; right: 14px; bottom: 9px; display: flex; align-items: center; gap: 3px; height: 12px; padding: 0 5px; border-radius: 8px; background: var(--dialogue-accent); pointer-events: none; }
 .signal i { width: 3px; height: 3px; border-radius: 50%; background: var(--card); }
 :global(.dark) .theme { --dialogue-name: #ffe16b; }
+:global(.dark) .theme[data-agent-persona="silverash"] { --dialogue-name: var(--billing-monthly-accent); }
+:global(.dark) .theme:is([data-agent-persona="default"], [data-agent-persona="exusiai"]) { --dialogue-name: #ef8597; }
 :global(.dark) .decoration, :global(.dark) .promptDecoration { opacity: .25; }
 
 @media (max-width: 639px) {

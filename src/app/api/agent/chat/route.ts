@@ -9,6 +9,7 @@ import { agentLlmSettings } from "@/server/agent/config";
 import { getAgentModel } from "@/server/agent/llm";
 import { createAgentStreamPolicy } from "@/server/agent/stream-policy";
 import { buildAgentSystemPrompt } from "@/server/agent/persona";
+import { listBuiltinAgentPersonas, resolveAgentPersonaContent } from "@/server/agent/persona-catalog";
 import { buildAgentTools } from "@/server/agent/tools";
 import { calculateAgentTokenCost } from "@/server/billing/pricing";
 
@@ -103,6 +104,7 @@ export async function GET(request: Request) {
         provider: settings.configured ? settings.provider : null,
         model: settings.configured ? settings.model : null,
         baseURL: settings.configured ? settings.baseURL : null,
+        personas: await listBuiltinAgentPersonas(),
       },
       requestId
     );
@@ -127,12 +129,16 @@ export async function POST(request: Request) {
       );
       return new Response(response.body, { status: 503, headers: response.headers });
     }
-    const body = (await request.json()) as { messages?: UIMessage[]; persona?: { id?: unknown; name?: unknown; content?: unknown } };
+    const body = (await request.json()) as { messages?: UIMessage[]; persona?: { id?: unknown; kind?: unknown; name?: unknown; content?: unknown } };
     if (!Array.isArray(body.messages) || body.messages.length === 0) {
       const response = failureResponse(new Error("缺少对话消息。"), requestId, "/api/agent/chat", startedAt);
       return new Response(response.body, { status: 400, headers: response.headers });
     }
-    const personaContent = typeof body.persona?.content === "string" ? body.persona.content.trim().slice(0, 36_000) : undefined;
+    let personaContent: string | undefined;
+    try { personaContent = await resolveAgentPersonaContent(body.persona); }
+    catch (error) {
+      return failureResponse(new PublicApiError("AIC-REQ-1001", { message: "所选人格卡暂不可用，请重新选择。", cause: error }), requestId, "/api/agent/chat", startedAt);
+    }
     const fileParts = body.messages.flatMap((message) => message.parts.filter((part) => part.type === "file")).map((part) => part as unknown as { url?: unknown; mediaType?: unknown; filename?: unknown });
     if (fileParts.length > 4) {
       const response = failureResponse(new Error("一次最多发送 4 个附件。"), requestId, "/api/agent/chat", startedAt);

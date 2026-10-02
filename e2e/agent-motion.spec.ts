@@ -36,6 +36,53 @@ async function emit(page: Page, parts: unknown[], done = false) {
   }, { parts, done });
 }
 
+for (const variant of ["closure", "silverash"]) {
+test(`${variant} animates only the latest reply avatar and settles when stopped`, async ({ page }) => {
+  await prepare(page);
+  if (variant === "silverash") {
+    await page.route("**/api/agent/chat", route => route.fulfill({ json: { success: true, data: { enabled: true, personas: [{ id: "silverash" }] } } }));
+    await page.addInitScript(() => localStorage.setItem("riic.agent.persona.selection.v1", "silverash"));
+  }
+  await page.addInitScript(() => {
+    const original = HTMLCanvasElement.prototype.getContext;
+    const allocated = new WeakSet<HTMLCanvasElement>();
+    (window as typeof window & { furContexts: number }).furContexts = 0;
+    HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, ...args: Parameters<typeof original>) {
+      if (args[0] === "webgl2" && !allocated.has(this)) {
+        allocated.add(this);
+        (window as typeof window & { furContexts: number }).furContexts++;
+      }
+      return original.apply(this, args);
+    } as typeof original;
+  });
+  await page.goto("/agent");
+  const input = page.getByRole("textbox", { name: variant === "silverash" ? "发给银灰的消息" : "发给可露希尔的消息" });
+  await input.fill("帮我排班");
+  await input.press("Enter");
+  await expect(page.getByRole("button", { name: "停止", exact: true })).toBeVisible();
+  await emit(page, [
+    { type: "start", messageId: "fur-answer" }, { type: "start-step" },
+    { type: "text-start", id: "fur-first" }, { type: "text-delta", id: "fur-first", delta: "先确认你的干员池。" },
+  ]);
+  const avatars = page.locator(`[data-speaker="assistant"] [data-fur-avatar="${variant}"]`);
+  await expect(avatars).toHaveCount(1);
+  await expect(avatars.first()).toHaveAttribute("data-fur-motion", "animated");
+  await emit(page, [
+    { type: "text-end", id: "fur-first" },
+    { type: "text-start", id: "fur-second" }, { type: "text-delta", id: "fur-second", delta: "接下来检查布局。" },
+  ]);
+  await expect(avatars).toHaveCount(2);
+  await expect(avatars.first()).toHaveAttribute("data-fur-motion", "idle");
+  await expect(avatars.last()).toHaveAttribute("data-fur-motion", "animated");
+  expect(await page.evaluate(() => (window as typeof window & { furContexts: number }).furContexts)).toBe(1);
+  await page.getByRole("button", { name: "停止", exact: true }).click();
+  await expect(avatars.last()).toHaveAttribute("data-fur-motion", "idle");
+  const stopped = await avatars.last().locator("canvas").evaluate((canvas: HTMLCanvasElement) => canvas.toDataURL());
+  await input.fill("停止后可以继续输入");
+  expect(await avatars.last().locator("canvas").evaluate((canvas: HTMLCanvasElement) => canvas.toDataURL())).toBe(stopped);
+});
+}
+
 test("Agent keeps streaming across routes, restores its live request, and saves while away", async ({ page }) => {
   await prepare(page);
   await page.goto("/agent");

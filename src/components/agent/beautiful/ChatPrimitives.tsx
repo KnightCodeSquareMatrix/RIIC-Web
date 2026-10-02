@@ -116,7 +116,7 @@ export function PromptBar({ input, attachments, toolbar, busy, disabled, sendLab
   return <div className={`${dialogue.prompt} relative flex min-w-0 flex-col gap-2 p-3 sm:p-4 focus-within:ring-2 focus-within:ring-ring/25`} onDragOver={(event) => event.preventDefault()} onDrop={onDrop} data-agent-prompt-bar>
     <div className={dialogue.promptDecoration} aria-hidden="true" data-agent-glass />
     {attachments}
-    <textarea {...input} className="h-20 w-full min-w-0 resize-none overflow-y-auto border-0 bg-transparent px-1 py-1 text-sm leading-relaxed text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-50" />
+    <textarea {...input} className="h-20 w-full min-w-0 resize-none overflow-y-auto border-0 bg-transparent px-1 py-1 text-base md:text-sm leading-relaxed text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-50" />
     <div className="flex min-w-0 items-end justify-between gap-2">
       <div className="flex min-w-0 flex-wrap items-center gap-1">{toolbar}</div>
       <button type="button" aria-label={busy ? stopLabel : sendLabel} title={busy ? stopLabel : sendLabel} disabled={!busy && disabled} onClick={busy ? onStop : onSend} className={`${dialogue.sendButton} flex size-10 shrink-0 items-center justify-center rounded-full transition-[filter,transform] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring enabled:active:scale-95 motion-reduce:transition-none`}>

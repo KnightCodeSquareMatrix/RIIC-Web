@@ -13,11 +13,11 @@
 .walletDetails > div { min-width: 0; }
 .balance { margin-top: 12px; font-size: 30px; line-height: 1.1; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .balance small { margin-left: 8px; font-family: inherit; font-size: 12px; font-weight: 400; color: var(--muted-foreground); }
-.available .balance { font-size: 44px; color: var(--dialogue-accent); }
+.available .balance { font-size: 44px; color: #7c3aed; }
 .products { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .product { display: flex; flex-direction: column; gap: 20px; }
 .product > :last-child { margin-top: auto; }
-.monthly { --dialogue-accent: #84bfff; --billing-accent-foreground: #153354; }
+.monthly { --billing-monthly-accent: #84bfff; --billing-monthly-foreground: #153354; --dialogue-accent: var(--billing-monthly-accent); --billing-accent-foreground: var(--billing-monthly-foreground); }
 .testPack { --dialogue-accent: #b8f03a; --billing-accent-foreground: #24320b; }
 .productBadge { background: var(--dialogue-accent); color: var(--billing-accent-foreground, #302710); }
 .price { margin-top: 18px; font-size: 36px; line-height: 1.1; font-variant-numeric: tabular-nums; }

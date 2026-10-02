@@ -26,8 +26,9 @@ async function mockWorkbench(page: Page) {
   } }));
 }
 
-test("Persona portraits use the operator image and persist independent custom avatars", async ({ page }) => {
+test("Persona portraits keep Closure fixed and persist uploaded persona avatars", async ({ page }) => {
   await mockWorkbench(page);
+  await page.addInitScript(() => localStorage.setItem("riic.agent.persona.closure.avatar.v1", "/images/operator-portraits/4195_radian.webp"));
   await page.route("**/api/agent/chat", (route) => route.request().method() === "GET"
     ? route.fulfill({ json: ready })
     : route.fulfill({ contentType: "text/event-stream", headers: { "x-vercel-ai-ui-message-stream": "v1" }, body: reply }));
@@ -36,14 +37,15 @@ test("Persona portraits use the operator image and persist independent custom av
   await input.fill("你好");
   await input.press("Enter");
   const assistantAvatar = page.locator('[data-speaker="assistant"] [data-agent-avatar]');
-  await expect(assistantAvatar.locator("img")).toHaveAttribute("src", /\/images\/operator-portraits\/4228_closur\.webp/);
-  await expect(assistantAvatar.locator("[data-remote-avatar-state]")).toHaveAttribute("data-remote-avatar-state", "loaded");
+  await expect(assistantAvatar.locator("[data-closure-fur-avatar]")).toHaveAttribute("data-fur-ready", "true");
+  await expect(assistantAvatar.locator("img")).toHaveCount(0);
   await page.getByRole("button", { name: /人格卡：/ }).click();
   const avatarInput = page.getByLabel("上传人格卡头像", { exact: true });
   const preview = page.locator("[data-persona-avatar-settings]");
-  await avatarInput.setInputFiles("public/images/operator-portraits/4195_radian.webp");
-  await expect(preview.locator("img")).toHaveAttribute("src", /^data:image\/webp;base64,/);
-  const defaultOverride = await preview.locator("img").getAttribute("src");
+  await expect(avatarInput).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "上传头像", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "重置头像", exact: true })).toHaveCount(0);
+  await expect(preview.locator("[data-closure-fur-avatar]")).toHaveAttribute("data-fur-ready", "true");
   await page.getByLabel("上传人格卡文件", { exact: true }).setInputFiles({ name: "测试人格.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify({ name: "测试人格", content: "简洁回答。", avatarUrl: "/images/operator-portraits/4228_closur.webp" })) });
   await expect(page.getByRole("button", { name: "人格卡：测试人格" })).toBeVisible();
   await expect(assistantAvatar.locator("img")).toHaveAttribute("src", "/images/operator-portraits/4228_closur.webp");
@@ -51,7 +53,6 @@ test("Persona portraits use the operator image and persist independent custom av
   await avatarInput.setInputFiles("public/images/operator-portraits/4228_closur.webp");
   await expect(preview.locator("img")).toHaveAttribute("src", /^data:image\/webp;base64,/);
   const customAvatar = await preview.locator("img").getAttribute("src");
-  expect(customAvatar).not.toBe(defaultOverride);
   await avatarInput.setInputFiles({ name: "invalid.svg", mimeType: "image/svg+xml", buffer: Buffer.from("<svg/>") });
   await expect(page.getByRole("dialog").getByRole("alert")).toContainText("PNG、JPEG 或 WebP");
   await expect(preview.locator("img")).toHaveAttribute("src", customAvatar!);
@@ -64,11 +65,103 @@ test("Persona portraits use the operator image and persist independent custom av
   await expect(preview.locator("img")).toHaveCount(0);
   await expect(preview.locator("[data-remote-avatar-state]")).toHaveText("测");
   await page.getByRole("button", { name: /可露希尔.*使用网站服务端/ }).click();
-  await expect(assistantAvatar.locator("img")).toHaveAttribute("src", defaultOverride!);
+  await expect(assistantAvatar.locator("[data-closure-fur-avatar]")).toHaveAttribute("data-fur-ready", "true");
+  await expect(assistantAvatar.locator("img")).toHaveCount(0);
   await page.getByRole("button", { name: /人格卡：/ }).click();
-  await page.getByRole("button", { name: "重置头像", exact: true }).click();
-  await expect(preview.locator("img")).toHaveAttribute("src", /\/images\/operator-portraits\/4228_closur\.webp/);
+  await expect(avatarInput).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "上传头像", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "重置头像", exact: true })).toHaveCount(0);
+  await expect(preview.locator("[data-closure-fur-avatar]")).toHaveAttribute("data-fur-ready", "true");
 });
+
+for (const width of [1440, 375]) {
+  test(`Closure fur wings extend beyond the yellow ring and respect reduced motion at ${width}px`, async ({ page }, testInfo) => {
+    await mockWorkbench(page);
+    await page.setViewportSize({ width, height: 900 });
+    await page.route("**/api/agent/chat", (route) => route.request().method() === "GET"
+      ? route.fulfill({ json: ready })
+      : route.fulfill({ contentType: "text/event-stream", headers: { "x-vercel-ai-ui-message-stream": "v1" }, body: reply }));
+    await page.goto("/agent");
+    const input = page.getByRole("textbox", { name: "发给可露希尔的消息" });
+    await input.fill("你好");
+    await input.press("Enter");
+    const ring = page.locator('[data-speaker="assistant"] [data-agent-avatar]');
+    const mascot = ring.locator("[data-closure-fur-avatar]");
+    await expect(mascot).toHaveAttribute("data-fur-ready", "true");
+    await expect(ring).toHaveCSS("border-top-color", "rgb(255, 216, 0)");
+    await expect(ring).toHaveCSS("width", width === 375 ? "32px" : "44px");
+    await expect(mascot).toHaveAttribute("data-fur-motion", "idle");
+    await expect(ring).toHaveCSS("overflow", "visible");
+    const painted = await mascot.locator("canvas").evaluate((canvas: HTMLCanvasElement) => {
+      const context = canvas.getContext("2d")!;
+      const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
+      const canvasBounds = canvas.getBoundingClientRect();
+      const ringBounds = canvas.closest("[data-agent-avatar]")!.getBoundingClientRect();
+      const ringLeft = (ringBounds.left - canvasBounds.left) / canvasBounds.width * canvas.width;
+      const ringRight = (ringBounds.right - canvasBounds.left) / canvasBounds.width * canvas.width;
+      let red = 0, leftWing = 0, rightWing = 0;
+      let minX = canvas.width, maxX = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] < 180) continue;
+        const x = (i / 4) % canvas.width;
+        minX = Math.min(minX, x);
+        maxX = Math.max(maxX, x + 1);
+        if (data[i] > 100 && data[i + 1] < 100 && data[i + 2] < 130) red++;
+        if (x < ringLeft) leftWing++;
+        if (x > ringRight) rightWing++;
+      }
+      return { red, leftWing, rightWing, leftOverflow: (ringLeft - minX) * canvasBounds.width / canvas.width, rightOverflow: (maxX - ringRight) * canvasBounds.width / canvas.width };
+    });
+    expect(painted.red).toBeGreaterThan(2);
+    expect(painted.leftWing).toBeGreaterThan(2);
+    expect(painted.rightWing).toBeGreaterThan(2);
+    expect(painted.leftOverflow).toBeLessThanOrEqual(width === 375 ? 4 : 5);
+    expect(painted.rightOverflow).toBeLessThanOrEqual(width === 375 ? 4 : 5);
+    await testInfo.attach(`closure-avatar-${width}`, { body: await page.screenshot(), contentType: "image/png" });
+    const resting = await mascot.locator("canvas").evaluate((canvas: HTMLCanvasElement) => canvas.toDataURL());
+    await mascot.hover({ position: { x: 10, y: 14 } });
+    await expect.poll(() => mascot.locator("canvas").evaluate((canvas: HTMLCanvasElement) => canvas.toDataURL())).not.toBe(resting);
+    await page.mouse.down();
+    await expect(mascot).toHaveAttribute("data-fur-motion", "animated");
+    await page.mouse.move(200, 250, { steps: 8 });
+    await page.mouse.up();
+    await input.hover();
+    await expect(mascot).toHaveAttribute("data-fur-motion", "idle");
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await expect(mascot).toHaveAttribute("data-fur-motion", "still");
+    const still = await mascot.locator("canvas").evaluate((canvas: HTMLCanvasElement) => canvas.toDataURL());
+    await mascot.hover();
+    await mascot.click();
+    expect(await mascot.locator("canvas").evaluate((canvas: HTMLCanvasElement) => canvas.toDataURL())).toBe(still);
+    await page.reload();
+    await expect(mascot).toHaveAttribute("data-fur-ready", "true");
+    await expect(mascot).toHaveAttribute("data-fur-motion", "still");
+  });
+}
+
+for (const unavailable of ["2d", "webgl2"]) {
+test(`Closure keeps its two-color fallback when ${unavailable} is unavailable`, async ({ page }) => {
+  await mockWorkbench(page);
+  await page.addInitScript((unavailable) => {
+    const original = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, ...args: Parameters<typeof original>) {
+      if ((unavailable === "2d" && this.closest("[data-closure-fur-avatar]")) || (unavailable === "webgl2" && args[0] === "webgl2")) return null;
+      return original.apply(this, args);
+    } as typeof original;
+  }, unavailable);
+  await page.route("**/api/agent/chat", (route) => route.request().method() === "GET"
+    ? route.fulfill({ json: ready })
+    : route.fulfill({ contentType: "text/event-stream", headers: { "x-vercel-ai-ui-message-stream": "v1" }, body: reply }));
+  await page.goto("/agent");
+  const input = page.getByRole("textbox", { name: "发给可露希尔的消息" });
+  await input.fill("你好");
+  await input.press("Enter");
+  const mascot = page.locator('[data-speaker="assistant"] [data-closure-fur-avatar]');
+  await expect(mascot.locator("[data-fur-fallback]")).toBeVisible();
+  await expect(mascot).toHaveAttribute("data-fur-ready", "false");
+  await expect(input).toBeEnabled();
+});
+}
 
 for (const width of [1440, 375]) {
   test(`Agent uses its sidebar group and real chat state at ${width}px`, async ({ page }) => {
@@ -118,7 +211,7 @@ for (const width of [1440, 375]) {
     await page.getByLabel("上传人格卡文件", { exact: true }).setInputFiles({ name: "测试人格.md", mimeType: "text/markdown", buffer: Buffer.from("回答请使用简洁中文。") });
     await expect(page.getByRole("button", { name: "人格卡：测试人格" })).toBeVisible();
     await page.getByRole("button", { name: /账号体检.*帮我看看/ }).click();
-    const input = page.getByRole("textbox", { name: "发给可露希尔的消息" });
+    const input = page.getByRole("textbox", { name: "发给测试人格的消息" });
     await expect(input).toBeFocused();
     await expect(input).toHaveValue("帮我看看账号现在什么水平");
     await expect(page.getByRole("button", { name: "发送", exact: true })).toBeEnabled();
