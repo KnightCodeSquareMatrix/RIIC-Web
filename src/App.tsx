@@ -2419,7 +2419,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       <AppSidebar page={page} onPageChange={handleAppPageChange} showMower={userSettings.showMower} />
       <SidebarInset className="isolate">
         <DotDistortionBackground />
-        <AppTopBar />
+        {page !== "agent" ? <AppTopBar /> : null}
         {agentArtifactNotice && page !== "agent" ? (
           <div className="flex flex-wrap items-center gap-3 border-b bg-[#FFD501]/15 px-4 py-2 text-sm" data-agent-artifact-banner>
             <span className="min-w-0">
@@ -2483,7 +2483,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       <div
         className={page === "calculator" && !scheduleResult && onboardingPreference === "active"
           ? "w-full flex-1"
-          : "app-content-track py-4"}
+          : page === "agent" ? "app-content-track py-0 md:py-4" : "app-content-track py-4"}
         data-app-content
         inert={!hasRestoredSession}
         aria-busy={!hasRestoredSession}

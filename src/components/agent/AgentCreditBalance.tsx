@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { Coins } from "lucide-react";
 
 export function AgentCreditBalance({ enabled, busy, en }: { enabled: boolean; busy: boolean; en: boolean }) {
   const [points, setPoints] = useState<number | null>(null);
@@ -28,8 +29,10 @@ export function AgentCreditBalance({ enabled, busy, en }: { enabled: boolean; bu
   }, [enabled, busy]);
 
   if (!enabled) return null;
-  return <Link href="/billing" data-agent-credit-balance className="inline-flex min-h-9 items-center gap-1.5 whitespace-nowrap rounded-md px-1 text-xs text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring">
-    <span>{en ? "Credits left" : "剩余积分"}</span>
+  const balance = points === null ? "—" : points.toLocaleString(en ? "en-US" : "zh-CN");
+  return <Link href="/billing" data-agent-credit-balance aria-label={`${en ? "Credits left" : "剩余积分"} ${balance}`} className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-md px-1 text-xs text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring">
+    <Coins className="size-3.5 md:hidden" aria-hidden="true" />
+    <span className="max-md:sr-only">{en ? "Credits left" : "剩余积分"}</span>
     <span className="font-number font-medium tabular-nums text-foreground">{points === null ? "—" : points.toLocaleString(en ? "en-US" : "zh-CN")}</span>
   </Link>;
 }
