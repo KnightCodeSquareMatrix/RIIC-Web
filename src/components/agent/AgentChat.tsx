@@ -578,7 +578,7 @@ export function AgentChat({ conversationId, initialMessages, userName, userId, b
                 const active = turn.pending && status !== "submitted" && message.id === messages.at(-1)?.id;
                 const animate = !restoredMessageIds.has(message.id);
                 const activeAvatarIndex = active ? message.parts.reduce((last, part, index) =>
-                  (part.type === "text" && !!part.text.trim()) || (isToolPart(part) && part.type === "tool-solve_schedule" && part.state === "output-available" && !!agentArtifactFromOutput(part.output)) ? index : last, -1) : -1;
+                  part.type === "text" && part.state === "streaming" && !!part.text.trim() ? index : last, -1) : -1;
                 return message.parts.map((part, partIndex) => {
                 const key = `${message.id}:${partIndex}`;
                 if (part.type === "text") return part.text.trim() ? <ChatBubble key={key} speaker="assistant" name={activePersona?.name ?? (en ? "Closure" : "可露希尔")} label={en ? "Closure reply" : "可露希尔的回答"} avatar={<PersonaAvatar name={activePersona?.name ?? "可露希尔"} src={activePersona?.avatarUrl} active={partIndex === activeAvatarIndex} />}><StreamingText content={part.text} running={active && part.state === "streaming"} animate={animate} previousParts={message.parts.slice(0, partIndex).filter((previous) => previous.type === "text").map((previous) => previous.text)} /></ChatBubble> : null;
