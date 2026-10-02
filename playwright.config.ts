@@ -39,6 +39,10 @@ export default defineConfig({
     timeout: 120_000,
     env: {
       ACCOUNT_CLOUD_SYNC_ENABLED: "1",
+      // Existing interaction fixtures exercise the future public rollout.
+      // The production-profile suite separately tests the admin boundary.
+      AGENT_ACCESS_MODE: "public",
+      BILLING_ACCESS_MODE: "public",
       BETA_RATE_LIMIT_ENABLED: "0",
       BETA_DEBUG_TOOLS_ENABLED: "0",
     },

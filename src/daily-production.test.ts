@@ -70,7 +70,7 @@ const completeLines = (trade = [1, 1, 1], manufacture = [2, 2, 2]): RotationRoom
   { room_id: "power_2", final_efficiency: 1.1, power_charge_speed_pct: 10 },
 ];
 
-test("weights room final efficiencies, mixed recipes, and shifts at full precision", () => {
+test("weights natural room final efficiencies, recipes, and shifts at full precision", () => {
   const input = fixture({
     durations: [8, 16],
     lines: [completeLines([1, 1.5, 2], [1.8, 2, 2.2]), completeLines([2, 1, 0.5], [2.2, 1.5, 2])],
@@ -80,7 +80,7 @@ test("weights room final efficiencies, mixed recipes, and shifts at full precisi
   const expectedLmd = (10_000 * 1 + 10_141 * 1.5 + 10_265 * 2) / 3
     + (10_000 * 2 + 10_141 * 1 + 10_265 * 0.5) * 2 / 3;
   assert.ok(Math.abs(result.lmdOrders.value! - expectedLmd) < 0.000_001);
-  assert.equal(result.gold.value, 20 * 1.8 / 3 + 20 * 2.2 * 2 / 3);
+  assert.equal(result.gold.value, 10_000 * 1.8 / 3 + 10_000 * 2.2 * 2 / 3);
   assert.equal(result.experience.value, 8_000 * 2 / 3 + 8_000 * 1.5 * 2 / 3);
   assert.equal(result.shards.value, 24 * 2.2 / 3 + 24 * 2 * 2 / 3);
   assert.equal(result.orundum.manufactureCapacity, result.shards.value! * 10);
@@ -89,56 +89,43 @@ test("weights room final efficiencies, mixed recipes, and shifts at full precisi
   assert.equal(result.orundum.bottleneck, "trade");
 });
 
-test("uses the target room final efficiency for trade drones", () => {
+test("uses final efficiency for natural trade output", () => {
   const lines = completeLines([3, 1, 1]);
   lines[0] = { room_id: "trade_1", final_efficiency: 3, trade_score: 99, trade_pct: 100, trade_gold_pct: 50 };
-  const input = fixture({
-    durations: [24],
-    lines: [lines],
-    drones: [{ enable: true, room: "trading", index: 1, order: "post" }],
-  });
-  const result = estimateDailyProduction(input);
+  const result = estimateDailyProduction(fixture({ durations: [24], lines: [lines] }));
 
-  const equivalent = (1 + 0.2 + 0.1) / 2;
   assert.equal(result.lmdOrders.natural, 10_000 * 3 + 10_141 + 10_265);
-  assert.equal(result.lmdOrders.droneTrade, equivalent * 10_000 * 3);
+  assert.equal(result.lmdOrders.droneTrade, 0);
 });
 
-test("uses only final_efficiency for natural and drone output when legacy fields conflict", () => {
+test("uses only final_efficiency for natural output when legacy fields conflict", () => {
   const lines = completeLines([2, 1, 1], [1.5, 2, 2]);
   Object.assign(lines[0], { trade_score: 99, trade_pct: 9_800, trade_gold_pct: 400 });
   Object.assign(lines[3], { manu_score: 999, manu_prod_total: 899 });
   Object.assign(lines[6], { power_score: 999, power_charge_speed_pct: 899 });
-  const input = fixture({
-    durations: [24],
-    lines: [lines],
-    drones: [{ enable: true, room: "trading", index: 1, order: "post" }],
-  });
-  const result = estimateDailyProduction(input);
-  const equivalent = (1 + 0.2 + 0.1) / 2;
+  const result = estimateDailyProduction(fixture({ durations: [24], lines: [lines] }));
 
   assert.equal(result.lmdOrders.natural, 10_000 * 2 + 10_141 + 10_265);
-  assert.equal(result.lmdOrders.droneTrade, equivalent * 10_000 * 2);
-  assert.equal(result.gold.natural, 20 * 1.5);
+  assert.equal(result.lmdOrders.droneTrade, 0);
+  assert.equal(result.gold.natural, 10_000 * 1.5);
 });
 
-test("routes drones to gold, experience, and both originium stages", () => {
+test("does not attribute selected drone targets to daily estimates", () => {
   const baseLines = completeLines();
   const drone = (room: "trading" | "manufacture", index: number) => ({ enable: true, room, index, order: "pre" as const });
-  const equivalent = (1 + 0.2 + 0.1) / 2 / 4;
-  const input = fixture({
+  const result = estimateDailyProduction(fixture({
     tradeProducts: ["Orundum", "LMD", "LMD"],
     durations: [6, 6, 6, 6],
     lines: [baseLines, baseLines, baseLines, baseLines],
     drones: [drone("manufacture", 1), drone("manufacture", 2), drone("manufacture", 3), drone("trading", 1)],
-  });
-  const result = estimateDailyProduction(input);
+  }));
 
-  assert.equal(result.gold.drones, equivalent * 20 * 2);
-  assert.equal(result.experience.drones, equivalent * 8_000 * 2);
-  assert.equal(result.shards.drones, equivalent * 24 * 2);
-  assert.equal(result.orundum.manufactureDrones, equivalent * 240 * 2);
-  assert.equal(result.orundum.tradeDrones, equivalent * 240);
+  assert.equal(result.lmdOrders.droneTrade, 0);
+  assert.equal(result.gold.drones, 0);
+  assert.equal(result.experience.drones, 0);
+  assert.equal(result.shards.drones, 0);
+  assert.equal(result.orundum.manufactureDrones, 0);
+  assert.equal(result.orundum.tradeDrones, 0);
 });
 
 test("uses the smaller originium stage and handles zero production lines", () => {
@@ -184,16 +171,12 @@ test("marks only affected products unavailable for missing room data and recipe 
   assert.equal(result.orundum.value, null);
 });
 
-test("requires complete power data only for the drone-targeted product", () => {
+test("does not require power data for natural production estimates", () => {
   const lines = completeLines();
   lines.splice(lines.findIndex((line) => line.room_id === "power_2"), 1);
-  const input = fixture({
-    durations: [24],
-    lines: [lines],
-    drones: [{ enable: true, room: "manufacture", index: 2, order: "pre" }],
-  });
-  const result = estimateDailyProduction(input);
-  assert.equal(result.experience.unavailableReason, "missing-drone-data");
+  const result = estimateDailyProduction(fixture({ durations: [24], lines: [lines] }));
+  assert.equal(result.experience.unavailableReason, undefined);
+  assert.equal(result.experience.value, 16_000);
   assert.equal(result.lmdOrders.value !== null, true);
 });
 
@@ -212,7 +195,7 @@ test("normalizes 36-hour rotation cycles back to daily production", () => {
     lines: [lines, lines, lines],
   });
   const result = estimateDailyProduction(input);
-  // 36h 周期（3×12h）折算 24h 每日产量：满效率下应等于基础每日量（10265 / 20），而不是 1.5 倍。
+  // 36h 周期（3×12h）折算 24h 每日产量：满效率下应等于基础每日值（10,265 / 10,000），而不是 1.5 倍。
   assert.ok(Math.abs(result.lmdOrders.value! - 10_265) < 1e-6);
-  assert.ok(Math.abs(result.gold.value! - 20) < 1e-6);
+  assert.ok(Math.abs(result.gold.value! - 10_000) < 1e-6);
 });

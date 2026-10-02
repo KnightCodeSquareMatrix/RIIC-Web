@@ -60,6 +60,12 @@ export const ERROR_DEFINITIONS: Record<AppErrorCode, ErrorDefinition> = {
   "AIC-DATA-8005": { status: 409, message: "云端工作区已变化，自动同步已暂停。请选择要保留的版本。", retryable: false },
   "AIC-RELEASE-9001": { status: 409, message: "更新日志已变化或版本号重复，请刷新后重试。", retryable: false },
   "AIC-RELEASE-9002": { status: 404, message: "当前环境中找不到这条更新日志。", retryable: false },
+  "AIC-BILLING-4101": { status: 402, message: "积分余额不足，请先充值。", retryable: false },
+  "AIC-BILLING-4102": { status: 400, message: "积分产品不存在。", retryable: false },
+  "AIC-BILLING-4103": { status: 409, message: "订单当前状态不可发放积分。", retryable: false },
+  "AIC-BILLING-4104": { status: 401, message: "支付回调签名无效。", retryable: false },
+  "AIC-BILLING-4105": { status: 422, message: "兑换码不存在或已核销。", retryable: false },
+  "AIC-BILLING-4106": { status: 503, message: "该档位暂未配置支付链接，请稍后再试。", retryable: true },
 };
 
 export class PublicApiError extends Error {

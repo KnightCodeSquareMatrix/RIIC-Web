@@ -61,5 +61,8 @@
   "moveThisOperator": "移动该干员？",
   "isAlreadyAssignedToMoveThemToAndLeave": "{value4}已经在{previousRoomTitle}工作。是否移动到{nextRoomTitle}，并将原位置留空？",
   "cancel": "取消",
-  "moveOperator": "移动干员"
+  "moveOperator": "移动干员",
+  "evaluateBasedOnCurrentScheduleUnavailable": "按当前排班评估暂未接入",
+  "calculateBasedOnSchedule": "根据排班计算",
+  "calculateBasedOnEfficiency": "根据效率计算"
 }

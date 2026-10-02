@@ -31,6 +31,8 @@ export {
 export interface ManualRoomAssignment {
   operators: Array<string | null>;
   autofill?: boolean;
+  /** User-entered paper skill efficiency in percentage points, per shift and room. */
+  manualSkillEfficiencyPct?: number;
 }
 
 export interface ManualShift {
@@ -466,6 +468,7 @@ export function createManualScheduleDraftFromCalculator(input: {
   source?: ManualScheduleSource;
   ownedOperatorNames?: readonly string[];
   preferMaaTiming?: boolean;
+  timingOverride?: { scheduleMode: ManualScheduleMode; startTime?: string };
   preserveExternalOperators?: boolean;
 }): ManualScheduleDraft {
   const planCount = input.maa?.plans.length ?? 0;
@@ -486,10 +489,12 @@ export function createManualScheduleDraftFromCalculator(input: {
         : finitePositive(input.fallbackDurations[index], maaDuration);
     },
   );
-  const scheduleMode: ManualScheduleMode = input.maa?.plans.some((plan) => Array.isArray(plan.period) && plan.period.length > 0)
-    ? "period"
-    : "sequential";
-  const draft = createManualScheduleDraft(durations, input.maa?.plans[0]?.period?.[0]?.[0], scheduleMode);
+  const scheduleMode: ManualScheduleMode = input.timingOverride?.scheduleMode
+    ?? (input.maa?.plans.some((plan) => Array.isArray(plan.period) && plan.period.length > 0)
+      ? "period"
+      : "sequential");
+  const startTime = input.timingOverride?.startTime ?? input.maa?.plans[0]?.period?.[0]?.[0];
+  const draft = createManualScheduleDraft(durations, startTime, scheduleMode);
   draft.fiammettaEnabled = input.fiammettaEnabled;
   if (input.source) draft.source = { ...input.source };
   const owned = input.ownedOperatorNames ? new Set(input.ownedOperatorNames) : undefined;
@@ -568,10 +573,14 @@ export function loadManualScheduleDraft(storage: StorageLike): ManualScheduleDra
       const rooms = candidate.rooms && typeof candidate.rooms === "object" && !Array.isArray(candidate.rooms)
         ? Object.fromEntries(Object.entries(candidate.rooms).flatMap(([roomId, assignment]) => {
           if (!assignment || typeof assignment !== "object" || !Array.isArray((assignment as ManualRoomAssignment).operators)) return [];
+          const manualSkillEfficiencyPct = Number((assignment as ManualRoomAssignment).manualSkillEfficiencyPct);
           return [[roomId, {
             operators: (assignment as ManualRoomAssignment).operators.map((name) => typeof name === "string" ? name : null),
             ...(typeof (assignment as ManualRoomAssignment).autofill === "boolean"
               ? { autofill: (assignment as ManualRoomAssignment).autofill }
+              : {}),
+            ...(Number.isFinite(manualSkillEfficiencyPct) && manualSkillEfficiencyPct >= 0
+              ? { manualSkillEfficiencyPct: Math.round(manualSkillEfficiencyPct * 100) / 100 }
               : {}),
           }]];
         }))
@@ -684,9 +693,14 @@ export function reconcileManualScheduleDraft(
               return name;
             },
           );
+          const manualSkillEfficiencyPct = Number(assignment?.manualSkillEfficiencyPct);
+          const isProductionRoom = room.kind === "trade_post" || room.kind === "factory" || room.kind === "power_plant";
           return [room.id, {
             operators,
             ...(room.kind === "dormitory" ? { autofill: assignment?.autofill ?? true } : {}),
+            ...(isProductionRoom && Number.isFinite(manualSkillEfficiencyPct) && manualSkillEfficiencyPct >= 0
+              ? { manualSkillEfficiencyPct: Math.round(manualSkillEfficiencyPct * 100) / 100 }
+              : {}),
           } satisfies ManualRoomAssignment];
         })),
       };
@@ -799,6 +813,29 @@ export function swapManualOperators(
   return next;
 }
 
+export function setManualRoomSkillEfficiency(
+  draft: ManualScheduleDraft,
+  layout: BaseBlueprint,
+  shiftIndex: number,
+  roomId: string,
+  value: number | null,
+): ManualScheduleDraft {
+  const room = layout.rooms.find((candidate) => candidate.id === roomId);
+  if (!room || !draft.shifts[shiftIndex] || (room.kind !== "trade_post" && room.kind !== "factory" && room.kind !== "power_plant")) return draft;
+  const next = structuredClone(draft);
+  const shift = next.shifts[shiftIndex]!;
+  const assignment = shift.rooms[roomId] ?? {
+    operators: Array.from({ length: manualRoomCapacity(room) }, () => null),
+  };
+  if (value === null || !Number.isFinite(value) || value < 0) {
+    delete assignment.manualSkillEfficiencyPct;
+  } else {
+    assignment.manualSkillEfficiencyPct = Math.round(value * 100) / 100;
+  }
+  shift.rooms[roomId] = assignment;
+  return next;
+}
+
 export function setManualDormAutofill(
   draft: ManualScheduleDraft,
   layout: BaseBlueprint,
@@ -866,7 +903,7 @@ export function clearManualShift(
 function maaProduct(room: BlueprintRoom): string | undefined {
   if (room.kind === "trade_post") {
     const order = room.product && "trade" in room.product ? room.product.trade.order : "gold";
-    return order === "originium" ? "Originium Shard" : "LMD";
+    return order === "originium" ? "Orundum" : "LMD";
   }
   if (room.kind !== "factory") return undefined;
   const recipe = room.product && "factory" in room.product ? room.product.factory.recipe : "gold";

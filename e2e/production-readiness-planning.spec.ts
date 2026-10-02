@@ -262,7 +262,7 @@ test("operator skill terms reveal square hover cards on pointer and keyboard foc
   await expect(termCard).toBeVisible();
 });
 
-test("Lancet-2 power rooms without total efficiency render zero with a red portrait filter", async ({ page }) => {
+test("Lancet-2 power rooms without total efficiency omit the readout with a red portrait filter", async ({ page }) => {
   await mockApis(page);
   const lancetPlanData = structuredClone(scheduleVisualPlanData) as PublicPlanData;
   lancetPlanData.maa.plans[0]!.rooms.power = [
@@ -280,7 +280,7 @@ test("Lancet-2 power rooms without total efficiency render zero with a red portr
 
   const ordinaryPowerRoom = page.locator('[data-room-title="发电站 1"]');
   const lancetPowerRoom = page.locator('[data-room-title="发电站 2"]');
-  await expect(lancetPowerRoom.locator("[data-room-primary-efficiency]")).toHaveText("0%");
+  await expect(lancetPowerRoom.locator("[data-room-primary-efficiency]")).toHaveCount(0);
   await expect(lancetPowerRoom.locator('[data-operator-identity="Lancet-2"] [data-operator-portrait-alert="missing-power-efficiency"]')).toBeVisible();
   await expect(ordinaryPowerRoom.locator('[data-operator-portrait-alert="missing-power-efficiency"]')).toHaveCount(0);
 });

@@ -10,9 +10,11 @@ import type { TrainingAdviceProps } from "@/components/pages/TrainingAdvice";
 import type { MasteryPlannerProps } from "@/components/pages/MasteryPlanner";
 import type { RecruitmentCalculatorProps } from "@/components/pages/RecruitmentCalculator";
 import type { UserSettings } from "@/user-settings";
+import type { AccountHealthRawInput } from "@/account-health-input";
 
 export interface WorkbenchContextValue {
   inventory: { identityKey: string; pending: boolean };
+  healthOperators: AccountHealthRawInput["operators"];
   calculator: InfraCalculatorProps;
   manual: ManualSchedulePageProps;
   training: TrainingAdviceProps;

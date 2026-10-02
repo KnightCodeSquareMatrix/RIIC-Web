@@ -65,7 +65,7 @@ const TRADE_BASE_DAILY: Record<number, number> = {
 const EXPERIENCE_BASE_DAILY = 8_000;
 const SHARD_BASE_DAILY = 24;
 const ORUNDUM_ORDER_BASE_DAILY = 240;
-const GOLD_UNITS_BASE_DAILY = 20;
+const GOLD_VALUE_BASE_DAILY = 10_000;
 const ORUNDUM_PER_SHARD = 10;
 
 function finite(value: unknown): value is number {
@@ -142,25 +142,6 @@ function finalEfficiency(efficiency: RoomEfficiency | undefined): number | null 
   return finite(efficiency.final_efficiency) ? efficiency.final_efficiency : null;
 }
 
-function powerBonus(efficiency: RoomEfficiency | undefined): number | null {
-  const final = finalEfficiency(efficiency);
-  return final === null ? null : (final - 1) * 100;
-}
-
-function droneEquivalent(
-  shift: RotationShift,
-  powerRooms: BlueprintRoom[],
-  durationWeight: number
-): number | null {
-  let bonusSum = 0;
-  for (const powerRoom of powerRooms) {
-    const bonus = powerBonus(roomLine(shift, powerRoom.id));
-    if (bonus === null) return null;
-    bonusSum += bonus;
-  }
-  return ((1 + bonusSum / 100) / 2) * durationWeight;
-}
-
 function finalizedAmount(source: MutableAmount): DailyProductionAmount {
   if (source.unavailableReason) {
     return {
@@ -188,7 +169,6 @@ export function estimateDailyProduction({
 }): DailyProductionEstimate {
   const tradeRooms = layoutRooms(layout, "trade_post");
   const factoryRooms = layoutRooms(layout, "factory");
-  const powerRooms = layoutRooms(layout, "power_plant");
   const lmdOrders: MutableAmount = { natural: 0, drones: 0 };
   const gold: MutableAmount = { natural: 0, drones: 0 };
   const experience: MutableAmount = { natural: 0, drones: 0 };
@@ -241,91 +221,16 @@ export function estimateDailyProduction({
         unavailable(target, "missing-room-data");
         return;
       }
-      target.natural += (recipe === "gold"
-        ? GOLD_UNITS_BASE_DAILY
+      const baseDaily = recipe === "gold"
+        ? GOLD_VALUE_BASE_DAILY
         : recipe === "battle_record"
           ? EXPERIENCE_BASE_DAILY
-          : SHARD_BASE_DAILY)
-        * multiplier
-        * durationWeight;
+          : SHARD_BASE_DAILY;
+      const output = baseDaily * multiplier * durationWeight;
+      target.natural += output;
     });
 
-    const drones = plan?.drones;
-    if (!drones || drones.enable === false) return;
-    const equivalent = droneEquivalent(shift, powerRooms, durationWeight);
-    if (equivalent === null) {
-      if (drones.room === "trading") {
-        const targetRoom = tradeRooms[drones.index - 1];
-        const order = targetRoom
-          ? tradeOrder(roomAt(tradeRooms, plan?.rooms.trading, shift, drones.index - 1))
-          : "ambiguous";
-        unavailable(order === "originium" ? orundumTrade : lmdOrders, "missing-drone-data");
-      } else {
-        const targetRoom = factoryRooms[drones.index - 1];
-        const recipe = targetRoom
-          ? factoryRecipe(roomAt(factoryRooms, plan?.rooms.manufacture, shift, drones.index - 1))
-          : "ambiguous";
-        if (recipe === "battle_record") unavailable(experience, "missing-drone-data");
-        else if (recipe === "originium") unavailable(shards, "missing-drone-data");
-        else unavailable(gold, "missing-drone-data");
-      }
-      return;
-    }
 
-    if (drones.room === "trading") {
-      const roomIndex = drones.index - 1;
-      const targetRoom = tradeRooms[roomIndex];
-      if (!targetRoom) {
-        unavailable(lmdOrders, "ambiguous-recipe");
-        unavailable(orundumTrade, "ambiguous-recipe");
-        return;
-      }
-      const room = roomAt(tradeRooms, plan?.rooms.trading, shift, roomIndex);
-      const order = tradeOrder(room);
-      if (order === "ambiguous") {
-        unavailable(lmdOrders, "ambiguous-recipe");
-        unavailable(orundumTrade, "ambiguous-recipe");
-        return;
-      }
-      const multiplier = finalEfficiency(room.efficiency);
-      const baseDaily = order === "gold" ? TRADE_BASE_DAILY[targetRoom.level] : ORUNDUM_ORDER_BASE_DAILY;
-      const target = order === "gold" ? lmdOrders : orundumTrade;
-      if (multiplier === null || !finite(baseDaily)) {
-        unavailable(target, "missing-drone-data");
-        return;
-      }
-      const output = equivalent * baseDaily * multiplier;
-      target.drones += output;
-      if (order === "gold") {
-        droneTrade += output;
-      }
-      return;
-    }
-
-    const roomIndex = drones.index - 1;
-    const targetRoom = factoryRooms[roomIndex];
-    if (!targetRoom) {
-      unavailable(gold, "ambiguous-recipe");
-      unavailable(experience, "ambiguous-recipe");
-      unavailable(shards, "ambiguous-recipe");
-      return;
-    }
-    const room = roomAt(factoryRooms, plan?.rooms.manufacture, shift, roomIndex);
-    const recipe = factoryRecipe(room);
-    const multiplier = finalEfficiency(room.efficiency);
-    if (recipe === "ambiguous") {
-      unavailable(gold, "ambiguous-recipe");
-      unavailable(experience, "ambiguous-recipe");
-      unavailable(shards, "ambiguous-recipe");
-    } else if (multiplier === null) {
-      unavailable(recipe === "gold" ? gold : recipe === "battle_record" ? experience : shards, "missing-drone-data");
-    } else if (recipe === "gold") {
-      gold.drones += equivalent * GOLD_UNITS_BASE_DAILY * multiplier;
-    } else if (recipe === "battle_record") {
-      experience.drones += equivalent * EXPERIENCE_BASE_DAILY * multiplier;
-    } else {
-      shards.drones += equivalent * SHARD_BASE_DAILY * multiplier;
-    }
   });
 
   // 轮换周期归一化：abc_12_12_12 等 36 小时周期（3×12h）折算回 24 小时等效每日产量。
@@ -360,7 +265,7 @@ export function estimateDailyProduction({
   else if (Math.abs(manufactureCapacity - tradeCapacity) < 0.000_001) bottleneck = "balanced";
   else bottleneck = manufactureCapacity < tradeCapacity ? "manufacture" : "trade";
 
-  return {
+  const estimate = {
     lmdOrders: {
       ...lmdOrderAmount,
       droneTrade: lmdOrders.unavailableReason ? null : droneTrade,
@@ -381,5 +286,6 @@ export function estimateDailyProduction({
       tradeDrones: tradeAmount.drones,
       bottleneck,
     },
-  };
+  } satisfies DailyProductionEstimate;
+  return estimate;
 }
