@@ -3,15 +3,14 @@ import "server-only";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createAnthropic } from "@ai-sdk/anthropic";
 
-import { agentLlmSettings } from "./config.ts";
+import { agentLlmSettings, type AgentLlmSettings } from "./config.ts";
 import { withAgentModelTimeout } from "./stream-policy.ts";
 
 // Providers like DeepSeek and Zhipu expose two compatible surfaces:
 // an OpenAI-style endpoint (/chat/completions) and an Anthropic-style
 // endpoint (.../anthropic, /v1/messages) for Claude-protocol clients.
 // Route the request by the configured base URL so users can paste either.
-export function getAgentModel() {
-  const settings = agentLlmSettings();
+export function getAgentModel(settings: AgentLlmSettings = agentLlmSettings()) {
   if (!settings.configured) {
     throw new Error("AGENT_LLM_API_KEY 未配置，agent 聊天不可用。");
   }
