@@ -839,11 +839,11 @@ export function ManualSchedulePage({
           <div className="flex flex-wrap items-center gap-2">
             {dormRooms.length > 0 ? (
               <Button type="button" variant="outline" size="sm" onClick={openDormBatchPicker}>
-                宿舍批量编辑（{dormBatchCapacity}）
+                {intl("components_pages_ManualSchedulePage.dormBatchEdit", { capacity: dormBatchCapacity })}
               </Button>
             ) : null}
             <Button type="button" variant="outline" size="sm" disabled={activeShift <= 0} onClick={restPreviousShift}>
-              让上一班下班休息
+              {intl("components_pages_ManualSchedulePage.restPreviousShift")}
             </Button>
             <Button type="button" variant="destructive" size="sm" onClick={() => setClearShiftConfirmationOpen(true)}>
               <Trash2 />{intl("components_pages_ManualSchedulePage.clearEveryFacilityInShift")}
@@ -1026,7 +1026,7 @@ export function ManualSchedulePage({
       <Dialog open={Boolean(picker)} onOpenChange={(open) => { if (!open) setPicker(null); }}>
         <DialogContent className="grid max-h-[min(820px,calc(100svh-1rem))] w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] grid-rows-[auto_minmax(0,1fr)] overflow-hidden sm:w-[calc(100vw-2rem)] sm:max-w-[min(960px,calc(100vw-2rem))]">
           <DialogHeader>
-            <DialogTitle>{picker?.kind === "fiammetta" ? (intl("components_pages_ManualSchedulePage.fiammettaMoraleTarget")) : (intl("components_pages_ManualSchedulePage.assign", { value1: (en) ? (selectedRoom?.title ?? "room") : "", value2: (en) ? "" : (selectedRoom?.title ?? "设施") }))}</DialogTitle>
+            <DialogTitle>{picker?.kind === "fiammetta" ? (intl("components_pages_ManualSchedulePage.fiammettaMoraleTarget")) : (intl("components_pages_ManualSchedulePage.assign", { value1: (en) ? (selectedRoom?.title ?? intl("components_pages_ManualSchedulePage.room")) : "", value2: (en) ? "" : (selectedRoom?.title ?? intl("components_pages_ManualSchedulePage.facility")) }))}</DialogTitle>
             <DialogDescription>{picker?.kind === "fiammetta" ? (intl("components_pages_ManualSchedulePage.thisTargetIsStoredOnlyForTheActiveShift")) : (intl("components_pages_ManualSchedulePage.onlyOwnedOperatorsInTheCurrentBoxAreShown"))}</DialogDescription>
           </DialogHeader>
           <SkeletonSuspense className="min-h-0 [&>[data-skeleton-swap-content]]:grid [&>[data-skeleton-swap-content]]:min-h-0" fallback={<div className="grid min-h-64 content-start gap-3 px-5 pb-5 sm:px-7"><Skeleton className="h-11" /><Skeleton className="h-24" /><div className="grid grid-cols-4 gap-3">{Array.from({ length: 4 }, (_, index) => <Skeleton key={index} className="h-20" />)}</div></div>}>
@@ -1122,9 +1122,9 @@ export function ManualSchedulePage({
       <Dialog open={dormBatchOpen} onOpenChange={setDormBatchOpen}>
         <DialogContent className={`grid max-h-[min(900px,calc(100svh-1rem))] w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden sm:w-[calc(100vw-2rem)] ${dormShowcaseOpen ? "sm:max-w-[min(1400px,calc(100vw-2rem))]" : "sm:max-w-[min(960px,calc(100vw-2rem))]"}`}>
           <DialogHeader>
-            <DialogTitle>宿舍批量编辑</DialogTitle>
+            <DialogTitle>{intl("components_pages_ManualSchedulePage.dormBatchEditTitle")}</DialogTitle>
             <DialogDescription>
-              一次选择最多 {dormBatchCapacity} 名干员，按宿舍顺序填入当前班次；未选位置留空。
+              {intl("components_pages_ManualSchedulePage.dormBatchDescription", { capacity: dormBatchCapacity })}
             </DialogDescription>
           </DialogHeader>
           <ScrollArea className="min-h-0" viewportClassName="overflow-x-hidden">
@@ -1135,8 +1135,8 @@ export function ManualSchedulePage({
                     <OperatorSearch
                       autoFocus
                       value={pickerQuery}
-                      label="搜索可选干员"
-                      placeholder="搜索干员、技能或效果"
+                      label={intl("components_pages_ManualSchedulePage.searchAvailableOperators")}
+                      placeholder={intl("components_pages_ManualSchedulePage.searchOperatorSkillOrEffect")}
                       onChange={(value) => {
                         setPickerQuery(value);
                         setPickerPage(1);
@@ -1144,10 +1144,12 @@ export function ManualSchedulePage({
                     />
                     <div className="flex shrink-0 items-center gap-2">
                       <span className="font-number text-xs text-muted-foreground">
-                        已选 {dormBatchSelection.length}/{dormBatchCapacity}
+                        {intl("components_pages_ManualSchedulePage.dormBatchSelected", { count: dormBatchSelection.length, capacity: dormBatchCapacity })}
                       </span>
                       <Button type="button" variant={dormShowcaseOpen ? "secondary" : "outline"} size="sm" onClick={() => setDormShowcaseOpen((open) => !open)}>
-                        {dormShowcaseOpen ? "收起宿舍" : "展开宿舍"}
+                        {dormShowcaseOpen
+                          ? intl("components_pages_ManualSchedulePage.collapseDormitories")
+                          : intl("components_pages_ManualSchedulePage.expandDormitories")}
                       </Button>
                     </div>
                   </div>
@@ -1185,9 +1187,9 @@ export function ManualSchedulePage({
                         setPickerPage(1);
                       }}
                     >
-                      需要休息
+                      {intl("components_pages_ManualSchedulePage.restRequired")}
                     </Button>
-                    {dormRestOnly ? <span className="text-xs text-muted-foreground">上一班上班、本班次未上班</span> : null}
+                    {dormRestOnly ? <span className="text-xs text-muted-foreground">{intl("components_pages_ManualSchedulePage.restRequiredDescription")}</span> : null}
                     <Button
                       type="button"
                       size="sm"
@@ -1195,7 +1197,7 @@ export function ManualSchedulePage({
                       disabled={!dormRestOnly || dormFilteredOperators.length === 0}
                       onClick={selectAllDormRestOperators}
                     >
-                      一键全选
+                      {intl("components_pages_ManualSchedulePage.selectAll")}
                     </Button>
                   </div>
                   <TooltipProvider delay={0} timeout={0}>
@@ -1206,7 +1208,7 @@ export function ManualSchedulePage({
                           operator={operator}
                           selected={dormBatchSelection.includes(operator.name)}
                           selectionNumber={dormBatchSelection.indexOf(operator.name) + 1 || undefined}
-                          assignmentLabel={dormBatchSelection.includes(operator.name) ? "已选" : undefined}
+                          assignmentLabel={dormBatchSelection.includes(operator.name) ? intl("components_pages_ManualSchedulePage.selected") : undefined}
                           en={en}
                           tooltipDisabled={pickerScrolling}
                           onChoose={() => toggleDormBatchOperator(operator.name)}
@@ -1226,8 +1228,8 @@ export function ManualSchedulePage({
                 {dormShowcaseOpen ? (
                   <div className="flex min-h-0 min-w-0 flex-col border border-border/70 bg-[#1e2425] p-2 text-white shadow-inner" data-dorm-batch-showcase>
                     <div className="mb-2 flex items-center justify-between border-b border-white/10 pb-1.5">
-                      <span className="text-sm font-semibold">宿舍预览</span>
-                      <span className="text-xs text-white/60">4 间 · 5 格</span>
+                      <span className="text-sm font-semibold">{intl("components_pages_ManualSchedulePage.dormPreview")}</span>
+                      <span className="text-xs text-white/60">{intl("components_pages_ManualSchedulePage.dormPreviewSummary", { count: dormRooms.length, slots: 5 })}</span>
                     </div>
                     <div className="grid min-h-0 flex-1 grid-rows-4 gap-2">
                       {dormRooms.map((room, roomIndex) => (
@@ -1244,8 +1246,8 @@ export function ManualSchedulePage({
                           <div className={COMPACT_ROOM_BACKGROUND_CLASS} style={{ ...COMPACT_ROOM_BACKGROUND_STYLE, backgroundImage: `url(${roomVisualFor("dormitory").background})` }} aria-hidden="true" />
                           <div className={`${COMPACT_HEADER_CLASS} relative z-10`}>
                             <span className="h-5 w-1 shrink-0 bg-[var(--room-accent)]" aria-hidden="true" />
-                            <span className={`${COMPACT_ROOM_TITLE_CLASS} font-number`}>宿舍 {roomIndex + 1}</span>
-                            <span className="ml-auto text-xs text-white/55">{Math.min(5, manualRoomCapacity(room))} 格</span>
+                            <span className={`${COMPACT_ROOM_TITLE_CLASS} font-number`}>{intl("components_pages_ManualSchedulePage.dormitory", { index: roomIndex + 1 })}</span>
+                            <span className="ml-auto text-xs text-white/55">{intl("components_pages_ManualSchedulePage.slots", { count: Math.min(5, manualRoomCapacity(room)) })}</span>
                           </div>
                           <div className="relative z-10 grid min-h-0 w-full flex-1 grid-cols-[repeat(5,minmax(0,1fr))] gap-1.5">
                             {Array.from({ length: 5 }, (_, slotIndex) => {
@@ -1273,7 +1275,9 @@ export function ManualSchedulePage({
                                     setDormDragOperator(null);
                                   }}
                                   onDragEnd={() => { setDormDragIndex(null); setDormDragOperator(null); }}
-                                  title={name ? "拖动调整宿舍顺序" : "空位"}
+                                  title={name
+                                    ? intl("components_pages_ManualSchedulePage.dragToReorderDormitories")
+                                    : intl("components_pages_ManualSchedulePage.emptySlot")}
                                 >
                                   {operator && presentation ? (
                                     <>
@@ -1301,8 +1305,8 @@ export function ManualSchedulePage({
             </DialogBody>
           </ScrollArea>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setDormBatchOpen(false)}>取消</Button>
-            <Button type="button" onClick={applyDormBatch}>应用宿舍安排</Button>
+            <Button type="button" variant="outline" onClick={() => setDormBatchOpen(false)}>{intl("components_pages_ManualSchedulePage.cancel")}</Button>
+            <Button type="button" onClick={applyDormBatch}>{intl("components_pages_ManualSchedulePage.applyDormBatch")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1332,7 +1336,7 @@ export function ManualSchedulePage({
 
       <Dialog open={Boolean(pendingMove)} onOpenChange={(open) => { if (!open) setPendingMove(null); }}>
         <DialogContent className="max-w-[min(480px,calc(100vw-2rem))]">
-          <DialogHeader><DialogTitle>{intl("components_pages_ManualSchedulePage.moveThisOperator")}</DialogTitle><DialogDescription>{intl("components_pages_ManualSchedulePage.isAlreadyAssignedToMoveThemToAndLeave", { value1: (en) ? (pendingMove?.operator ?? "") : "", previousRoomTitle: previousRoomTitle, nextRoomTitle: nextRoomTitle, value4: (en) ? "" : (pendingMove?.operator ?? "该干员") })}</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>{intl("components_pages_ManualSchedulePage.moveThisOperator")}</DialogTitle><DialogDescription>{intl("components_pages_ManualSchedulePage.isAlreadyAssignedToMoveThemToAndLeave", { value1: (en) ? (pendingMove?.operator ?? intl("components_pages_ManualSchedulePage.thisOperator")) : "", previousRoomTitle: previousRoomTitle, nextRoomTitle: nextRoomTitle, value4: (en) ? "" : (pendingMove?.operator ?? intl("components_pages_ManualSchedulePage.thisOperator")) })}</DialogDescription></DialogHeader>
           <DialogFooter><Button type="button" variant="ghost" onClick={() => setPendingMove(null)}>{intl("components_pages_ManualSchedulePage.cancel")}</Button><Button type="button" onClick={confirmMove}>{intl("components_pages_ManualSchedulePage.moveOperator")}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
