@@ -43,7 +43,7 @@ test("agent cards group sources, expose only knowledge subjects, and render fail
     assert.equal(formatEnvironmentSummary({ fireworks: 0, sami: 1, abyssal: 2, knights: 0 }, { fireworks: "默认值（未自动推导）", sami: "森空岛自动读取", abyssal: "森空岛自动读取", knights: "手动指定" }), "默认：人间烟火 0；森空岛自动读取：萨米 1、深海猎人 2；用户指定：骑士 0");
     const render = (part) => renderToStaticMarkup(React.createElement(AgentToolCard, { part }));
     const solve = render({ type: "tool-solve_schedule", state: "output-available", output: { plan: { layoutLabel: "243", summary: {} }, workbenchSession: {}, planUrl: "/plan/old" } });
-    assert.match(solve, /在工作台中打开/);
+    assert.match(solve, /在基建计算器打开/);
     assert.doesNotMatch(solve, /只读结果页|\/plan\/old/);
     const skill = render({ type: "tool-query_skills", state: "output-available", output: { query: "巫恋", skills: [{ description: "隐藏的长原文" }], path: "docs/private.md" } });
     assert.match(skill, /技能查询 完成 · 巫恋/); assert.doesNotMatch(skill, /隐藏的长原文|docs\/private/);

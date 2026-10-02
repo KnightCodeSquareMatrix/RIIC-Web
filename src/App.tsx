@@ -751,7 +751,10 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       setOperbox(restoredOperbox);
       setFileName(typeof session.sourceName === "string" ? session.sourceName : null);
       setBoxSource(restoredBoxSource);
-      setLayoutDirty(false);
+      // Explicitly opening an Agent result is a local selection. A later
+      // Skland/cloud restore must not replace it with the previous layout.
+      setLayoutDirty(true);
+      hadPersistedSession.current = true;
       setLayoutSource("local");
       setLocalLayoutBackup(null);
       setRotationProfile(isRotationProfile(session.rotationProfile) ? session.rotationProfile : DEFAULT_ROTATION_PROFILE);
