@@ -497,6 +497,73 @@ html.schedule-layout-return::view-transition-new(.schedule-room-entering) {
   }
 }
 
+/* Agent owns mobile scrolling. dvh alone does not follow the on-screen keyboard. */
+html[data-agent-viewport],
+html[data-agent-viewport] body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+html[data-agent-viewport] [data-slot="sidebar-wrapper"] {
+  position: fixed;
+  inset-inline: 0;
+  top: var(--agent-viewport-top, 0px);
+  height: var(--agent-viewport-height, 100dvh);
+  min-height: 0;
+  overflow: hidden;
+}
+
+html[data-agent-viewport] [data-slot="sidebar-inset"] {
+  min-height: 0;
+}
+
+html[data-agent-viewport] [data-app-topbar],
+html[data-agent-viewport] [data-agent-chat] > header {
+  flex-shrink: 0;
+}
+
+html[data-agent-viewport] [data-app-content] {
+  flex: 1;
+  min-height: 0;
+  padding-block: 0;
+}
+
+html[data-agent-viewport] [data-primary-page="agent"],
+html[data-agent-viewport] [data-primary-page="agent"] > [data-skeleton-swap],
+html[data-agent-viewport] [data-primary-page="agent"] > [data-skeleton-swap] > [data-skeleton-swap-content],
+html[data-agent-viewport] [data-agent-chat] {
+  height: 100%;
+  min-height: 0;
+}
+
+html[data-agent-viewport] [data-agent-composer] {
+  max-height: 100%;
+  overflow-y: auto;
+}
+
+html[data-agent-viewport] [data-agent-prompt-bar] textarea {
+  font-size: 16px;
+}
+
+html[data-agent-viewport] [data-agent-prompt-bar] textarea:placeholder-shown {
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+html[data-agent-keyboard] [data-agent-chat] > header p,
+html[data-agent-keyboard] [data-agent-composer] > p:not([role="alert"]) {
+  display: none;
+}
+
+html[data-agent-keyboard] [data-agent-prompt-bar] textarea {
+  height: 3rem;
+}
+
+html[data-agent-keyboard] [data-agent-composer] {
+  padding-block: 0.5rem;
+}
+
 .infra-technical-canvas {
   position: relative;
   isolation: isolate;

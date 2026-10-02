@@ -7,13 +7,15 @@ import { getDatabase } from "@/server/db";
 import { deleteWebsiteAccountPrivateArtifacts } from "./account-deletion";
 import { websiteAccountNameDatabaseHooks } from "./account-name-hooks";
 import { sendAuthEmail } from "./email";
-import { configuredAdminIds, requireAuthBaseUrl, requireAuthSecret } from "./config";
+import { configuredAdminIds, localAuthTrustedOrigins, requireAuthBaseUrl, requireAuthSecret } from "./config";
 import { passwordStrengthHook } from "./password-strength-hook";
 
 function createAuth() {
+  const baseURL = requireAuthBaseUrl();
   return betterAuth({
     appName: "可露希尔基建终端",
-    baseURL: requireAuthBaseUrl(),
+    baseURL,
+    trustedOrigins: localAuthTrustedOrigins(baseURL),
     secret: requireAuthSecret(),
     database: drizzleAdapter(getDatabase(), { provider: "pg" }),
     databaseHooks: websiteAccountNameDatabaseHooks,
