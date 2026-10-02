@@ -20,6 +20,7 @@
 .activity + .activity { margin-top: -4px; }
 .conversation { --conversation-edge: 24px; isolation: isolate; }
 .conversation > [data-slot="scroll-area-viewport"] {
+  padding-left: 6px;
   mask-image: linear-gradient(to bottom, transparent, black var(--conversation-edge), black calc(100% - var(--conversation-edge)), transparent);
 }
 .conversation::before, .conversation::after {
@@ -79,7 +80,6 @@
   background: var(--card);
 }
 
-.row[data-speaker="assistant"]:has([data-closure-fur-avatar]) { padding-left: 6px; }
 .avatar:has([data-closure-fur-avatar]) { position: relative; z-index: 1; overflow: visible; }
 
 .bubble {
