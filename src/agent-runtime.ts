@@ -1,5 +1,5 @@
-import { Chat } from "@ai-sdk/react";
-import { DefaultChatTransport, type ChatRequestOptions, type UIMessage } from "ai";
+import type { Chat } from "@ai-sdk/react";
+import type { ChatRequestOptions, UIMessage } from "ai";
 
 export interface AgentRuntimeConversation {
   owner: string;
@@ -20,11 +20,12 @@ export class AgentRuntime {
   getServerSnapshot = () => 0;
   private publish() { this.revision++; this.listeners.forEach((listener) => listener()); }
 
-  getConversation(owner: string, id: string, messages: UIMessage[], save: AgentRuntimeConversation["save"]) {
+  getConversation(owner: string, id: string, messages: UIMessage[], save: AgentRuntimeConversation["save"], createChat: () => Chat<UIMessage>) {
     const key = `${owner}:${id}`;
     let entry = this.conversations.get(key);
     if (!entry) {
-      entry = { owner, chat: new Chat({ id, messages, transport: new DefaultChatTransport({ api: "/api/agent/chat" }) }), running: false, save, savedMessages: messages };
+      // The route supplies the SDK instance so other pages do not load the chat SDK.
+      entry = { owner, chat: createChat(), running: false, save, savedMessages: messages };
       this.conversations.set(key, entry);
     }
     // Keep the active entry most recent; retain all in-flight work during eviction.

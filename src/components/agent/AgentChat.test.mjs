@@ -21,6 +21,8 @@ test("agent cards group sources, expose only knowledge subjects, and render fail
           import { createElement } from "react";
           export default {};
           export const useChat=()=>({});
+          export const Chat=class{};
+          export const DefaultChatTransport=class{};
           export const convertFileListToFileUIParts=async()=>[];
           export const useAgentRuntime=()=>({});
           export const useAgentHistory=()=>({});
