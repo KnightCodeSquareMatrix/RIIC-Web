@@ -4,6 +4,18 @@
   --dialogue-avatar-size: 44px;
   --dialogue-avatar-gap: 24px;
 }
+.chat { display: flex; flex-direction: column; gap: 16px; width: 100%; min-width: 0; min-height: 0; height: calc(100dvh - 2rem); padding-block: 20px 8px; }
+.headerSlot { flex-shrink: 0; }
+.header { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.headerActions { display: flex; flex-shrink: 0; align-items: center; gap: 12px; }
+.modeTrigger { display: flex; align-items: center; justify-content: space-between; gap: 4px; height: 44px; width: 170px; min-width: 0; padding: 4px 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--background); }
+.modeTrigger:hover { background: var(--muted); }
+.modeTrigger:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.modeTrigger > svg { flex-shrink: 0; }
+.promptInput { height: 80px; width: 100%; min-width: 0; resize: none; overflow-y: auto; border: 0; background: transparent; padding: 4px; font-size: 14px; line-height: 24px; color: var(--foreground); outline: none; }
+.promptInput::placeholder { color: var(--muted-foreground); }
+.promptControls { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; min-width: 0; }
+.promptTools { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; min-width: 0; }
 .theme button:disabled, .theme button[aria-disabled="true"] {
   opacity: 1;
   filter: saturate(.12);
@@ -109,6 +121,30 @@
 .signal i { width: 3px; height: 3px; border-radius: 50%; background: var(--card); }
 :global(.dark) .theme { --dialogue-name: #ffe16b; }
 :global(.dark) .decoration, :global(.dark) .promptDecoration { opacity: .25; }
+
+@media (max-width: 767px) {
+  :global(body:has([data-agent-chat]) [data-cloud-sync-error]) {
+    bottom: calc(max(6px, env(safe-area-inset-bottom)) + 68px);
+    max-height: calc(100dvh - 140px);
+    overflow-y: auto;
+  }
+  .chat { height: var(--agent-viewport-height, 100dvh); gap: 0; padding-top: max(4px, env(safe-area-inset-top)); padding-bottom: max(6px, env(safe-area-inset-bottom)); }
+  .headerSlot { display: grid; grid-template-rows: 1fr; opacity: 1; transition: grid-template-rows 180ms ease-out, opacity 140ms ease-out; }
+  .headerSlot[data-hidden="true"] { grid-template-rows: 0fr; opacity: 0; pointer-events: none; }
+  .header { min-height: 0; overflow: hidden; gap: 2px; }
+  .headerActions { gap: 2px; }
+  .modeTrigger { width: 116px; padding-inline: 6px; border-color: transparent; background: transparent; }
+  .newConversation { width: 44px; height: 44px; padding: 0; }
+  .prompt { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center; gap: 2px; padding: 4px; border-radius: 28px; }
+  .promptInput { grid-column: 2; grid-row: 1; height: 44px; padding: 10px 2px; font-size: 16px; line-height: 24px; }
+  .promptControls, .promptTools { display: contents; }
+  .promptTools > button { grid-column: 1; grid-row: 1; }
+  .sendButton { grid-column: 3; grid-row: 1; width: 44px; height: 44px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .headerSlot { transition: none; }
+}
 
 @media (max-width: 639px) {
   .theme { --dialogue-avatar-size: 32px; --dialogue-avatar-gap: 12px; }
