@@ -34,6 +34,7 @@ import { loadClientFeature } from "@/client-lazy-loader";
 import { WorkbenchContext } from "@/workbench-context";
 import { WORKBENCH_PAGE_PATHS, workbenchHref, workbenchPageFromPathname, type AppPage } from "@/workbench-routes";
 import { useWebsiteSession } from "@/website-session";
+import { useFeatureAccess } from "@/components/workbench/FeatureAccessProvider";
 import { usePlanTask } from "@/hooks/use-plan-task";
 import type { SklandTrainingSyncOptions } from "@/hooks/use-skland-training-sync";
 import type { TrainingSyncSnapshot } from "@/components/workbench/SklandTrainingSyncBridge";
@@ -256,6 +257,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   const router = useRouter();
   const page = workbenchPageFromPathname(pathname);
   const { data: websiteSession, isPending: websiteSessionPending, refetch: refetchWebsiteSession } = useWebsiteSession();
+  const features = useFeatureAccess();
   const defaultPreset = PRESETS[0];
   const defaultLayout = buildBlueprint(defaultPreset);
   const hasRenderedCalculator = useRef(false);
@@ -635,6 +637,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     const frame = window.requestAnimationFrame(() => {
       for (const target of Object.keys(WORKBENCH_PAGE_PATHS) as AppPage[]) {
         if (target === page || (target === "skland" && !CLIENT_SKLAND_ENABLED)) continue;
+        if ((target === "agent" || target === "billing") && !features[target]) continue;
         router.prefetch(workbenchHref(target));
       }
     });
@@ -656,7 +659,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       if (idleCallback !== undefined) window.cancelIdleCallback?.(idleCallback);
       if (fallbackTimer !== undefined) window.clearTimeout(fallbackTimer);
     };
-  }, [hasRestoredSession, page, router]);
+  }, [hasRestoredSession, page, router, features]);
 
   useEffect(() => {
     if (setupOpen) setSetupMounted(true);

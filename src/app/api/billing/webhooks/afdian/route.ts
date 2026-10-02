@@ -1,7 +1,7 @@
 import { createRequestId, failureResponse, readJsonBody, PublicApiError } from "@/server/api-contract";
 import { findAfdianOrderByOutTradeNo } from "@/server/billing/afdian";
 import { fulfillBillingOrder } from "@/server/billing/service";
-import { NextResponse } from "next/server";
+import { NextResponse } from "next/server.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,28 +44,18 @@ export async function POST(request: Request) {
     }
     const body = await readJsonBody(request, 64 * 1024) as AfdianPrototypePayload;
     const order = body.data?.order;
-    let customOrderIdCandidates = [
-      body.custom_order_id,
-      order?.custom_order_id,
-      order?.remark,
-    ].filter((value): value is string => typeof value === "string" && /^riic-[a-z0-9]+$/i.test(value.trim()));
     const outTradeNo = typeof order?.out_trade_no === "string" ? order.out_trade_no : typeof body.out_trade_no === "string" ? body.out_trade_no : undefined;
-    let queriedOrder = null;
-    if (customOrderIdCandidates.length === 0 && outTradeNo) {
-      try {
-        queriedOrder = await findAfdianOrderByOutTradeNo(outTradeNo);
-        if (queriedOrder?.custom_order_id || queriedOrder?.remark) {
-          customOrderIdCandidates = [queriedOrder.custom_order_id, queriedOrder.remark].filter((value): value is string => typeof value === "string" && /^riic-[a-z0-9]+$/i.test(value.trim()));
-        }
-      } catch (error) {
-        console.warn(JSON.stringify({ level: "warn", event: "afdian_query_order_failed", requestId, outTradeNo, message: error instanceof Error ? error.message : String(error) }));
-      }
-    }
+    if (!outTradeNo || outTradeNo.length > 128) throw new PublicApiError("AIC-BILLING-4104");
+    // A callback is an untrusted notification, not proof of payment. Always
+    // authenticate the transaction through the provider, even with a local ID.
+    const queriedOrder = await findAfdianOrderByOutTradeNo(outTradeNo);
+    if (!queriedOrder || queriedOrder.out_trade_no !== outTradeNo) throw new PublicApiError("AIC-BILLING-4104");
+    const customOrderIdCandidates = [queriedOrder.custom_order_id, queriedOrder.remark]
+      .filter((value): value is string => typeof value === "string" && /^riic-[a-z0-9]+$/i.test(value.trim()))
+      .map((value) => value.trim());
     const customOrderId = customOrderIdCandidates[0] ?? null;
-    const status = queriedOrder?.status ?? order?.status ?? body.status;
-    const totalAmount = queriedOrder?.total_amount !== undefined
-      ? Number(queriedOrder.total_amount)
-      : typeof order?.total_amount === "string" || typeof order?.total_amount === "number" ? Number(order.total_amount) : undefined;
+    const status = queriedOrder.status;
+    const totalAmount = queriedOrder.total_amount !== undefined ? Number(queriedOrder.total_amount) : undefined;
     console.info(JSON.stringify({
       level: "info",
       event: "afdian_webhook_received",
@@ -76,7 +66,7 @@ export async function POST(request: Request) {
       totalAmount,
       matched: Boolean(customOrderId),
     }));
-    if (!customOrderId || (status !== undefined && Number(status) !== 2)) {
+    if (!customOrderId || Number(status) !== 2) {
       return afdianAck(requestId, { accepted: false, reason: "payment_not_success_or_unmatched" });
     }
     if (totalAmount === undefined || !Number.isFinite(totalAmount)) {

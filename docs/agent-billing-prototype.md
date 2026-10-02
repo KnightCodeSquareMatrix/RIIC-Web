@@ -3,10 +3,10 @@
 ## 本地联调
 
 1. 使用项目的迁移配置执行 `npm run db:migrate`，会安装 `drizzle/0019_agent_billing.sql`。
-2. 登录网站账号后打开 `/billing`。
+2. 登录管理员网站账号后打开 `/billing`。默认仅管理员可用，开放开关见 [开放策略](FEATURE_ROLLOUT.md)。
 3. 配置各档位独立的爱发电商品地址：`AFDIAN_PAYMENT_URL_POINTS_1_TEST`、`AFDIAN_PAYMENT_URL_POINTS_5`、`AFDIAN_PAYMENT_URL_POINTS_10`、`AFDIAN_PAYMENT_URL_MONTHLY_19_9`。旧变量 `AFDIAN_TEST_PAYMENT_URL` 只作为 ¥5 档位的本地迁移兼容项；未配置的档位会禁用购买按钮，不会错误跳到其它金额。
-4. 本地开发环境可点击“模拟爱发电回调到账”；生产环境只有设置 `BILLING_PROTOTYPE_MODE=1` 才允许该接口。
-5. 在爱发电开发者后台（`https://afdian.com/dashboard/dev`）把 Webhook 地址设置为 `https://你的域名/api/billing/webhooks/afdian`。接口兼容官方 `data.order` 回调，成功响应为 `{"ec":200,"em":""}`；本地原型也支持 `x-afdian-prototype-secret` 对应 `AFDIAN_WEBHOOK_SECRET` 的回放校验。主动查询使用 `AFDIAN_API_TOKEN` + `AFDIAN_USER_ID`，用于回调缺少自定义订单号时补查订单。
+4. 管理员可在本地开发环境点击“模拟爱发电回调到账”；生产环境还须设置 `BILLING_PROTOTYPE_MODE=1`。按钮和接口都受限制，公开模式不向普通用户开放此入口。
+5. 在爱发电开发者后台（`https://afdian.com/dashboard/dev`）把 Webhook 地址设置为 `https://你的域名/api/billing/webhooks/afdian`。接口兼容官方 `data.order` 回调，成功响应为 `{"ec":200,"em":""}`；若配置 `AFDIAN_WEBHOOK_SECRET`，同时验证 `x-afdian-prototype-secret`。每次回调均使用 `AFDIAN_API_TOKEN` + `AFDIAN_USER_ID` 主动查询真实订单，只采用查询得到的交易号、订单关联、成功状态与金额，查询未成功不入账。
 
 ## 当前规则
 

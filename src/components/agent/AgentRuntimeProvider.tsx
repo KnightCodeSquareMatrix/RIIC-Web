@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { AgentRuntime } from "@/agent-runtime";
 import { useWebsiteSession } from "@/website-session";
+import { useFeatureAccess } from "@/components/workbench/FeatureAccessProvider";
 
 const RuntimeContext = createContext<AgentRuntime | null>(null);
 
@@ -27,7 +28,8 @@ export function useAgentRuntime() {
 export function AgentRuntimeAccountBoundary() {
   const runtime = useAgentRuntime();
   const { data, isPending } = useWebsiteSession();
-  const owner = data?.user.id ?? null;
+  const features = useFeatureAccess();
+  const owner = features.agent ? data?.user.id ?? null : null;
   useEffect(() => {
     if (!isPending) runtime.activateOwner(owner);
   }, [runtime, owner, isPending]);

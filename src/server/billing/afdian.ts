@@ -78,5 +78,5 @@ export async function queryAfdianOrders(input: { page?: number; outTradeNo?: str
 
 export async function findAfdianOrderByOutTradeNo(outTradeNo: string): Promise<AfdianOrder | null> {
   const data = await queryAfdianOrders({ outTradeNo });
-  return data?.list?.find((item) => item.out_trade_no === outTradeNo) ?? data?.list?.[0] ?? null;
+  return data?.list?.find((item) => item.out_trade_no === outTradeNo) ?? null;
 }

@@ -1,5 +1,5 @@
 import { createRequestId, failureResponse, successResponse, PublicApiError } from "@/server/api-contract";
-import { requireWebsiteSession } from "@/server/auth/authorization";
+import { requireFeatureSession } from "@/server/auth/feature-access";
 import { getOrder, getWallet } from "@/server/billing/service";
 
 export const runtime = "nodejs";
@@ -9,7 +9,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   const requestId = createRequestId();
   const startedAt = performance.now();
   try {
-    const session = await requireWebsiteSession(request);
+    const session = await requireFeatureSession(request, "billing");
     const { id } = await context.params;
     const order = await getOrder(session.user.id, id);
     if (!order) throw new PublicApiError("AIC-DATA-8004");
