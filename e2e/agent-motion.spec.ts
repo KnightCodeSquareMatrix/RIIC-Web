@@ -52,6 +52,47 @@ test("revoking feature access removes navigation and stops the active conversati
   await expect.poll(() => page.evaluate(() => (window as typeof window & { agentTestAborts: number }).agentTestAborts)).toBe(1);
 });
 
+test("Closure animates only the latest reply avatar and settles when stopped", async ({ page }) => {
+  await prepare(page);
+  await page.addInitScript(() => {
+    const original = HTMLCanvasElement.prototype.getContext;
+    const allocated = new WeakSet<HTMLCanvasElement>();
+    (window as typeof window & { furContexts: number }).furContexts = 0;
+    HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, ...args: Parameters<typeof original>) {
+      if (args[0] === "webgl2" && !allocated.has(this)) {
+        allocated.add(this);
+        (window as typeof window & { furContexts: number }).furContexts++;
+      }
+      return original.apply(this, args);
+    } as typeof original;
+  });
+  await page.goto("/agent");
+  const input = page.getByRole("textbox", { name: "发给可露希尔的消息" });
+  await input.fill("帮我排班");
+  await input.press("Enter");
+  await expect(page.getByRole("button", { name: "停止", exact: true })).toBeVisible();
+  await emit(page, [
+    { type: "start", messageId: "fur-answer" }, { type: "start-step" },
+    { type: "text-start", id: "fur-first" }, { type: "text-delta", id: "fur-first", delta: "先确认你的干员池。" },
+  ]);
+  const avatars = page.locator('[data-speaker="assistant"] [data-closure-fur-avatar]');
+  await expect(avatars).toHaveCount(1);
+  await expect(avatars.first()).toHaveAttribute("data-fur-motion", "animated");
+  await emit(page, [
+    { type: "text-end", id: "fur-first" },
+    { type: "text-start", id: "fur-second" }, { type: "text-delta", id: "fur-second", delta: "接下来检查布局。" },
+  ]);
+  await expect(avatars).toHaveCount(2);
+  await expect(avatars.first()).toHaveAttribute("data-fur-motion", "idle");
+  await expect(avatars.last()).toHaveAttribute("data-fur-motion", "animated");
+  expect(await page.evaluate(() => (window as typeof window & { furContexts: number }).furContexts)).toBe(1);
+  await page.getByRole("button", { name: "停止", exact: true }).click();
+  await expect(avatars.last()).toHaveAttribute("data-fur-motion", "idle");
+  const stopped = await avatars.last().locator("canvas").evaluate((canvas: HTMLCanvasElement) => canvas.toDataURL());
+  await input.fill("停止后可以继续输入");
+  expect(await avatars.last().locator("canvas").evaluate((canvas: HTMLCanvasElement) => canvas.toDataURL())).toBe(stopped);
+});
+
 test("Agent keeps streaming across routes, restores its live request, and saves while away", async ({ page }) => {
   await prepare(page);
   await page.goto("/agent");
@@ -227,6 +268,7 @@ test("Long reasoning collapses without a gap and streamed text stays readable ac
   const intro = page.locator("[data-agent-streaming-text]").first();
   await expect(intro).toHaveText("我来查一下练卡资料。");
   await expect(intro.locator("[data-stream-chunk]")).toHaveCount(0);
+  await expect(intro.locator('xpath=ancestor::article').locator("[data-closure-fur-avatar]")).toHaveAttribute("data-fur-motion", "idle");
   // Reasoning is outside the bubble; measure the gap to its row, excluding
   // the speaker name and the bubble's own padding.
   await expect.poll(async () => (await intro.locator('xpath=ancestor::article').boundingBox())!.y - ((await first.boundingBox())!.y + (await first.boundingBox())!.height)).toBeLessThan(16);

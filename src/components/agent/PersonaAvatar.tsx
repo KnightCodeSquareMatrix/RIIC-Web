@@ -2,8 +2,10 @@
 
 import { RemoteAvatar } from "@/components/ui/remote-avatar";
 import { operatorPortraitFor } from "@/operatorPortraits";
+import { ClosureFurAvatar } from "./ClosureFurAvatar";
 
-export function PersonaAvatar({ name, src, size = 38 }: { name: string; src?: string; size?: number }) {
+export function PersonaAvatar({ name, src, size = 38, active = false }: { name: string; src?: string; size?: number; active?: boolean }) {
+  if (!src && (name === "可露希尔" || name === "Closure")) return <ClosureFurAvatar active={active} />;
   return <RemoteAvatar
     src={src ?? operatorPortraitFor(name)}
     alt=""
