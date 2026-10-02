@@ -1055,7 +1055,13 @@ export type AppErrorCode =
   | "AIC-DATA-8004"
   | "AIC-DATA-8005"
   | "AIC-RELEASE-9001"
-  | "AIC-RELEASE-9002";
+  | "AIC-RELEASE-9002"
+  | "AIC-BILLING-4101"
+  | "AIC-BILLING-4102"
+  | "AIC-BILLING-4103"
+  | "AIC-BILLING-4104"
+  | "AIC-BILLING-4105"
+  | "AIC-BILLING-4106";
 
 export interface ApiFieldError {
   path: string;
@@ -1256,6 +1262,10 @@ export interface AdminUserData {
   sklandBindingCount: number;
   sklandActiveBindingCount: number;
   sklandRenewalDueCount: number;
+  paidPoints: number;
+  monthlyPoints: number;
+  monthlyExpiresAt: string | null;
+  totalPoints: number;
 }
 
 export interface AdminUsersData {

@@ -21,6 +21,7 @@ test("pending plan envelopes resume into finalized private artifacts", async (co
   process.env.BETA_BUSINESS_DB_ENABLED = "0";
 
   const diagnosticId = "11111111-1111-4111-8111-111111111111";
+  const startedAt = new Date().toISOString();
   const ownerTag = "a".repeat(64);
   const envelopePath = path.join(runRoot, "run-envelope.json");
   await writeFile(envelopePath, JSON.stringify({
@@ -29,7 +30,7 @@ test("pending plan envelopes resume into finalized private artifacts", async (co
     dataOwnerTag: ownerTag,
     result: {
       success: false,
-      startedAt: "2026-09-02T00:00:00.000Z",
+      startedAt,
       runId: diagnosticId,
       error: "fixture",
     },
@@ -52,7 +53,7 @@ test("pending plan envelopes resume into finalized private artifacts", async (co
     ownerTag,
     diagnosticId,
     sourceName: null,
-    createdAt: "2026-09-02T00:00:00.000Z",
+    createdAt: startedAt,
   });
   assert.equal(JSON.parse(await readFile(path.join(runRoot, "artifact-expanded.json"), "utf-8")).diagnosticId, diagnosticId);
   assert.equal(JSON.parse(await readFile(path.join(runRoot, "artifact-finalized.json"), "utf-8")).diagnosticId, diagnosticId);
@@ -82,7 +83,7 @@ test("pending plan envelopes resume into finalized private artifacts", async (co
     dataOwnerTag: null,
     result: {
       success: false,
-      startedAt: "2026-09-02T00:00:00.000Z",
+      startedAt,
       runId: "22222222-2222-4222-8222-222222222222",
       error: "crashed before recordRun",
     },

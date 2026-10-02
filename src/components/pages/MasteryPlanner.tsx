@@ -1,4 +1,5 @@
 "use client";
+import { WorkbenchPageHeading } from "@/components/workbench/WorkbenchPageHeading";
 import { localize as localize_components_pages_MasteryPlanner } from "../../i18n/helpers/components_pages_MasteryPlanner.ts";
 
 import { useTranslations, useLocale } from "next-intl";
@@ -113,7 +114,7 @@ export function MasteryPlanner({ operbox, sourceName, requiresAccount, pending, 
 
   return <section className="grid min-w-0 gap-3 pt-2 pb-8 md:gap-5 md:pt-5" aria-labelledby="mastery-heading" data-mastery-planner>
     <header className="flex items-start justify-between gap-3">
-      <div className="min-w-0"><h1 id="mastery-heading" className="flex items-center gap-2.5 text-lg font-semibold"><span className="h-6 w-1.5 shrink-0 bg-[#FFD501]" />{intl("components_pages_MasteryPlanner.masteryPlanner")}</h1>
+      <div className="min-w-0"><WorkbenchPageHeading page="mastery" id="mastery-heading">{intl("components_pages_MasteryPlanner.masteryPlanner")}</WorkbenchPageHeading>
         <p className="mt-1 text-xs leading-5 text-muted-foreground md:mt-2 md:text-sm">{intl("components_pages_MasteryPlanner.chooseAnOperatorGetAStageByStageTrainer")}</p></div>
       <SetupActionButton className="max-md:!h-11 max-md:w-11 max-md:!min-w-0 max-md:!px-0" variant="outline" onClick={onOpenSetup} disabled={pending} aria-label={intl("components_pages_MasteryPlanner.configureBox")} title={intl("components_pages_MasteryPlanner.configureBox")}><Settings2 className="size-4 md:hidden" /><span className="max-md:hidden">{intl("components_pages_MasteryPlanner.configureBox")}</span></SetupActionButton>
     </header>

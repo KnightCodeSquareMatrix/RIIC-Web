@@ -5,7 +5,9 @@ import {
   Calculator,
   BookOpen,
   CircleHelp,
+  ClipboardCheck,
   Cloud,
+  CreditCard,
   GraduationCap,
   Search,
   Settings2,
@@ -16,6 +18,11 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
+import { createContext, lazy, Suspense, useContext, useId, useState, type ReactNode } from "react";
+import { LayoutGroup, motion, useReducedMotion } from "motion/react";
+import styles from "./AppSidebar.module.css";
+import { useWebsiteSession } from "@/website-session";
+import { useFeatureAccess } from "@/components/workbench/FeatureAccessProvider";
 
 import {
   Sidebar,
@@ -34,6 +41,8 @@ import { workbenchHref, type AppPage } from "@/workbench-routes";
 import { useLocale } from "next-intl";
 
 const CLIENT_SKLAND_ENABLED = process.env.APP_CLIENT_SKLAND_ENABLED === "1";
+const AgentHistoryNavigation = lazy(() => import("@/components/agent/AgentHistoryNavigation").then((module) => ({ default: module.AgentHistoryNavigation })));
+const SidebarHighlight = createContext<{ target: string; setHovered: (target: string | null) => void }>({ target: "", setHovered: () => undefined });
 
 interface AppSidebarProps {
   showMower?: boolean;
@@ -45,6 +54,7 @@ interface AppNavigationItemProps extends AppSidebarProps {
   target: AppPage;
   label: string;
   icon: LucideIcon;
+  children?: ReactNode;
 }
 
 function AppNavigationItem({
@@ -53,17 +63,22 @@ function AppNavigationItem({
   label,
   icon: Icon,
   onPageChange,
+  children,
 }: AppNavigationItemProps) {
   const { isMobile, setOpenMobile } = useSidebar();
   const href = workbenchHref(target);
+  const highlight = useContext(SidebarHighlight);
+  const reducedMotion = useReducedMotion();
 
   return (
-    <SidebarMenuItem>
+    <SidebarMenuItem onPointerEnter={() => highlight.setHovered(target)} onFocus={() => highlight.setHovered(target)}>
+      {highlight.target === target ? <motion.span aria-hidden="true" className={styles.highlight} layoutId="sidebar-highlight" initial={false} transition={{ duration: reducedMotion ? 0 : 0.18, ease: [0.16, 1, 0.3, 1] }} /> : null}
       <SidebarMenuButton
         render={(
           <Link
             href={href}
             role="button"
+            aria-label={label}
             aria-current={page === target ? "page" : undefined}
             data-primary-navigation-page={target}
             onClick={(event) => {
@@ -76,21 +91,30 @@ function AppNavigationItem({
         tooltip={label}
       >
         <Icon className="size-5" />
-        <span>{label}</span>
+        <span className={styles.copy}>{label}</span>
       </SidebarMenuButton>
+      {children}
     </SidebarMenuItem>
   );
 }
 
 export function AppSidebar({ page, onPageChange, showMower = false }: AppSidebarProps) {
   const locale = useLocale();
+  const { data: websiteSession } = useWebsiteSession();
+  const features = useFeatureAccess();
   const labels = messageRecord(locale, "components_layout_AppSidebar_labels");
+  const billingLabel = locale === "en" ? "Payment plans" : "付费计划";
+  const [hovered, setHovered] = useState<string | null>(null);
+  const highlightId = useId();
   return (
-    <Sidebar collapsible="icon" data-primary-navigation-prefetch="eager">
-      <SidebarHeader className="h-[65px] flex-row items-center justify-end border-b border-sidebar-border px-2 group-data-[collapsible=icon]:justify-center">
-        <SidebarTrigger className="h-9 w-9" />
+    <Sidebar collapsible="icon" mobileWidth="min(17rem, calc(100vw - 3rem))" data-primary-navigation-prefetch="eager">
+      <div className={styles.sidebar} data-beautiful-sidebar onPointerLeave={() => setHovered(null)} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setHovered(null); }}>
+      <SidebarHeader className={styles.header}>
+        <SidebarTrigger className="h-8 w-8 shrink-0 rounded-lg text-muted-foreground" />
       </SidebarHeader>
-      <SidebarContent>
+      <SidebarHighlight.Provider value={{ target: hovered ?? "", setHovered }}>
+      <LayoutGroup id={highlightId}>
+      <SidebarContent data-yeye-scroll={undefined}>
         <SidebarGroup>
           <SidebarGroupLabel>{labels.schedulingGroup}</SidebarGroupLabel>
           <SidebarMenu>
@@ -103,6 +127,7 @@ export function AppSidebar({ page, onPageChange, showMower = false }: AppSidebar
         <SidebarGroup>
           <SidebarGroupLabel>{labels.progressionGroup}</SidebarGroupLabel>
           <SidebarMenu>
+            <AppNavigationItem page={page} target="account-health" label={locale === "en" ? "Account Health" : "账号体检"} icon={ClipboardCheck} onPageChange={onPageChange} />
             <AppNavigationItem page={page} target="mastery" label={labels.mastery} icon={BookOpen} onPageChange={onPageChange} />
             <AppNavigationItem page={page} target="recruitment" label={labels.recruitment} icon={UserRoundPlus} onPageChange={onPageChange} />
           </SidebarMenu>
@@ -113,6 +138,14 @@ export function AppSidebar({ page, onPageChange, showMower = false }: AppSidebar
             <AppNavigationItem page={page} target="skill-query" label={labels.skills} icon={Search} onPageChange={onPageChange} />
           </SidebarMenu>
         </SidebarGroup>
+        {features.agent ? <SidebarGroup>
+          <SidebarGroupLabel>{locale === "en" ? "AI Assistant" : "智能助理"}</SidebarGroupLabel>
+          <SidebarMenu>
+            <AppNavigationItem page={page} target="agent" label={locale === "en" ? "Closure Assistant" : "可露希尔助理"} icon={Bot} onPageChange={onPageChange}>
+              {websiteSession ? <Suspense fallback={null}><AgentHistoryNavigation active={page === "agent"} /></Suspense> : null}
+            </AppNavigationItem>
+          </SidebarMenu>
+        </SidebarGroup> : null}
         <SidebarGroup>
           <SidebarGroupLabel>{labels.personalGroup}</SidebarGroupLabel>
           <SidebarMenu>
@@ -120,32 +153,36 @@ export function AppSidebar({ page, onPageChange, showMower = false }: AppSidebar
               <AppNavigationItem page={page} target="skland" label={labels.skland} icon={Cloud} onPageChange={onPageChange} />
             ) : null}
             <AppNavigationItem page={page} target="account" label={labels.account} icon={UserRound} onPageChange={onPageChange} />
+            {features.billing ? <AppNavigationItem page={page} target="billing" label={billingLabel} icon={CreditCard} onPageChange={onPageChange} /> : null}
             <AppNavigationItem page={page} target="settings" label={labels.settings} icon={Settings2} onPageChange={onPageChange} />
           </SidebarMenu>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="border-t border-sidebar-border p-2">
+      </LayoutGroup>
+      </SidebarHighlight.Provider>
+      <SidebarFooter className={styles.footer}>
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
-              render={<Link href="/changelog" data-changelog-link />}
+              render={<Link href="/changelog" aria-label={locale === "en" ? "Changelog" : "更新日志"} data-changelog-link />}
               tooltip={locale === "en" ? "Changelog" : "更新日志"}
             >
               <BookOpen className="size-5" />
-              <span>{locale === "en" ? "Changelog" : "更新日志"}</span>
+              <span className={styles.copy}>{locale === "en" ? "Changelog" : "更新日志"}</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton
-              render={<Link href="/help" data-help-link />}
+              render={<Link href="/help" aria-label={labels.help} data-help-link />}
               tooltip={labels.help}
             >
               <CircleHelp className="size-5" />
-              <span>{labels.help}</span>
+              <span className={styles.copy}>{labels.help}</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
+      </div>
     </Sidebar>
   );
 }

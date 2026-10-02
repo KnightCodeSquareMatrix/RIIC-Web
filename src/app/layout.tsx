@@ -6,6 +6,7 @@ import "overlayscrollbars/overlayscrollbars.css";
 import "./globals.css";
 import { TelemetryLoader } from "@/components/telemetry/TelemetryLoader";
 import { PageScrollbar } from "@/components/ui/page-scrollbar";
+import { AgentRuntimeProvider } from "@/components/agent/AgentRuntimeProvider";
 import { LocaleProvider } from "@/i18n/client";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getTranslations } from "next-intl/server";
@@ -60,7 +61,7 @@ export default async function RootLayout({
             当前浏览器无法运行页面脚本。请启用 JavaScript，或升级浏览器 / Android System WebView。
           </div>
         </noscript>
-        <NextIntlClientProvider><LocaleProvider>{children}</LocaleProvider></NextIntlClientProvider>
+        <NextIntlClientProvider><LocaleProvider><AgentRuntimeProvider>{children}</AgentRuntimeProvider></LocaleProvider></NextIntlClientProvider>
         <TelemetryLoader />
         <PageScrollbar />
       </body>

@@ -8,12 +8,14 @@ function ScrollArea({
   className,
   viewportClassName,
   viewportProps,
+  scrollbarSlotId,
   direction = "y",
   children,
   ...props
 }: React.ComponentProps<"div"> & {
   viewportClassName?: string
   viewportProps?: React.ComponentProps<"div">
+  scrollbarSlotId?: string
   direction?: ScrollDirection
 }) {
   return (
@@ -22,6 +24,7 @@ function ScrollArea({
         {...viewportProps}
         data-slot="scroll-area-viewport"
         data-yeye-scroll={direction}
+        data-yeye-scroll-slot={scrollbarSlotId}
         tabIndex={viewportProps?.tabIndex ?? 0}
         className={cn(
           "size-full max-h-[inherit] rounded-[inherit] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1",

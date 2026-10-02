@@ -1,0 +1,69 @@
+import catalogue from "./generated/arkntools/operator-catalog.json" with { type: "json" };
+
+export const MAX_OPERATOR_PORTRAITS = 24;
+export interface OperatorMention { start: number; end: number; id: string; name: string; portrait: string }
+interface Operator { id: string; name: string; portrait: string }
+interface TrieNode { children: Map<string, TrieNode>; operator?: Operator }
+const root: TrieNode = { children: new Map() };
+function addName(name: string, operator: Operator) {
+  let node = root;
+  for (const character of name) {
+    if (!node.children.has(character)) node.children.set(character, { children: new Map() });
+    node = node.children.get(character)!;
+  }
+  node.operator = operator;
+}
+for (const operator of catalogue) {
+  if (/^\/images\/operator-portraits\/[a-zA-Z0-9_-]+\.webp\?v=\d+-[a-f0-9]{12}$/.test(operator.portrait)) addName(operator.name, operator);
+}
+const amiya = catalogue.find((operator) => operator.id === "char_002_amiya");
+if (amiya) for (const name of ["阿米娅(近卫)", "阿米娅(医疗)", "阿米娅（近卫）", "阿米娅（医疗）"]) addName(name, amiya);
+
+const boundary = /[\s，。！？、；：,.!?;:()[\]{}「」『』“”‘’"'<>《》]/;
+const latinWord = /[A-Za-z0-9_]/;
+const cache = new Map<string, readonly OperatorMention[]>();
+let cacheCharacters = 0;
+const CACHE_CHARACTERS = 256_000;
+
+/** Longest match; ambiguous short names require explicit delimiters or operator context. */
+export function findOperatorMentions(text: string, explicit = false): readonly OperatorMention[] {
+  const key = `${explicit ? "1" : "0"}:${text}`;
+  const cached = cache.get(key);
+  if (cached) return cached;
+  const mentions: OperatorMention[] = [];
+  const seen = new Set<string>();
+  for (let start = 0; start < text.length;) {
+    let node = root;
+    let candidate: OperatorMention | undefined;
+    for (let end = start; end < text.length; end++) {
+      const next = node.children.get(text[end]);
+      if (!next) break;
+      node = next;
+      if (node.operator) candidate = { start, end: end + 1, id: node.operator.id, name: node.operator.name, portrait: node.operator.portrait };
+    }
+    if (!candidate) { start++; continue; }
+    const label = text.slice(start, candidate.end);
+    const before = text[start - 1];
+    const after = text[candidate.end];
+    const standalone = (!before || boundary.test(before)) && (!after || boundary.test(after));
+    const context = /(?:干员|培养|练度|练|精二|专精|招募|部署|编入|推荐|选择|使用|携带)[：:、\s]*$/.test(text.slice(Math.max(0, start - 12), start));
+    const latin = /[A-Za-z0-9]/.test(label);
+    const boundedLatin = (!before || !latinWord.test(before)) && (!after || !latinWord.test(after));
+    const shortName = [...label].length <= 2;
+    if ((!latin || boundedLatin) && (!shortName || standalone || (explicit && text.trim() === label) || (context && (!after || boundary.test(after) || /^(?:的|与|和|及|进行|到|至|升|练)/.test(text.slice(candidate.end)))))) {
+      if (!seen.has(candidate.id)) { mentions.push(candidate); seen.add(candidate.id); }
+    }
+    // Consume rejected longest names too: never reinterpret 红云 as 红.
+    start = candidate.end;
+  }
+  if (key.length <= CACHE_CHARACTERS) {
+    while (cache.size >= 64 || cacheCharacters + key.length > CACHE_CHARACTERS) {
+      const oldest = cache.keys().next().value!;
+      cacheCharacters -= oldest.length;
+      cache.delete(oldest);
+    }
+    cache.set(key, mentions);
+    cacheCharacters += key.length;
+  }
+  return mentions;
+}

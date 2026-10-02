@@ -1,0 +1,42 @@
+/* Motion adapted from Beautiful UI, Copyright (c) 2026 Shane Levine, MIT.
+ * See LICENSE.txt. All running states are driven by the actual response stream. */
+.grid { display: grid; width: .875rem; height: .875rem; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(0, 1fr)); gap: 1.5px; flex-shrink: 0; }
+.pixel { border-radius: 1px; background: currentColor; opacity: .15; animation: pixelOn 650ms ease-in-out infinite; }
+.shimmer { background: linear-gradient(90deg, var(--muted-foreground) 35%, var(--foreground) 50%, var(--muted-foreground) 65%); background-size: 200% 100%; background-clip: text; color: transparent; animation: shimmer 1.4s linear infinite; }
+.enter { animation: fadeUp 280ms cubic-bezier(.23, 1, .32, 1) both; }
+.settle { animation: settle 240ms cubic-bezier(.16, 1, .3, 1) both; }
+.spin { animation: spin 900ms linear infinite; }
+.reveal { animation: reveal 180ms ease-out; }
+.portraitReveal { animation: portraitReveal 260ms cubic-bezier(.16, 1, .3, 1) both; }
+.composerEnter { animation: composerEnter 360ms cubic-bezier(.2, .8, .2, 1) both; }
+/* Closed content must release its space even if animation frames are delayed. */
+.disclosure { min-width: 0; }
+.disclosure[hidden] { display: none; }
+.disclosureInner { min-height: 0; overflow: hidden; }
+.reasoningWindow { position: relative; margin: 2px 0 0 8px; border-left: 1px solid var(--border); contain: layout paint; }
+.reasoningContent { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 18px; }
+.toolDetails, .toolDetails :global(.text-xs) { font-size: 11px; line-height: 18px; }
+/* Blur only the narrow exit edge. The latest lines never receive a text filter. */
+.reasoningWindow[data-fading="true"] [data-slot="scroll-area-viewport"] { mask-image: linear-gradient(to bottom, transparent, black 18px); }
+.reasoningWindow[data-fading="true"]::after { content: ""; position: absolute; pointer-events: none; top: 0; left: 12px; right: 8px; height: 18px; backdrop-filter: blur(1.5px); mask-image: linear-gradient(to bottom, black, transparent); }
+.chevron { transition: transform 250ms cubic-bezier(.23, 1, .32, 1); }
+.cursor { display: inline-block; width: 2px; height: 1em; margin-left: 3px; vertical-align: -.1em; border-radius: 1px; background: var(--foreground); animation: cursor 1s step-end infinite; }
+.streaming[data-streaming="true"] :global(.agent-markdown) > :last-child:not(pre):not(div):not(ul):not(ol)::after { content: ""; display: inline-block; width: 2px; height: 1em; margin-left: 3px; vertical-align: -.1em; background: var(--foreground); animation: cursor 1s step-end infinite; }
+@keyframes pixelOn { 0%, 100% { opacity: .15; transform: scale(.8); } 40% { opacity: 1; transform: scale(1); } }
+@keyframes shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes settle { from { opacity: .2; transform: scale(.8); } to { opacity: 1; transform: scale(1); } }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes reveal { from { opacity: .65; } to { opacity: 1; } }
+@keyframes portraitReveal { from { opacity: 0; filter: blur(3px); } to { opacity: 1; filter: blur(0); } }
+@keyframes composerEnter { 0% { opacity: 0; transform: translateY(20px); } 75% { opacity: 1; transform: translateY(-2px); } 100% { opacity: 1; transform: translateY(0); } }
+@keyframes cursor { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) {
+  .pixel, .shimmer, .enter, .settle, .spin, .reveal, .portraitReveal, .composerEnter, .cursor { animation: none; filter: none; transform: none; }
+  .pixel { opacity: .5; }
+  .shimmer { background: none; color: var(--muted-foreground); }
+  .disclosure, .disclosureInner, .chevron { transition: none; }
+  .reasoningWindow[data-fading="true"] [data-slot="scroll-area-viewport"] { mask-image: none; }
+  .reasoningWindow[data-fading="true"]::after { display: none; }
+  .streaming[data-streaming="true"] :global(.agent-markdown) > :last-child::after { animation: none; }
+}

@@ -1,4 +1,5 @@
 "use client";
+import { WorkbenchPageHeading } from "@/components/workbench/WorkbenchPageHeading";
 
 import { useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
@@ -45,7 +46,7 @@ export function RecruitmentCalculator({ operbox, sourceName, pending, onOpenSetu
   return <section className="grid min-w-0 gap-3 pt-2 pb-8 md:gap-5 md:pt-5" aria-labelledby="recruitment-heading" data-recruitment-page>
     <header className="flex items-start justify-between gap-3">
       <div className="min-w-0">
-        <h1 id="recruitment-heading" className="flex items-center gap-2.5 text-lg font-semibold"><span className="h-6 w-1.5 shrink-0 bg-[#FFD501]" aria-hidden="true" />{t("title")}</h1>
+        <WorkbenchPageHeading page="recruitment" id="recruitment-heading">{t("title")}</WorkbenchPageHeading>
         <p className="mt-1 text-xs leading-5 text-muted-foreground md:mt-2 md:text-sm">{t("intro")}</p>
       </div>
       <SetupActionButton type="button" className="max-md:!h-11 max-md:w-11 max-md:!min-w-0 max-md:!px-0" variant="outline" onClick={onOpenSetup} disabled={pending} aria-label={mastery("configureBox")} title={mastery("configureBox")}>

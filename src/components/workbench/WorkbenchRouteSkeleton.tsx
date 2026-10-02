@@ -3,12 +3,14 @@ import { useTranslations } from "next-intl";
 
 import { StatusCenterLoading, StatusCenterPage } from "@/components/pages/StatusCenterShell";
 import { Skeleton } from "@/components/ui/skeleton";
+import { WorkbenchHeadingAccent } from "@/components/workbench/WorkbenchPageHeading";
+import type { AppPage } from "@/workbench-routes";
 
-function PageHeadingSkeleton({ width }: { width: string }) {
+function PageHeadingSkeleton({ width, page }: { width: string; page: AppPage }) {
   return (
     <div className="mb-2 flex h-7 min-w-0 items-center gap-2.5" aria-hidden="true">
-      <span className="h-7 w-1.5 shrink-0 bg-[#FFD501]" />
-      <Skeleton className={`h-[21px] ${width}`} />
+      <WorkbenchHeadingAccent page={page} />
+      <Skeleton className={`h-[18px] ${width}`} />
       <Skeleton className="h-3 w-12" />
     </div>
   );
@@ -25,7 +27,7 @@ export function TrainingRouteSkeleton() {
       data-workbench-route-skeleton="training"
     >
       <section className="min-w-0">
-        <PageHeadingSkeleton width="w-24" />
+        <PageHeadingSkeleton page="training" width="w-24" />
         <div className="min-h-[176px] bg-[#272A2B] p-5 text-white sm:p-6">
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(28rem,0.8fr)] lg:items-end">
             <div className="grid gap-4">
@@ -53,7 +55,7 @@ export function TrainingRouteSkeleton() {
         <Skeleton className="mt-3 h-3 w-1/2 max-w-sm bg-white/15" />
       </div>
       <section className="min-w-0">
-        <PageHeadingSkeleton width="w-20" />
+        <PageHeadingSkeleton page="training" width="w-20" />
         <div className="grid gap-3 lg:grid-cols-2">
           {Array.from({ length: 4 }, (_, index) => (
             <Skeleton key={index} className="h-40 rounded-none" />
@@ -74,7 +76,7 @@ export function SkillQueryRouteSkeleton() {
       aria-label={intl("components_workbench_WorkbenchRouteSkeleton.loadingSkillReference")}
       data-workbench-route-skeleton="skill-query"
     >
-      <PageHeadingSkeleton width="w-20" />
+      <PageHeadingSkeleton page="skill-query" width="w-20" />
       <div className="mt-3 flex min-h-11 flex-wrap items-center gap-2">
         {Array.from({ length: 7 }, (_, index) => (
           <Skeleton key={index} className="h-9 w-20" />

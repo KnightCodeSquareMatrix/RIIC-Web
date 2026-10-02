@@ -15,6 +15,9 @@ export function createAdminPreviewRequest(isAdmin: boolean, en: boolean): AdminF
     createdAt: date(index * 37 + 3), isAdmin: index < 2, isReviewer: index === 2 || index === 5,
     isBootstrapAdmin: index === 0, sklandBindingCount: index % 3,
     sklandActiveBindingCount: index % 3, sklandRenewalDueCount: index === 4 ? 1 : 0,
+    paidPoints: 120 + index * 45, monthlyPoints: index % 4 === 0 ? 100 : 0,
+    monthlyExpiresAt: index % 4 === 0 ? date(-24 * (10 - index)) : null,
+    totalPoints: 120 + index * 45 + (index % 4 === 0 ? 100 : 0),
   }));
   const revokedSessions = new Set<string>();
   const notes = en
