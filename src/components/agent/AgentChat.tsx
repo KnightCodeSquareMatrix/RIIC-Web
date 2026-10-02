@@ -150,7 +150,7 @@ function MasteryWarnings({ warnings }: { warnings: unknown }) {
   })}</>;
 }
 
-export function ToolResultSummary({ name, output, openLabel = "在工作台中打开" }: { name: string; output: unknown; openLabel?: string }) {
+export function ToolResultSummary({ name, output, openLabel = "在基建计算器打开" }: { name: string; output: unknown; openLabel?: string }) {
   const [handoffError, setHandoffError] = useState<string | null>(null);
   const handoff = agentArtifactFromOutput(output);
   const record = asRecord(output);
