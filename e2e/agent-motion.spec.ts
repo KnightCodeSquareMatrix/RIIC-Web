@@ -268,6 +268,7 @@ test("Long reasoning collapses without a gap and streamed text stays readable ac
   const intro = page.locator("[data-agent-streaming-text]").first();
   await expect(intro).toHaveText("我来查一下练卡资料。");
   await expect(intro.locator("[data-stream-chunk]")).toHaveCount(0);
+  await expect(intro.locator('xpath=ancestor::article').locator("[data-closure-fur-avatar]")).toHaveAttribute("data-fur-motion", "idle");
   // Reasoning is outside the bubble; measure the gap to its row, excluding
   // the speaker name and the bubble's own padding.
   await expect.poll(async () => (await intro.locator('xpath=ancestor::article').boundingBox())!.y - ((await first.boundingBox())!.y + (await first.boundingBox())!.height)).toBeLessThan(16);
