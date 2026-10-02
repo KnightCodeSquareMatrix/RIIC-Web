@@ -27,6 +27,8 @@ export default defineConfig({
     timeout: 120_000,
     env: {
       APP_DEPLOYMENT_ENV: "production",
+      AGENT_ACCESS_MODE: "admin",
+      BILLING_ACCESS_MODE: "admin",
       SKLAND_FEATURE_ENABLED: "1",
       BETA_RATE_LIMIT_ENABLED: "0",
       BETA_DEBUG_TOOLS_ENABLED: "1",

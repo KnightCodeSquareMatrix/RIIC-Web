@@ -17,5 +17,5 @@ test("new results enable every dorm in every shift without mutating solver data"
   }
   assert.equal(source.maa.plans[0].rooms.dormitory?.[0]?.autofill, false);
   next.maa.plans[0].rooms.dormitory![0].autofill = false;
-  assert.equal(prepareMaaForExport(next.maa).plans[0].rooms.dormitory?.[0]?.autofill, false);
+  assert.equal(prepareMaaForExport(next.maa).plans[0].rooms.dormitory?.[0]?.autofill, true);
 });

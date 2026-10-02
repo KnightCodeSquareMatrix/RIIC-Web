@@ -10,12 +10,25 @@ import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, Di
 import { StatusMark, type StatusMarkStatus } from "@/components/ui/status-mark";
 import { cn } from "@/lib/utils";
 import { MOTION_EASE_OUT } from "@/motion";
-import type { DisplayError } from "@/types";
+import type { DisplayError, MaaJson } from "@/types";
 import { solverDiagnosticFor } from "@/solver-diagnostic";
 
 const SURFACE = { duration: 0.38, ease: MOTION_EASE_OUT } as const;
 const FACE = { duration: 0.26, ease: MOTION_EASE_OUT } as const;
 const STATUS_MARK_COLORS = "text-amber-600 [--status-mark-done:var(--color-emerald-600)] [--status-mark-failed:var(--destructive)] dark:text-amber-300 dark:[--status-mark-done:var(--color-emerald-400)]";
+
+const MAA_UNCERTAIN_OPERATOR_NAMES = ["红", "红隼"] as const;
+
+function maaUncertainOperators(maa: MaaJson): string[] {
+  const scheduledNames = maa.plans.flatMap((plan) => [
+    ...Object.values(plan.rooms).flatMap((rooms) => (rooms ?? []).flatMap((room: NonNullable<MaaJson["plans"][number]["rooms"]["trading"]>[number]) => room.operators ?? [])),
+    ...(plan.groups ?? []).flatMap((group) => group.operators),
+  ]).flatMap((operator) => {
+    if (typeof operator === "string") return [operator];
+    return operator?.name ? [operator.name] : [];
+  });
+  return MAA_UNCERTAIN_OPERATOR_NAMES.filter((name) => scheduledNames.includes(name));
+}
 
 export type ActivityPhase = "running" | "queued" | "success" | "error";
 export type ActivityKind = "schedule" | "progression-adjustment";
@@ -28,6 +41,7 @@ export interface Activity {
   queuePosition?: number | null;
   etaSeconds?: number | null;
   buffered?: boolean;
+  uncertainMaaOperators?: string[];
 }
 
 export interface LiveActivityProps {
@@ -41,6 +55,7 @@ export function usePlanActivity({
   loading,
   error,
   completed = false,
+  completedMaa = null,
   queued = false,
   queuePosition = null,
   etaSeconds = null,
@@ -51,6 +66,8 @@ export function usePlanActivity({
   error: DisplayError | null;
   /** 当前任务是否真正完成（由任务状态驱动，避免取消/旧结果误判成功）。 */
   completed?: boolean;
+  /** Snapshot the completed task's warning, independent of later result edits or variant switches. */
+  completedMaa?: MaaJson | null;
   queued?: boolean;
   queuePosition?: number | null;
   etaSeconds?: number | null;
@@ -85,11 +102,11 @@ export function usePlanActivity({
       setActivity(error
         ? { id, kind, phase: "error", error }
         : completed
-          ? { id, kind, phase: "success", error: null, queuePosition: null, etaSeconds: null }
+          ? { id, kind, phase: "success", error: null, queuePosition: null, etaSeconds: null, uncertainMaaOperators: completedMaa ? maaUncertainOperators(completedMaa) : [] }
           : null);
     }
     wasLoading.current = loading;
-  }, [buffered, completed, error, etaSeconds, kind, loading, queued, queuePosition]);
+  }, [buffered, completed, completedMaa, error, etaSeconds, kind, loading, queued, queuePosition]);
 
   return activity;
 }
@@ -147,9 +164,9 @@ export function LiveActivity({ activity, onRetry, onCopyDiagnostic, retryCountdo
     );
   }, [activity]);
 
-  // 仅 success 自动消失；为扫带完成后保留 1.2s 白底确认时间。
+  // 普通成功提示自动消失；包含 MAA 识别提醒时保留到用户手动关闭。
   useEffect(() => {
-    if (!activity || activity.phase !== "success") return;
+    if (!activity || activity.phase !== "success" || activity.uncertainMaaOperators?.length) return;
     const id = activity.id;
     const phase = activity.phase;
     const timer = window.setTimeout(() => setDismissed({ id, phase }), 4_000);
@@ -319,6 +336,13 @@ export function LiveActivity({ activity, onRetry, onCopyDiagnostic, retryCountdo
                   </span>
                 )}
               </span>
+              {activity.phase === "success" && activity.uncertainMaaOperators?.length ? (
+                <p className="mt-1 text-sm leading-relaxed text-amber-700 dark:text-amber-300" data-maa-recognition-warning>
+                  {intl("components_ui_live_activity.maaRecognitionWarning", {
+                    operators: activity.uncertainMaaOperators.join(en ? ", " : "」「"),
+                  })}
+                </p>
+              ) : null}
               {activity.phase === "queued" ? (
                 <span className="mt-1 block text-sm text-muted-foreground">
                   {intl("components_ui_live_activity.thisPageUpdatesAutomaticallyDoNotSubmitAgain")}

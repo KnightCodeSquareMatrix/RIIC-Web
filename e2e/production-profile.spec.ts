@@ -1,5 +1,32 @@
 import { expect, test } from "@playwright/test";
 
+test("admin beta denies direct pages and APIs without exposing either navigation entry", async ({ page, request }) => {
+  test.setTimeout(90_000);
+  await page.addInitScript(() => localStorage.setItem("arknights-infra-calc-beta-onboarding-v1", "1"));
+  // A forged browser session/role must not grant a server-side capability.
+  await page.route("**/api/auth/get-session", (route) => route.fulfill({ json: {
+    user: { id: "ordinary-user", name: "Member", email: "member@example.test", role: "admin" },
+    session: { expiresAt: "2099-01-01T00:00:00Z" },
+  } }));
+  await page.goto("/");
+  await expect(page.locator('[data-workbench-hydrated="true"]')).toBeVisible();
+  await expect(page.locator('[data-primary-navigation-page="agent"], [data-primary-navigation-page="billing"], [data-agent-history]')).toHaveCount(0);
+  for (const path of ["/agent", "/billing", "/plan/test-artifact"]) {
+    await page.goto(path);
+    await expect(page.locator('[data-agent-chat], [data-billing-prototype], [data-plan-artifact-page]')).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "404" })).toBeVisible();
+  }
+  for (const path of ["/api/agent/chat", "/api/agent/plan/test", "/api/billing", "/api/billing/orders/test"]) {
+    const response = await request.get(path);
+    expect(response.status(), path).toBe(401);
+    expect((await response.json()).error.code).toBe("AIC-AUTH-2008");
+  }
+  for (const path of ["/api/agent/chat", "/api/billing", "/api/billing/cdk"]) {
+    const response = await request.post(path, { headers: { origin: new URL(page.url()).origin }, data: {} });
+    expect(response.status(), path).toBe(401);
+  }
+});
+
 test("production profile exposes explicitly enabled Skland while preserving security defaults", async ({ page, request }) => {
   test.setTimeout(60_000);
   const sklandRequests: string[] = [];
@@ -16,6 +43,8 @@ test("production profile exposes explicitly enabled Skland while preserving secu
   await expect(page.getByRole("button", { name: "基建计算器", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "森空岛状态中心", exact: true })).toBeVisible();
   await expect(page.getByText("调试工具", { exact: false })).toHaveCount(0);
+  await expect(page.locator('[data-primary-navigation-page="agent"], [data-primary-navigation-page="billing"], [data-agent-history]')).toHaveCount(0);
+  await expect(page.getByText("智能助理", { exact: true })).toHaveCount(0);
   expect(sklandRequests).toEqual([]);
 
   await page.getByRole("button", { name: "账号管理", exact: true }).click();

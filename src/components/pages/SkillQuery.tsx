@@ -1,4 +1,5 @@
 "use client";
+import { WorkbenchPageHeading } from "@/components/workbench/WorkbenchPageHeading";
 import { useTranslations } from "next-intl";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -124,8 +125,7 @@ export function SkillQuery() {
   return (
     <section className="min-w-0 pt-5" aria-label={intl("components_pages_SkillQuery.skillSearch")} data-skill-query-page>
       <div className="mb-2 flex min-w-0 items-center gap-2.5">
-        <span className="h-7 w-1.5 shrink-0 bg-[#FFD501]" aria-hidden="true" />
-        <h1 className="truncate text-[21px] font-medium leading-none">{intl("components_pages_SkillQuery.skillSearch")}</h1>
+        <WorkbenchPageHeading page="skill-query">{intl("components_pages_SkillQuery.skillSearch")}</WorkbenchPageHeading>
         <span className="font-number text-xs text-muted-foreground" aria-live="polite">{filters("operators", { count: filtered.length })}</span>
         <Button type="button" variant="ghost" size="sm" className="ml-auto shrink-0"
           disabled={rarity === "all" && profession === "all" && !selectedRoom && !selectedTag}

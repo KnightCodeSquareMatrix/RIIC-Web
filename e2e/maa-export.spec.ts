@@ -4,7 +4,7 @@ import { mockAnonymousWebsiteSession, mockApis, planData, requestId, seedV4Sessi
 import type { MaaJson } from "../src/types";
 
 for (const source of ["generated", "restored"] as const) {
-  test(`${source} calculator schedules export the dorm autofill shown on screen`, async ({ page }) => {
+  test(`${source} calculator exports normalize every dorm to autofill`, async ({ page }) => {
     const result = {
       ...planData,
       maa: {
@@ -48,12 +48,10 @@ for (const source of ["generated", "restored"] as const) {
     const exported = JSON.parse(await readFile((await download.path())!, "utf8")) as MaaJson;
     expect(exported.plans).toHaveLength(result.maa.plans.length);
     exported.plans.forEach((plan, index) => {
-      expect(plan.rooms.dormitory?.map((room) => room.autofill)).toEqual(source === "generated"
-        ? [true, true, true, true]
-        : [false, true, false, false]);
+      expect(plan.rooms.dormitory?.map((room) => room.autofill)).toEqual([true, true, true, true]);
+      expect(plan.rooms.dormitory?.map((room) => room.skip)).toEqual([false, false, false, false]);
       expect(plan.rooms.dormitory?.map((room) => room.operators))
         .toEqual(result.maa.plans[index]!.rooms.dormitory.map((room) => room.operators));
-      expect(plan.rooms.dormitory?.[2]?.skip).toBe(true);
     });
   });
 }

@@ -2,8 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { prepareMaaForExport } from "./maa-safety.ts";
-import { planToRows } from "./schedule.ts";
-import type { BaseBlueprint, MaaJson } from "./types.ts";
+import type { MaaJson } from "./types.ts";
 
 test("MAA export fixes every action to pre without changing source data", () => {
   const maa: MaaJson = {
@@ -52,11 +51,7 @@ test("prepares MAA export with sort enabled and preserves displayed operator ord
   assert.equal(replacementSorted.plans[0]!.rooms.trading![0]!.sort, true);
 });
 
-test("calculator downloads preserve displayed dorm autofill across every shift", () => {
-  const layout: BaseBlueprint = {
-    template: "243", drone_cap: 235, scenario: {},
-    rooms: [{ id: "dorm_4", kind: "dormitory", level: 1, dorm_beds: 2 }],
-  };
+test("downloads normalize every dorm to skip=false and autofill=true", () => {
   const maa: MaaJson = {
     title: "计算排班",
     plans: [false, undefined].map((autofill, index) => ({
@@ -77,25 +72,30 @@ test("calculator downloads preserve displayed dorm autofill across every shift",
     })),
   };
   const original = structuredClone(maa);
-  const exported = JSON.parse(JSON.stringify(prepareMaaForExport(maa, true, false, layout))) as MaaJson;
+  const exported = JSON.parse(JSON.stringify(prepareMaaForExport(maa, true, false))) as MaaJson;
 
   exported.plans.forEach((plan, index) => {
-    const displayed = planToRows(maa.plans[index], undefined, layout)
-      .filter((row) => row.group === "dormitory");
-    assert.deepEqual(plan.rooms.dormitory?.map((room) => room.autofill), plan === exported.plans[0]
-      ? [false, false, false, false, false, true, false]
-      : [true, true, false, false, false, true, false]);
-    assert.deepEqual(plan.rooms.dormitory?.map((room) => room.autofill), displayed.map((row) => row.autofill));
+    assert.deepEqual(
+      plan.rooms.dormitory?.map((room) => room.autofill),
+      [true, true, true, true, true, true, true],
+    );
+    assert.deepEqual(
+      plan.rooms.dormitory?.map((room) => room.skip),
+      [false, false, false, false, false, false, false],
+    );
+    assert.deepEqual(
+      plan.rooms.dormitory?.map((room) => room.candidates ?? null),
+      [null, null, null, null, null, null, null],
+    );
     assert.deepEqual(plan.rooms.dormitory?.map((room) => room.operators), maa.plans[index]!.rooms.dormitory?.map((room) => room.operators));
-    assert.deepEqual(plan.rooms.dormitory?.[6]?.candidates, ["芬"]);
-    assert.equal(plan.rooms.dormitory?.[4]?.skip, true);
     assert.equal(plan.rooms.trading?.[0]?.autofill, false);
+    assert.equal(plan.rooms.trading?.[0]?.skip, undefined);
     assert.equal(plan.rooms.meeting?.[0]?.autofill, true);
   });
   assert.deepEqual(maa, original);
 });
 
-test("manual downloads preserve explicit dorm autofill settings", () => {
+test("manual downloads also normalize every dorm to skip=false and autofill=true", () => {
   const maa: MaaJson = {
     title: "手动排班",
     plans: [{
@@ -109,5 +109,7 @@ test("manual downloads preserve explicit dorm autofill settings", () => {
       },
     }],
   };
-  assert.deepEqual(prepareMaaForExport(maa).plans[0]!.rooms.dormitory?.map((room) => room.autofill), [false, false, true]);
+  const dorms = prepareMaaForExport(maa).plans[0]!.rooms.dormitory!;
+  assert.deepEqual(dorms.map((room) => room.autofill), [true, true, true]);
+  assert.deepEqual(dorms.map((room) => room.skip), [false, false, false]);
 });

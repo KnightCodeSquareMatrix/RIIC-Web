@@ -23,6 +23,7 @@ import { useAccountCloudWorkspace } from "account-cloud-workspace-bridge";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { FilingLinks } from "@/components/layout/FilingLinks";
 import { AppTopBar, SklandAccountControl } from "@/components/layout/AppTopBar";
+import { DotDistortionBackground } from "@/components/layout/DotDistortionBackground";
 import { AppMotionProvider } from "@/components/MotionProvider";
 import { PrimaryPageTransition } from "@/components/layout/PrimaryPageTransition";
 import { SetupDialogSkeleton } from "@/components/setup/SetupDialogSkeleton";
@@ -33,6 +34,7 @@ import { loadClientFeature } from "@/client-lazy-loader";
 import { WorkbenchContext } from "@/workbench-context";
 import { WORKBENCH_PAGE_PATHS, workbenchHref, workbenchPageFromPathname, type AppPage } from "@/workbench-routes";
 import { useWebsiteSession } from "@/website-session";
+import { useFeatureAccess } from "@/components/workbench/FeatureAccessProvider";
 import { usePlanTask } from "@/hooks/use-plan-task";
 import type { SklandTrainingSyncOptions } from "@/hooks/use-skland-training-sync";
 import type { TrainingSyncSnapshot } from "@/components/workbench/SklandTrainingSyncBridge";
@@ -72,6 +74,7 @@ import {
 } from "./onboarding";
 import { normalizeOperboxEntries } from "./operbox-normalization";
 import { droneStoragePlanIndex } from "./drone-plan-mapping";
+import { AGENT_BROADCAST_CHANNEL, consumeAgentArtifactHandoff, isAgentArtifactHandoff, receiveAgentArtifactMessage, type AgentArtifactHandoff } from "./agent-artifact-bridge";
 import { prepareMaaForExport } from "./maa-safety";
 import { upgradeSimulationBoxSource } from "./upgrade-simulation";
 import {
@@ -93,7 +96,7 @@ import {
   RESULT_CLEAR_WARNING_DISMISSED_KEY,
 } from "./persistence";
 import type { RoomRow } from "./schedule";
-import { DEFAULT_ROTATION_PROFILE, rotationDurations } from "./rotation-settings";
+import { DEFAULT_ROTATION_PROFILE, isRotationProfile, rotationDurations } from "./rotation-settings";
 import { MOTION_DURATION } from "./motion";
 import { emptySklandBindingSummary } from "./skland-binding-state";
 import { createSklandRestoreGuard } from "./skland-restore-guard";
@@ -254,6 +257,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   const router = useRouter();
   const page = workbenchPageFromPathname(pathname);
   const { data: websiteSession, isPending: websiteSessionPending, refetch: refetchWebsiteSession } = useWebsiteSession();
+  const features = useFeatureAccess();
   const defaultPreset = PRESETS[0];
   const defaultLayout = buildBlueprint(defaultPreset);
   const hasRenderedCalculator = useRef(false);
@@ -353,6 +357,10 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   const [sampleLoading, setSampleLoading] = useState(false);
   const sampleTrialInFlightRef = useRef(false);
   const [result, setResult] = useState<PublicPlanData | null>(null);
+  const [agentArtifactNotice, setAgentArtifactNotice] = useState<AgentArtifactHandoff | null>(null);
+  const [agentArtifactLoading, setAgentArtifactLoading] = useState(false);
+  const [agentArtifactApplied, setAgentArtifactApplied] = useState<{ preset: string } | null>(null);
+  const [agentArtifactError, setAgentArtifactError] = useState(false);
   const [manualDroneShifts, setManualDroneShifts] = useState<Record<number, boolean>>({});
   const automaticMaaRef = useRef<{ diagnosticId: string; maa: MaaJson } | null>(null);
   const [upgradeComparison, setUpgradeComparison] = useState<{ baseline: PublicPlanData; trial: PublicPlanData } | null>(null);
@@ -363,6 +371,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     loading: boolean;
     completed: boolean;
     error: DisplayError | null;
+    maa?: MaaJson;
   }>({
     active: false,
     loading: false,
@@ -628,6 +637,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     const frame = window.requestAnimationFrame(() => {
       for (const target of Object.keys(WORKBENCH_PAGE_PATHS) as AppPage[]) {
         if (target === page || (target === "skland" && !CLIENT_SKLAND_ENABLED)) continue;
+        if ((target === "agent" || target === "billing") && !features[target]) continue;
         router.prefetch(workbenchHref(target));
       }
     });
@@ -649,7 +659,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       if (idleCallback !== undefined) window.cancelIdleCallback?.(idleCallback);
       if (fallbackTimer !== undefined) window.clearTimeout(fallbackTimer);
     };
-  }, [hasRestoredSession, page, router]);
+  }, [hasRestoredSession, page, router, features]);
 
   useEffect(() => {
     if (setupOpen) setSetupMounted(true);
@@ -722,6 +732,81 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       setHasRestoredSession(true);
     }
   }, [intl, locale, setBoxSource, setLayoutDirty, setOperbox]);
+
+  // 将 agent 生成的排班产物注入工作台：复用会话恢复路径设置全部状态，
+  // 使班次切换、手动排班导入、效率视图等现有功能立即可用。
+  async function applyAgentArtifact(handoff: AgentArtifactHandoff): Promise<void> {
+    setAgentArtifactLoading(true);
+    setAgentArtifactError(false);
+    setAgentArtifactNotice(handoff);
+    try {
+      if (!isAgentArtifactHandoff(handoff)) throw new Error("Invalid agent session");
+      const session = handoff.session;
+      const restoredPreset = resolvePreset(PRESETS.find((item) => item.label === session.presetLabel));
+      const restoredLayout = restoreEditableProducts(buildBlueprint(restoredPreset), session.layout as BaseBlueprint);
+      const restoredOperbox = Array.isArray(session.operbox) ? normalizeOperboxEntries(session.operbox as OperBoxEntry[]) : null;
+      const restoredBoxSource = (session.boxSource === "skland" || session.boxSource === "maa" ? session.boxSource : "sample") as typeof boxSource;
+      setPreset(restoredPreset);
+      setLayout(restoredLayout);
+      setOperbox(restoredOperbox);
+      setFileName(typeof session.sourceName === "string" ? session.sourceName : null);
+      setBoxSource(restoredBoxSource);
+      // Explicitly opening an Agent result is a local selection. A later
+      // Skland/cloud restore must not replace it with the previous layout.
+      setLayoutDirty(true);
+      hadPersistedSession.current = true;
+      setLayoutSource("local");
+      setLocalLayoutBackup(null);
+      setRotationProfile(isRotationProfile(session.rotationProfile) ? session.rotationProfile : DEFAULT_ROTATION_PROFILE);
+      setFiammettaEnabled(Boolean(session.fiammettaEnabled));
+      const artifactResult = (session.result ?? null) as PublicPlanData | null;
+      setResult(artifactResult);
+      automaticMaaRef.current = artifactResult ? { diagnosticId: artifactResult.diagnosticId, maa: structuredClone(artifactResult.maa) } : null;
+      setActiveShift(0);
+      setUpgradeComparison(null);
+      setScheduleVariant("baseline");
+      initialLayoutForRestore.current = restoredLayout;
+      initialBoxSource.current = restoredBoxSource;
+      initialOperbox.current = restoredOperbox;
+      initialLayoutSource.current = "local";
+      initialLocalLayoutBackup.current = null;
+      if (page !== "calculator") handleAppPageChange("calculator");
+      // 成功注入后显示"可露希尔完成排班"提示横幅（数秒后自动消失），并清掉"新排班待注入"横幅。
+      setAgentArtifactNotice(null);
+      setAgentArtifactApplied({ preset: restoredPreset.label });
+    } catch {
+      // 网络等异常：同样保留横幅并显示错误，用户可重试。
+      setAgentArtifactError(true);
+    } finally {
+      setAgentArtifactLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!hasRestoredSession || typeof window === "undefined") return;
+    const channel = typeof BroadcastChannel !== "undefined" ? new BroadcastChannel(AGENT_BROADCAST_CHANNEL) : null;
+    if (channel) channel.onmessage = (event: MessageEvent) => {
+      receiveAgentArtifactMessage(event.data, (handoff) => {
+        setAgentArtifactNotice(handoff);
+        setAgentArtifactError(false);
+      });
+    };
+    try {
+      const handoff = consumeAgentArtifactHandoff();
+      if (handoff) void applyAgentArtifact(handoff);
+    } catch {
+      setAgentArtifactError(true);
+    }
+    return () => channel?.close();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasRestoredSession]);
+
+  // 排班成功注入工作台后的"可露希尔完成排班"提示横幅，数秒后自动消失。
+  useEffect(() => {
+    if (!agentArtifactApplied) return;
+    const timer = window.setTimeout(() => setAgentArtifactApplied(null), 6000);
+    return () => window.clearTimeout(timer);
+  }, [agentArtifactApplied]);
 
   useEffect(() => {
     if (!hasRestoredSession || typeof window === "undefined") return;
@@ -1175,7 +1260,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       setOperbox(normalizedTrialOperbox);
       setFileName(intl("App.progressionAdjustedBox"));
       setInputMode("manual");
-      setProgressionAdjustmentActivity({ active: true, loading: false, completed: true, error: null });
+      setProgressionAdjustmentActivity({ active: true, loading: false, completed: true, error: null, maa: response.maa });
       trackTelemetry({ type: "interaction", name: "upgrade_simulation_response", page: "calculator" });
       return response;
     } catch (error) {
@@ -1228,7 +1313,6 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       scheduleResult.maa,
       userSettings.strictMaaOperatorOrder,
       userSettings.allowReplacementOperatorSort,
-      layout,
     ));
   }
 
@@ -2045,6 +2129,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       ? progressionAdjustmentPollError ?? progressionAdjustmentActivity.error
       : statusError,
     completed: progressionAdjustmentActivity.active ? progressionAdjustmentActivity.completed : planTask.status === "done",
+    completedMaa: progressionAdjustmentActivity.active ? progressionAdjustmentActivity.maa : planTask.result?.maa,
     kind: progressionAdjustmentActivity.active ? "progression-adjustment" : "schedule",
     queued: progressionAdjustmentActivity.active
       ? progressionAdjustmentActivity.loading && (
@@ -2084,6 +2169,10 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       identityKey: JSON.stringify([websiteUserId, sklandActiveAccountId, activeSklandAccount?.selectedUid ?? null]),
       pending: websiteSessionPending || !hasRestoredSession,
     },
+    healthOperators: boxSource === "skland"
+      ? sklandStatusSnapshot && sklandStatusSnapshot.player.uid === activeSklandAccount?.selectedUid
+        ? { items: sklandStatusSnapshot.operators, source: "skland" as const } : undefined
+      : accountCanUseCurrentBox && operbox ? { items: operbox, source: boxSource } : undefined,
     calculator: {
       layout,
       result,
@@ -2321,15 +2410,64 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
         if (event.key === "Escape" && websiteAuthDialogOpen) handleWebsiteAuthDialogOpenChange(false);
       }}
     >
-    <SidebarProvider defaultOpen defaultOpenBreakpoint={1280}>
+    <SidebarProvider defaultOpen defaultOpenBreakpoint={1280} style={{ "--sidebar-width": "14rem", "--sidebar-width-icon": "3.25rem" } as React.CSSProperties}>
       {trainingSyncLoaded || page === "training" ? (
         <Suspense fallback={null}>
           <SklandTrainingSyncBridge options={sklandTrainingSyncOptions} onChange={setTrainingSyncSnapshot} />
         </Suspense>
       ) : null}
       <AppSidebar page={page} onPageChange={handleAppPageChange} showMower={userSettings.showMower} />
-      <SidebarInset>
+      <SidebarInset className="isolate">
+        <DotDistortionBackground />
         <AppTopBar />
+        {agentArtifactNotice && page !== "agent" ? (
+          <div className="flex flex-wrap items-center gap-3 border-b bg-[#FFD501]/15 px-4 py-2 text-sm" data-agent-artifact-banner>
+            <span className="min-w-0">
+              {intl("App.agentArtifactBannerText", { preset: agentArtifactNotice.preset ? `（${agentArtifactNotice.preset}）` : "" })}
+            </span>
+            <button
+              type="button"
+              disabled={agentArtifactLoading}
+              className="rounded-md bg-[#FFD501] px-3 py-1 text-xs font-medium text-black disabled:opacity-50"
+              onClick={() => void applyAgentArtifact(agentArtifactNotice)}
+            >
+              {agentArtifactLoading ? intl("App.agentArtifactLoading") : intl("App.agentArtifactOpen")}
+            </button>
+            <button
+              type="button"
+              className="rounded-md border px-3 py-1 text-xs hover:bg-muted"
+              onClick={() => setAgentArtifactNotice(null)}
+            >
+              {intl("App.agentArtifactIgnore")}
+            </button>
+          </div>
+        ) : null}
+        {agentArtifactApplied ? (
+          <div className="flex flex-wrap items-center gap-3 border-b bg-emerald-500/10 px-4 py-2 text-sm text-emerald-700 dark:text-emerald-300" data-agent-artifact-applied-banner>
+            <span className="min-w-0">
+              {intl("App.agentArtifactAppliedText", { preset: agentArtifactApplied.preset ? `（${agentArtifactApplied.preset}）` : "" })}
+            </span>
+            <button
+              type="button"
+              className="rounded-md border px-3 py-1 text-xs hover:bg-muted"
+              onClick={() => setAgentArtifactApplied(null)}
+            >
+              {intl("App.agentArtifactIgnore")}
+            </button>
+          </div>
+        ) : null}
+        {agentArtifactError ? (
+          <div className="flex flex-wrap items-center gap-3 border-b bg-destructive/10 px-4 py-2 text-sm text-destructive" data-agent-artifact-error-banner>
+            <span className="min-w-0">{intl("App.agentArtifactErrorText")}</span>
+            <button
+              type="button"
+              className="rounded-md border px-3 py-1 text-xs hover:bg-muted"
+              onClick={() => setAgentArtifactError(false)}
+            >
+              {intl("App.agentArtifactIgnore")}
+            </button>
+          </div>
+        ) : null}
         <LiveActivity
           activity={activity}
           onRetry={() => void handleRetry()}
@@ -2355,7 +2493,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       </WorkbenchContext.Provider>
       </div>
 
-      <footer className="app-content-track workbench-footer mt-auto flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border/70 py-5 text-xs text-muted-foreground">
+      {page !== "agent" ? <footer className="app-content-track workbench-footer mt-auto flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border/70 py-5 text-xs text-muted-foreground">
         <div className="w-full md:w-auto max-md:[&>div]:h-12 max-md:[&_button]:h-11 max-md:[&_button]:min-w-12 max-md:[&_span]:h-11"><LanguageSwitch /></div>
         <div className="flex w-full flex-wrap items-center gap-x-4 md:contents">
         <Link prefetch={false} className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-foreground" href="/help" data-help-link>{intl("App.help")}</Link>
@@ -2387,7 +2525,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
             {locale === "en" ? null : <span className="block leading-none">提供云计算服务</span>}
           </a>
         </div>
-      </footer>
+      </footer> : null}
 
       {CLIENT_ACCOUNT_CLOUD_SYNC_ENABLED ? accountCloudWorkspace.syncElement : null}
       {hasRestoredSession ? <Suspense fallback={null}>
