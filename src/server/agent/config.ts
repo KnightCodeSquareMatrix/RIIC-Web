@@ -20,13 +20,24 @@ function normalizeProvider(value: string | undefined): AgentLlmProviderId {
   return trimmed === "glm" ? "glm" : "deepseek";
 }
 
-export function agentLlmSettings(): AgentLlmSettings {
-  const provider = normalizeProvider(process.env.AGENT_LLM_PROVIDER);
+export function agentLlmSettings(selection?: AgentLlmProviderId): AgentLlmSettings {
+  const defaultProvider = normalizeProvider(process.env.AGENT_LLM_PROVIDER);
+  const provider = selection ?? defaultProvider;
   const preset = PROVIDER_PRESETS[provider];
-  const baseURL = process.env.AGENT_LLM_BASE_URL?.trim() || preset.baseURL;
-  const model = process.env.AGENT_LLM_MODEL?.trim() || preset.model;
-  const apiKey = process.env.AGENT_LLM_API_KEY?.trim() ?? "";
+  const prefix = `AGENT_LLM_${provider.toUpperCase()}_`;
+  // Legacy single-model settings apply only to the default provider. Never
+  // send one provider's credential to a different provider's endpoint.
+  const legacy = (key: string) => provider === defaultProvider ? process.env[`AGENT_LLM_${key}`]?.trim() : undefined;
+  const baseURL = process.env[`${prefix}BASE_URL`]?.trim() || legacy("BASE_URL") || preset.baseURL;
+  const model = process.env[`${prefix}MODEL`]?.trim() || legacy("MODEL") || preset.model;
+  const apiKey = process.env[`${prefix}API_KEY`]?.trim() || legacy("API_KEY") || "";
   return { provider, baseURL, model, apiKey, configured: apiKey.length > 0 };
+}
+
+export function agentModelChoices() {
+  return (["deepseek", "glm"] as const).map(agentLlmSettings)
+    .filter((settings) => settings.configured)
+    .map(({ provider, model }) => ({ id: provider, label: model }));
 }
 
 export function agentKnowledgeDir(): string {

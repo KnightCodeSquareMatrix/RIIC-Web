@@ -11,6 +11,7 @@ import { useLocale, useTranslations } from "next-intl";
 
 import { PlanArtifactView } from "@/components/agent/PlanArtifactView";
 import { Button } from "@/components/ui/button";
+import { Combobox, ComboboxContent, ComboboxInput, ComboboxItem, ComboboxList } from "@/components/ui/combobox";
 import { FluidOrb } from "@/components/ui/fluid-orb";
 import { accountOrbColor } from "@/account-orb";
 import { AgentConversationScrollArea } from "./AgentConversationScrollArea";
@@ -30,6 +31,7 @@ import { AGENT_BROADCAST_CHANNEL, agentArtifactFromOutput, requestAgentArtifactO
 import type { AgentPlanProjection } from "@/server/agent/plan-artifact";
 
 type AgentStatus = "loading" | "ready" | "unconfigured" | "unauthenticated" | "payment_required" | "unavailable";
+type AgentModelChoice = { id: "deepseek" | "glm"; label: string };
 
 type PersonaCard = {
   id: string;
@@ -292,6 +294,8 @@ export function AgentChat({ conversationId, initialMessages, userName, userId, b
   const intl = useTranslations();
   const { store: historyStore, error: historyError } = useAgentHistory();
   const [agentStatus, setAgentStatus] = useState<AgentStatus>("loading");
+  const [modelChoices, setModelChoices] = useState<AgentModelChoice[]>([]);
+  const [selectedModel, setSelectedModel] = useState<AgentModelChoice["id"]>();
   const [draft, setDraft] = useState("");
   const [attachments, setAttachments] = useState<FileUIPart[]>([]);
   const [activePersona, setActivePersona] = useState<PersonaCard | null>(null);
@@ -340,9 +344,12 @@ export function AgentChat({ conversationId, initialMessages, userName, userId, b
         }
         const payload = (await response.json()) as {
           success?: boolean;
-          data?: { enabled?: boolean };
+          data?: { enabled?: boolean; provider?: AgentModelChoice["id"]; models?: AgentModelChoice[] };
         };
         if (!cancelled) {
+          setModelChoices(payload.data?.models ?? []);
+          const previous = (runtimeConversation.requestOptions?.body as { model?: unknown } | undefined)?.model;
+          setSelectedModel(previous === "deepseek" || previous === "glm" ? previous : payload.data?.provider);
           if (payload.data?.enabled) {
             setAgentStatus("ready");
           } else {
@@ -356,7 +363,7 @@ export function AgentChat({ conversationId, initialMessages, userName, userId, b
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [runtimeConversation]);
 
   useEffect(() => {
     const container = conversationRef.current;
@@ -404,9 +411,10 @@ export function AgentChat({ conversationId, initialMessages, userName, userId, b
     setDraft("");
     setAttachments([]);
     followMessages.current = true;
-    runtime.setRequestOptions(runtimeConversation, activePersona?.kind === "upload"
-      ? { body: { persona: { id: activePersona.id, name: activePersona.name, content: activePersona.content } } }
-      : undefined);
+    runtime.setRequestOptions(runtimeConversation, { body: {
+      model: selectedModel,
+      ...(activePersona?.kind === "upload" ? { persona: { id: activePersona.id, name: activePersona.name, content: activePersona.content } } : {}),
+    } });
     await runtime.run(runtimeConversation, () => sendMessage(
       { text: trimmed, files },
       runtimeConversation.requestOptions,
@@ -419,6 +427,7 @@ export function AgentChat({ conversationId, initialMessages, userName, userId, b
     if (!question) return;
     clearError();
     followMessages.current = true;
+    runtime.setRequestOptions(runtimeConversation, { body: { ...runtimeConversation.requestOptions?.body, model: selectedModel } });
     await runtime.run(runtimeConversation, () => regenerate({ messageId: question.id, ...runtimeConversation.requestOptions }));
   };
 
@@ -506,7 +515,15 @@ export function AgentChat({ conversationId, initialMessages, userName, userId, b
           <WorkbenchPageHeading page="agent">{en ? "Closure Assistant" : "可露希尔助理"}</WorkbenchPageHeading>
           <p className="mt-2 text-xs text-muted-foreground">{en ? "Your account, base and training — in one conversation." : "从了解账号到安排基建，把想做的事交给可露希尔。"}</p>
         </div>
-        <div className="ml-auto flex shrink-0 items-center gap-3">
+        <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-3">
+        {modelChoices.length > 1 ? <Combobox items={modelChoices} filteredItems={modelChoices}
+          value={modelChoices.find((choice) => choice.id === selectedModel) ?? null}
+          inputValue={modelChoices.find((choice) => choice.id === selectedModel)?.label ?? ""}
+          itemToStringValue={(choice) => choice.label} isItemEqualToValue={(choice, value) => choice.id === value.id}
+          disabled={busy} onValueChange={(choice) => { if (choice) setSelectedModel(choice.id); }}>
+          <ComboboxInput aria-label={en ? "Assistant model" : "助理模型"} readOnly className="h-8 w-44 text-xs" />
+          <ComboboxContent><ComboboxList>{(choice) => <ComboboxItem key={choice.id} value={choice}>{choice.label}</ComboboxItem>}</ComboboxList></ComboboxContent>
+        </Combobox> : null}
         <AgentCreditBalance enabled={billingAllowed && (agentStatus === "ready" || agentStatus === "payment_required" || agentStatus === "unconfigured")} busy={busy} en={en} />
         <Button type="button" variant="outline" size="sm" className={dialogueStyles.newConversation} disabled={busy || messages.length === 0} onClick={() => { runtime.flush(); historyStore.startNew(); }}>
           <Plus className="size-4" aria-hidden="true" />{en ? "New conversation" : "新对话"}
