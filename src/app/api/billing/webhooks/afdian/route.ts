@@ -15,6 +15,8 @@ type AfdianPrototypePayload = {
     type?: unknown;
     order?: {
       out_trade_no?: unknown;
+      user_id?: unknown;
+      plan_id?: unknown;
       status?: unknown;
       total_amount?: unknown;
       remark?: unknown;
@@ -42,8 +44,25 @@ export async function POST(request: Request) {
     if (expected && request.headers.get("x-afdian-prototype-secret") !== expected) {
       throw new PublicApiError("AIC-BILLING-4104");
     }
+    if (request.body === null || request.headers.get("content-length") === "0") {
+      return afdianAck(requestId, { accepted: false, method: "health_check" });
+    }
     const body = await readJsonBody(request, 64 * 1024) as AfdianPrototypePayload;
+    if (body && typeof body === "object" && !Array.isArray(body) && Object.keys(body).length === 0) {
+      return afdianAck(requestId, { accepted: false, method: "health_check" });
+    }
     const order = body.data?.order;
+    // The creator dashboard sends the public example order to validate the URL.
+    // Acknowledge this exact fixture as a probe, never as a payment. All real
+    // notifications still go through the authenticated query-order API below.
+    // Source: https://guide.afdian.com/creator/developer
+    if (body.ec === 200 && body.data?.type === "order"
+      && order?.out_trade_no === "202106232138371083454010626"
+      && order.user_id === "adf397fe8374811eaacee52540025c377"
+      && order.plan_id === "a45353328af911eb973052540025c377"
+      && !order.custom_order_id && !order.remark && !body.custom_order_id) {
+      return afdianAck(requestId, { accepted: false, method: "dashboard_test" });
+    }
     const outTradeNo = typeof order?.out_trade_no === "string" ? order.out_trade_no : typeof body.out_trade_no === "string" ? body.out_trade_no : undefined;
     if (!outTradeNo || outTradeNo.length > 128) throw new PublicApiError("AIC-BILLING-4104");
     // A callback is an untrusted notification, not proof of payment. Always
