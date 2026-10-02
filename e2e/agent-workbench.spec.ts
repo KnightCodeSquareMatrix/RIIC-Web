@@ -20,6 +20,7 @@ const reply = [
 
 async function mockWorkbench(page: Page) {
   await mockApis(page);
+  await page.route("**/api/account/data-consent", route => route.fulfill({ json: { success: true, data: { current: false, cloudSyncEnabled: false } } }));
   await page.route("**/api/auth/get-session", (route) => route.fulfill({ json: {
     user: { id: "agent-test-user", name: "测试博士", email: "agent@example.test" },
     session: { expiresAt: "2099-01-01T00:00:00Z" },
@@ -56,7 +57,7 @@ test("Persona portraits keep Closure fixed and persist uploaded persona avatars"
   await avatarInput.setInputFiles({ name: "invalid.svg", mimeType: "image/svg+xml", buffer: Buffer.from("<svg/>") });
   await expect(page.getByRole("dialog").getByRole("alert")).toContainText("PNG、JPEG 或 WebP");
   await expect(preview.locator("img")).toHaveAttribute("src", customAvatar!);
-  await page.getByRole("button", { name: "关闭", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
   await page.reload();
   await expect(assistantAvatar.locator("img")).toHaveAttribute("src", customAvatar!);
   await page.getByRole("button", { name: /人格卡：/ }).click();
@@ -67,10 +68,9 @@ test("Persona portraits keep Closure fixed and persist uploaded persona avatars"
   await page.getByRole("button", { name: /可露希尔.*使用网站服务端/ }).click();
   await expect(assistantAvatar.locator("[data-closure-fur-avatar]")).toHaveAttribute("data-fur-ready", "true");
   await expect(assistantAvatar.locator("img")).toHaveCount(0);
-  await page.getByRole("button", { name: /人格卡：/ }).click();
-  await expect(avatarInput).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "上传头像", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "重置头像", exact: true })).toHaveCount(0);
+  await expect(avatarInput).toHaveCount(1);
+  await expect(page.locator('[data-persona-card="default"]')).toHaveAttribute("data-selected", "true");
+  await expect(page.locator('[data-persona-card^="upload-"]')).toContainText("测试人格");
   await expect(preview.locator("[data-closure-fur-avatar]")).toHaveAttribute("data-fur-ready", "true");
 });
 
@@ -88,7 +88,7 @@ for (const width of [1440, 375]) {
     const ring = page.locator('[data-speaker="assistant"] [data-agent-avatar]');
     const mascot = ring.locator("[data-closure-fur-avatar]");
     await expect(mascot).toHaveAttribute("data-fur-ready", "true");
-    await expect(ring).toHaveCSS("border-top-color", "rgb(255, 216, 0)");
+    await expect(ring).toHaveCSS("border-top-color", "rgb(189, 53, 75)");
     await expect(ring).toHaveCSS("width", width === 375 ? "32px" : "44px");
     await expect(mascot).toHaveAttribute("data-fur-motion", "idle");
     await expect(ring).toHaveCSS("overflow", "visible");
@@ -207,9 +207,12 @@ for (const width of [1440, 375]) {
     expect(Math.abs(agentBounds!.x - workbenchBounds!.x)).toBeLessThan(2);
     expect(Math.abs(agentBounds!.width - workbenchBounds!.width)).toBeLessThan(2);
     if (width >= 768) await expect(group.getByRole("button", { name: "可露希尔助理", exact: true })).toHaveAttribute("aria-current", "page");
+    if (width < 768) await page.getByRole("button", { name: "附件与人格卡", exact: true }).click();
     await page.getByRole("button", { name: /人格卡：/ }).click();
     await page.getByLabel("上传人格卡文件", { exact: true }).setInputFiles({ name: "测试人格.md", mimeType: "text/markdown", buffer: Buffer.from("回答请使用简洁中文。") });
+    if (width < 768) await page.getByRole("button", { name: "附件与人格卡", exact: true }).click();
     await expect(page.getByRole("button", { name: "人格卡：测试人格" })).toBeVisible();
+    if (width < 768) await page.keyboard.press("Escape");
     await page.getByRole("button", { name: /账号体检.*帮我看看/ }).click();
     const input = page.getByRole("textbox", { name: "发给测试人格的消息" });
     await expect(input).toBeFocused();
@@ -217,7 +220,9 @@ for (const width of [1440, 375]) {
     await expect(page.getByRole("button", { name: "发送", exact: true })).toBeEnabled();
     await expect(page.getByRole("button", { name: "发送", exact: true })).toHaveCSS("background-color", "rgb(255, 216, 0)");
     await page.locator('input[aria-label="上传附件"]').setInputFiles({ name: "说明.txt", mimeType: "text/plain", buffer: Buffer.from("测试附件") });
+    if (width < 768) await page.getByRole("button", { name: "附件与人格卡，1 个附件", exact: true }).click();
     await expect(page.getByRole("button", { name: "移除 说明.txt" })).toBeVisible();
+    if (width < 768) await page.keyboard.press("Escape");
     await input.press("Shift+Enter");
     await expect(input).toHaveValue(/\n/);
     await input.press("Enter");
@@ -232,12 +237,12 @@ for (const width of [1440, 375]) {
     await expect(page.locator("[data-agent-avatar] img, [data-agent-avatar] svg")).toHaveCount(0);
     await expect(userMessage.locator('[data-slot="fluid-orb"]')).toHaveAttribute("data-account-orb-color", accountOrbColor("agent-test-user"));
     await expect(assistantMessage.locator('[data-slot="fluid-orb"]')).toHaveCount(0);
-    const headingBounds = (await page.getByRole("heading", { name: "可露希尔助理", exact: true }).boundingBox())!;
+    const headingBounds = (await page.getByRole("heading", { name: width < 768 ? "可露希尔" : "可露希尔助理", exact: true }).boundingBox())!;
     const leftAvatar = (await assistantMessage.locator("[data-agent-avatar]").boundingBox())!;
     const rightAvatar = (await userMessage.locator("[data-agent-avatar]").boundingBox())!;
     expect(leftAvatar.width).toBe(width < 640 ? 32 : 44);
     expect(rightAvatar.width).toBe(leftAvatar.width);
-    expect(Math.abs(leftAvatar.x - headingBounds.x)).toBeLessThan(2);
+    expect(Math.abs(leftAvatar.x - (width < 768 ? agentBounds!.x : headingBounds.x))).toBeLessThan(2);
     expect(Math.abs(rightAvatar.x + rightAvatar.width - newChatBounds.x - newChatBounds.width)).toBeLessThan(2);
     for (const [message, user] of [[userMessage, true], [assistantMessage, false]] as const) {
       const avatarElement = message.locator("[data-agent-avatar]");
@@ -300,6 +305,7 @@ for (const width of [1440, 375]) {
     await expect(page.getByRole("heading", { name: "博士，今天从哪里开始？" })).toBeVisible();
     await expect(tool).toHaveCount(0);
     await page.reload();
+    if (width < 768) await page.getByRole("button", { name: "附件与人格卡", exact: true }).click();
     await expect(page.getByRole("button", { name: "人格卡：测试人格" })).toBeVisible();
   });
 }

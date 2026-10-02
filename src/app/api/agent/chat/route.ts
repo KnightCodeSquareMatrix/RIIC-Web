@@ -2,10 +2,10 @@ import { convertToModelMessages, createUIMessageStreamResponse, stepCountIs, str
 import { appendFile } from "node:fs/promises";
 
 import { assertSameOrigin, createRequestId, failureResponse, PublicApiError, successResponse } from "@/server/api-contract";
-import { websiteSession } from "@/server/auth";
+import { requireFeatureSession } from "@/server/auth/feature-access";
 import { createAgentUsage, finalizeAgentUsage, getWallet } from "@/server/billing/service";
 import { SOLVE_TOOL_POINTS } from "@/server/billing/config";
-import { agentLlmSettings } from "@/server/agent/config";
+import { agentLlmSettings, agentModelChoices } from "@/server/agent/config";
 import { getAgentModel } from "@/server/agent/llm";
 import { createAgentStreamPolicy } from "@/server/agent/stream-policy";
 import { buildAgentSystemPrompt } from "@/server/agent/persona";
@@ -74,6 +74,7 @@ function monitorStep(step: unknown, index: number): unknown {
 }
 
 async function monitorLog(entry: Record<string, unknown>): Promise<void> {
+  if (process.env.NODE_ENV === "production") return;
   try {
     await appendFile(AGENT_MONITOR_LOG, `${JSON.stringify({ ts: new Date().toISOString(), ...entry })}\n`, "utf-8");
   } catch {
@@ -83,8 +84,7 @@ async function monitorLog(entry: Record<string, unknown>): Promise<void> {
 // ── 临时监控结束 ──
 
 async function requireAgentAccess(request: Request) {
-  const session = await websiteSession(request);
-  if (!session?.user) throw new PublicApiError("AIC-AUTH-2008");
+  const session = await requireFeatureSession(request, "agent");
   const wallet = await getWallet(session.user.id);
   if (wallet.totalPoints < SOLVE_TOOL_POINTS) {
     throw new PublicApiError("AIC-BILLING-4101", { message: `请先购买积分，Agent 至少需要 ${SOLVE_TOOL_POINTS} 积分才能使用。` });
@@ -103,8 +103,8 @@ export async function GET(request: Request) {
         enabled: settings.configured,
         provider: settings.configured ? settings.provider : null,
         model: settings.configured ? settings.model : null,
-        baseURL: settings.configured ? settings.baseURL : null,
         personas: await listBuiltinAgentPersonas(),
+        models: agentModelChoices(),
       },
       requestId
     );
@@ -119,7 +119,11 @@ export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
     const { session } = await requireAgentAccess(request);
-    const settings = agentLlmSettings();
+    const body = (await request.json()) as { model?: unknown; messages?: UIMessage[]; persona?: { id?: unknown; kind?: unknown; name?: unknown; content?: unknown } };
+    if (body.model !== undefined && body.model !== "deepseek" && body.model !== "glm") {
+      throw new PublicApiError("AIC-REQ-1001", { message: "请选择可用的模型。" });
+    }
+    const settings = agentLlmSettings(body.model);
     if (!settings.configured) {
       const response = failureResponse(
         new Error(`AGENT_LLM_API_KEY 未配置（provider=${settings.provider}），请在本机 .env.local 填入后重启开发服务。`),
@@ -129,7 +133,6 @@ export async function POST(request: Request) {
       );
       return new Response(response.body, { status: 503, headers: response.headers });
     }
-    const body = (await request.json()) as { messages?: UIMessage[]; persona?: { id?: unknown; kind?: unknown; name?: unknown; content?: unknown } };
     if (!Array.isArray(body.messages) || body.messages.length === 0) {
       const response = failureResponse(new Error("缺少对话消息。"), requestId, "/api/agent/chat", startedAt);
       return new Response(response.body, { status: 400, headers: response.headers });
@@ -163,7 +166,7 @@ export async function POST(request: Request) {
     const streamPolicy = createAgentStreamPolicy(request.signal);
     const result = streamText({
       ...streamPolicy.options,
-      model: getAgentModel(),
+      model: getAgentModel(settings),
       system: await buildAgentSystemPrompt(personaContent),
       messages: await convertToModelMessages(body.messages, { tools }),
       tools,
@@ -235,7 +238,7 @@ export async function POST(request: Request) {
     });
     const stream = result.toUIMessageStream({
       onError: (error) => {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = streamPolicy.errorText(error);
         console.error(JSON.stringify({
           level: "error",
           event: "agent_stream_error",

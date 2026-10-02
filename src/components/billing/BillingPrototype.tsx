@@ -12,6 +12,7 @@ import styles from "./BillingPrototype.module.css";
 
 type Product = { id: string; name: string; amountFen: number; points: number; badge?: string; description: string; kind: string; checkoutConfigured: boolean };
 type BillingData = {
+  canSimulatePayment?: boolean;
   products: Product[];
   wallet: { paidPoints: number; monthlyPoints: number; monthlyExpiresAt: string | null; totalPoints: number };
   ledger: Array<{ id: string; kind: string; pointsDelta: number; createdAt: string; metadata?: Record<string, unknown> | null }>;
@@ -229,7 +230,7 @@ export function BillingPrototype() {
             </li>;
           })}
         </ul>}
-        {activeOrder?.status === "pending" ? <div className={styles.recordFoot}><p className={styles.caption}>最近一笔订单待支付</p><Button type="button" variant="outline" className={styles.pill} disabled={busy !== null} onClick={() => void simulatePaid(activeOrder.id)}>{busy === activeOrder.id ? "处理中…" : "模拟爱发电回调到账"}</Button></div> : null}
+        {activeOrder?.status === "pending" && data?.canSimulatePayment === true ? <div className={styles.recordFoot}><p className={styles.caption}>最近一笔订单待支付</p><Button type="button" variant="outline" className={styles.pill} disabled={busy !== null} onClick={() => void simulatePaid(activeOrder.id)}>{busy === activeOrder.id ? "处理中…" : "模拟爱发电回调到账"}</Button></div> : null}
       </BillingCard>
 
       <div className={styles.activity}>

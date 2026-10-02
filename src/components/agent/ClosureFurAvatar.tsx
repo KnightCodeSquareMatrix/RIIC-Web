@@ -49,13 +49,15 @@ function FurAvatar({ active, variant }: { active: boolean; variant: FurAvatarVar
     let frame = 0, lastFrame = 0, targetX = 0, targetY = 0;
     let yaw = 0, pitch = 0, press = 0, pressVelocity = 0;
     let lastX = 0, lastY = 0, lagX = 0, lagY = 0;
-    let pixels = 0;
+    let pixels = 0, drawCost = 0;
     let engine: ReturnType<typeof acquireFurRenderer> | undefined;
 
     const paint = (time: number, animated: boolean) => {
       if (!engine) return false;
       try {
+        const started = performance.now();
         const drawn = engine.draw(context, pixels, { yaw, pitch, press, lagX, lagY, time: time / 1000, active: animated && activeRef.current }, variant);
+        drawCost = drawCost * 0.75 + (performance.now() - started) * 0.25;
         root.dataset.furReady = String(drawn);
         if (!drawn) context.clearRect(0, 0, pixels, pixels);
         return drawn;
@@ -70,7 +72,9 @@ function FurAvatar({ active, variant }: { active: boolean; variant: FurAvatarVar
       frame = 0;
       if (disposed || !visible || document.hidden) { root.dataset.furMotion = "paused"; return; }
       if (!engine) return;
-      if (lastFrame && time - lastFrame < 1000 / 30) { frame = requestAnimationFrame(render); return; }
+      // Leave time for streaming text and input on devices with slow/software WebGL.
+      const interval = Math.max(1000 / 30, Math.min(250, drawCost * 4));
+      if (lastFrame && time - lastFrame < interval) { frame = requestAnimationFrame(render); return; }
       const dt = lastFrame ? Math.min((time - lastFrame) / 1000, 0.5) : 1 / 30;
       lastFrame = time;
       const interactive = interactionOwner === root;

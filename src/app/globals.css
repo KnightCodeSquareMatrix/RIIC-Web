@@ -526,7 +526,7 @@ html[data-agent-viewport] [data-agent-chat] > header {
 html[data-agent-viewport] [data-app-content] {
   flex: 1;
   min-height: 0;
-  padding-block: 0.5rem;
+  padding-block: 0;
 }
 
 html[data-agent-viewport] [data-primary-page="agent"],
@@ -540,7 +540,6 @@ html[data-agent-viewport] [data-agent-chat] {
 html[data-agent-viewport] [data-agent-composer] {
   max-height: 100%;
   overflow-y: auto;
-  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
 }
 
 html[data-agent-viewport] [data-agent-prompt-bar] textarea {

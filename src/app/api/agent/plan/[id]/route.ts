@@ -1,5 +1,5 @@
 import { createRequestId, failureResponse, successResponse } from "@/server/api-contract";
-import { websiteSession } from "@/server/auth";
+import { requireFeatureSession } from "@/server/auth/feature-access";
 import { getAgentPlanArtifact } from "@/server/agent/plan-artifact";
 
 export const runtime = "nodejs";
@@ -9,7 +9,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   const requestId = createRequestId();
   const startedAt = performance.now();
   try {
-    const session = await websiteSession(request);
+    const session = await requireFeatureSession(request, "agent");
     if (!session?.user) {
       const response = failureResponse(new Error("请先登录网站账号。"), requestId, "/api/agent/plan/[id]", startedAt);
       return new Response(response.body, { status: 401, headers: response.headers });

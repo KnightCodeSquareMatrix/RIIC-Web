@@ -5,7 +5,7 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { LanguageModelV4, LanguageModelV4StreamPart } from "@ai-sdk/provider";
 import { jsonSchema, stepCountIs, streamText, tool, type UIMessageChunk } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
-import { AGENT_TIMEOUT_ERROR, agentChatErrorMessage } from "../../agent-chat-errors.ts";
+import { AGENT_INTERRUPTED_ERROR, AGENT_UNAVAILABLE_ERROR, AGENT_TIMEOUT_ERROR, agentChatErrorMessage } from "../../agent-chat-errors.ts";
 import { createAgentStreamPolicy, withAgentModelTimeout } from "./stream-policy.ts";
 
 const limits = { firstChunkMs: 60, chunkMs: 60, totalMs: 2_000 };
@@ -72,6 +72,16 @@ test("user cancellation stays a normal stop instead of a timeout error", { timeo
   } finally { clearTimeout(timer); }
 });
 
+test("stopping a partial reply is not misreported as an upstream interruption", { timeout: 5_000 }, async () => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30);
+  try {
+    const chunks = await collect(waitingModel([{ type: "text-start", id: "text" }, { type: "text-delta", id: "text", delta: "partial" }]), controller.signal);
+    assert.ok(chunks.some((chunk) => chunk.type === "abort"));
+    assert.equal(chunks.some((chunk) => chunk.type === "error"), false);
+  } finally { clearTimeout(timer); }
+});
+
 test("the overall request deadline also becomes a retryable timeout", { timeout: 5_000 }, async () => {
   const chunks = await collect(waitingModel(), new AbortController().signal, { ...limits, firstChunkMs: 1_000, totalMs: 30 });
   assert.ok(chunks.some((chunk) => chunk.type === "error" && chunk.errorText === AGENT_TIMEOUT_ERROR));
@@ -121,4 +131,39 @@ test("timeout text is localized without replacing unrelated failures", () => {
   assert.match(agentChatErrorMessage(AGENT_TIMEOUT_ERROR, false), /超时/);
   assert.match(agentChatErrorMessage(AGENT_TIMEOUT_ERROR, true), /timed out/);
   assert.equal(agentChatErrorMessage("specific failure", false), "specific failure");
+});
+
+test("upstream URLs, credentials and raw errors never enter public error text", () => {
+  const policy = createAgentStreamPolicy(new AbortController().signal);
+  assert.equal(policy.errorText(new Error("https://gateway.test failed with private-api-token")), AGENT_UNAVAILABLE_ERROR);
+  assert.equal(policy.errorText({ responseBody: "private-api-token" }), AGENT_UNAVAILABLE_ERROR);
+  assert.match(agentChatErrorMessage(AGENT_UNAVAILABLE_ERROR, false), /切换模型/);
+});
+
+test("a truncated stream preserves output and reports failure without replaying it", async () => {
+  const model = new MockLanguageModelV4({ doStream: async () => ({ stream: new ReadableStream({ start(controller) {
+    controller.enqueue({ type: "text-start", id: "answer" });
+    controller.enqueue({ type: "text-delta", id: "answer", delta: "partial" });
+    controller.close();
+  } }) }) });
+  const chunks = await collect(model);
+  assert.equal(model.doStreamCalls.length, 1);
+  assert.ok(chunks.some((chunk) => chunk.type === "text-delta" && chunk.delta === "partial"));
+  assert.ok(chunks.some((chunk) => chunk.type === "error" && chunk.errorText === AGENT_INTERRUPTED_ERROR));
+});
+
+test("transient connection errors retry before output; successful output is emitted once", { timeout: 10_000 }, async () => {
+  let calls = 0;
+  const upstream: typeof fetch = async () => {
+    if (++calls === 1) return new Response(JSON.stringify({ error: { message: "private upstream details" } }), { status: 503, headers: { "content-type": "application/json" } });
+    return new Response([
+      { choices: [{ index: 0, delta: { role: "assistant", content: "OK" }, finish_reason: null }] },
+      { choices: [{ index: 0, delta: {}, finish_reason: "stop" }] },
+    ].map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join("") + "data: [DONE]\n\n", { headers: { "content-type": "text/event-stream" } });
+  };
+  const model = createOpenAICompatible({ name: "test", baseURL: "https://example.test/v1", fetch: upstream }).chatModel("test");
+  const chunks = await collect(model, new AbortController().signal, { ...limits, totalMs: 8_000 });
+  assert.equal(calls, 2);
+  assert.equal(chunks.filter((chunk) => chunk.type === "text-delta").length, 1);
+  assert.equal(chunks.some((chunk) => chunk.type === "error"), false);
 });

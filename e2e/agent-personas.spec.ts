@@ -1,6 +1,15 @@
 import { expect, test, type Page } from "@playwright/test";
 import { mockApis } from "./production-readiness.fixture";
 
+async function personaControl(page: Page, name: string) {
+  const menu = page.getByRole("button", { name: "附件与人格卡", exact: true });
+  if ((page.viewportSize()?.width ?? 1280) < 768) {
+    await expect(menu).toBeVisible({ timeout: 30_000 });
+    if (await menu.getAttribute("aria-expanded") !== "true") await menu.click();
+  }
+  return page.getByRole("button", { name, exact: true });
+}
+
 const savedUpload = { version: 1, id: "upload-existing", name: "原有人格", content: "原来的自定义人格内容", description: "保留上传内容" };
 
 async function prepare(page: Page, available = true) {
@@ -31,7 +40,7 @@ for (const mobile of [false, true]) {
     await prepare(page);
     await page.addInitScript(upload => localStorage.setItem("riic.agent.persona.v1", JSON.stringify(upload)), savedUpload);
     await page.goto("/agent");
-    const selector = page.getByRole("button", { name: "人格卡：原有人格" });
+    const selector = (await personaControl(page, "人格卡：原有人格"));
     await expect(selector).toBeVisible({ timeout: 30_000 });
     await selector.click();
     const card = page.locator('[data-persona-card="silverash"]');
@@ -67,22 +76,22 @@ for (const mobile of [false, true]) {
     expect(pixels.dark).toBeGreaterThan(2);
     expect(pixels.tinted).toBe(0);
     expect(pixels.tail).toBeGreaterThan(2);
-    await expect(page.getByRole("button", { name: "人格卡：银灰" })).toBeEnabled();
+    await expect((await personaControl(page, "人格卡：银灰"))).toBeEnabled();
     await page.reload();
-    await expect(page.getByRole("button", { name: "人格卡：银灰" })).toBeVisible({ timeout: 30_000 });
-    await page.getByRole("button", { name: "人格卡：银灰" }).click();
+    await expect((await personaControl(page, "人格卡：银灰"))).toBeVisible({ timeout: 30_000 });
+    await (await personaControl(page, "人格卡：银灰")).click();
     await expect(page.locator('[data-persona-card="upload-existing"]')).toContainText("原有人格");
     await page.getByRole("button", { name: "可露希尔 · 使用网站服务端当前配置的人格卡" }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
     await expect(page.locator("[data-agent-chat]")).toHaveCSS("--dialogue-accent", "#bd354b");
     await expect(page.locator('[data-agent-chat] h1 > span[aria-hidden="true"]')).toHaveCSS("background-color", "rgb(189, 53, 75)");
     await page.reload();
-    await expect(page.getByRole("button", { name: "人格卡：可露希尔" })).toBeVisible({ timeout: 30_000 });
+    await expect((await personaControl(page, "人格卡：可露希尔"))).toBeVisible({ timeout: 30_000 });
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem("riic.agent.persona.v1")!))).toEqual(savedUpload);
-    await page.getByRole("button", { name: "人格卡：可露希尔" }).click();
+    await (await personaControl(page, "人格卡：可露希尔")).click();
     await page.getByRole("button", { name: "使用原有人格" }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
-    await expect(page.getByRole("button", { name: "人格卡：原有人格" })).toBeVisible();
+    await expect((await personaControl(page, "人格卡：原有人格"))).toBeVisible();
   });
 }
 
@@ -93,7 +102,7 @@ test("a missing private card explains why sending is blocked and permits switchi
   await expect(page.locator("[data-agent-chat]").getByRole("alert")).toContainText("所选人格卡暂不可用", { timeout: 30_000 });
   await page.getByRole("textbox", { name: "发给银灰的消息" }).fill("你好");
   await expect(page.getByRole("button", { name: "发送", exact: true })).toBeDisabled();
-  await page.getByRole("button", { name: "人格卡：银灰" }).click();
+  await (await personaControl(page, "人格卡：银灰")).click();
   await page.getByRole("button", { name: "可露希尔 · 使用网站服务端当前配置的人格卡" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
   await expect(page.getByRole("button", { name: "发送", exact: true })).toBeEnabled();
@@ -114,7 +123,7 @@ test("five plush characters share a renderer, SilverAsh reacts and reduced motio
     } as typeof original;
   });
   await page.goto("/agent");
-  await page.getByRole("button", { name: "人格卡：可露希尔" }).click();
+  await (await personaControl(page, "人格卡：可露希尔")).click();
   const silverash = page.locator('[data-persona-card="silverash"] [data-silverash-fur-avatar]');
   await expect(silverash).toHaveAttribute("data-fur-ready", "true");
   await expect(page.locator('[data-persona-card="default"] [data-closure-fur-avatar]')).toHaveAttribute("data-fur-ready", "true");
@@ -154,7 +163,7 @@ for (const mobile of [false, true]) {
     });
     await prepare(page);
     await page.goto("/agent");
-    await page.getByRole("button", { name: "人格卡：可露希尔" }).click();
+    await (await personaControl(page, "人格卡：可露希尔")).click();
     const card = page.locator('[data-persona-card="exusiai"]');
     await card.scrollIntoViewIfNeeded();
     await expect(card).toHaveCSS("--dialogue-accent", "#bd354b");
@@ -230,7 +239,7 @@ for (const mobile of [false, true]) {
     expect(pixels.haloRatio).toBeLessThan(4);
     expect(shaderErrors).toEqual([]);
     await page.reload();
-    await expect(page.getByRole("button", { name: "人格卡：能天使" })).toBeVisible({ timeout: 30_000 });
+    await expect((await personaControl(page, "人格卡：能天使"))).toBeVisible({ timeout: 30_000 });
     await expect(page.locator("[data-agent-chat]")).toHaveCSS("--dialogue-accent", "#bd354b");
   });
 }
@@ -244,7 +253,7 @@ for (const mobile of [false, true]) {
     });
     await prepare(page);
     await page.goto("/agent");
-    await page.getByRole("button", { name: "人格卡：可露希尔" }).click();
+    await (await personaControl(page, "人格卡：可露希尔")).click();
     const card = page.locator('[data-persona-card="saileach"]');
     await card.scrollIntoViewIfNeeded();
     await expect(card).toHaveCSS("--dialogue-accent", "#ffd800");
@@ -283,9 +292,9 @@ for (const mobile of [false, true]) {
     for (const key of ["blue", "navy", "horns"] as const) expect(pixels[key], JSON.stringify(pixels)).toBeGreaterThan(2);
     expect(shaderErrors).toEqual([]);
     await page.reload();
-    await expect(page.getByRole("button", { name: "人格卡：琴柳" })).toBeVisible({ timeout: 30_000 });
+    await expect((await personaControl(page, "人格卡：琴柳"))).toBeVisible({ timeout: 30_000 });
     await expect(page.locator("[data-agent-chat]")).toHaveCSS("--dialogue-accent", "#ffd800");
-    await page.getByRole("button", { name: "人格卡：琴柳" }).click();
+    await (await personaControl(page, "人格卡：琴柳")).click();
     const selected = page.getByRole("button", { name: "使用琴柳" });
     await expect(selected).toHaveAttribute("aria-pressed", "true");
     await expect(selected).toBeEmpty();
@@ -309,7 +318,7 @@ for (const mobile of [false, true]) {
     });
     await prepare(page);
     await page.goto("/agent");
-    await page.getByRole("button", { name: "人格卡：可露希尔" }).click();
+    await (await personaControl(page, "人格卡：可露希尔")).click();
     const card = page.locator('[data-persona-card="mountain"]');
     await card.scrollIntoViewIfNeeded();
     await expect(card).toHaveCSS("--dialogue-accent", "#84bfff");
@@ -348,7 +357,7 @@ for (const mobile of [false, true]) {
     expect(pixels.cropped).toBe(0);
     expect(shaderErrors).toEqual([]);
     await page.reload();
-    await expect(page.getByRole("button", { name: "人格卡：山", exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect((await personaControl(page, "人格卡：山"))).toBeVisible({ timeout: 30_000 });
     await expect(page.locator("[data-agent-chat]")).toHaveCSS("--dialogue-accent", "#84bfff");
   });
 }
@@ -364,7 +373,7 @@ test("Mountain keeps a usable SVG fallback without WebGL", async ({ page }) => {
     } as typeof original;
   });
   await page.goto("/agent");
-  await page.getByRole("button", { name: "人格卡：山", exact: true }).click();
+  await (await personaControl(page, "人格卡：山")).click();
   const avatar = page.locator('[data-persona-card="mountain"] [data-fur-avatar="mountain"]');
   await avatar.scrollIntoViewIfNeeded();
   await expect(avatar).toHaveAttribute("data-fur-ready", "false");
@@ -380,7 +389,7 @@ test("Mountain missing private card blocks sending and allows another persona", 
   await expect(page.locator("[data-agent-chat]").getByRole("alert")).toContainText("所选人格卡暂不可用", { timeout: 30_000 });
   await page.getByRole("textbox", { name: "发给山的消息" }).fill("你好");
   await expect(page.getByRole("button", { name: "发送", exact: true })).toBeDisabled();
-  await page.getByRole("button", { name: "人格卡：山", exact: true }).click();
+  await (await personaControl(page, "人格卡：山")).click();
   await page.getByRole("button", { name: "可露希尔 · 使用网站服务端当前配置的人格卡" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
   await expect(page.getByRole("button", { name: "发送", exact: true })).toBeEnabled();
@@ -397,7 +406,7 @@ test("Saileach has a usable SVG fallback without WebGL", async ({ page }) => {
     } as typeof original;
   });
   await page.goto("/agent");
-  await page.getByRole("button", { name: "人格卡：琴柳" }).click();
+  await (await personaControl(page, "人格卡：琴柳")).click();
   const avatar = page.locator('[data-persona-card="saileach"] [data-fur-avatar="saileach"]');
   await avatar.scrollIntoViewIfNeeded();
   await expect(avatar).toHaveAttribute("data-fur-ready", "false");
@@ -417,7 +426,7 @@ test("Exusiai retains a halo and usable chat without WebGL", async ({ page }) =>
     } as typeof original;
   });
   await page.goto("/agent");
-  await page.getByRole("button", { name: "人格卡：能天使" }).click();
+  await (await personaControl(page, "人格卡：能天使")).click();
   const avatar = page.locator('[data-persona-card="exusiai"] [data-fur-avatar="exusiai"]');
   await avatar.scrollIntoViewIfNeeded();
   await expect(avatar).toHaveAttribute("data-fur-ready", "false");
@@ -440,7 +449,7 @@ test("SilverAsh keeps its gray and white silhouette when WebGL is unavailable", 
     } as typeof original;
   });
   await page.goto("/agent");
-  await page.getByRole("button", { name: "人格卡：银灰" }).click();
+  await (await personaControl(page, "人格卡：银灰")).click();
   const silverash = page.locator('[data-persona-card="silverash"] [data-silverash-fur-avatar]');
   await expect(silverash.locator("[data-fur-fallback]")).toBeVisible();
   await expect(silverash).toHaveAttribute("data-fur-ready", "false");

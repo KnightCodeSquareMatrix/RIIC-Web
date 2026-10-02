@@ -1,5 +1,5 @@
 import { assertSameOrigin, createRequestId, failureResponse, readJsonBody, successResponse, PublicApiError } from "@/server/api-contract";
-import { requireWebsiteSession } from "@/server/auth/authorization";
+import { requireFeatureActor, requireFeatureSession } from "@/server/auth/feature-access";
 import { BillingError, createBillingOrder, getWallet, listBillingProducts, listLedger, listOrders, listUsage } from "@/server/billing/service";
 
 export const runtime = "nodejs";
@@ -17,7 +17,7 @@ export async function GET(request: Request) {
   const requestId = createRequestId();
   const startedAt = performance.now();
   try {
-    const session = await requireWebsiteSession(request);
+    const { session, isAdmin } = await requireFeatureActor(request, "billing");
     const url = new URL(request.url);
     const [wallet, ledger, orders, usage] = await Promise.all([
       getWallet(session.user.id),
@@ -25,7 +25,8 @@ export async function GET(request: Request) {
       listOrders(session.user.id),
       listUsage(session.user.id),
     ]);
-    return successResponse({ products: listBillingProducts(), wallet, ledger, orders, usage }, requestId);
+    const canSimulatePayment = isAdmin && (process.env.NODE_ENV !== "production" || process.env.BILLING_PROTOTYPE_MODE === "1");
+    return successResponse({ products: listBillingProducts(), wallet, ledger, orders, usage, canSimulatePayment }, requestId);
   } catch (error) {
     return failureResponse(normalizeBillingError(error), requestId, "/api/billing", startedAt, "AIC-SYS-5000", request);
   }
@@ -36,7 +37,7 @@ export async function POST(request: Request) {
   const startedAt = performance.now();
   try {
     assertSameOrigin(request);
-    const session = await requireWebsiteSession(request);
+    const session = await requireFeatureSession(request, "billing");
     const body = await readJsonBody(request, 32 * 1024) as { productId?: unknown; provider?: unknown };
     if (typeof body.productId !== "string" || body.productId.length > 80) throw new PublicApiError("AIC-BILLING-4102");
     const idempotencyKey = request.headers.get("idempotency-key")?.trim();

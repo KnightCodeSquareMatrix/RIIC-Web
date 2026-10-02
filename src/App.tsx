@@ -34,6 +34,7 @@ import { loadClientFeature } from "@/client-lazy-loader";
 import { WorkbenchContext } from "@/workbench-context";
 import { WORKBENCH_PAGE_PATHS, workbenchHref, workbenchPageFromPathname, type AppPage } from "@/workbench-routes";
 import { useWebsiteSession } from "@/website-session";
+import { useFeatureAccess } from "@/components/workbench/FeatureAccessProvider";
 import { usePlanTask } from "@/hooks/use-plan-task";
 import type { SklandTrainingSyncOptions } from "@/hooks/use-skland-training-sync";
 import type { TrainingSyncSnapshot } from "@/components/workbench/SklandTrainingSyncBridge";
@@ -256,6 +257,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   const router = useRouter();
   const page = workbenchPageFromPathname(pathname);
   const { data: websiteSession, isPending: websiteSessionPending, refetch: refetchWebsiteSession } = useWebsiteSession();
+  const features = useFeatureAccess();
   const defaultPreset = PRESETS[0];
   const defaultLayout = buildBlueprint(defaultPreset);
   const hasRenderedCalculator = useRef(false);
@@ -635,6 +637,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     const frame = window.requestAnimationFrame(() => {
       for (const target of Object.keys(WORKBENCH_PAGE_PATHS) as AppPage[]) {
         if (target === page || (target === "skland" && !CLIENT_SKLAND_ENABLED)) continue;
+        if ((target === "agent" || target === "billing") && !features[target]) continue;
         router.prefetch(workbenchHref(target));
       }
     });
@@ -656,7 +659,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       if (idleCallback !== undefined) window.cancelIdleCallback?.(idleCallback);
       if (fallbackTimer !== undefined) window.clearTimeout(fallbackTimer);
     };
-  }, [hasRestoredSession, page, router]);
+  }, [hasRestoredSession, page, router, features]);
 
   useEffect(() => {
     if (setupOpen) setSetupMounted(true);
@@ -748,7 +751,10 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       setOperbox(restoredOperbox);
       setFileName(typeof session.sourceName === "string" ? session.sourceName : null);
       setBoxSource(restoredBoxSource);
-      setLayoutDirty(false);
+      // Explicitly opening an Agent result is a local selection. A later
+      // Skland/cloud restore must not replace it with the previous layout.
+      setLayoutDirty(true);
+      hadPersistedSession.current = true;
       setLayoutSource("local");
       setLocalLayoutBackup(null);
       setRotationProfile(isRotationProfile(session.rotationProfile) ? session.rotationProfile : DEFAULT_ROTATION_PROFILE);
@@ -2413,7 +2419,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       <AppSidebar page={page} onPageChange={handleAppPageChange} showMower={userSettings.showMower} />
       <SidebarInset className="isolate">
         <DotDistortionBackground />
-        <AppTopBar />
+        {page !== "agent" ? <AppTopBar /> : null}
         {agentArtifactNotice && page !== "agent" ? (
           <div className="flex flex-wrap items-center gap-3 border-b bg-[#FFD501]/15 px-4 py-2 text-sm" data-agent-artifact-banner>
             <span className="min-w-0">
@@ -2477,7 +2483,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       <div
         className={page === "calculator" && !scheduleResult && onboardingPreference === "active"
           ? "w-full flex-1"
-          : "app-content-track py-4"}
+          : page === "agent" ? "app-content-track py-0 md:py-4" : "app-content-track py-4"}
         data-app-content
         inert={!hasRestoredSession}
         aria-busy={!hasRestoredSession}

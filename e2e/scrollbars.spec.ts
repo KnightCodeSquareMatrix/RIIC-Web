@@ -98,6 +98,8 @@ test("nested dialog and dropdown keep keyboard navigation, background locking an
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(before);
   await page.keyboard.press("Escape");
   await expect(drawer).toHaveCount(0);
+  // Wheel over the document, not the independently scrollable fixed sidebar.
+  await page.mouse.move(550, 300);
   await page.mouse.wheel(0, 500);
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(before);
 });

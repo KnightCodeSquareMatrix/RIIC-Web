@@ -11,6 +11,9 @@ import { useLocale, useTranslations } from "next-intl";
 
 import { PlanArtifactView } from "@/components/agent/PlanArtifactView";
 import { Button } from "@/components/ui/button";
+import { Combobox, ComboboxContent, ComboboxTrigger, ComboboxItem, ComboboxList } from "@/components/ui/combobox";
+import { SidebarTrigger } from "@/components/ui/sidebar";
+import { AgentComposerMenu } from "./AgentComposerMenu";
 import { FluidOrb } from "@/components/ui/fluid-orb";
 import { accountOrbColor } from "@/account-orb";
 import { AgentConversationScrollArea } from "./AgentConversationScrollArea";
@@ -33,6 +36,7 @@ import { AGENT_BROADCAST_CHANNEL, agentArtifactFromOutput, requestAgentArtifactO
 import type { AgentPlanProjection } from "@/server/agent/plan-artifact";
 
 type AgentStatus = "loading" | "ready" | "unconfigured" | "unauthenticated" | "payment_required" | "unavailable";
+type AgentModelChoice = { id: "deepseek" | "glm"; label: string };
 
 type PersonaCard = UploadedAgentPersona;
 
@@ -144,7 +148,7 @@ function MasteryWarnings({ warnings }: { warnings: unknown }) {
   })}</>;
 }
 
-export function ToolResultSummary({ name, output, openLabel = "在工作台中打开" }: { name: string; output: unknown; openLabel?: string }) {
+export function ToolResultSummary({ name, output, openLabel = "在基建计算器打开" }: { name: string; output: unknown; openLabel?: string }) {
   const [handoffError, setHandoffError] = useState<string | null>(null);
   const handoff = agentArtifactFromOutput(output);
   const record = asRecord(output);
@@ -283,13 +287,15 @@ function AttachmentPreview({ file, onRemove }: { file: FileUIPart; onRemove?: ()
   </div>;
 }
 
-export function AgentChat({ conversationId, initialMessages, userName, userId }: { conversationId: string; initialMessages: UIMessage[]; userName?: string; userId?: string }) {
+export function AgentChat({ conversationId, initialMessages, userName, userId, billingAllowed = false }: { conversationId: string; initialMessages: UIMessage[]; userName?: string; userId?: string; billingAllowed?: boolean }) {
   useAgentViewport();
   const isMobile = useIsMobile();
   const en = useLocale() === "en";
   const intl = useTranslations();
   const { store: historyStore, error: historyError } = useAgentHistory();
   const [agentStatus, setAgentStatus] = useState<AgentStatus>("loading");
+  const [modelChoices, setModelChoices] = useState<AgentModelChoice[]>([]);
+  const [selectedModel, setSelectedModel] = useState<AgentModelChoice["id"]>();
   const [draft, setDraft] = useState("");
   const [attachments, setAttachments] = useState<FileUIPart[]>([]);
   const [activePersona, setActivePersona] = useState<AgentPersona | null>(null);
@@ -300,6 +306,9 @@ export function AgentChat({ conversationId, initialMessages, userName, userId }:
   const [personaOpen, setPersonaOpen] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [personaError, setPersonaError] = useState<string | null>(null);
+  const [headerHidden, setHeaderHidden] = useState(false);
+  const modeAnchor = useRef<HTMLButtonElement>(null);
+  const touchY = useRef<number | null>(null);
   const conversationRef = useRef<HTMLDivElement>(null);
   const followMessages = useRef(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -320,6 +329,27 @@ export function AgentChat({ conversationId, initialMessages, userName, userId }:
   const personaTheme = activePersona?.kind === "builtin" ? BUILTIN_PERSONA_THEMES[activePersona.theme] : !activePersona ? personaStyles.closure : "";
   const personaUnavailable = activePersona?.kind === "builtin" && !builtinPersonas.some(persona => persona.id === activePersona.id);
   const displayTurns = useMemo(() => buildAgentDisplayTurns(messages, busy), [messages, busy]);
+  const modeLabel = (id?: AgentModelChoice["id"]) => id === "glm" ? (en ? "Deep" : "深度模式") : (en ? "Fast" : "快速模式");
+  const currentModel = modelChoices.find((choice) => choice.id === selectedModel);
+
+  useEffect(() => {
+    const mobile = window.matchMedia("(max-width: 767px)");
+    const resize = () => {
+      if (!mobile.matches) setHeaderHidden(false);
+    };
+    resize();
+    window.addEventListener("resize", resize);
+    return () => { window.removeEventListener("resize", resize); };
+  }, []);
+
+  // Only deliberate reading gestures collapse the header; streaming and history
+  // restoration also scroll the viewport and must not move the controls.
+  const readingGesture = (delta: number) => {
+    const viewport = conversationRef.current;
+    if (!window.matchMedia("(max-width: 767px)").matches || !viewport) return;
+    if (delta < -12) setHeaderHidden(false);
+    else if (delta > 12 && viewport.scrollHeight > viewport.clientHeight + 24) setHeaderHidden(true);
+  };
 
   useEffect(() => {
     const stored = readLocalPersona();
@@ -347,9 +377,15 @@ export function AgentChat({ conversationId, initialMessages, userName, userId }:
         }
         const payload = (await response.json()) as {
           success?: boolean;
-          data?: { enabled?: boolean; personas?: { id?: unknown }[] };
+          data?: { enabled?: boolean; personas?: { id?: unknown }[]; provider?: AgentModelChoice["id"]; models?: AgentModelChoice[] };
         };
         if (!cancelled) {
+          const choices = payload.data?.models ?? [];
+          setModelChoices(choices);
+          const previous = (runtimeConversation.requestOptions?.body as { model?: unknown } | undefined)?.model;
+          setSelectedModel(choices.find((choice) => choice.id === previous)?.id
+            ?? choices.find((choice) => choice.id === "deepseek")?.id
+            ?? choices[0]?.id ?? payload.data?.provider);
           setBuiltinPersonas((payload.data?.personas ?? []).flatMap(card => {
             const persona = builtinAgentPersona(card.id);
             return persona ? [persona] : [];
@@ -367,7 +403,7 @@ export function AgentChat({ conversationId, initialMessages, userName, userId }:
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [runtimeConversation]);
 
   useEffect(() => {
     const container = conversationRef.current;
@@ -415,9 +451,10 @@ export function AgentChat({ conversationId, initialMessages, userName, userId }:
     setDraft("");
     setAttachments([]);
     followMessages.current = true;
-    runtime.setRequestOptions(runtimeConversation, activePersona
-      ? { body: { persona: activePersona.kind === "builtin" ? { id: activePersona.id, kind: "builtin" } : { id: activePersona.id, name: activePersona.name, content: activePersona.content } } }
-      : undefined);
+    runtime.setRequestOptions(runtimeConversation, { body: {
+      model: selectedModel,
+      ...(activePersona ? { persona: activePersona.kind === "builtin" ? { id: activePersona.id, kind: "builtin" } : { id: activePersona.id, name: activePersona.name, content: activePersona.content } } : {}),
+    } });
     await runtime.run(runtimeConversation, () => sendMessage(
       { text: trimmed, files },
       runtimeConversation.requestOptions,
@@ -430,6 +467,7 @@ export function AgentChat({ conversationId, initialMessages, userName, userId }:
     if (!question) return;
     clearError();
     followMessages.current = true;
+    runtime.setRequestOptions(runtimeConversation, { body: { ...runtimeConversation.requestOptions?.body, model: selectedModel } });
     await runtime.run(runtimeConversation, () => regenerate({ messageId: question.id, ...runtimeConversation.requestOptions }));
   };
 
@@ -520,19 +558,31 @@ export function AgentChat({ conversationId, initialMessages, userName, userId }:
     { icon: UsersRound, title: en ? "Recruitment" : "公开招募", text: "公招有高级资深干员、狙击干员、远程位，九小时怎么选？" },
   ];
   return (
-    <section className={`${dialogueStyles.theme} ${personaTheme} flex h-[calc(100dvh-5.0625rem-env(safe-area-inset-top))] min-h-[28rem] w-full min-w-0 flex-col gap-4 pt-2 pb-2 md:h-[calc(100dvh-2rem)] md:pt-5`} data-agent-chat data-agent-persona={activePersona?.id ?? "default"}>
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0">
-          <WorkbenchPageHeading page="agent" accentColor="var(--dialogue-accent)">{en ? "Closure Assistant" : "可露希尔助理"}</WorkbenchPageHeading>
-          <p className="mt-2 text-xs text-muted-foreground">{en ? "Your account, base and training — in one conversation." : "从了解账号到安排基建，把想做的事交给可露希尔。"}</p>
+    <section className={`${dialogueStyles.theme} ${dialogueStyles.chat} ${personaTheme}`} data-agent-chat data-agent-persona={activePersona?.id ?? "default"}>
+      <div className={dialogueStyles.headerSlot} data-agent-header-slot data-hidden={headerHidden} inert={headerHidden}>
+      <header className={dialogueStyles.header} data-agent-header>
+        <SidebarTrigger className="size-11 shrink-0 md:hidden" />
+        <div className="min-w-0 flex-1">
+          <WorkbenchPageHeading page="agent" accentColor="var(--dialogue-accent)" className="max-md:gap-1 max-md:text-sm max-md:[&>span:first-child]:hidden"><span className="md:hidden">{en ? "Closure" : "可露希尔"}</span><span className="hidden md:inline">{en ? "Closure Assistant" : "可露希尔助理"}</span></WorkbenchPageHeading>
+          <p className="mt-2 hidden text-xs text-muted-foreground md:block">{en ? "Your account, base and training — in one conversation." : "从了解账号到安排基建，把想做的事交给可露希尔。"}</p>
         </div>
-        <div className="ml-auto flex shrink-0 items-center gap-3">
-        <AgentCreditBalance enabled={agentStatus === "ready" || agentStatus === "payment_required" || agentStatus === "unconfigured"} busy={busy} en={en} />
-        <Button type="button" variant="outline" size="sm" className={dialogueStyles.newConversation} disabled={busy || messages.length === 0} onClick={() => { runtime.flush(); historyStore.startNew(); }}>
-          <Plus className="size-4" aria-hidden="true" />{en ? "New conversation" : "新对话"}
+        <div className={dialogueStyles.headerActions}>
+        {modelChoices.length > 0 ? <Combobox items={modelChoices} filteredItems={modelChoices}
+          value={currentModel ?? null}
+          itemToStringValue={(choice) => `${modeLabel(choice.id)} ${choice.label}`} isItemEqualToValue={(choice, value) => choice.id === value.id}
+          disabled={busy} onValueChange={(choice) => { if (choice) setSelectedModel(choice.id); }}>
+          <ComboboxTrigger ref={modeAnchor} aria-label={`${en ? "Assistant mode" : "助理模式"}：${modeLabel(selectedModel)}`} className={dialogueStyles.modeTrigger}>
+            <span className="min-w-0 text-left"><span className="block truncate text-xs font-semibold">{modeLabel(selectedModel)}</span><span className="block truncate text-[10px] leading-4 text-muted-foreground">{currentModel?.label}</span></span>
+          </ComboboxTrigger>
+          <ComboboxContent anchor={modeAnchor} className="min-w-56"><ComboboxList>{(choice) => <ComboboxItem key={choice.id} value={choice} className="min-h-14"><span><span className="block font-medium">{modeLabel(choice.id)}</span><span className="block text-xs text-muted-foreground">{choice.label}</span></span></ComboboxItem>}</ComboboxList></ComboboxContent>
+        </Combobox> : null}
+        <AgentCreditBalance enabled={billingAllowed && (agentStatus === "ready" || agentStatus === "payment_required" || agentStatus === "unconfigured")} busy={busy} en={en} />
+        <Button type="button" variant="outline" size="sm" aria-label={en ? "New conversation" : "新对话"} title={en ? "New conversation" : "新对话"} className={dialogueStyles.newConversation} disabled={busy || messages.length === 0} onClick={() => { runtime.flush(); historyStore.startNew(); }}>
+          <Plus className="size-4" aria-hidden="true" /><span className="max-md:hidden">{en ? "New conversation" : "新对话"}</span>
         </Button>
         </div>
       </header>
+      </div>
 
       {historyError ? <p role="alert" className="text-xs text-destructive">{en ? "Chat history could not be saved in this browser. Keep this page open and check available storage." : "浏览器暂时无法保存对话历史，请暂勿关闭页面，并检查可用存储空间。"}</p> : null}
       {agentStatus === "ready" && personaUnavailable ? <p role="alert" className="text-xs text-destructive">{en ? "This persona is unavailable. Choose another persona to continue." : "所选人格卡暂不可用，请在输入框下方选择其他人格卡。"}</p> : null}
@@ -550,7 +600,7 @@ export function AgentChat({ conversationId, initialMessages, userName, userId }:
             input={{
               "aria-label": en ? `Message ${personaName}` : `发给${personaName}的消息`,
               placeholder: isMobile ? (en ? "Ask your assistant…" : "聊聊基建、干员…") : (en ? "Ask about your base, operators or next upgrade…" : "聊聊你的基建、干员，或下一步养成计划…"),
-              rows: 2,
+              rows: 1,
               value: draft,
               onChange: (event) => setDraft(event.target.value),
               onKeyDown: (event) => {
@@ -562,20 +612,30 @@ export function AgentChat({ conversationId, initialMessages, userName, userId }:
             }}
             attachments={attachments.length ? <div className="flex flex-wrap gap-2 p-1">{attachments.map((file, index) => <AttachmentPreview key={`${file.filename}-${index}`} file={file} onRemove={() => setAttachments((current) => current.filter((_, itemIndex) => itemIndex !== index))} />)}</div> : undefined}
             toolbar={<>
+              <AgentComposerMenu en={en} personaName={activePersona?.name ?? (en ? "Closure" : "可露希尔")} onAttach={() => fileInputRef.current?.click()} onPersona={() => setPersonaOpen(true)} attachmentCount={attachments.length}>
+                {attachments.map((file, index) => <AttachmentPreview key={`${file.filename}-${index}`} file={file} onRemove={() => setAttachments((current) => current.filter((_, itemIndex) => itemIndex !== index))} />)}
+              </AgentComposerMenu>
               <input ref={fileInputRef} type="file" aria-label={en ? "Attach files" : "上传附件"} multiple accept="image/*,.md,.markdown,.txt,.json,.pdf,.csv,.xlsx" className="hidden" onChange={(event) => { void addFiles(event.target.files); event.currentTarget.value = ""; }} />
-              <Button type="button" variant="ghost" size="icon" className="size-9 rounded-lg text-muted-foreground" aria-label={en ? "Add attachment" : "添加附件"} title={en ? "Add attachment" : "添加附件"} onClick={() => fileInputRef.current?.click()}><Paperclip className="size-4" aria-hidden="true" /></Button>
-              <Button type="button" variant="ghost" size="sm" disabled={busy} className="max-w-40 rounded-lg text-xs text-muted-foreground" onClick={() => setPersonaOpen(true)}><Settings2 className="size-3.5 shrink-0" aria-hidden="true" /><span className="truncate">{en ? "Persona" : "人格卡"}：{personaName}</span></Button>
+              <Button type="button" variant="ghost" size="icon" className="hidden md:inline-flex size-9 rounded-lg text-muted-foreground" aria-label={en ? "Add attachment" : "添加附件"} title={en ? "Add attachment" : "添加附件"} onClick={() => fileInputRef.current?.click()}><Paperclip className="size-4" aria-hidden="true" /></Button>
+              <Button type="button" variant="ghost" size="sm" disabled={busy} className="hidden md:inline-flex max-w-40 rounded-lg text-xs text-muted-foreground" onClick={() => setPersonaOpen(true)}><Settings2 className="size-3.5 shrink-0" aria-hidden="true" /><span className="truncate">{en ? "Persona" : "人格卡"}：{personaName}</span></Button>
             </>}
           />
-          {uploadError ? <p role="alert" className="mt-2 px-1 text-xs text-destructive">{uploadError}</p> : <p className="mt-2 flex flex-wrap justify-between gap-1 px-1 text-[10px] text-muted-foreground"><span>{en ? "Up to 4 attachments · 8 MB each" : "最多 4 个附件 · 单个 ≤ 8 MB"}</span><span>{en ? "Enter to send · Shift + Enter for a new line" : "Enter 发送 · Shift + Enter 换行"}</span></p>}
+          {uploadError ? <p role="alert" className="mt-2 px-1 text-xs text-destructive">{uploadError}</p> : <p className="mt-2 hidden flex-wrap justify-between gap-1 px-1 text-[10px] text-muted-foreground md:flex"><span>{en ? "Up to 4 attachments · 8 MB each" : "最多 4 个附件 · 单个 ≤ 8 MB"}</span><span>{en ? "Enter to send · Shift + Enter for a new line" : "Enter 发送 · Shift + Enter 换行"}</span></p>}
         </> : null}
       >
-        <AgentConversationScrollArea className={`${dialogueStyles.conversation} min-h-0 flex-1 bg-transparent`} viewportClassName="flex min-w-0 flex-col gap-8 overscroll-contain py-5 sm:gap-10 sm:py-8" viewportProps={{ ref: conversationRef, onScroll: (event) => { const el = event.currentTarget; followMessages.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80; }, role: "region", "aria-label": en ? "Conversation" : "对话记录", "aria-busy": busy }}>
-          {agentStatus === "loading" ? <div className={dialogueStyles.activity}><LoadingState label={en ? `Connecting to ${personaName}…` : `正在连接${personaName}…`} /></div> : null}
+        <AgentConversationScrollArea className={`${dialogueStyles.conversation} min-h-0 flex-1 bg-transparent`} viewportClassName="flex min-w-0 flex-col gap-6 overscroll-contain py-3 md:gap-10 md:py-8" viewportProps={{ ref: conversationRef,
+          onScroll: (event) => { const el = event.currentTarget; followMessages.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80; if (el.scrollTop <= 0) setHeaderHidden(false); },
+          onWheel: (event) => readingGesture(event.deltaY),
+          onTouchStart: (event) => { touchY.current = event.touches[0]?.clientY ?? null; },
+          onTouchMove: (event) => { const y = event.touches[0]?.clientY; if (y !== undefined && touchY.current !== null && Math.abs(touchY.current - y) > 12) { readingGesture(touchY.current - y); touchY.current = y; } },
+          onTouchEnd: () => { touchY.current = null; },
+          onKeyDown: (event) => { if (event.target === event.currentTarget) { if (event.key === "PageDown" || event.key === "ArrowDown") readingGesture(20); if (["PageUp", "ArrowUp", "Home"].includes(event.key)) readingGesture(-20); } },
+          role: "region", "aria-label": en ? "Conversation" : "对话记录", "aria-busy": busy }}>
+          {agentStatus === "loading" ? <div className={dialogueStyles.activity}><LoadingState label={en ? "Connecting to Closure…" : "正在连接可露希尔…"} /></div> : null}
           {agentStatus === "unconfigured" ? <div className="my-auto grid justify-items-start gap-3 text-sm"><Bot className="size-6 text-muted-foreground" aria-hidden="true" /><h2 className="font-medium">{en ? "Assistant is not available yet" : "助理暂未就绪"}</h2><p className="text-muted-foreground">{en ? "The model connection needs to be configured. Please try again later." : "大模型连接尚未配置，请稍后重试。"}</p></div> : null}
           {agentStatus === "unavailable" ? <div role="alert" className="my-auto grid justify-items-start gap-3 text-sm"><h2 className="font-medium">{en ? "Could not connect to the assistant" : "暂时无法连接助理"}</h2><p className="text-muted-foreground">{en ? "Please refresh the page and try again." : "请刷新页面后重试。"}</p></div> : null}
           {agentStatus === "unauthenticated" ? <div className="my-auto grid justify-items-start gap-3 text-sm"><Bot className="size-6 text-muted-foreground" aria-hidden="true" /><h2 className="font-medium">{en ? "Sign in to meet Closure" : "登录后，与可露希尔开始对话"}</h2><p className="text-muted-foreground">{en ? "Use your website account to access the assistant." : "使用网站账号登录，即可让助理帮你诊断账号、规划基建。"}</p><Button nativeButton={false} render={<Link href="/account" />} size="sm" className="h-9 rounded-full px-4">{en ? "Sign in" : "前往账号管理登录"}</Button></div> : null}
-          {agentStatus === "payment_required" ? <div className="my-auto grid justify-items-start gap-3 text-sm"><h2 className="font-medium">{en ? "Add credits to get started" : "补充积分，开始对话"}</h2><p className="text-muted-foreground">{en ? "You need at least 1 credit to use the assistant." : "当前账号需至少有 1 积分才能使用助理。"}</p><Button nativeButton={false} render={<Link href="/billing" />} size="sm" className={billingStyles.pill}>{en ? "View payment plans" : "查看付费计划"}</Button></div> : null}
+          {agentStatus === "payment_required" ? <div className="my-auto grid justify-items-start gap-3 text-sm"><h2 className="font-medium">{en ? "Add credits to get started" : "补充积分，开始对话"}</h2><p className="text-muted-foreground">{en ? "You need at least 1 credit to use the assistant." : "当前账号需至少有 1 积分才能使用助理。"}</p>{billingAllowed ? <Button nativeButton={false} render={<Link href="/billing" />} size="sm" className={billingStyles.pill}>{en ? "View payment plans" : "查看付费计划"}</Button> : null}</div> : null}
 
           {messages.length === 0 && agentStatus === "ready" ? <div className="my-auto grid gap-7 py-4 sm:py-8">
             <div className="grid gap-3"><p className="flex items-center gap-2 text-xs text-muted-foreground"><Bot className="size-4" aria-hidden="true" />{activePersona?.kind === "builtin" ? activePersona.identity[en ? "en" : "zh"] : activePersona?.name ?? (en ? "CLOSURE / RHODES ISLAND" : "可露希尔 / 罗德岛")}</p><h2 className="text-2xl font-medium tracking-tight sm:text-3xl">{activePersona?.kind === "builtin" ? activePersona.welcome[en ? "en" : "zh"] : (en ? "Doctor, where shall we start?" : "博士，今天从哪里开始？")}</h2><p className="max-w-lg text-sm leading-6 text-muted-foreground">{en ? "Tell me what you want to improve. I can check your account, calculate a plan and send the result to your workbench." : "说说你想改善什么。我可以检查账号、计算方案，再把结果交给你的工作台。"}</p></div>
@@ -599,7 +659,7 @@ export function AgentChat({ conversationId, initialMessages, userName, userId }:
                 const active = turn.pending && status !== "submitted" && message.id === messages.at(-1)?.id;
                 const animate = !restoredMessageIds.has(message.id);
                 const activeAvatarIndex = active ? message.parts.reduce((last, part, index) =>
-                  (part.type === "text" && !!part.text.trim()) || (isToolPart(part) && part.type === "tool-solve_schedule" && part.state === "output-available" && !!agentArtifactFromOutput(part.output)) ? index : last, -1) : -1;
+                  part.type === "text" && part.state === "streaming" && !!part.text.trim() ? index : last, -1) : -1;
                 return message.parts.map((part, partIndex) => {
                 const key = `${message.id}:${partIndex}`;
                 if (part.type === "text") return part.text.trim() ? <ChatBubble key={key} speaker="assistant" name={personaName} label={en ? `${personaName} reply` : `${personaName}的回答`} avatar={<PersonaAvatar name={personaName} src={personaAvatar} mascot={personaMascot} active={partIndex === activeAvatarIndex} />}><StreamingText content={part.text} running={active && part.state === "streaming"} animate={animate} previousParts={message.parts.slice(0, partIndex).filter((previous) => previous.type === "text").map((previous) => previous.text)} /></ChatBubble> : null;

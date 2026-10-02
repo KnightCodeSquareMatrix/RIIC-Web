@@ -7,6 +7,9 @@
   "scripts": {
     "dev:admin-preview": "node scripts/start-admin-preview.mjs",
     "test:admin-preview": "node --test --experimental-strip-types src/admin-preview-policy.test.ts src/admin-preview-data.test.ts",
+    "test:feature-access": "node --test --experimental-strip-types --experimental-test-module-mocks src/server/auth/feature-access.test.ts src/server/billing/webhook.test.ts",
+    "test:agent-models": "node --test --experimental-strip-types src/server/agent/config.test.ts src/server/agent/stream-policy.test.ts",
+    "pretest:api-contract": "npm run test:feature-access && npm run test:agent-models",
     "dev": "next dev -H 0.0.0.0 -p 5174",
     "dev:full": "npm run dev",
     "build": "next build",
@@ -83,7 +86,7 @@
     "html2canvas-pro": "^2.4.2",
     "lucide-react": "^0.475.0",
     "motion": "^13.0.0",
-    "next": "16.3.4",
+    "next": "16.3.8",
     "next-intl": "^4.14.2",
     "overlayscrollbars": "^2.16.0",
     "pg": "^8.23.0",

@@ -36,6 +36,22 @@ async function emit(page: Page, parts: unknown[], done = false) {
   }, { parts, done });
 }
 
+test("revoking feature access removes navigation and stops the active conversation", async ({ page }) => {
+  await prepare(page);
+  let allowed = true;
+  await page.route("**/api/account/feature-access", (route) => route.fulfill({ json: { agent: allowed, billing: allowed } }));
+  await page.goto("/agent");
+  const input = page.getByRole("textbox", { name: "发给可露希尔的消息" });
+  await input.fill("等待权限检查");
+  await input.press("Enter");
+  await expect.poll(() => page.evaluate(() => (window as typeof window & { agentTestRequests: number }).agentTestRequests)).toBe(1);
+  allowed = false;
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(page.locator("[data-agent-chat]")).toHaveCount(0);
+  await expect(page.locator('[data-primary-navigation-page="agent"], [data-primary-navigation-page="billing"], [data-agent-history]')).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => (window as typeof window & { agentTestAborts: number }).agentTestAborts)).toBe(1);
+});
+
 for (const variant of ["closure", "silverash"]) {
 test(`${variant} animates only the latest reply avatar and settles when stopped`, async ({ page }) => {
   await prepare(page);
@@ -150,7 +166,7 @@ test("A timeout in the background clears loading and retries the same question, 
   await page.goto("/agent");
   await expect(page.getByRole("button", { name: "人格卡：重试人格" })).toBeVisible();
   await page.locator('input[aria-label="上传附件"]').setInputFiles({ name: "问题.txt", mimeType: "text/plain", buffer: Buffer.from("附件内容") });
-  const input = page.getByRole("textbox", { name: "发给可露希尔的消息" });
+  const input = page.getByRole("textbox", { name: "发给重试人格的消息" });
   await input.fill("超时测试问题");
   await input.press("Enter");
   await expect(page.locator('[data-agent-history] a[aria-label="超时测试问题"] [data-agent-history-loading]')).toBeVisible();
@@ -258,6 +274,7 @@ test("Long reasoning collapses without a gap and streamed text stays readable ac
   const intro = page.locator("[data-agent-streaming-text]").first();
   await expect(intro).toHaveText("我来查一下练卡资料。");
   await expect(intro.locator("[data-stream-chunk]")).toHaveCount(0);
+  await expect(intro.locator('xpath=ancestor::article').locator("[data-closure-fur-avatar]")).toHaveAttribute("data-fur-motion", "idle");
   // Reasoning is outside the bubble; measure the gap to its row, excluding
   // the speaker name and the bubble's own padding.
   await expect.poll(async () => (await intro.locator('xpath=ancestor::article').boundingBox())!.y - ((await first.boundingBox())!.y + (await first.boundingBox())!.height)).toBeLessThan(16);

@@ -31,6 +31,9 @@ const uncachedDocumentRoutes = [
 const documentCacheControl = "private, no-cache, no-store, max-age=0, must-revalidate";
 
 const nextConfig: NextConfig = {
+  // The framework badge sits over the mobile composer's touch targets in dev.
+  // Hide only that badge during E2E; application errors still surface normally.
+  devIndicators: process.env.RIIC_E2E === "1" ? false : undefined,
   distDir: process.env.RIIC_NEXT_DIST_DIR || ".next",
   allowedDevOrigins: ["127.0.0.1"],
   compress: true,
