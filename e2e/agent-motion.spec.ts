@@ -3,6 +3,8 @@ import { mockApis } from "./production-readiness.fixture";
 
 async function prepare(page: Page) {
   await mockApis(page);
+  await page.route("**/api/account/data-consent", route => route.fulfill({ json: { success: true, data: { current: false, cloudSyncEnabled: false } } }));
+  await page.route("**/api/billing", route => route.fulfill({ json: { data: { wallet: { totalPoints: 100 } } } }));
   await page.route("**/api/auth/get-session", (route) => route.fulfill({ json: {
     user: { id: "motion-user", name: "博士", email: "motion@example.test" }, session: { expiresAt: "2099-01-01T00:00:00Z" },
   } }));
@@ -99,7 +101,7 @@ test(`${variant} animates only the latest reply avatar and settles when stopped`
 });
 }
 
-test("Agent keeps streaming across routes, restores its live request, and saves while away", async ({ page }) => {
+test("Agent keeps streaming across routes and restores its live request", async ({ page }) => {
   await prepare(page);
   await page.goto("/agent");
   const input = page.getByRole("textbox", { name: "发给可露希尔的消息" });
@@ -115,8 +117,26 @@ test("Agent keeps streaming across routes, restores its live request, and saves 
   await page.locator('[data-primary-navigation-page="agent"]').click();
   await expect(page.getByText("正在生成。", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "停止", exact: true })).toBeVisible();
+  await emit(page, [{ type: "text-delta", id: "reply", delta: "后台回答完成。" }, { type: "text-end", id: "reply" }, { type: "finish", finishReason: "stop" }], true);
+  await expect(spinner).toHaveCount(0);
+  await expect(page.getByText("正在生成。后台回答完成。", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => (window as typeof window & { agentTestAborts: number }).agentTestAborts)).toBe(0);
+  expect(await page.evaluate(() => (window as typeof window & { agentTestRequests: number }).agentTestRequests)).toBe(1);
+});
+
+test("Agent saves a reply completed while away and restores it after reload", async ({ page }) => {
+  await prepare(page);
+  await page.goto("/agent");
+  const input = page.getByRole("textbox", { name: "发给可露希尔的消息" });
+  await input.fill("后台继续回答");
+  await input.press("Enter");
+  const spinner = page.locator('[data-agent-history] a[aria-label="后台继续回答"] [data-agent-history-loading]');
+  await expect(spinner).toBeVisible();
+  await emit(page, [{ type: "start", messageId: "background" }, { type: "text-start", id: "reply" }, { type: "text-delta", id: "reply", delta: "正在生成。" }]);
   await page.locator('[data-primary-navigation-page="recruitment"]').click();
   await expect(page).toHaveURL(/\/recruitment$/);
+  await expect(page.locator("[data-agent-chat]")).toHaveCount(0);
+  await expect(spinner).toBeVisible();
   await emit(page, [{ type: "text-delta", id: "reply", delta: "后台回答完成。" }, { type: "text-end", id: "reply" }, { type: "finish", finishReason: "stop" }], true);
   await expect(spinner).toHaveCount(0);
   await page.locator('[data-primary-navigation-page="agent"]').click();
