@@ -56,6 +56,9 @@ test("revoking feature access removes navigation and stops the active conversati
 
 for (const variant of ["closure", "silverash"]) {
 test(`${variant} animates only the latest reply avatar and settles when stopped`, async ({ page }) => {
+  // Software WebGL must present two separate reply avatars and their final
+  // settled frames. Retain normal per-assertion limits within this flow budget.
+  test.setTimeout(60_000);
   await prepare(page);
   if (variant === "silverash") {
     await page.route("**/api/agent/chat", route => route.fulfill({ json: { success: true, data: { enabled: true, personas: [{ id: "silverash" }] } } }));
@@ -215,6 +218,9 @@ test("A timeout in the background clears loading and retries the same question, 
 
 for (const scenario of [{ width: 1440, reducedMotion: "no-preference" }, { width: 375, reducedMotion: "reduce" }] as const) {
   test(`Operator portraits follow completed text and survive history (${scenario.width}px)`, async ({ page }) => {
+    // Two page loads plus streamed tool steps and persistence assertions share
+    // this budget. Keep each assertion's normal timeout on software-GPU CI.
+    test.setTimeout(60_000);
     await page.setViewportSize({ width: scenario.width, height: 900 });
     await page.emulateMedia({ reducedMotion: scenario.reducedMotion });
     await prepare(page);

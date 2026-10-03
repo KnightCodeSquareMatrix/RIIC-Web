@@ -1,17 +1,27 @@
 import {
-  CatmullRomCurve3, Color, DoubleSide, ExtrudeGeometry, Float32BufferAttribute, Group, InstancedBufferAttribute,
-  InstancedBufferGeometry, Mesh, MeshBasicMaterial, OrthographicCamera,
-  Scene, ShaderMaterial, Shape, SphereGeometry, TubeGeometry, Vector2, Vector3, WebGLRenderer,
-  type BufferGeometry,
+  AmbientLight, BufferGeometry, CatmullRomCurve3, Color, CubeUVReflectionMapping, DataTexture, DirectionalLight, ExtrudeGeometry, Float32BufferAttribute, Group, HalfFloatType, InstancedBufferAttribute,
+  InstancedBufferGeometry, LinearFilter, LinearSRGBColorSpace, LineBasicMaterial, LineSegments, Mesh, MeshBasicMaterial, MeshPhysicalMaterial, OrthographicCamera, RGBAFormat,
+  Scene, ShaderMaterial, Shape, SphereGeometry, TubeGeometry, Vector2, Vector3, Vector4, WebGLRenderer,
 } from "three";
+import { mergeVertices } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { createExusiaiCoat } from "./exusiai-coat";
+import { createExusiaiEmbroidery } from "./exusiai-embroidery";
 import { createSaileachCoat } from "./saileach-coat";
 import { createMountainCoat } from "./mountain-coat";
+import { DEFAULT_FUR_SETTINGS, type FurSettings } from "./fur-settings";
+import { EYE_SQUINT_HEIGHT, EYE_SQUINT_WIDTH, eyeSquintInfluence, eyeSurfaceZ, furGroom } from "./fur-detail";
+import { addEyeSquintMorph } from "./eye-squint";
 
 // Shell fur: layered geometry, procedural strand cutouts, bent tips and soft
 // directional/rim lighting. The reference uses this same rendering technique.
 const VERTEX = `
 attribute float aShell;
+attribute vec3 aGroom;
+uniform vec4 uEyes[2];
+uniform float uShells;
+uniform float uMess;
+uniform float uGravity;
+uniform float uWind;
 uniform float uLength;
 uniform float uTime;
 uniform float uMotion;
@@ -24,43 +34,76 @@ uniform vec2 uLag;
 varying vec3 vRoot;
 varying vec3 vNormal;
 varying vec3 vView;
+varying vec3 vSurfaceNormal;
+varying vec3 vCurl;
 varying float vHeight;
+varying float vBaseLayer;
 void main() {
-  float h = aShell;
+  // Classify the substrate by its integer instance index. GPU reciprocal math
+  // must not turn h=0 into a tiny positive value and discard painted details.
+  float baseLayer = step(uShells - 1.5, aShell);
+  float h = baseLayer > 0.5 ? 0.0 : 1.0 - aShell / (uShells - 1.0);
   vec3 n = normalize(normal);
-  vec3 comb = vec3(sin(position.y * 13.0 + position.z * 9.0),
-                   cos(position.x * 11.0 - position.z * 8.0),
-                   sin(position.x * 9.0 + position.y * 12.0)) * 0.22;
+  vec3 comb = aGroom;
   vec2 offset = position.xy - uTouch;
   float touch = uPress * exp(-dot(offset, offset) * 5.0);
-  vec3 bend = comb + vec3(uLag.x, -0.24 + uLag.y, 0.0);
+  vec3 bend = comb * uMess + vec3(uLag.x, -0.24 * uGravity + uLag.y, 0.0);
   bend.y += uGroomUp;
-  bend += vec3(sin(uTime * 1.7 + position.y * 3.0) * 0.13, 0.0, 0.0) * uMotion;
+  bend += vec3(sin(uTime * 1.7 + position.y * 3.0) * 0.13, 0.0, 0.0) * uMotion * uWind;
   bend.xy += offset * touch * 1.6;
   bend -= n * min(dot(bend, n), 0.0);
   float coatLength = uLength;
+  if (uCoatStyle > 1.5 && uCoatStyle < 2.5 && position.z > 0.0) {
+    // Use the original round ear's coverage so the inset stays white.
+    float front = smoothstep(0.20, 0.68, sqrt(max(0.0, 1.0 - dot(position.xy, position.xy))));
+    // White inner-ear fur is 0.48 at default settings: 3x the previous 0.16.
+    coatLength *= 1.0 + 5.0 * front;
+  }
+  if (position.z > 0.0) {
+    for (int i = 0; i < 2; i++) {
+      if (uEyes[i].z > 0.0) {
+        float eyeDistance = length((position.xy - uEyes[i].xy) / uEyes[i].zw);
+        coatLength *= smoothstep(0.9, 1.4, eyeDistance);
+      }
+    }
+  }
   if (uCoatStyle > 3.5 && position.z > 0.0) {
     coatLength *= texture2D(uPattern, vec2(position.x * 0.5 + 0.5, 0.5 - position.y * 0.5)).a;
   }
   vec3 p = position + normalize(n + bend * h) * coatLength * h * (1.0 - touch * 0.5);
   vec4 view = modelViewMatrix * vec4(p, 1.0);
   vRoot = position;
-  vNormal = normalize(normalMatrix * n);
+  vSurfaceNormal = n;
+  vCurl = aGroom.yzx;
+  vNormal = normalize(normalMatrix * normalize(n + bend * h * 0.35));
   vView = -view.xyz;
   vHeight = h;
+  vBaseLayer = baseLayer;
   gl_Position = projectionMatrix * view;
 }`;
 
 const FRAGMENT = `
+uniform vec4 uEmbroideredEye;
+uniform vec3 uFaceColor;
+uniform float uEyeSquint;
 uniform vec3 uRootColor;
 uniform vec3 uTipColor;
 uniform float uDensity;
+uniform float uThickness;
+uniform float uSphericalRoots;
+uniform float uCurl;
+uniform float uBrightness;
+uniform float uRim;
 uniform float uCoatStyle;
 uniform sampler2D uPattern;
+uniform vec4 uEyes[2];
 varying vec3 vRoot;
 varying vec3 vNormal;
 varying vec3 vView;
+varying vec3 vSurfaceNormal;
+varying vec3 vCurl;
 varying float vHeight;
+varying float vBaseLayer;
 vec3 hash33(vec3 p) {
   p = fract(p * vec3(0.1031, 0.1030, 0.0973));
   p += dot(p, p.yxz + 33.33);
@@ -83,22 +126,48 @@ void main() {
   bool patterned = uCoatStyle > 3.5 && vRoot.z > 0.0;
   if (patterned) painted = texture2D(uPattern, vec2(vRoot.x * 0.5 + 0.5, 0.5 - vRoot.y * 0.5));
   bool smoothFace = patterned && painted.a < 0.5;
-  if (smoothFace && h > 0.0) discard;
-  if (h > 0.0) {
-    vec3 x = vRoot * uDensity;
-    x += sin(vRoot.yzx * 9.0) * h * h * 0.55;
+  if (smoothFace && vBaseLayer < 0.5) discard;
+  float strandTone = 1.0;
+  float strandDepth = h;
+  if (vBaseLayer < 0.5) {
+    if (vRoot.z > 0.0) {
+      for (int i = 0; i < 2; i++) {
+        if (uEyes[i].z > 0.0 && length((vRoot.xy - uEyes[i].xy) / uEyes[i].zw) < 1.04) discard;
+      }
+    }
+    // Unit-sphere heads share one root field across all shells. Normalize the
+    // interpolated direction so triangle interiors cannot shift the root lattice.
+    // Wings, inset ears and tubes retain their authored, non-spherical surface.
+    vec3 surfaceNormal = uSphericalRoots > 0.5 ? normalize(vRoot) : normalize(vSurfaceNormal);
+    vec3 x = (uSphericalRoots > 0.5 ? surfaceNormal : vRoot) * uDensity;
+    float aa = max(length(fwidth(x)) * 0.5, 0.015);
+    x += (vCurl - surfaceNormal * dot(vCurl, surfaceNormal)) * h * h * uCurl;
     vec3 cell = floor(x - 0.5);
     float coverage = 0.0;
-    float aa = max(length(fwidth(x)) * 0.35, 0.015);
     for (int z = 0; z < 2; z++) {
       for (int y = 0; y < 2; y++) {
         for (int i = 0; i < 2; i++) {
           vec3 c = cell + vec3(float(i), float(y), float(z));
-          vec3 random = hash33(c);
-          float strandHeight = mix(0.45, 1.0, random.z);
-          float radius = mix(0.46, 0.12, clamp(h / strandHeight, 0.0, 1.0));
-          float distanceToStrand = length(x - (c + random));
-          coverage = max(coverage, (1.0 - smoothstep(radius - aa, radius + aa, distanceToStrand)) * step(h, strandHeight));
+          vec3 root = c + hash33(c);
+          float rootCoverage = 1.0;
+          if (uSphericalRoots > 0.5) {
+            float rootRadius = length(root);
+            if (abs(rootRadius - uDensity) > 0.5) continue;
+            root *= uDensity / max(rootRadius, 0.001);
+          } else {
+            float depthOffset = dot(x - root, surfaceNormal);
+            rootCoverage = 1.0 - smoothstep(0.45, 0.7, abs(depthOffset));
+          }
+          vec3 random = hash33(c + 71.3);
+          float strandHeight = mix(0.5, 1.0, random.z);
+          float tip = clamp(h / strandHeight, 0.0, 1.0);
+          vec3 delta = x - root;
+          vec3 lean = hash33(c + 23.7) - 0.5;
+          delta -= (lean - surfaceNormal * dot(lean, surfaceNormal)) * tip * tip * 0.65;
+          float radius = 0.38 * uThickness * mix(0.8, 1.0, random.x) * (1.0 - 0.72 * tip * tip);
+          float distanceToStrand = length(delta - surfaceNormal * dot(delta, surfaceNormal));
+          float strand = (1.0 - smoothstep(radius - aa, radius + aa, distanceToStrand)) * step(h, strandHeight) * rootCoverage;
+          if (strand > coverage) { coverage = strand; strandTone = 0.88 + random.y * 0.24; strandDepth = tip; }
         }
       }
     }
@@ -125,7 +194,7 @@ void main() {
   } else if (uCoatStyle > 1.5 && uCoatStyle < 2.5) {
     // Rounded ears: white front, dark upper back fading to pale gray below.
     float top = smoothstep(-0.75, 0.85, vRoot.y);
-    float front = smoothstep(0.20, 0.68, vRoot.z);
+    float front = vRoot.z > 0.0 ? smoothstep(0.20, 0.68, sqrt(max(0.0, 1.0 - dot(vRoot.xy, vRoot.xy)))) : 0.0;
     rootColor = mix(mix(vec3(0.48), vec3(0.065), top), vec3(0.78), front);
     tipColor = mix(mix(vec3(0.76), vec3(0.19), top), vec3(0.98), front);
   } else if (uCoatStyle > 2.5 && uCoatStyle < 3.5) {
@@ -148,58 +217,222 @@ void main() {
     rootColor = painted.rgb * 0.55;
     tipColor = painted.rgb;
   }
-  vec3 color = mix(rootColor, tipColor, h) * (0.6 + diffuse * 0.9) * mix(0.72, 1.0, h);
-  color += tipColor * rim * h * 0.5;
-  if (smoothFace) color = painted.rgb * (0.94 + diffuse * 0.06);
+  float depth = mix(h, strandDepth, 0.3);
+  vec3 sheen = mix(tipColor, vec3(1.0), 0.22);
+  vec3 softTip = mix(tipColor, sheen, smoothstep(0.7, 1.0, depth) * 0.3);
+  float sky = mix(0.78, 1.0, n.y * 0.5 + 0.5);
+  vec3 color = mix(rootColor, softTip, depth) * strandTone * (0.65 * uBrightness * sky + diffuse * 0.85) * mix(0.7, 1.0, depth);
+  color += sheen * rim * smoothstep(0.2, 1.0, depth) * 0.4 * uRim;
+  if (smoothFace) {
+    vec3 view = normalize(vView);
+    vec3 halfway = normalize(light + view);
+    float highlight = max(dot(n, halfway), 0.0);
+    // Fade the static eye backing into the face as the real lens and stitches
+    // close, so their original round silhouette cannot show through.
+    if (uEmbroideredEye.z > 0.0 && length((vRoot.xy - uEmbroideredEye.xy) / uEmbroideredEye.zw) < 1.10) {
+      painted.rgb = mix(painted.rgb, uFaceColor, smoothstep(0.0, 0.08, uEyeSquint));
+      painted.a *= 1.0 - smoothstep(0.0, 0.08, uEyeSquint);
+    }
+    // The alpha channel labels surface treatments below 0.5; fur remains 1.
+    // Details are shaded on the original curved substrate, not floating decals.
+    bool headband = uCoatStyle > 4.5 && uCoatStyle < 5.5;
+    vec2 weaveUV = vRoot.xy * (headband ? 600.0 : 850.0);
+    vec2 filtering = 1.0 - smoothstep(vec2(0.7), vec2(2.0), fwidth(weaveUV));
+    float weave = (sin(weaveUV.x) * filtering.x + sin(weaveUV.y) * filtering.y) * 0.025;
+    if (headband && painted.a > 0.34) {
+      // Warm satin metal: broad gold reflection with a small polished glint.
+      color = painted.rgb * (0.70 + diffuse * 0.35);
+      color += mix(painted.rgb, vec3(1.0), 0.35) * pow(highlight, 28.0) * 0.40;
+    } else if (headband && painted.a > 0.16) {
+      // Dyed woven ribbon, with the existing diamond embroidery left intact.
+      color = painted.rgb * (0.80 + diffuse * 0.28 + weave);
+      color += painted.rgb * rim * 0.12;
+    } else if (uCoatStyle > 3.5 && uCoatStyle < 4.5 && painted.a > 0.16) {
+      // Matte backing beneath actual raised thread geometry and short fibers.
+      color = painted.rgb * (0.84 + diffuse * 0.20);
+    } else {
+      // Soft matte face applique; embroidery has its own directional response.
+      color = painted.rgb * (0.85 + diffuse * 0.20 + weave * 0.5);
+      color += painted.rgb * pow(highlight, 8.0) * 0.025;
+    }
+  }
   gl_FragColor = vec4(color, 1.0);
   #include <colorspace_fragment>
 }`;
 
 export type FurAvatarPose = {
+  inertiaX?: number;
   yaw: number; pitch: number; press: number; time: number; active: boolean;
   lagX: number; lagY: number;
 };
 export type FurAvatarVariant = "closure" | "silverash" | "exusiai" | "saileach" | "mountain";
 
-function buildRenderer() {
+let environmentPixels: Promise<Uint16Array> | undefined;
+function loadEnvironment() {
+  return environmentPixels ??= (async () => {
+    // The exact RoomEnvironment PMREM, generated by bake-plush-environment.mjs.
+    // A fixed reflection map does not need hundreds of GPU passes per page load.
+    const response = await fetch("/textures/plush-room-environment.bin.gz");
+    if (!response.ok) throw new Error("Plush environment unavailable");
+    const blob = await response.blob();
+    const header = new Uint8Array(await blob.slice(0, 2).arrayBuffer());
+    const bytes = header[0] === 0x1f && header[1] === 0x8b
+      ? await new Response(blob.stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer()
+      : await blob.arrayBuffer();
+    if (bytes.byteLength !== 768 * 1024 * 4 * 2) throw new Error("Invalid plush environment");
+    return new Uint16Array(bytes);
+  })().catch(error => { environmentPixels = undefined; throw error; });
+}
+
+function buildRenderer(environmentData: Uint16Array) {
   const renderer = new WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true, powerPreference: "low-power" });
+  let disposed = false;
+  let pendingDraw: Promise<unknown> = Promise.resolve();
+  const compiledVariants = new Set<FurAvatarVariant>();
+  // A canvas copy waits synchronously for unfinished GPU work. On software WebGL
+  // that can freeze input for seconds. Fence the submitted frame and yield the
+  // main thread until it is ready; serialize copies because all portraits share it.
+  const waitForGpu = async () => {
+    const gl = renderer.getContext() as WebGL2RenderingContext;
+    const fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+    if (!fence) return false;
+    gl.flush();
+    const deadline = performance.now() + 30_000;
+    try {
+      while (!disposed && !gl.isContextLost()) {
+        const state = gl.clientWaitSync(fence, 0, 0);
+        if (state === gl.ALREADY_SIGNALED || state === gl.CONDITION_SATISFIED) return true;
+        if (state === gl.WAIT_FAILED || performance.now() > deadline) return false;
+        await new Promise(resolve => setTimeout(resolve, 16));
+      }
+      return false;
+    } finally { gl.deleteSync(fence); }
+  };
   renderer.setClearColor(0x000000, 0);
   const scene = new Scene();
+  const environment = new DataTexture(environmentData, 768, 1024, RGBAFormat, HalfFloatType);
+  environment.mapping = CubeUVReflectionMapping;
+  environment.colorSpace = LinearSRGBColorSpace;
+  environment.minFilter = environment.magFilter = LinearFilter;
+  environment.needsUpdate = true;
+  scene.environment = environment;
+  const keyLight = new DirectionalLight(0xffffff, 2.4);
+  keyLight.position.set(-2, 4, 5);
+  scene.add(keyLight, new AmbientLight(0xffffff, 0.35));
   const camera = new OrthographicCamera(-1.35, 1.35, 1.35, -1.35, 0.1, 20);
   camera.position.set(0, 0, 5);
   const rig = new Group();
   scene.add(rig);
   const geometries = new Set<BufferGeometry>();
-  const materials = new Set<ShaderMaterial | MeshBasicMaterial>();
+  const materials = new Set<ShaderMaterial | MeshBasicMaterial | MeshPhysicalMaterial | LineBasicMaterial>();
   const coats: ShaderMaterial[] = [];
+  const coatSettings = new Map<ShaderMaterial, { geometry: InstancedBufferGeometry; length: number; density: number }>();
   const textures: ReturnType<typeof createExusiaiCoat>[] = [];
-  const sphere = new SphereGeometry(1, 32, 24);
+  const sphere = new SphereGeometry(1, 48, 36);
   geometries.add(sphere);
 
   const fur = (base: BufferGeometry, length: number, density: number, coatStyle = 0, colors = ["#131d28", "#354654"], groomUp = 0) => {
     const geometry = new InstancedBufferGeometry();
     geometry.index = base.index;
     for (const [name, attribute] of Object.entries(base.attributes)) geometry.setAttribute(name, attribute);
-    const shells = 28;
-    geometry.setAttribute("aShell", new InstancedBufferAttribute(Float32Array.from({ length: shells }, (_, i) => i / (shells - 1)), 1));
-    geometry.instanceCount = shells;
+    if (!base.hasAttribute("aGroom")) {
+      const positions = base.getAttribute("position");
+      const grooming = new Float32Array(positions.count * 3);
+      for (let i = 0; i < positions.count; i++) grooming.set(furGroom(positions.getX(i), positions.getY(i), positions.getZ(i)), i * 3);
+      base.setAttribute("aGroom", new Float32BufferAttribute(grooming, 3));
+    }
+    geometry.setAttribute("aGroom", base.getAttribute("aGroom"));
+    // Allocate once; changing quality only changes the instance count/uniforms.
+    geometry.setAttribute("aShell", new InstancedBufferAttribute(Float32Array.from({ length: 64 }, (_, i) => i), 1));
+    geometry.instanceCount = DEFAULT_FUR_SETTINGS.shells;
     geometries.add(geometry);
     const material = new ShaderMaterial({
-      vertexShader: VERTEX, fragmentShader: FRAGMENT, side: DoubleSide,
+      // All coats use closed outward-facing meshes; their interior faces never
+      // contribute to the silhouette and need not shade the strand field.
+      vertexShader: VERTEX, fragmentShader: FRAGMENT,
       uniforms: {
+        uEyes: { value: [new Vector4(), new Vector4()] },
+        uEmbroideredEye: { value: new Vector4() }, uFaceColor: { value: new Color("#f1d4ac") }, uEyeSquint: { value: 0 },
+        uShells: { value: DEFAULT_FUR_SETTINGS.shells }, uMess: { value: 1 },
+        uGravity: { value: 1 }, uWind: { value: 1 }, uThickness: { value: 1 },
+        uCurl: { value: 1 }, uBrightness: { value: 1 }, uRim: { value: 1 },
         uLength: { value: length }, uTime: { value: 0 }, uMotion: { value: 0 },
         uPress: { value: 0 }, uTouch: { value: new Vector2() }, uLag: { value: new Vector2() },
         uRootColor: { value: new Color(colors[0]) }, uTipColor: { value: new Color(colors[1]) },
-        uDensity: { value: density }, uCoatStyle: { value: coatStyle },
+        uDensity: { value: density * 2.6 }, uCoatStyle: { value: coatStyle },
+        uSphericalRoots: { value: base === sphere ? 1 : 0 },
         uGroomUp: { value: groomUp },
         uPattern: { value: null },
       },
     });
     coats.push(material);
+    coatSettings.set(material, { geometry, length, density: density * 2.6 });
     materials.add(material);
     const mesh = new Mesh(geometry, material);
     mesh.frustumCulled = false;
     return mesh;
+  };
+
+  const eyeMasks = new Map<Mesh, { mask: Vector4; rest: Vector4 }>();
+  const addEyes = (parent: Group, head: Mesh<InstancedBufferGeometry, ShaderMaterial>, specs: { x: number; y: number; rx: number; ry: number; color: string; rimColor?: string }[]) => {
+    const center = head.position.toArray(), radii = head.scale.toArray();
+    return specs.map((spec, eyeIndex) => {
+      const { x, y, rx, ry } = spec;
+      const rimWidth = spec.rimColor ? 0.005 : 0;
+      head.material.uniforms.uEyes.value[eyeIndex].set((x - center[0]) / radii[0], (y - center[1]) / radii[1], (rx + rimWidth) / radii[0], (ry + rimWidth) / radii[1]);
+      const geometry = new BufferGeometry();
+      const positions: number[] = [], indices: number[] = [];
+      const centerZ = eyeSurfaceZ(x, y, center, radii);
+      const rings = 10, sides = 48;
+      for (let ring = 0; ring <= rings; ring++) {
+        const r = ring / rings;
+        for (let side = 0; side <= sides; side++) {
+          const angle = side / sides * Math.PI * 2;
+          const dx = Math.cos(angle) * rx * r, dy = Math.sin(angle) * ry * r;
+          // A shallow polished lens follows the sphere; no floating face plates.
+          positions.push(dx, dy, eyeSurfaceZ(x + dx, y + dy, center, radii) - centerZ + 0.004 + 0.035 * (1 - r * r));
+          if (ring < rings && side < sides) {
+            const a = ring * (sides + 1) + side, b = a + sides + 1;
+            indices.push(a, b, a + 1, a + 1, b, b + 1);
+          }
+        }
+      }
+      geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+      geometry.setIndex(indices);
+      geometry.computeVertexNormals();
+      addEyeSquintMorph(geometry, [x, y], center, radii, [x, y, centerZ]);
+      geometries.add(geometry);
+      const material = new MeshPhysicalMaterial({ color: spec.color, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.06, metalness: 0, envMapIntensity: 0.9 });
+      materials.add(material);
+      const eye = new Mesh(geometry, material);
+      eye.position.set(x, y, centerZ);
+      const mask = head.material.uniforms.uEyes.value[eyeIndex] as Vector4;
+      eyeMasks.set(eye, { mask, rest: mask.clone() });
+      if (spec.rimColor) {
+        const rimGeometry = new BufferGeometry();
+        const rimPositions: number[] = [], rimIndices: number[] = [];
+        for (let ring = 0; ring <= 1; ring++) for (let side = 0; side <= sides; side++) {
+          const angle = side / sides * Math.PI * 2;
+          const dx = Math.cos(angle) * (ring ? rx + rimWidth : rx * 0.98);
+          const dy = Math.sin(angle) * (ring ? ry + rimWidth : ry * 0.98);
+          rimPositions.push(dx, dy, eyeSurfaceZ(x + dx, y + dy, center, radii) - centerZ + 0.003);
+          if (!ring && side < sides) {
+            const next = side + sides + 1;
+            rimIndices.push(side, next, side + 1, side + 1, next, next + 1);
+          }
+        }
+        rimGeometry.setAttribute("position", new Float32BufferAttribute(rimPositions, 3));
+        rimGeometry.setIndex(rimIndices);
+        rimGeometry.computeVertexNormals();
+        addEyeSquintMorph(rimGeometry, [x, y], center, radii, [x, y, centerZ]);
+        const rimMaterial = new MeshPhysicalMaterial({ color: spec.rimColor, roughness: 0.85 });
+        geometries.add(rimGeometry);
+        materials.add(rimMaterial);
+        eye.add(new Mesh(rimGeometry, rimMaterial));
+      }
+      parent.add(eye);
+      return eye;
+    });
   };
 
   const body = fur(sphere, 0.12, 40);
@@ -207,16 +440,28 @@ function buildRenderer() {
   body.position.set(-0.03, -0.05, 0);
   rig.add(body);
 
-  // Three soft scallops on each wing, using the same blue-black coat.
+  // Rounded scallop tips and aligned tangents keep the fur flowing across joins.
   const outline = new Shape();
   outline.moveTo(0, 0.16);
-  outline.bezierCurveTo(0.2, 0.29, 0.48, 0.67, 0.71, 0.54);
-  outline.bezierCurveTo(0.61, 0.34, 0.65, 0.14, 0.91, -0.06);
-  outline.bezierCurveTo(0.69, -0.005, 0.58, -0.015, 0.59, -0.23);
-  outline.bezierCurveTo(0.43, -0.11, 0.28, -0.14, 0.26, -0.35);
-  outline.bezierCurveTo(0.16, -0.23, 0.07, -0.28, 0, -0.32);
+  outline.bezierCurveTo(0.2, 0.29, 0.45, 0.60, 0.65, 0.58);
+  outline.bezierCurveTo(0.73, 0.572, 0.68, 0.47, 0.65, 0.40);
+  outline.bezierCurveTo(0.59, 0.26, 0.71, 0.10, 0.84, -0.005);
+  outline.bezierCurveTo(0.94, -0.086, 0.78, -0.008, 0.68, -0.045);
+  outline.bezierCurveTo(0.59, -0.078, 0.615, -0.17, 0.58, -0.205);
+  outline.bezierCurveTo(0.545, -0.240, 0.50, -0.16, 0.41, -0.175);
+  outline.bezierCurveTo(0.32, -0.19, 0.30, -0.255, 0.27, -0.30);
+  outline.bezierCurveTo(0.24, -0.345, 0.22, -0.28, 0.14, -0.27);
+  outline.bezierCurveTo(0.07, -0.261, 0, -0.28, 0, -0.32);
   outline.closePath();
-  const wingGeometry = new ExtrudeGeometry(outline, { depth: 0.09, bevelEnabled: true, bevelThickness: 0.045, bevelSize: 0.04, bevelSegments: 3, steps: 1, curveSegments: 10 });
+  const extrusion = new ExtrudeGeometry(outline, { depth: 0.09, bevelEnabled: true, bevelThickness: 0.045, bevelSize: 0.022, bevelSegments: 5, steps: 1, curveSegments: 16 });
+  // ExtrudeGeometry splits vertices per face. Weld before recalculating normals
+  // so adjacent fur shells do not fan apart at the bevel/face seams.
+  // This procedural coat does not use UVs; removing them allows seam welding.
+  extrusion.deleteAttribute("normal");
+  extrusion.deleteAttribute("uv");
+  const wingGeometry = mergeVertices(extrusion, 1e-5);
+  extrusion.dispose();
+  wingGeometry.computeVertexNormals();
   wingGeometry.translate(0, 0, -0.045);
   geometries.add(wingGeometry);
   const wings = [-1, 1].map((side) => {
@@ -229,16 +474,7 @@ function buildRenderer() {
     return pivot;
   });
 
-  const eyeMaterial = new MeshBasicMaterial({ color: "#b63445" });
-  materials.add(eyeMaterial);
-  const eyes = [[-0.27, 0.08], [0.22, 0.04]].map(([x, y]) => {
-    const eye = new Mesh(sphere, eyeMaterial);
-    eye.position.set(x, y, 0.65);
-    eye.scale.set(0.09, 0.16, 0.045);
-    eye.rotation.z = -0.12;
-    rig.add(eye);
-    return eye;
-  });
+  const eyes = addEyes(rig, body, [[-0.27, 0.08], [0.22, 0.04]].map(([x, y]) => ({ x, y, rx: 0.09, ry: 0.16, color: "#b63445" })));
 
   // Build additional characters only when selected. All rigs share one WebGL
   // context and the base sphere; only the selected rig is submitted for drawing.
@@ -283,11 +519,24 @@ function buildRenderer() {
     ruff.position.set(-0.11, -0.38, 0);
     silverRig.add(ruff);
 
+    // A deeper, smooth bowl in the white front, with the rounded rim intact.
+    // Share the inset mesh across both ears; build it only once per character.
+    const earGeometry = sphere.clone();
+    earGeometry.deleteAttribute("aGroom");
+    const earPositions = earGeometry.getAttribute("position");
+    for (let i = 0; i < earPositions.count; i++) {
+      const x = earPositions.getX(i), y = earPositions.getY(i), z = earPositions.getZ(i);
+      if (z <= 0) continue;
+      const inset = Math.max(0, 1 - (x * x + y * y) / (0.85 * 0.85));
+      earPositions.setZ(i, z - 0.72 * inset * inset);
+    }
+    earGeometry.computeVertexNormals();
+    geometries.add(earGeometry);
     const ears = [-1, 1].map(side => {
       const pivot = new Group();
       pivot.position.set(-0.11 + side * 0.43, 0.42, -0.015);
       pivot.rotation.z = -side * 0.17;
-      const ear = fur(sphere, 0.08, 48, 2);
+      const ear = fur(earGeometry, 0.08, 48, 2);
       ear.scale.set(0.25, 0.27, 0.16);
       pivot.add(ear);
       silverRig.add(pivot);
@@ -310,16 +559,7 @@ function buildRenderer() {
     tail.add(tip);
     silverRig.add(tail);
 
-    const silverEyeMaterial = new MeshBasicMaterial({ color: "#42474b" });
-    materials.add(silverEyeMaterial);
-    const silverEyes = [-0.32, 0.09].map(x => {
-      const eye = new Mesh(sphere, silverEyeMaterial);
-      eye.position.set(x, -0.07, 0.59);
-      eye.scale.set(0.075, 0.115, 0.038);
-      eye.rotation.z = -0.08;
-      silverRig.add(eye);
-      return eye;
-    });
+    const silverEyes = addEyes(silverRig, head, [-0.32, 0.09].map(x => ({ x, y: -0.07, rx: 0.075, ry: 0.115, color: "#42474b" })));
     return { rig: silverRig, ears, tail, eyes: silverEyes, coats: coats.slice(firstCoat) };
   };
   let silverash: ReturnType<typeof buildSilverash> | undefined;
@@ -335,8 +575,8 @@ function buildRenderer() {
     head.position.set(0, -0.13, 0);
     angelRig.add(head);
 
-    // Saturated yellow fades to pale yellow on the halo and white on each wing.
-    const accessoryMaterial = new MeshBasicMaterial({ vertexColors: true });
+    // Keep the vertex-color gradients under the same polished finish as the eyes.
+    const accessoryMaterial = new MeshPhysicalMaterial({ vertexColors: true, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.06, metalness: 0, envMapIntensity: 0.9 });
     materials.add(accessoryMaterial);
     const paintAccessory = (geometry: BufferGeometry, axis: "y" | "z") => {
       geometry.computeBoundingBox();
@@ -345,7 +585,7 @@ function buildRenderer() {
       const positions = geometry.getAttribute("position");
       const colors = new Float32Array(positions.count * 3);
       const yellow = new Color("#ffe000");
-      const gradientEnd = new Color(axis === "z" ? "#fff2a8" : "#ffffff");
+      const gradientEnd = new Color(axis === "z" ? "#fff2a8" : "#ffe875");
       const color = new Color();
       for (let i = 0; i < positions.count; i++) {
         const coordinate = axis === "z" ? positions.getZ(i) : positions.getY(i);
@@ -387,15 +627,32 @@ function buildRenderer() {
       // A real circular ring, tilted behind the crown as in the supplied drawing.
       return new Vector3(Math.cos(angle) * 0.62, Math.sin(angle) * 0.62 * 0.55, Math.sin(angle) * 0.62 * Math.sqrt(1 - 0.55 ** 2));
     }), true);
-    const haloGeometry = new TubeGeometry(haloCurve, 48, 0.10, 10, true);
+    const haloGeometry = new TubeGeometry(haloCurve, 48, 0.085, 16, true);
     geometries.add(haloGeometry);
     paintAccessory(haloGeometry, "z");
-    const halo = new Mesh(haloGeometry, accessoryMaterial);
+    // Soften the ring's rim reflections without changing the glossy wings.
+    const haloMaterial = accessoryMaterial.clone();
+    haloMaterial.envMapIntensity = 0.55;
+    haloMaterial.clearcoatRoughness = 0.18;
+    haloMaterial.emissive.set("#fff2b3");
+    haloMaterial.emissiveIntensity = 0.10;
+    materials.add(haloMaterial);
+    const halo = new Mesh(haloGeometry, haloMaterial);
     halo.position.set(0.02, 0.70, -0.25);
     halo.rotation.z = 0;
     angelRig.add(halo);
 
-    return { rig: angelRig, wings: angelWings, halo, eyes: [] as Mesh[], coats: coats.slice(firstCoat) };
+    const angelEyes = addEyes(angelRig, head, [{ x: -0.25, y: -0.025, rx: 0.105, ry: 0.14, color: "#ffe02b" }]);
+    head.material.uniforms.uEmbroideredEye.value.copy(head.material.uniforms.uEyes.value[0]);
+    const embroidery = createExusiaiEmbroidery(coat);
+    embroidery.traverse(object => {
+      if (object instanceof Mesh || object instanceof LineSegments) {
+        geometries.add(object.geometry);
+        materials.add(object.material);
+      }
+    });
+    angelRig.add(embroidery);
+    return { rig: angelRig, wings: angelWings, halo, accessoryMaterial, embroidery, eyes: angelEyes, coats: coats.slice(firstCoat) };
   };
   let exusiai: ReturnType<typeof buildExusiai> | undefined;
   const buildSaileach = () => {
@@ -404,7 +661,7 @@ function buildRenderer() {
     scene.add(willowRig);
     const coat = createSaileachCoat();
     textures.push(coat);
-    const head = fur(sphere, 0.10, 42, 4, ["#b79a58", "#f4d68b"]);
+    const head = fur(sphere, 0.10, 42, 5, ["#b79a58", "#f4d68b"]);
     head.material.uniforms.uPattern.value = coat;
     head.scale.set(0.72, 0.70, 0.72);
     head.position.set(0, -0.08, 0);
@@ -466,7 +723,8 @@ function buildRenderer() {
     tie.position.copy(braidCurve.getPoint(0.9));
     braid.add(tie);
     willowRig.add(braid);
-    return { rig: willowRig, braid, eyes: [] as Mesh[], coats: coats.slice(firstCoat) };
+    const willowEyes = addEyes(willowRig, head, [-0.22, 0.22].map(x => ({ x, y: -0.112, rx: 0.087, ry: 0.124, color: "#97c9f2", rimColor: "#526481" })));
+    return { rig: willowRig, braid, eyes: willowEyes, coats: coats.slice(firstCoat) };
   };
   let saileach: ReturnType<typeof buildSaileach> | undefined;
   const buildMountain = () => {
@@ -515,7 +773,8 @@ function buildRenderer() {
     tailTip.position.copy(curve.getPoint(1));
     tail.add(tailTip);
     tigerRig.add(tail);
-    return { rig: tigerRig, ears, tail, eyes: [] as Mesh[], coats: coats.slice(firstCoat) };
+    const tigerEyes = addEyes(tigerRig, head, [-0.23, 0.23].map(x => ({ x, y: -0.085, rx: 0.084, ry: 0.107, color: "#78aabd" })));
+    return { rig: tigerRig, ears, tail, eyes: tigerEyes, coats: coats.slice(firstCoat) };
   };
   let mountain: ReturnType<typeof buildMountain> | undefined;
   let lost = false;
@@ -523,23 +782,36 @@ function buildRenderer() {
   const contextRestored = () => { lost = false; };
   renderer.domElement.addEventListener("webglcontextlost", contextLost);
   renderer.domElement.addEventListener("webglcontextrestored", contextRestored);
-  let size = 0;
+  let size = 0, width = 0;
   return {
-    draw(context: CanvasRenderingContext2D, pixels: number, pose: FurAvatarPose, variant: FurAvatarVariant = "closure") {
-      if (lost) return false;
-      if (size !== pixels) { renderer.setSize(pixels, pixels, false); size = pixels; }
+    draw(context: CanvasRenderingContext2D, pixels: number, pose: FurAvatarPose, variant: FurAvatarVariant = "closure", settings: FurSettings = DEFAULT_FUR_SETTINGS, isCurrent = () => true) {
+      const canvasWidth = context.canvas.width;
+      const draw = async () => {
+      if (lost || disposed || !isCurrent() || context.canvas.width !== canvasWidth || context.canvas.height !== pixels) return false;
+      if (size !== pixels || width !== canvasWidth) {
+        renderer.setSize(canvasWidth, pixels, false);
+        size = pixels;
+        width = canvasWidth;
+        camera.left = -1.35 * canvasWidth / pixels;
+        camera.right = 1.35 * canvasWidth / pixels;
+        camera.updateProjectionMatrix();
+      }
       const press = Math.max(0, pose.press);
+      const squint = eyeSquintInfluence(pose.press);
       const snow = variant === "silverash" ? (silverash ??= buildSilverash()) : undefined;
       const angel = variant === "exusiai" ? (exusiai ??= buildExusiai()) : undefined;
       const willow = variant === "saileach" ? (saileach ??= buildSaileach()) : undefined;
       const tiger = variant === "mountain" ? (mountain ??= buildMountain()) : undefined;
+      // Subpixel fuzz is noisy on tiny chat portraits; the stitches remain.
+      if (angel) for (const child of angel.embroidery.children) if (child instanceof LineSegments) child.visible = pixels >= 240;
       rig.visible = !snow && !angel && !willow && !tiger;
       if (silverash) silverash.rig.visible = !!snow;
       if (exusiai) exusiai.rig.visible = !!angel;
       if (saileach) saileach.rig.visible = !!willow;
       if (mountain) mountain.rig.visible = !!tiger;
       const activeRig = snow?.rig ?? angel?.rig ?? willow?.rig ?? tiger?.rig ?? rig;
-      activeRig.rotation.set(pose.pitch, pose.yaw, 0, "YXZ");
+      activeRig.rotation.set(pose.pitch + settings.pitch * Math.PI / 180, pose.yaw + settings.yaw * Math.PI / 180, -(pose.inertiaX ?? 0) * 0.08, "YXZ");
+      if (camera.zoom !== settings.zoom) { camera.zoom = settings.zoom; camera.updateProjectionMatrix(); }
       const avatarScale = willow ? 1.16 : snow || tiger ? 1.10 : angel ? 1.05 : 1;
       activeRig.scale.set(avatarScale * (1 + pose.press * 0.04), avatarScale * (1 - pose.press * 0.07), avatarScale);
       if (snow) {
@@ -569,25 +841,69 @@ function buildRenderer() {
           wings[i].rotation.z = side * (pose.lagY * 0.25 - press * 0.08);
         }
       }
-      for (const eye of snow?.eyes ?? angel?.eyes ?? willow?.eyes ?? tiger?.eyes ?? eyes) eye.scale.y = (snow ? 0.115 : angel ? 0.14 : 0.16) * (1 - press * 0.38);
+      // Stronger eye compression follows the same spring as the body.
+      for (const eye of snow?.eyes ?? angel?.eyes ?? willow?.eyes ?? tiger?.eyes ?? eyes) {
+        eye.morphTargetInfluences![0] = squint;
+        for (const child of eye.children) if (child instanceof Mesh && child.morphTargetInfluences) child.morphTargetInfluences[0] = squint;
+        const { mask, rest } = eyeMasks.get(eye)!;
+        mask.z = rest.z * (1 + (EYE_SQUINT_WIDTH - 1) * squint);
+        mask.w = rest.w * (1 + (EYE_SQUINT_HEIGHT - 1) * squint);
+        eye.material.roughness = settings.eyeRoughness;
+        eye.material.clearcoat = settings.eyeClearcoat;
+      }
+      if (angel) for (const child of angel.embroidery.children) {
+        if ((child instanceof Mesh || child instanceof LineSegments) && child.morphTargetInfluences) child.morphTargetInfluences[0] = squint;
+      }
+      if (angel) {
+        angel.accessoryMaterial.roughness = settings.eyeRoughness;
+        angel.accessoryMaterial.clearcoat = settings.eyeClearcoat;
+        angel.halo.material.roughness = Math.max(0.4, settings.eyeRoughness);
+        angel.halo.material.clearcoat = settings.eyeClearcoat * 0.7;
+      }
       for (const material of snow?.coats ?? angel?.coats ?? willow?.coats ?? tiger?.coats ?? closureCoats) {
+        const base = coatSettings.get(material)!;
+        base.geometry.instanceCount = settings.shells;
+        material.uniforms.uShells.value = settings.shells;
+        material.uniforms.uLength.value = base.length * settings.length;
+        material.uniforms.uDensity.value = base.density * settings.density;
+        material.uniforms.uThickness.value = settings.thickness;
+        material.uniforms.uMess.value = settings.mess;
+        material.uniforms.uCurl.value = settings.curl;
+        material.uniforms.uGravity.value = settings.gravity;
+        material.uniforms.uBrightness.value = settings.brightness;
+        material.uniforms.uRim.value = settings.rim;
+        material.uniforms.uWind.value = settings.wind;
         material.uniforms.uTime.value = pose.time;
         material.uniforms.uMotion.value = pose.active ? 1 : 0;
         material.uniforms.uPress.value = press;
+        material.uniforms.uEyeSquint.value = squint;
         material.uniforms.uTouch.value.set(pose.yaw * 2, -pose.pitch * 2);
-        material.uniforms.uLag.value.set(pose.lagX * 4, pose.lagY * 4);
+        material.uniforms.uLag.value.set(pose.lagX * 4 + (pose.inertiaX ?? 0), pose.lagY * 4);
+      }
+      if (!compiledVariants.has(variant)) {
+        await renderer.compileAsync(activeRig, camera, scene);
+        compiledVariants.add(variant);
+        if (disposed || !isCurrent()) return false;
       }
       renderer.render(scene, camera);
-      context.clearRect(0, 0, pixels, pixels);
-      context.drawImage(renderer.domElement, 0, 0, pixels, pixels);
+      if (!await waitForGpu() || disposed || !isCurrent()) return false;
+      if (context.canvas.width !== canvasWidth || context.canvas.height !== pixels) return false;
+      context.clearRect(0, 0, canvasWidth, pixels);
+      context.drawImage(renderer.domElement, 0, 0, canvasWidth, pixels);
       return true;
+      };
+      const result = pendingDraw.then(draw);
+      pendingDraw = result.catch(() => false);
+      return result;
     },
     dispose() {
+      disposed = true;
       renderer.domElement.removeEventListener("webglcontextlost", contextLost);
       renderer.domElement.removeEventListener("webglcontextrestored", contextRestored);
       for (const geometry of geometries) geometry.dispose();
       for (const material of materials) material.dispose();
       for (const texture of textures) texture.dispose();
+      environment.dispose();
       renderer.dispose();
       renderer.forceContextLoss();
     },
@@ -597,8 +913,11 @@ function buildRenderer() {
 // ONE shared WebGL renderer; historical portraits use cheap 2D canvas copies.
 let shared: ReturnType<typeof buildRenderer> | undefined;
 let users = 0;
-export function acquireFurRenderer() {
-  shared ??= buildRenderer();
+let disposalTimer: ReturnType<typeof setTimeout> | undefined;
+export async function acquireFurRenderer() {
+  const environmentData = await loadEnvironment();
+  clearTimeout(disposalTimer);
+  shared ??= buildRenderer(environmentData);
   const resource = shared;
   users++;
   let released = false;
@@ -607,7 +926,11 @@ export function acquireFurRenderer() {
     release() {
       if (released) return;
       released = true;
-      if (--users === 0) { resource.dispose(); shared = undefined; }
+      // Dialog close/reopen and route changes often overlap by a few frames.
+      // Keep the idle resource briefly to avoid rebuilding shaders and the PMREM.
+      if (--users === 0) disposalTimer = setTimeout(() => {
+        if (users === 0 && shared === resource) { resource.dispose(); shared = undefined; }
+      }, 5_000);
     },
   };
 }
