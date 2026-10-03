@@ -15,7 +15,7 @@ function tokens(nodes: MarkdownNode<InlineToken[]>[]): InlineToken[] {
 const mentions = (content: string, streaming = false, previousParts: string[] = []) => tokens(prepareAgentMarkdown(content, streaming, previousParts)).flatMap((token) => token.mentions);
 
 test("full names win over prefixes and aliases share an operator identity", () => {
-  assert.deepEqual(findOperatorMentions("红云、红、阿米娅（近卫）、阿米娅、假干员").map((item) => item.name), ["红云", "红", "阿米娅"]);
+  assert.deepEqual(findOperatorMentions("红云、红、阿米娅（近卫）、阿米娅、假干员").map((item) => item.name), ["红云", "红", "阿米娅", "阿米娅"]);
   const matched = findOperatorMentions("建议优先培养能天使，再部署银灰。");
   assert.deepEqual(matched.map((item) => item.name), ["能天使", "银灰"]);
   assert.equal(matched[0].start, 6);
@@ -39,10 +39,11 @@ test("Markdown excludes code and links without consuming their first occurrence"
   assert.equal(mentions("[能天使](javascript:alert) [银灰](/images/x)").length, 0);
 });
 
-test("blocks, formats and tool-separated parts share one cap and first occurrence", () => {
+test("every occurrence across blocks, formats and tool parts gets a portrait within the message cap", () => {
   const content = "# 能天使\n\n> 银灰\n\n- 阿米娅\n- 红云\n\n| 干员 | 备注 |\n| --- | --- |\n| 可露希尔 | 能天使 |\n\n**红**，阿米娅。";
-  assert.deepEqual(mentions(content).map((item) => item.name), ["能天使", "银灰", "阿米娅", "红云", "可露希尔", "红"]);
-  assert.deepEqual(mentions(content, false, ["能天使。", "银灰，阿米娅（医疗）。"]).map((item) => item.name), ["红云", "可露希尔", "红"]);
+  const expected = ["能天使", "银灰", "阿米娅", "红云", "可露希尔", "能天使", "红", "阿米娅"];
+  assert.deepEqual(mentions(content).map((item) => item.name), expected);
+  assert.deepEqual(mentions(content, false, ["能天使。", "银灰，阿米娅（医疗）。"]).map((item) => item.name), expected);
   const allNames = catalogue.map((operator) => operator.name).join("、");
   assert.equal(mentions(allNames).length, MAX_OPERATOR_PORTRAITS);
   assert.equal(mentions(allNames, false, [allNames]).length, 0);
@@ -56,12 +57,34 @@ test("streaming waits for a closed block and never treats a trailing newline as 
   assert.equal(mentions("- 能天使\n\n", true).length, 1);
 });
 
-test("source text and cached results are unaffected by per-message deduplication", () => {
+test("source text and cached results are unaffected by the per-message portrait limit", () => {
   const content = "能天使，能天使；阿米娅（近卫）。";
   const first = prepareAgentMarkdown(content);
   assert.equal(tokens(first).map((token) => token.text).join(""), content);
-  assert.equal(mentions(content, false, [content]).length, 0);
-  assert.equal(mentions(content).length, 2);
+  assert.equal(mentions(content, false, [content]).length, 3);
+  assert.equal(mentions(content).length, 3);
   assert.deepEqual(prepareAgentMarkdown(content), first);
-  assert.equal(findOperatorMentions("能天使，".repeat(10_000)).length, 1);
+  assert.equal(findOperatorMentions("能天使，".repeat(10_000)).length, MAX_OPERATOR_PORTRAITS);
+});
+
+test("explicit tags resolve short names, repeated mentions and aliases without changing offsets", () => {
+  const source = "让[干员:山]先守住，再由**[干员:红]**支援。[干员:山]的配置和[干员:阿米娅（医疗）]不同。";
+  const inline = tokens(prepareAgentMarkdown(source));
+  assert.equal(inline.map(token => token.text).join(""), "让山先守住，再由红支援。山的配置和阿米娅（医疗）不同。");
+  assert.deepEqual(inline.flatMap(token => token.mentions.map(mention => token.text.slice(mention.start, mention.end))), ["山", "红", "山", "阿米娅（医疗）"]);
+  assert.deepEqual(mentions("| 干员 | 对照 |\n| --- | --- |\n| [干员:山] | [干员:山] |").map(item => item.name), ["山", "山"]);
+});
+
+test("tags use only catalogue portraits and never transform code, URLs or unknown names", () => {
+  const source = "[干员:不存在的银灰]、[干员:https://example.test/avatar.png]、[干员:<img src=x>]、[干员:红色]";
+  assert.equal(mentions(source).length, 0);
+  const unknown = tokens(prepareAgentMarkdown(source));
+  assert.equal(unknown.map(token => token.text).join(""), "不存在的银灰、https://example.test/avatar.png、<img src=x>、红色");
+  assert.equal(unknown.some(token => token.kind === "link"), false);
+  assert.equal(mentions("[干员:银灰](https://example.test)").length, 0);
+  assert.equal(mentions("`[干员:山]`\n\n```text\n[干员:红]\n```\n\n[山](https://example.test/干员) https://example.test/山").length, 0);
+  assert.equal(mentions("[干员:山", true).length, 0);
+  assert.equal(mentions("[干员:山]", true).length, 0);
+  assert.deepEqual(mentions("[干员:山]\n\n[干员:红]", true).map(item => item.name), ["山"]);
+  assert.deepEqual(mentions("[干员:山]\n\n[干员:红]").map(item => item.name), ["山", "红"]);
 });

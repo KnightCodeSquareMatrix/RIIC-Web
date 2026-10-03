@@ -13,17 +13,34 @@ test("payment callback uses only verified provider data and rejects forged payme
   t.after(() => { process.env = originalEnv; });
   let verified: AfdianOrder | null = null;
   const writes: unknown[] = [];
+  let queries = 0;
   await t.mock.module(new URL("../api-contract.ts", import.meta.url), { namedExports: {
     PublicApiError: class extends Error {}, createRequestId: () => "test",
     readJsonBody: (request: Request) => request.json(),
     failureResponse: () => Response.json({}, { status: 403 }),
   } });
-  await t.mock.module(new URL("./afdian.ts", import.meta.url), { namedExports: { findAfdianOrderByOutTradeNo: async () => verified } });
+  await t.mock.module(new URL("./afdian.ts", import.meta.url), { namedExports: { findAfdianOrderByOutTradeNo: async () => { queries++; return verified; } } });
   await t.mock.module(new URL("./service.ts", import.meta.url), { namedExports: {
     fulfillBillingOrder: async (input: unknown) => { writes.push(input); return { idempotent: false }; },
   } });
   process.env.AFDIAN_WEBHOOK_SECRET = "";
   const { POST } = await import("../../app/api/billing/webhooks/afdian/route.ts");
+  const sample = { ec: 200, data: { type: "order", order: {
+    out_trade_no: "202106232138371083454010626", user_id: "adf397fe8374811eaacee52540025c377",
+    plan_id: "a45353328af911eb973052540025c377", status: 2, total_amount: "5.00", remark: "",
+  } } };
+  for (const body of [undefined, "{}", JSON.stringify(sample)]) {
+    const probe = await POST(new Request("https://riic.test/api/billing/webhooks/afdian", { method: "POST", body }));
+    assert.equal(probe.status, 200);
+    const payload = await probe.json();
+    assert.equal(payload.ec, 200);
+    assert.equal(payload.data.accepted, false, "health/test acknowledgments must never represent a fulfilled payment");
+  }
+  assert.equal(queries, 0, "probes must not depend on upstream API availability");
+  assert.equal(writes.length, 0);
+  const alteredSample = { ...sample, custom_order_id: "riic-forged" };
+  assert.equal((await POST(new Request("https://riic.test/api/billing/webhooks/afdian", { method: "POST", body: JSON.stringify(alteredSample) }))).status, 403);
+  assert.equal(writes.length, 0, "adding a payment reference must not bypass verification");
   const request = (trade = "real-trade") => new Request("https://riic.test/api/billing/webhooks/afdian", {
     method: "POST", body: JSON.stringify({ custom_order_id: "riic-forged", out_trade_no: trade, status: 2,
       data: { order: { custom_order_id: "riic-forged", total_amount: "999", status: 2 } } }),

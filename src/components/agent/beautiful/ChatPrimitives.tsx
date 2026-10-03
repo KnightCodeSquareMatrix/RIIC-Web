@@ -13,7 +13,7 @@ import dialogue from "./Dialogue.module.css";
 export function ChatPanel({ children, composer }: { children: ReactNode; composer: ReactNode }) {
   return <div className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-transparent" data-agent-panel>
     {children}
-    {composer ? <div className={`${styles.composerEnter} relative z-10 shrink-0 px-2 pb-2 pt-4 sm:px-4 sm:pb-3`} data-agent-composer>{composer}</div> : null}
+    {composer ? <div className={`${styles.composerEnter} relative z-10 shrink-0 pt-2 md:px-4 md:pb-3 md:pt-4`} data-agent-composer>{composer}</div> : null}
   </div>;
 }
 
@@ -115,10 +115,10 @@ type PromptBarProps = {
 export function PromptBar({ input, attachments, toolbar, busy, disabled, sendLabel, stopLabel, onSend, onStop, onDrop }: PromptBarProps) {
   return <div className={`${dialogue.prompt} relative flex min-w-0 flex-col gap-2 p-3 sm:p-4 focus-within:ring-2 focus-within:ring-ring/25`} onDragOver={(event) => event.preventDefault()} onDrop={onDrop} data-agent-prompt-bar>
     <div className={dialogue.promptDecoration} aria-hidden="true" data-agent-glass />
-    {attachments}
-    <textarea {...input} className="h-20 w-full min-w-0 resize-none overflow-y-auto border-0 bg-transparent px-1 py-1 text-sm leading-relaxed text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-50" />
-    <div className="flex min-w-0 items-end justify-between gap-2">
-      <div className="flex min-w-0 flex-wrap items-center gap-1">{toolbar}</div>
+    {attachments ? <div className="hidden md:block">{attachments}</div> : null}
+    <textarea {...input} className={dialogue.promptInput} />
+    <div className={dialogue.promptControls}>
+      <div className={dialogue.promptTools}>{toolbar}</div>
       <button type="button" aria-label={busy ? stopLabel : sendLabel} title={busy ? stopLabel : sendLabel} disabled={!busy && disabled} onClick={busy ? onStop : onSend} className={`${dialogue.sendButton} flex size-10 shrink-0 items-center justify-center rounded-full transition-[filter,transform] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring enabled:active:scale-95 motion-reduce:transition-none`}>
         {busy ? <Square className="size-3.5 fill-current" aria-hidden="true" /> : <ArrowUp className="size-4" aria-hidden="true" />}
       </button>
