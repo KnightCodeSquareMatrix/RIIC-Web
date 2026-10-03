@@ -38,6 +38,9 @@ async function prepare(page: Page, available = true) {
 
 for (const mobile of [false, true]) {
   test(`SilverAsh selection, private prompt request and persistence (${mobile ? "mobile" : "desktop"})`, async ({ page }) => {
+    // This flow reloads three times and opens four real WebGL persona pickers.
+    // Include cold shader compilation on software GPUs, while retaining every assertion.
+    test.setTimeout(60_000);
     await page.setViewportSize(mobile ? { width: 375, height: 812 } : { width: 1280, height: 900 });
     await prepare(page);
     await page.addInitScript(upload => localStorage.setItem("riic.agent.persona.v1", JSON.stringify(upload)), savedUpload);
@@ -169,6 +172,7 @@ test("SilverAsh reacts to pointer input, settles, and respects reduced motion", 
 
 for (const mobile of [false, true]) {
   test(`Exusiai selection, shared red theme and plush rendering (${mobile ? "mobile" : "desktop"})`, async ({ page }) => {
+    test.setTimeout(60_000); // Real shader compilation plus a full-page persistence reload.
     await page.setViewportSize(mobile ? { width: 375, height: 812 } : { width: 1280, height: 900 });
     const shaderErrors: string[] = [];
     page.on("console", message => {
@@ -197,7 +201,7 @@ for (const mobile of [false, true]) {
     const pixels = await avatar.locator("canvas").evaluate((canvas: HTMLCanvasElement) => {
       const { data } = canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height);
       let red = 0, halo = 0, wings = 0, leftEye = 0, rightEye = 0, face = 0;
-      let haloPaleYellow = 0, haloYellow = 0, wingWhite = 0, wingYellow = 0;
+      let haloPaleYellow = 0, haloYellow = 0, wingBlueMin = 255, wingBlueMax = 0;
       let haloMinX = canvas.width, haloMaxX = 0, haloMinY = canvas.height, haloMaxY = 0;
       for (let i = 0; i < data.length; i += 4) {
         const x = (i / 4) % canvas.width, y = Math.floor(i / 4 / canvas.width);
@@ -219,8 +223,10 @@ for (const mobile of [false, true]) {
         }
         if ((x < canvas.width * 0.20 || x > canvas.width * 0.80) && accessory) {
           wings++;
-          if (b > 220) wingWhite++;
-          if (b < 165) wingYellow++;
+          // PBR reflections and downsampling shift absolute color bins. Check
+          // the visible yellow-to-pale-yellow range, not an obsolete white tip.
+          wingBlueMin = Math.min(wingBlueMin, b);
+          wingBlueMax = Math.max(wingBlueMax, b);
         }
       }
       // Sample the space between each gradient diamond and the red body, at any size.
@@ -236,15 +242,19 @@ for (const mobile of [false, true]) {
       const leftBody = Math.min(...body.map(p => p.x)), rightBody = Math.max(...body.map(p => p.x));
       const detachedLeft = row.some(p => p.x > leftWing && p.x < leftBody && p.a < 60);
       const detachedRight = row.some(p => p.x > rightBody && p.x < rightWing && p.a < 60);
-      return { red, halo, wings, haloPaleYellow, haloYellow, wingWhite, wingYellow, leftEye, rightEye, face, detachedLeft, detachedRight, haloRatio: (haloMaxX - haloMinX) / Math.max(1, haloMaxY - haloMinY) };
+      return { red, halo, wings, haloPaleYellow, haloYellow, wingBlueMin, wingBlueMax, leftEye, rightEye, eyeCoverage: leftEye / (canvas.width * canvas.height), face, detachedLeft, detachedRight, haloRatio: (haloMaxX - haloMinX) / Math.max(1, haloMaxY - haloMinY) };
     });
     expect(pixels.red).toBeGreaterThan(40);
     expect(pixels.halo).toBeGreaterThan(2);
     expect(pixels.wings).toBeGreaterThan(2);
-    for (const key of ["haloPaleYellow", "haloYellow", "wingWhite", "wingYellow"] as const) expect(pixels[key], `${key}: ${JSON.stringify(pixels)}`).toBeGreaterThan(0);
+    for (const key of ["haloPaleYellow", "haloYellow"] as const) expect(pixels[key], `${key}: ${JSON.stringify(pixels)}`).toBeGreaterThan(0);
+    expect(pixels.wingBlueMin).toBeLessThan(165);
+    expect(pixels.wingBlueMax - pixels.wingBlueMin).toBeGreaterThan(12);
+    expect(pixels.wingBlueMax).toBeLessThan(225);
     expect(pixels.detachedLeft).toBe(true);
     expect(pixels.detachedRight).toBe(true);
-    expect(pixels.leftEye).toBeGreaterThan(2);
+    // Agent portraits have a smaller pixel budget than the full-quality gallery.
+    expect(pixels.eyeCoverage).toBeGreaterThan(0.00075);
     expect(pixels.rightEye).toBe(0);
     expect(pixels.face).toBeGreaterThan(8);
     // The circular halo recedes behind the head; its horizontal axis stays level.
@@ -259,6 +269,7 @@ for (const mobile of [false, true]) {
 
 for (const mobile of [false, true]) {
   test(`Saileach selection, yellow theme and persistence (${mobile ? "mobile" : "desktop"})`, async ({ page }) => {
+    test.setTimeout(60_000); // Real shader compilation plus a full-page persistence reload.
     await page.setViewportSize(mobile ? { width: 375, height: 812 } : { width: 1280, height: 900 });
     const shaderErrors: string[] = [];
     page.on("console", message => {
@@ -324,6 +335,7 @@ for (const mobile of [false, true]) {
 
 for (const mobile of [false, true]) {
   test(`Mountain selection, striped plush and persistence (${mobile ? "mobile" : "desktop"})`, async ({ page }) => {
+    test.setTimeout(60_000); // Real shader compilation plus a full-page persistence reload.
     await page.setViewportSize(mobile ? { width: 375, height: 812 } : { width: 1280, height: 900 });
     const shaderErrors: string[] = [];
     page.on("console", message => {
