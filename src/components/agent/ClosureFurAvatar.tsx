@@ -151,12 +151,15 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
       pressVelocity = decay * ((amplitude * frequency - 5 * offset) * cosine - (offset * frequency + 5 * amplitude) * sine);
       if (!animate) { yaw = 0; pitch = 0; press = 0; pressVelocity = 0; lagX = 0; lagY = 0; inertiaX = 0; }
       const settling = Math.abs(yaw - nextYaw) + Math.abs(pitch - nextPitch) + Math.abs(press - targetPress) + Math.abs(pressVelocity) + Math.abs(lagX) + Math.abs(lagY) + Math.abs(inertiaX) > 0.003;
-      root.dataset.furMotion = reduce.matches ? "still" : working || settling || transition ? "animated" : "idle";
+      const motion = reduce.matches ? "still" : working || settling || transition ? "animated" : "idle";
       drawing = true;
       needsFrame = false;
       const drawn = await paint(time, animate);
       drawing = false;
       if (disposed) return;
+      // Publish the state of the frame actually presented, not one still in the
+      // GPU queue. A newer pose requested during this draw must settle first.
+      if (drawn && !needsFrame) root.dataset.furMotion = motion;
       if (!drawn && !needsFrame) { root.dataset.furMotion = "fallback"; return; }
       if (!frame && (needsFrame || (animate && (working || settling || transition)))) frame = requestAnimationFrame(render);
     };
