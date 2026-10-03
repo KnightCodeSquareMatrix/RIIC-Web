@@ -1,4 +1,4 @@
-import { findOperatorMentions, MAX_OPERATOR_PORTRAITS, type OperatorMention } from "./agent-operator-mentions.ts";
+import { prepareOperatorText, MAX_OPERATOR_PORTRAITS, type OperatorMention } from "./agent-operator-mentions.ts";
 
 export type MarkdownNode<T = string> = (
   | { kind: "paragraph"; text: T }
@@ -73,14 +73,14 @@ function safeHref(href: string) {
 }
 export interface InlineToken { kind: "text" | "strong" | "em" | "code" | "link"; text: string; href?: string; mentions: readonly OperatorMention[] }
 function tokenizeInline(text: string, eligible: boolean): InlineToken[] {
-  return text.split(/(`[^`]+`|\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*|_[^_]+_|\[[^\]]+\]\([^)]+\)|https?:\/\/[^\s<]+)/g).filter(Boolean).map((part) => {
+  return text.split(/(`[^`]+`|\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*|_[^_]+_|\[[^\]]+\]\([^)]+\)|\[干员[:：][^\]\r\n]{1,64}\]|https?:\/\/[^\s<]+)/g).filter(Boolean).map((part) => {
     if (/^`[^`]+`$/.test(part)) return { kind: "code", text: part.slice(1, -1), mentions: [] };
-    if (/^\*\*[^*]+\*\*$/.test(part) || /^__[^_]+__$/.test(part)) return { kind: "strong", text: part.slice(2, -2), mentions: eligible ? findOperatorMentions(part.slice(2, -2), true) : [] };
-    if (/^\*[^*]+\*$/.test(part) || /^_[^_]+_$/.test(part)) return { kind: "em", text: part.slice(1, -1), mentions: eligible ? findOperatorMentions(part.slice(1, -1), true) : [] };
+    if (/^\*\*[^*]+\*\*$/.test(part) || /^__[^_]+__$/.test(part)) return { kind: "strong", ...prepareOperatorText(part.slice(2, -2), eligible, true) };
+    if (/^\*[^*]+\*$/.test(part) || /^_[^_]+_$/.test(part)) return { kind: "em", ...prepareOperatorText(part.slice(1, -1), eligible, true) };
     const link = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
     const href = safeHref(link?.[2] ?? part);
     if (href) return { kind: "link", text: link?.[1] ?? part, href, mentions: [] };
-    return { kind: "text", text: part, mentions: eligible && !link ? findOperatorMentions(part) : [] };
+    return link ? { kind: "text", text: part, mentions: [] } : { kind: "text", ...prepareOperatorText(part, eligible) };
   });
 }
 
@@ -120,11 +120,15 @@ function visitInline(nodes: readonly MarkdownNode<InlineToken[]>[], visit: (toke
 }
 
 export function prepareAgentMarkdown(content: string, streaming = false, previousParts: readonly string[] = []): MarkdownNode<InlineToken[]>[] {
-  const seen = new Set<string>();
-  const deduplicate = (tokens: InlineToken[]) => tokens.map((token) => ({ ...token, mentions: token.mentions.filter((mention) => {
-    if (seen.has(mention.id) || seen.size >= MAX_OPERATOR_PORTRAITS) return false;
-    seen.add(mention.id); return true;
-  }) }));
-  for (const previous of previousParts) visitInline(tokenizeDocument(previous, false), deduplicate);
-  return visitInline(tokenizeDocument(content, streaming), deduplicate);
+  let count = 0;
+  const limitPortraits = (tokens: InlineToken[]) => tokens.map((token) => {
+    const mentions = token.mentions.slice(0, Math.max(0, MAX_OPERATOR_PORTRAITS - count));
+    count += mentions.length;
+    return { ...token, mentions };
+  });
+  for (const previous of previousParts) {
+    visitInline(tokenizeDocument(previous, false), limitPortraits);
+    if (count >= MAX_OPERATOR_PORTRAITS) break;
+  }
+  return visitInline(tokenizeDocument(content, streaming), limitPortraits);
 }
