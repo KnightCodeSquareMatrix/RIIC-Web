@@ -1,6 +1,6 @@
 import { DataTexture, LinearFilter, SRGBColorSpace } from "three";
 
-/** Sparse tiger stripes and blue-gray eyes follow the same furry sphere. */
+/** Sparse tiger stripes on the furry sphere; eyes are separate deformable lenses. */
 export function createMountainCoat() {
   const size = 512;
   const canvas = document.createElement("canvas"), mask = document.createElement("canvas");
@@ -29,10 +29,6 @@ export function createMountainCoat() {
     "M-.67 -.38L-.56 -.34L-.51 -.40L-.43 -.34L-.30 -.39L-.46 -.44L-.49 -.50L-.59 -.46L-.61 -.53Z",
     "M.65 -.43L.55 -.39L.50 -.45L.42 -.40L.32 -.46L.47 -.49L.52 -.56L.58 -.49L.62 -.53Z",
   ]) paint(stripe, "#35383c");
-  for (const x of [-0.23, 0.23]) {
-    const eye = new Path2D(); eye.ellipse(x, -0.085, 0.084, 0.107, 0, 0, Math.PI * 2);
-    paint(eye, "#78aabd", false);
-  }
   const pixels = color.getImageData(0, 0, size, size).data;
   const coverage = regions.getImageData(0, 0, size, size).data;
   for (let i = 0; i < pixels.length; i += 4) pixels[i + 3] = coverage[i];
