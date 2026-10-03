@@ -98,7 +98,6 @@
     "recharts": "^3.8.0",
     "resend": "^6.20.0",
     "resize-observer-polyfill": "1.5.1",
-    "shadcn": "^4.16.0",
     "skland-kit": "0.3.5",
     "tailwind-merge": "^3.6.0",
     "three": "^0.186.1",
