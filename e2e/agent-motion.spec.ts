@@ -215,6 +215,9 @@ test("A timeout in the background clears loading and retries the same question, 
 
 for (const scenario of [{ width: 1440, reducedMotion: "no-preference" }, { width: 375, reducedMotion: "reduce" }] as const) {
   test(`Operator portraits follow completed text and survive history (${scenario.width}px)`, async ({ page }) => {
+    // Two page loads plus streamed tool steps and persistence assertions share
+    // this budget. Keep each assertion's normal timeout on software-GPU CI.
+    test.setTimeout(60_000);
     await page.setViewportSize({ width: scenario.width, height: 900 });
     await page.emulateMedia({ reducedMotion: scenario.reducedMotion });
     await prepare(page);

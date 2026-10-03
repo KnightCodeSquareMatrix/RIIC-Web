@@ -19,6 +19,9 @@ test(`${variant} eyes press into ovals and recover without a static backing`, as
     await page.getByRole("toolbar").getByRole("button", { name, exact: true }).click();
     const avatar = page.locator(`[data-fur-avatar="${variant}"]`);
     await expect(avatar).toHaveAttribute("data-fur-ready", "true", { timeout: 30_000 });
+    // The first rendered frame starts the incoming animation; its initial
+    // bounding box can still be outside the viewport. Press the settled model.
+    await expect(page.locator(`[data-plush-card="${variant}"]`)).not.toHaveAttribute("data-switching", /.+/);
     const bounds = await avatar.boundingBox();
     await page.mouse.move(bounds!.x + bounds!.width / 2, bounds!.y + bounds!.height / 2);
     await expect(avatar).toHaveAttribute("data-fur-motion", "idle", { timeout: 15_000 });
