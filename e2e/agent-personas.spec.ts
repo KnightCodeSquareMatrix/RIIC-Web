@@ -197,7 +197,7 @@ for (const mobile of [false, true]) {
     const pixels = await avatar.locator("canvas").evaluate((canvas: HTMLCanvasElement) => {
       const { data } = canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height);
       let red = 0, halo = 0, wings = 0, leftEye = 0, rightEye = 0, face = 0;
-      let haloPaleYellow = 0, haloYellow = 0, wingWhite = 0, wingYellow = 0;
+      let haloPaleYellow = 0, haloYellow = 0, wingPaleYellow = 0, wingYellow = 0;
       let haloMinX = canvas.width, haloMaxX = 0, haloMinY = canvas.height, haloMaxY = 0;
       for (let i = 0; i < data.length; i += 4) {
         const x = (i / 4) % canvas.width, y = Math.floor(i / 4 / canvas.width);
@@ -219,8 +219,9 @@ for (const mobile of [false, true]) {
         }
         if ((x < canvas.width * 0.20 || x > canvas.width * 0.80) && accessory) {
           wings++;
-          if (b > 220) wingWhite++;
-          if (b < 165) wingYellow++;
+          // The approved lower wing is pale yellow, not the old white endpoint.
+          if (b >= 110 && b < 220) wingPaleYellow++;
+          if (b < 110) wingYellow++;
         }
       }
       // Sample the space between each gradient diamond and the red body, at any size.
@@ -236,12 +237,12 @@ for (const mobile of [false, true]) {
       const leftBody = Math.min(...body.map(p => p.x)), rightBody = Math.max(...body.map(p => p.x));
       const detachedLeft = row.some(p => p.x > leftWing && p.x < leftBody && p.a < 60);
       const detachedRight = row.some(p => p.x > rightBody && p.x < rightWing && p.a < 60);
-      return { red, halo, wings, haloPaleYellow, haloYellow, wingWhite, wingYellow, leftEye, rightEye, face, detachedLeft, detachedRight, haloRatio: (haloMaxX - haloMinX) / Math.max(1, haloMaxY - haloMinY) };
+      return { red, halo, wings, haloPaleYellow, haloYellow, wingPaleYellow, wingYellow, leftEye, rightEye, face, detachedLeft, detachedRight, haloRatio: (haloMaxX - haloMinX) / Math.max(1, haloMaxY - haloMinY) };
     });
     expect(pixels.red).toBeGreaterThan(40);
     expect(pixels.halo).toBeGreaterThan(2);
     expect(pixels.wings).toBeGreaterThan(2);
-    for (const key of ["haloPaleYellow", "haloYellow", "wingWhite", "wingYellow"] as const) expect(pixels[key], `${key}: ${JSON.stringify(pixels)}`).toBeGreaterThan(0);
+    for (const key of ["haloPaleYellow", "haloYellow", "wingPaleYellow", "wingYellow"] as const) expect(pixels[key], `${key}: ${JSON.stringify(pixels)}`).toBeGreaterThan(0);
     expect(pixels.detachedLeft).toBe(true);
     expect(pixels.detachedRight).toBe(true);
     expect(pixels.leftEye).toBeGreaterThan(2);

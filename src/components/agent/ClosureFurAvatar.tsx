@@ -72,14 +72,17 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
     let yaw = 0, pitch = 0, press = 0, pressVelocity = 0;
     let lastX = 0, lastY = 0, lagX = 0, lagY = 0;
     let pixels = 0, drawCost = 0;
+    let drawing = false, needsFrame = false, revision = 0;
     let announcedVariant: FurAvatarVariant | undefined;
     let engine: ReturnType<typeof acquireFurRenderer> | undefined;
 
-    const paint = (time: number, animated: boolean) => {
+    const paint = async (time: number, animated: boolean) => {
       if (!engine) return false;
+      const currentRevision = revision;
       try {
         const started = performance.now();
-        const drawn = engine.draw(context, pixels, { yaw, pitch, press, lagX, lagY, inertiaX, time: time / 1000, active: animated && activeRef.current }, variantRef.current, settingsRef.current);
+        const drawn = await engine.draw(context, pixels, { yaw, pitch, press, lagX, lagY, inertiaX, time: time / 1000, active: animated && activeRef.current }, variantRef.current, settingsRef.current, () => !disposed && currentRevision === revision);
+        if (disposed || currentRevision !== revision) return true;
         drawCost = drawCost * 0.75 + (performance.now() - started) * 0.25;
         if (settingsRef.current) {
           root.dataset.furDrawMs = drawCost.toFixed(1);
@@ -101,6 +104,7 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
         if (!drawn) context.clearRect(0, 0, canvas.width, canvas.height);
         return drawn;
       } catch {
+        if (disposed || currentRevision !== revision) return true;
         root.dataset.furReady = "false";
         context.clearRect(0, 0, canvas.width, canvas.height);
         if (announcedVariant !== variantRef.current) {
@@ -111,14 +115,15 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
       }
     };
     const stop = () => { window.cancelAnimationFrame(frame); frame = 0; lastFrame = 0; };
-    const render = (time: number) => {
+    const render = async (time: number) => {
       frame = 0;
+      if (drawing) { needsFrame = true; return; }
       if (disposed || (!visible && !transition) || document.hidden) { root.dataset.furMotion = "paused"; return; }
       if (!engine) return;
       // Leave time for streaming text and input on devices with slow/software WebGL.
       const interval = Math.max(1000 / Math.min(settingsRef.current?.fps ?? 30, transition ? 24 : 60), Math.min(250, drawCost * 4));
       if (lastFrame && time - lastFrame < interval) { frame = requestAnimationFrame(render); return; }
-      const dt = lastFrame ? Math.min((time - lastFrame) / 1000, 0.5) : 1 / 30;
+      const dt = lastFrame ? Math.min((time - lastFrame) / 1000, 5) : 1 / 30;
       lastFrame = time;
       const interactive = interactionOwner === root;
       const animate = (!reduce.matches || (gallery && pressed)) && (!interactionOwner || interactive);
@@ -145,10 +150,19 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
       if (!animate) { yaw = 0; pitch = 0; press = 0; pressVelocity = 0; lagX = 0; lagY = 0; inertiaX = 0; }
       const settling = Math.abs(yaw - nextYaw) + Math.abs(pitch - nextPitch) + Math.abs(press - targetPress) + Math.abs(pressVelocity) + Math.abs(lagX) + Math.abs(lagY) + Math.abs(inertiaX) > 0.003;
       root.dataset.furMotion = reduce.matches ? "still" : working || settling || transition ? "animated" : "idle";
-      if (!paint(time, animate)) { root.dataset.furMotion = "fallback"; return; }
-      if (!frame && animate && (working || settling || transition)) frame = requestAnimationFrame(render);
+      drawing = true;
+      needsFrame = false;
+      const drawn = await paint(time, animate);
+      drawing = false;
+      if (disposed) return;
+      if (!drawn && !needsFrame) { root.dataset.furMotion = "fallback"; return; }
+      if (!frame && (needsFrame || (animate && (working || settling || transition)))) frame = requestAnimationFrame(render);
     };
-    const wake = () => { if (!frame && !disposed) { lastFrame = 0; frame = requestAnimationFrame(render); } };
+    const wake = () => {
+      if (disposed) return;
+      if (drawing) { needsFrame = true; return; }
+      if (!frame) { lastFrame = 0; frame = requestAnimationFrame(render); }
+    };
     const reset = () => { pressed = false; hovering = false; targetX = 0; targetY = 0; };
     const releaseOwner = () => {
       if (interactionOwner === root) { interactionOwner = null; interactionOwners.dispatchEvent(new Event("change")); }
@@ -203,9 +217,9 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
       const width = Math.max(1, Math.round(next * aspect));
       if (next === pixels && canvas.width === width) return;
       pixels = next;
+      revision++;
       canvas.width = width;
       canvas.height = pixels;
-      paint(performance.now(), false);
       wake();
     };
     const visibility = () => {
@@ -218,8 +232,9 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
       if (transition) { reset(); releaseOwner(); }
       wake();
     };
-    const settingsChange = () => { resize(); wake(); };
+    const settingsChange = () => { revision++; resize(); wake(); };
     const variantChange = () => {
+      revision++;
       reset(); releaseOwner();
       yaw = pitch = press = pressVelocity = lagX = lagY = 0;
       inertiaX = 0;

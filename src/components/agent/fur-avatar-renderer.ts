@@ -1,5 +1,5 @@
 import {
-  AmbientLight, BufferGeometry, CatmullRomCurve3, Color, DirectionalLight, DoubleSide, ExtrudeGeometry, Float32BufferAttribute, Group, InstancedBufferAttribute,
+  AmbientLight, BufferGeometry, CatmullRomCurve3, Color, DirectionalLight, ExtrudeGeometry, Float32BufferAttribute, Group, InstancedBufferAttribute,
   InstancedBufferGeometry, LineBasicMaterial, LineSegments, Mesh, MeshBasicMaterial, MeshPhysicalMaterial, OrthographicCamera, PMREMGenerator,
   Scene, ShaderMaterial, Shape, SphereGeometry, TubeGeometry, Vector2, Vector3, Vector4, WebGLRenderer,
 } from "three";
@@ -270,6 +270,27 @@ export type FurAvatarVariant = "closure" | "silverash" | "exusiai" | "saileach" 
 
 function buildRenderer() {
   const renderer = new WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true, powerPreference: "low-power" });
+  let disposed = false;
+  let pendingDraw: Promise<unknown> = Promise.resolve();
+  // A canvas copy waits synchronously for unfinished GPU work. On software WebGL
+  // that can freeze input for seconds. Fence the submitted frame and yield the
+  // main thread until it is ready; serialize copies because all portraits share it.
+  const waitForGpu = async () => {
+    const gl = renderer.getContext() as WebGL2RenderingContext;
+    const fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+    if (!fence) return false;
+    gl.flush();
+    const deadline = performance.now() + 30_000;
+    try {
+      while (!disposed && !gl.isContextLost()) {
+        const state = gl.clientWaitSync(fence, 0, 0);
+        if (state === gl.ALREADY_SIGNALED || state === gl.CONDITION_SATISFIED) return true;
+        if (state === gl.WAIT_FAILED || performance.now() > deadline) return false;
+        await new Promise(resolve => setTimeout(resolve, 16));
+      }
+      return false;
+    } finally { gl.deleteSync(fence); }
+  };
   renderer.setClearColor(0x000000, 0);
   const scene = new Scene();
   const room = new RoomEnvironment();
@@ -309,7 +330,9 @@ function buildRenderer() {
     geometry.instanceCount = DEFAULT_FUR_SETTINGS.shells;
     geometries.add(geometry);
     const material = new ShaderMaterial({
-      vertexShader: VERTEX, fragmentShader: FRAGMENT, side: DoubleSide,
+      // All coats use closed outward-facing meshes; their interior faces never
+      // contribute to the silhouette and need not shade the strand field.
+      vertexShader: VERTEX, fragmentShader: FRAGMENT,
       uniforms: {
         uEyes: { value: [new Vector4(), new Vector4()] },
         uEmbroideredEye: { value: new Vector4() }, uFaceColor: { value: new Color("#f1d4ac") }, uEyeSquint: { value: 0 },
@@ -744,9 +767,10 @@ function buildRenderer() {
   renderer.domElement.addEventListener("webglcontextrestored", contextRestored);
   let size = 0, width = 0;
   return {
-    draw(context: CanvasRenderingContext2D, pixels: number, pose: FurAvatarPose, variant: FurAvatarVariant = "closure", settings: FurSettings = DEFAULT_FUR_SETTINGS) {
-      if (lost) return false;
+    draw(context: CanvasRenderingContext2D, pixels: number, pose: FurAvatarPose, variant: FurAvatarVariant = "closure", settings: FurSettings = DEFAULT_FUR_SETTINGS, isCurrent = () => true) {
       const canvasWidth = context.canvas.width;
+      const draw = async () => {
+      if (lost || disposed || !isCurrent() || context.canvas.width !== canvasWidth || context.canvas.height !== pixels) return false;
       if (size !== pixels || width !== canvasWidth) {
         renderer.setSize(canvasWidth, pixels, false);
         size = pixels;
@@ -840,11 +864,18 @@ function buildRenderer() {
         material.uniforms.uLag.value.set(pose.lagX * 4 + (pose.inertiaX ?? 0), pose.lagY * 4);
       }
       renderer.render(scene, camera);
+      if (!await waitForGpu() || disposed || !isCurrent()) return false;
+      if (context.canvas.width !== canvasWidth || context.canvas.height !== pixels) return false;
       context.clearRect(0, 0, canvasWidth, pixels);
       context.drawImage(renderer.domElement, 0, 0, canvasWidth, pixels);
       return true;
+      };
+      const result = pendingDraw.then(draw);
+      pendingDraw = result.catch(() => false);
+      return result;
     },
     dispose() {
+      disposed = true;
       renderer.domElement.removeEventListener("webglcontextlost", contextLost);
       renderer.domElement.removeEventListener("webglcontextrestored", contextRestored);
       for (const geometry of geometries) geometry.dispose();
@@ -860,7 +891,9 @@ function buildRenderer() {
 // ONE shared WebGL renderer; historical portraits use cheap 2D canvas copies.
 let shared: ReturnType<typeof buildRenderer> | undefined;
 let users = 0;
+let disposalTimer: ReturnType<typeof setTimeout> | undefined;
 export function acquireFurRenderer() {
+  clearTimeout(disposalTimer);
   shared ??= buildRenderer();
   const resource = shared;
   users++;
@@ -870,7 +903,11 @@ export function acquireFurRenderer() {
     release() {
       if (released) return;
       released = true;
-      if (--users === 0) { resource.dispose(); shared = undefined; }
+      // Dialog close/reopen and route changes often overlap by a few frames.
+      // Keep the idle resource briefly to avoid rebuilding shaders and the PMREM.
+      if (--users === 0) disposalTimer = setTimeout(() => {
+        if (users === 0 && shared === resource) { resource.dispose(); shared = undefined; }
+      }, 5_000);
     },
   };
 }
