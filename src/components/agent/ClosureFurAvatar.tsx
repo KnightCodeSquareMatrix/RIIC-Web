@@ -1,7 +1,10 @@
 "use client";
 
-import { useEffect, useId, useRef } from "react";
+import { useContext, useEffect, useId, useRef } from "react";
 import type { acquireFurRenderer, FurAvatarVariant } from "./fur-avatar-renderer";
+import { FurSettingsContext } from "./FurSettingsContext";
+import { useAgentFurSettings } from "./fur-settings-store";
+import { plushFurInertia } from "./plush-motion";
 
 // One interactive avatar at a time, even when the history contains many replies.
 const interactionOwners = new EventTarget();
@@ -27,11 +30,27 @@ export function MountainFurAvatar({ active = false }: { active?: boolean }) {
   return <FurAvatar active={active} variant="mountain" />;
 }
 
-function FurAvatar({ active, variant }: { active: boolean; variant: FurAvatarVariant }) {
+export function FurAvatar({ active = false, variant, preview = false, fullWidth = false }: { active?: boolean; variant: FurAvatarVariant; preview?: boolean; fullWidth?: boolean }) {
   const gradientId = useId().replaceAll(":", "");
   const rootRef = useRef<HTMLSpanElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const activeRef = useRef(active);
+  const variantRef = useRef(variant);
+  const override = useContext(FurSettingsContext);
+  const agentSettings = useAgentFurSettings(variant, !preview && !override);
+  const settings = override ?? agentSettings;
+  const gallery = Boolean(override);
+  const settingsRef = useRef(settings);
+
+  useEffect(() => {
+    variantRef.current = variant;
+    rootRef.current?.dispatchEvent(new Event("fur-variant"));
+  }, [variant]);
+
+  useEffect(() => {
+    settingsRef.current = settings;
+    rootRef.current?.dispatchEvent(new Event("fur-settings"));
+  }, [settings]);
 
   useEffect(() => {
     activeRef.current = active;
@@ -39,6 +58,7 @@ function FurAvatar({ active, variant }: { active: boolean; variant: FurAvatarVar
   }, [active]);
 
   useEffect(() => {
+    if (preview) return;
     const root = rootRef.current, canvas = canvasRef.current;
     if (!root || !canvas) return;
     const context = canvas.getContext("2d");
@@ -46,43 +66,69 @@ function FurAvatar({ active, variant }: { active: boolean; variant: FurAvatarVar
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
     const finePointer = window.matchMedia("(hover: hover) and (pointer: fine)");
     let visible = false, disposed = false, pressed = false, hovering = false;
+    let transition: { animation: Animation; width: number; direction: number } | null = null;
+    let inertiaX = 0;
     let frame = 0, lastFrame = 0, targetX = 0, targetY = 0;
     let yaw = 0, pitch = 0, press = 0, pressVelocity = 0;
     let lastX = 0, lastY = 0, lagX = 0, lagY = 0;
     let pixels = 0, drawCost = 0;
+    let announcedVariant: FurAvatarVariant | undefined;
     let engine: ReturnType<typeof acquireFurRenderer> | undefined;
 
     const paint = (time: number, animated: boolean) => {
       if (!engine) return false;
       try {
         const started = performance.now();
-        const drawn = engine.draw(context, pixels, { yaw, pitch, press, lagX, lagY, time: time / 1000, active: animated && activeRef.current }, variant);
+        const drawn = engine.draw(context, pixels, { yaw, pitch, press, lagX, lagY, inertiaX, time: time / 1000, active: animated && activeRef.current }, variantRef.current, settingsRef.current);
         drawCost = drawCost * 0.75 + (performance.now() - started) * 0.25;
+        if (settingsRef.current) {
+          root.dataset.furDrawMs = drawCost.toFixed(1);
+          root.dataset.furPixels = String(pixels);
+          root.dataset.furWidth = String(canvas.width);
+          root.dataset.furShells = String(settingsRef.current.shells);
+          root.dataset.furLength = String(settingsRef.current.length);
+          root.dataset.furFps = String(settingsRef.current.fps);
+          root.dataset.furQuality = gallery ? "gallery" : "agent";
+          root.dataset.furInertia = inertiaX.toFixed(3);
+          root.dataset.furYaw = yaw.toFixed(3);
+          root.dataset.furPitch = pitch.toFixed(3);
+        }
         root.dataset.furReady = String(drawn);
-        if (!drawn) context.clearRect(0, 0, pixels, pixels);
+        if (announcedVariant !== variantRef.current) {
+          announcedVariant = variantRef.current;
+          root.dispatchEvent(new Event("fur-rendered", { bubbles: true }));
+        }
+        if (!drawn) context.clearRect(0, 0, canvas.width, canvas.height);
         return drawn;
       } catch {
         root.dataset.furReady = "false";
-        context.clearRect(0, 0, pixels, pixels);
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        if (announcedVariant !== variantRef.current) {
+          announcedVariant = variantRef.current;
+          root.dispatchEvent(new Event("fur-rendered", { bubbles: true }));
+        }
         return false;
       }
     };
     const stop = () => { window.cancelAnimationFrame(frame); frame = 0; lastFrame = 0; };
     const render = (time: number) => {
       frame = 0;
-      if (disposed || !visible || document.hidden) { root.dataset.furMotion = "paused"; return; }
+      if (disposed || (!visible && !transition) || document.hidden) { root.dataset.furMotion = "paused"; return; }
       if (!engine) return;
       // Leave time for streaming text and input on devices with slow/software WebGL.
-      const interval = Math.max(1000 / 30, Math.min(250, drawCost * 4));
+      const interval = Math.max(1000 / Math.min(settingsRef.current?.fps ?? 30, transition ? 24 : 60), Math.min(250, drawCost * 4));
       if (lastFrame && time - lastFrame < interval) { frame = requestAnimationFrame(render); return; }
       const dt = lastFrame ? Math.min((time - lastFrame) / 1000, 0.5) : 1 / 30;
       lastFrame = time;
       const interactive = interactionOwner === root;
-      const animate = !reduce.matches && (!interactionOwner || interactive);
+      const animate = (!reduce.matches || (gallery && pressed)) && (!interactionOwner || interactive);
       const working = animate && activeRef.current;
       const nextYaw = animate ? (interactive ? targetX : 0) + (working ? Math.sin(time / 1100) * 0.045 : 0) : 0;
       const nextPitch = animate ? (interactive ? targetY : 0) + (working ? Math.sin(time / 1400) * 0.025 : 0) : 0;
       const ease = 1 - Math.exp(-14 * dt);
+      const targetInertia = animate && transition ? plushFurInertia(Number(transition.animation.currentTime ?? 0), transition.width, transition.direction) : 0;
+      inertiaX += (targetInertia - inertiaX) * (1 - Math.exp(-12 * dt));
+      if (!transition && Math.abs(inertiaX) < 0.001) inertiaX = 0;
       lagX += ((nextYaw - yaw) - lagX) * ease;
       lagY += ((nextPitch - pitch) - lagY) * ease;
       yaw += (nextYaw - yaw) * ease;
@@ -96,11 +142,11 @@ function FurAvatar({ active, variant }: { active: boolean; variant: FurAvatarVar
       const decay = Math.exp(-5 * dt), cosine = Math.cos(frequency * dt), sine = Math.sin(frequency * dt);
       press = targetPress + decay * (offset * cosine + amplitude * sine);
       pressVelocity = decay * ((amplitude * frequency - 5 * offset) * cosine - (offset * frequency + 5 * amplitude) * sine);
-      if (!animate) { yaw = 0; pitch = 0; press = 0; pressVelocity = 0; lagX = 0; lagY = 0; }
-      const settling = Math.abs(yaw - nextYaw) + Math.abs(pitch - nextPitch) + Math.abs(press - targetPress) + Math.abs(pressVelocity) + Math.abs(lagX) + Math.abs(lagY) > 0.003;
-      root.dataset.furMotion = reduce.matches ? "still" : working || settling ? "animated" : "idle";
+      if (!animate) { yaw = 0; pitch = 0; press = 0; pressVelocity = 0; lagX = 0; lagY = 0; inertiaX = 0; }
+      const settling = Math.abs(yaw - nextYaw) + Math.abs(pitch - nextPitch) + Math.abs(press - targetPress) + Math.abs(pressVelocity) + Math.abs(lagX) + Math.abs(lagY) + Math.abs(inertiaX) > 0.003;
+      root.dataset.furMotion = reduce.matches ? "still" : working || settling || transition ? "animated" : "idle";
       if (!paint(time, animate)) { root.dataset.furMotion = "fallback"; return; }
-      if (animate && (working || settling)) frame = requestAnimationFrame(render);
+      if (!frame && animate && (working || settling || transition)) frame = requestAnimationFrame(render);
     };
     const wake = () => { if (!frame && !disposed) { lastFrame = 0; frame = requestAnimationFrame(render); } };
     const reset = () => { pressed = false; hovering = false; targetX = 0; targetY = 0; };
@@ -108,12 +154,12 @@ function FurAvatar({ active, variant }: { active: boolean; variant: FurAvatarVar
       if (interactionOwner === root) { interactionOwner = null; interactionOwners.dispatchEvent(new Event("change")); }
     };
     const claim = () => {
-      if (reduce.matches || interactionOwner === root) return;
+      if ((reduce.matches && !gallery) || interactionOwner === root) return;
       interactionOwner = root;
       interactionOwners.dispatchEvent(new Event("change"));
     };
     const move = (event: PointerEvent) => {
-      if (event.pointerType !== "mouse" || !finePointer.matches || reduce.matches) return;
+      if (!(gallery && pressed) && (event.pointerType !== "mouse" || !finePointer.matches || reduce.matches)) return;
       hovering = true;
       claim();
       if (pressed) {
@@ -121,19 +167,20 @@ function FurAvatar({ active, variant }: { active: boolean; variant: FurAvatarVar
         targetY = Math.max(-0.6, Math.min(0.6, targetY + (event.clientY - lastY) * 0.01));
       } else {
         const bounds = root.getBoundingClientRect();
-        targetX = Math.max(-0.2, Math.min(0.2, ((event.clientX - bounds.left) / bounds.width - 0.5) * 0.32));
-        targetY = Math.max(-0.16, Math.min(0.16, ((event.clientY - bounds.top) / bounds.height - 0.5) * 0.22));
+        // Noticeable gaze at the edges: about 32° sideways and 20° vertically.
+        targetX = Math.max(-0.55, Math.min(0.55, ((event.clientX - bounds.left) / bounds.width - 0.5) * 1.10));
+        targetY = Math.max(-0.34, Math.min(0.34, ((event.clientY - bounds.top) / bounds.height - 0.5) * 0.68));
       }
       lastX = event.clientX;
       lastY = event.clientY;
       wake();
     };
     const down = (event: PointerEvent) => {
-      if (event.button !== 0 || reduce.matches) return;
+      if (event.button !== 0 || (reduce.matches && !gallery)) return;
       pressed = true;
       lastX = event.clientX;
       lastY = event.clientY;
-      if (event.pointerType === "mouse") root.setPointerCapture(event.pointerId);
+      if (gallery || event.pointerType === "mouse") root.setPointerCapture(event.pointerId);
       claim();
       wake();
     };
@@ -145,10 +192,19 @@ function FurAvatar({ active, variant }: { active: boolean; variant: FurAvatarVar
     };
     const leave = () => { reset(); releaseOwner(); wake(); };
     const resize = () => {
-      const next = Math.max(1, Math.round(root.getBoundingClientRect().width * 1.44 * Math.min(devicePixelRatio || 1, 2)));
-      if (next === pixels) return;
+      const bounds = root.getBoundingClientRect();
+      const aspect = fullWidth ? bounds.width / Math.max(1, bounds.height * 1.44) : 1;
+      const requestedRatio = Math.min(devicePixelRatio || 1, 2) * (settingsRef.current?.resolution ?? 1);
+      const requested = (fullWidth ? bounds.height : bounds.width) * 1.44 * (gallery ? Math.min(2, requestedRatio) : requestedRatio);
+      // Give fullscreen fur enough samples instead of stretching the avatar's
+      // old 1 MP budget. Cap gallery at 4 MP / 4096 wide and Agent at 256 square.
+      const limit = gallery ? Math.min(2048, 2048 / Math.sqrt(aspect), 4096 / aspect) : 256;
+      const next = Math.max(1, Math.round(settingsRef.current ? Math.min(limit, requested) : requested));
+      const width = Math.max(1, Math.round(next * aspect));
+      if (next === pixels && canvas.width === width) return;
       pixels = next;
-      canvas.width = canvas.height = pixels;
+      canvas.width = width;
+      canvas.height = pixels;
       paint(performance.now(), false);
       wake();
     };
@@ -157,9 +213,24 @@ function FurAvatar({ active, variant }: { active: boolean; variant: FurAvatarVar
       else wake();
     };
     const motionChange = () => { reset(); releaseOwner(); wake(); };
+    const transitionChange = (event: Event) => {
+      transition = (event as CustomEvent<typeof transition>).detail || null;
+      if (transition) { reset(); releaseOwner(); }
+      wake();
+    };
+    const settingsChange = () => { resize(); wake(); };
+    const variantChange = () => {
+      reset(); releaseOwner();
+      yaw = pitch = press = pressVelocity = lagX = lagY = 0;
+      inertiaX = 0;
+      root.dataset.furReady = "false";
+      announcedVariant = undefined;
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      wake();
+    };
     const observer = new IntersectionObserver(([entry]) => {
       visible = entry?.isIntersecting ?? false;
-      if (visible) wake();
+      if (visible || transition) wake();
       else { stop(); reset(); releaseOwner(); root.dataset.furMotion = "paused"; }
     });
     const resizer = new ResizeObserver(resize);
@@ -171,6 +242,9 @@ function FurAvatar({ active, variant }: { active: boolean; variant: FurAvatarVar
     root.addEventListener("pointerleave", leave);
     root.addEventListener("pointercancel", leave);
     root.addEventListener("fur-activity", wake);
+    root.addEventListener("fur-settings", settingsChange);
+    root.addEventListener("fur-variant", variantChange);
+    root.addEventListener("fur-transition", transitionChange);
     window.addEventListener("pointerup", up);
     document.addEventListener("visibilitychange", visibility);
     reduce.addEventListener("change", motionChange);
@@ -190,6 +264,9 @@ function FurAvatar({ active, variant }: { active: boolean; variant: FurAvatarVar
       root.removeEventListener("pointerleave", leave);
       root.removeEventListener("pointercancel", leave);
       root.removeEventListener("fur-activity", wake);
+      root.removeEventListener("fur-settings", settingsChange);
+      root.removeEventListener("fur-variant", variantChange);
+      root.removeEventListener("fur-transition", transitionChange);
       window.removeEventListener("pointerup", up);
       document.removeEventListener("visibilitychange", visibility);
       reduce.removeEventListener("change", motionChange);
@@ -197,9 +274,9 @@ function FurAvatar({ active, variant }: { active: boolean; variant: FurAvatarVar
       releaseOwner();
       engine?.release();
     };
-  }, [variant]);
+  }, [preview, fullWidth, gallery]);
 
-  return <span ref={rootRef} data-fur-avatar={variant} data-closure-fur-avatar={variant === "closure" ? "" : undefined} data-silverash-fur-avatar={variant === "silverash" ? "" : undefined} data-fur-ready="false" data-fur-motion="idle" className="group/fur relative block size-full touch-pan-y cursor-grab active:cursor-grabbing">
+  return <span ref={rootRef} data-fur-avatar={preview ? undefined : variant} data-fur-preview={preview ? variant : undefined} data-closure-fur-avatar={variant === "closure" ? "" : undefined} data-silverash-fur-avatar={variant === "silverash" ? "" : undefined} data-fur-ready="false" data-fur-motion="idle" className={`group/fur relative block size-full ${gallery ? "touch-none" : "touch-pan-y"} cursor-grab active:cursor-grabbing`}>
     <svg viewBox="0 0 100 100" aria-hidden="true" className="pointer-events-none absolute -left-[22%] -top-[22%] size-[144%] group-data-[fur-ready=true]/fur:invisible" data-fur-fallback>
       {variant === "mountain" ? <g data-mountain-fallback transform="translate(50 50) scale(1.10) translate(-50 -50)">
         <defs><radialGradient id={`${gradientId}-tiger`}><stop stopColor="#f8f8f5" /><stop offset="1" stopColor="#c8cbca" /></radialGradient></defs>
@@ -284,6 +361,6 @@ function FurAvatar({ active, variant }: { active: boolean; variant: FurAvatarVar
       <ellipse fill="#b63445" cx="57" cy="51" rx="3.3" ry="5.6" transform="rotate(8 57 51)" />
       </>}
     </svg>
-    <canvas ref={canvasRef} aria-hidden="true" className="absolute -left-[22%] -top-[22%] size-[144%]" />
+    {!preview && <canvas ref={canvasRef} aria-hidden="true" className={fullWidth ? "absolute left-0 -top-[22%] h-[144%] w-full" : "absolute -left-[22%] -top-[22%] size-[144%]"} />}
   </span>;
 }
