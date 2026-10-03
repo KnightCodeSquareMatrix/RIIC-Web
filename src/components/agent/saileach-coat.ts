@@ -12,24 +12,17 @@ export function createSaileachCoat() {
   regions.fillStyle = "#fff";
   regions.fillRect(0, 0, size, size);
   for (const context of [color, regions]) context.setTransform(size / 1.44, 0, 0, -size / 1.40, size / 2, size / 2 - 0.08 * size / 1.40);
-  const paint = (path: Path2D, fill: string, furry = false) => {
+  const paint = (path: Path2D, fill: string, furry = false, surface = "#000") => {
     color.fillStyle = fill;
     color.fill(path);
-    regions.fillStyle = furry ? "#fff" : "#000";
+    regions.fillStyle = furry ? "#fff" : surface;
     regions.fill(path);
   };
-  for (const x of [-0.22, 0.22]) {
-    const rim = new Path2D();
-    rim.ellipse(x, -0.112, 0.092, 0.129, 0, 0, Math.PI * 2);
-    paint(rim, "#526481");
-    const eye = new Path2D();
-    eye.ellipse(x, -0.112, 0.087, 0.124, 0, 0, Math.PI * 2);
-    paint(eye, "#97c9f2");
-  }
+  // Eyes and their fine rims are deformable meshes; the coat beneath stays furry.
   paint(new Path2D("M-.53 -.35 C-.66 -.08 -.56 .41 -.22 .50 C.16 .62 .53 .40 .56 .12 L.48 -.34 Q.37 -.20 .34 .09 Q.22 .05 .12 .13 L.04 .03 Q-.09 .12 -.06 .27 Q-.24 .10 -.40 .06 L-.43 -.35Z"), "#dcb867", true);
   // The navy band and small gold badge are painted on the crown, not floating plates.
   const headband = new Path2D("M-.45 .32 Q-.02 .68 .44 .32 L.48 .20 Q.03 .48 -.49 .19Z");
-  paint(headband, "#304768");
+  paint(headband, "#304768", false, "#404040");
   color.save();
   color.clip(headband);
   color.strokeStyle = "#7892ae";
@@ -41,7 +34,7 @@ export function createSaileachCoat() {
   }
   color.stroke();
   color.restore();
-  paint(new Path2D("M-.16 .39 L-.10 .45 L-.04 .39 L-.10 .33Z"), "#f9dc8a");
+  paint(new Path2D("M-.16 .39 L-.10 .45 L-.04 .39 L-.10 .33Z"), "#f9dc8a", false, "#666666");
   const pixels = color.getImageData(0, 0, size, size).data;
   const coverage = regions.getImageData(0, 0, size, size).data;
   for (let i = 0; i < pixels.length; i += 4) pixels[i + 3] = coverage[i];
