@@ -3,7 +3,9 @@ import { mockApis } from "./production-readiness.fixture";
 
 test("gallery appearances persist to Agent and sync between tabs with separate quality", async ({ page, context }) => {
   test.setTimeout(120_000);
-  await page.setViewportSize({ width: 1280, height: 900 });
+  // Settings synchronization does not need a desktop-sized GPU framebuffer.
+  // The gallery still renders at its fixed 64-shell quality; Agent stays desktop.
+  await page.setViewportSize({ width: 400, height: 600 });
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.route("**/api/telemetry", route => route.fulfill({ json: { success: true } }));
   await page.goto("/plush?debug=1");

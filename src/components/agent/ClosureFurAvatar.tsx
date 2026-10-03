@@ -74,7 +74,7 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
     let pixels = 0, drawCost = 0;
     let drawing = false, needsFrame = false, revision = 0;
     let announcedVariant: FurAvatarVariant | undefined;
-    let engine: ReturnType<typeof acquireFurRenderer> | undefined;
+    let engine: Awaited<ReturnType<typeof acquireFurRenderer>> | undefined;
 
     const paint = async (time: number, animated: boolean) => {
       if (!engine) return false;
@@ -123,7 +123,9 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
       // Leave time for streaming text and input on devices with slow/software WebGL.
       const interval = Math.max(1000 / Math.min(settingsRef.current?.fps ?? 30, transition ? 24 : 60), Math.min(250, drawCost * 4));
       if (lastFrame && time - lastFrame < interval) { frame = requestAnimationFrame(render); return; }
-      const dt = lastFrame ? Math.min((time - lastFrame) / 1000, 5) : 1 / 30;
+      // On a slow GPU, an initial near-rest pose would consume an entire frame
+      // before any press became visible. Account for its measured presentation latency.
+      const dt = lastFrame ? Math.min((time - lastFrame) / 1000, 5) : Math.max(1 / 30, Math.min(0.5, drawCost / 1000));
       lastFrame = time;
       const interactive = interactionOwner === root;
       const animate = (!reduce.matches || (gallery && pressed)) && (!interactionOwner || interactive);
@@ -264,9 +266,11 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
     document.addEventListener("visibilitychange", visibility);
     reduce.addEventListener("change", motionChange);
     interactionOwners.addEventListener("change", wake);
-    void import("./fur-avatar-renderer").then(({ acquireFurRenderer }) => {
+    void import("./fur-avatar-renderer").then(async ({ acquireFurRenderer }) => {
       if (disposed) return;
-      engine = acquireFurRenderer();
+      const acquired = await acquireFurRenderer();
+      if (disposed) { acquired.release(); return; }
+      engine = acquired;
       wake();
     }).catch(() => { if (!disposed) root.dataset.furMotion = "fallback"; });
     return () => {
