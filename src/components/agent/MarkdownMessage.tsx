@@ -11,7 +11,7 @@ const EMPTY_PARTS: readonly string[] = [];
 const OperatorName = memo(function OperatorName({ mention, text, animate }: { mention: OperatorMention; text: string; animate: boolean }) {
   const [failed, setFailed] = useState(false);
   const [loaded, setLoaded] = useState(false);
-  return <span className="inline whitespace-nowrap" data-agent-operator={mention.id}>
+  return <span className="mx-1 inline whitespace-nowrap" data-agent-operator={mention.id}>
     <span aria-hidden="true" className={`mr-1 inline-block size-[18px] align-[-3px] ${animate ? loaded ? motionStyles.portraitReveal : "opacity-0" : ""}`} data-agent-operator-portrait>{!failed ? <img src={mention.portrait} alt="" width={18} height={18} loading="lazy" decoding="async" onLoad={() => setLoaded(true)} onError={() => setFailed(true)} className="size-full rounded-full object-cover" /> : null}</span>{text}
   </span>;
 });
