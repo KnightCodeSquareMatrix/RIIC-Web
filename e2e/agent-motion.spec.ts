@@ -247,10 +247,13 @@ for (const scenario of [{ width: 1440, reducedMotion: "no-preference" }, { width
       await expect(image).toHaveAttribute("alt", "");
       await expect(image).toHaveCSS("width", "18px");
     }
-    const secondText = "能天使、红云、**红**。今年空闲时看夕阳。\n\n`阿米娅` [可露希尔](https://example.test/)\n\n```text\n银灰\n```\n\n| 干员 | 建议 |\n| --- | --- |\n| 阿米娅 | 稍后培养 |\n\n- 可露希尔";
+    const secondText = "能天使、红云、**红**。今年空闲时看夕阳。\n\n`阿米娅` [可露希尔](https://example.test/)\n\n```text\n银灰\n```\n\n| 干员 | 建议 |\n| --- | --- |\n| 阿米娅 | 稍后培养 |\n\n- 可露希尔\n\n让[干员:山]先守住，[干员:山]的身后是[干员:能天使]。";
     await emit(page, [{ type: "text-end", id: "first" }, { type: "tool-input-available", toolCallId: "account", toolName: "diagnose_account", input: {} }, { type: "tool-output-available", toolCallId: "account", output: {} }, { type: "finish-step" }, { type: "start-step" }, { type: "text-start", id: "second" }, { type: "text-delta", id: "second", delta: secondText }, { type: "text-end", id: "second" }, { type: "finish-step" }, { type: "finish", finishReason: "stop" }], true);
     await expect(text.last()).toHaveAttribute("data-streaming", "false");
-    await expect(mentions).toHaveText(["能天使", "银灰", "红云", "红", "阿米娅", "可露希尔"]);
+    await expect(mentions).toHaveText(["能天使", "银灰", "能天使", "红云", "红", "阿米娅", "可露希尔", "山", "山", "能天使"]);
+    await expect(mentions.last()).toHaveCSS("margin-left", "4px");
+    await expect(mentions.last()).toHaveCSS("margin-right", "4px");
+    await expect(text.last()).not.toContainText("[干员:");
     expect(await mentions.first().locator("[data-agent-operator-portrait]").evaluate((el) => el.getAnimations()[0]?.startTime ?? null)).toBe(portraitStartedAt);
     await expect(page.locator("code [data-agent-operator], a [data-agent-operator], [data-agent-thinking] [data-agent-operator], [data-speaker=user] [data-agent-operator]")).toHaveCount(0);
     expect(await text.last().locator("p").first().textContent()).toBe("能天使、红云、红。今年空闲时看夕阳。");
@@ -265,7 +268,7 @@ for (const scenario of [{ width: 1440, reducedMotion: "no-preference" }, { width
       };
     }))).toEqual(["能天使、银灰。\n\n继续说明。", secondText]);
     await page.reload();
-    await expect(mentions).toHaveText(["能天使", "银灰", "红云", "红", "阿米娅", "可露希尔"]);
+    await expect(mentions).toHaveText(["能天使", "银灰", "能天使", "红云", "红", "阿米娅", "可露希尔", "山", "山", "能天使"]);
     await expect(text.locator("[data-stream-chunk]")).toHaveCount(0);
     await expect(mentions.first().locator("[data-agent-operator-portrait]")).toHaveCSS("animation-name", "none");
     const firstName = mentions.first();

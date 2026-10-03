@@ -1,11 +1,13 @@
 import catalogue from "./generated/arkntools/operator-catalog.json" with { type: "json" };
 
-export const MAX_OPERATOR_PORTRAITS = 24;
+export const MAX_OPERATOR_PORTRAITS = 128;
 export interface OperatorMention { start: number; end: number; id: string; name: string; portrait: string }
 interface Operator { id: string; name: string; portrait: string }
 interface TrieNode { children: Map<string, TrieNode>; operator?: Operator }
 const root: TrieNode = { children: new Map() };
+const operatorsByName = new Map<string, Operator>();
 function addName(name: string, operator: Operator) {
+  operatorsByName.set(name, operator);
   let node = root;
   for (const character of name) {
     if (!node.children.has(character)) node.children.set(character, { children: new Map() });
@@ -31,8 +33,7 @@ export function findOperatorMentions(text: string, explicit = false): readonly O
   const cached = cache.get(key);
   if (cached) return cached;
   const mentions: OperatorMention[] = [];
-  const seen = new Set<string>();
-  for (let start = 0; start < text.length;) {
+  for (let start = 0; start < text.length && mentions.length < MAX_OPERATOR_PORTRAITS;) {
     let node = root;
     let candidate: OperatorMention | undefined;
     for (let end = start; end < text.length; end++) {
@@ -51,7 +52,7 @@ export function findOperatorMentions(text: string, explicit = false): readonly O
     const boundedLatin = (!before || !latinWord.test(before)) && (!after || !latinWord.test(after));
     const shortName = [...label].length <= 2;
     if ((!latin || boundedLatin) && (!shortName || standalone || (explicit && text.trim() === label) || (context && (!after || boundary.test(after) || /^(?:的|与|和|及|进行|到|至|升|练)/.test(text.slice(candidate.end)))))) {
-      if (!seen.has(candidate.id)) { mentions.push(candidate); seen.add(candidate.id); }
+      mentions.push(candidate);
     }
     // Consume rejected longest names too: never reinterpret 红云 as 红.
     start = candidate.end;
@@ -66,4 +67,30 @@ export function findOperatorMentions(text: string, explicit = false): readonly O
     cacheCharacters += key.length;
   }
   return mentions;
+}
+
+/** Tags carry names only; portraits always come from the trusted local catalogue. */
+export function prepareOperatorText(source: string, eligible: boolean, explicit = false): { text: string; mentions: OperatorMention[] } {
+  let text = "";
+  let cursor = 0;
+  const mentions: OperatorMention[] = [];
+  const appendPlain = (part: string) => {
+    if (eligible && mentions.length < MAX_OPERATOR_PORTRAITS) {
+      const offset = text.length;
+      mentions.push(...findOperatorMentions(part, explicit).slice(0, MAX_OPERATOR_PORTRAITS - mentions.length).map(mention => ({ ...mention, start: mention.start + offset, end: mention.end + offset })));
+    }
+    text += part;
+  };
+  for (const tag of source.matchAll(/\[干员[:：]([^\]\r\n]{1,64})\]/g)) {
+    appendPlain(source.slice(cursor, tag.index));
+    const name = tag[1].trim();
+    const operator = operatorsByName.get(name);
+    if (eligible && operator && mentions.length < MAX_OPERATOR_PORTRAITS) {
+      mentions.push({ ...operator, start: text.length, end: text.length + name.length });
+    }
+    text += name;
+    cursor = tag.index + tag[0].length;
+  }
+  appendPlain(source.slice(cursor));
+  return { text, mentions };
 }
