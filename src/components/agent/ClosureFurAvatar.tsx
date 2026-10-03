@@ -65,7 +65,7 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
     if (!context) return;
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
     const finePointer = window.matchMedia("(hover: hover) and (pointer: fine)");
-    let visible = false, disposed = false, pressed = false, hovering = false;
+    let visible = gallery, disposed = false, pressed = false, hovering = false;
     let transition: { animation: Animation; width: number; direction: number } | null = null;
     let inertiaX = 0;
     let frame = 0, lastFrame = 0, targetX = 0, targetY = 0;
@@ -249,12 +249,16 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
       wake();
     };
     const observer = new IntersectionObserver(([entry]) => {
+      // The dedicated gallery fills the viewport. Layout changes in its debug
+      // panel and orbital transforms must not suspend the sole live model.
+      // Browser visibility still pauses it; Agent portraits retain culling.
+      if (gallery) return;
       visible = entry?.isIntersecting ?? false;
       if (visible || transition) wake();
       else { stop(); reset(); releaseOwner(); root.dataset.furMotion = "paused"; }
     });
     const resizer = new ResizeObserver(resize);
-    observer.observe(root);
+    if (!gallery) observer.observe(root);
     resizer.observe(root);
     resize();
     root.addEventListener("pointermove", move);
