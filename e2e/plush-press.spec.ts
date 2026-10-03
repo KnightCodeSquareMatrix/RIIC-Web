@@ -22,9 +22,17 @@ test(`${variant} eyes press into ovals and recover without a static backing`, as
     // The first rendered frame starts the incoming animation; its initial
     // bounding box can still be outside the viewport. Press the settled model.
     await expect(page.locator(`[data-plush-card="${variant}"]`)).not.toHaveAttribute("data-switching", /.+/);
+    await page.bringToFront();
+    await expect(avatar).toBeInViewport();
+    await expect.poll(() => page.evaluate(() => document.visibilityState)).toBe("visible");
     const bounds = await avatar.boundingBox();
     await page.mouse.move(bounds!.x + bounds!.width / 2, bounds!.y + bounds!.height / 2);
-    await expect(avatar).toHaveAttribute("data-fur-motion", "idle", { timeout: 15_000 });
+    await expect.poll(() => avatar.evaluate(element => {
+      const box = element.getBoundingClientRect();
+      return { motion: (element as HTMLElement).dataset.furMotion, visibility: document.visibilityState,
+        bounds: { x: box.x, y: box.y, width: box.width, height: box.height },
+        viewport: { width: innerWidth, height: innerHeight }, scrollY };
+    }), { timeout: 15_000 }).toMatchObject({ motion: "idle", visibility: "visible" });
     const eyePixels = () => page.locator("main canvas").evaluate((element, { character, scale }) => {
       const canvas = element as HTMLCanvasElement;
       const image = canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height);
@@ -46,6 +54,12 @@ test(`${variant} eyes press into ovals and recover without a static backing`, as
     }, { character: variant, scale });
     const open = await eyePixels();
     expect(open).toBeGreaterThan(30);
+    await page.bringToFront();
+    // Coordinate input does not perform Playwright's usual hit-target checks.
+    expect(await avatar.evaluate(element => {
+      const box = element.getBoundingClientRect();
+      return document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2)?.closest("[data-fur-avatar]") === element;
+    })).toBe(true);
     await page.mouse.down();
     await expect.poll(eyePixels, { timeout: 20_000 }).toBeLessThan(open * 0.75);
     await expect(avatar).toHaveAttribute("data-fur-motion", "idle", { timeout: 15_000 });
