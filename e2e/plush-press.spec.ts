@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 for (const [name, variant, scale] of [["可露希尔", "closure", 1], ["能天使", "exusiai", 1.05], ["琴柳", "saileach", 1.16], ["山", "mountain", 1.10]] as const) {
 test(`${variant} eyes press into ovals and recover without a static backing`, async ({ page }) => {
   test.setTimeout(120_000);
-  await page.setViewportSize({ width: 500, height: 600 });
+  await page.setViewportSize({ width: 400, height: 540 });
   await page.emulateMedia({ reducedMotion: "no-preference" });
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));

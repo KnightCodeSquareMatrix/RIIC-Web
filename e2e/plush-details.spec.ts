@@ -2,7 +2,9 @@ import { expect, test } from "@playwright/test";
 
 test("painted face, woven headband, badge and embroidery render at gallery quality", async ({ page }) => {
   test.setTimeout(120_000);
-  await page.setViewportSize({ width: 1000, height: 700 });
+  // Keep all 64 shells and actual material sampling, with a bounded software-GPU
+  // pixel workload. Full desktop/mobile canvas bounds are checked separately below.
+  await page.setViewportSize({ width: 800, height: 400 });
   await page.emulateMedia({ reducedMotion: "reduce" });
   // Check actual short-fiber draw calls, not just the underlying painted mask.
   await page.addInitScript(() => {
@@ -62,7 +64,7 @@ test("painted face, woven headband, badge and embroidery render at gallery quali
 
 test("silverash inset ears render while rotating", async ({ page }) => {
   test.setTimeout(90_000);
-  await page.setViewportSize({ width: 1000, height: 700 });
+  await page.setViewportSize({ width: 800, height: 400 });
   await page.emulateMedia({ reducedMotion: "reduce" });
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
@@ -85,7 +87,7 @@ test("silverash inset ears render while rotating", async ({ page }) => {
   expect(front.visible).toBeGreaterThan(10_000);
   await page.getByText("更多设置", { exact: true }).click();
   await page.getByLabel("水平角度", { exact: true }).fill("55");
-  await expect.poll(async () => (await sample()).hash).not.toBe(front.hash);
+  await expect.poll(async () => (await sample()).hash, { timeout: 30_000 }).not.toBe(front.hash);
   expect((await sample()).visible).toBeGreaterThan(10_000);
   for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
     await page.setViewportSize(viewport);
