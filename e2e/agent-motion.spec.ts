@@ -56,6 +56,9 @@ test("revoking feature access removes navigation and stops the active conversati
 
 for (const variant of ["closure", "silverash"]) {
 test(`${variant} animates only the latest reply avatar and settles when stopped`, async ({ page }) => {
+  // Software WebGL must present two separate reply avatars and their final
+  // settled frames. Retain normal per-assertion limits within this flow budget.
+  test.setTimeout(60_000);
   await prepare(page);
   if (variant === "silverash") {
     await page.route("**/api/agent/chat", route => route.fulfill({ json: { success: true, data: { enabled: true, personas: [{ id: "silverash" }] } } }));
