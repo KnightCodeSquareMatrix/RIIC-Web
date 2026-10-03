@@ -3,6 +3,8 @@ import { mockApis } from "./production-readiness.fixture";
 
 async function prepare(page: Page) {
   await mockApis(page);
+  await page.route("**/api/account/data-consent", route => route.fulfill({ json: { success: true, data: { current: false, cloudSyncEnabled: false } } }));
+  await page.route("**/api/billing", route => route.fulfill({ json: { data: { wallet: { totalPoints: 100 } } } }));
   await page.route("**/api/auth/get-session", (route) => route.fulfill({ json: {
     user: { id: "motion-user", name: "博士", email: "motion@example.test" }, session: { expiresAt: "2099-01-01T00:00:00Z" },
   } }));
@@ -52,8 +54,13 @@ test("revoking feature access removes navigation and stops the active conversati
   await expect.poll(() => page.evaluate(() => (window as typeof window & { agentTestAborts: number }).agentTestAborts)).toBe(1);
 });
 
-test("Closure animates only the latest reply avatar and settles when stopped", async ({ page }) => {
+for (const variant of ["closure", "silverash"]) {
+test(`${variant} animates only the latest reply avatar and settles when stopped`, async ({ page }) => {
   await prepare(page);
+  if (variant === "silverash") {
+    await page.route("**/api/agent/chat", route => route.fulfill({ json: { success: true, data: { enabled: true, personas: [{ id: "silverash" }] } } }));
+    await page.addInitScript(() => localStorage.setItem("riic.agent.persona.selection.v1", "silverash"));
+  }
   await page.addInitScript(() => {
     const original = HTMLCanvasElement.prototype.getContext;
     const allocated = new WeakSet<HTMLCanvasElement>();
@@ -67,7 +74,7 @@ test("Closure animates only the latest reply avatar and settles when stopped", a
     } as typeof original;
   });
   await page.goto("/agent");
-  const input = page.getByRole("textbox", { name: "发给可露希尔的消息" });
+  const input = page.getByRole("textbox", { name: variant === "silverash" ? "发给银灰的消息" : "发给可露希尔的消息" });
   await input.fill("帮我排班");
   await input.press("Enter");
   await expect(page.getByRole("button", { name: "停止", exact: true })).toBeVisible();
@@ -75,7 +82,7 @@ test("Closure animates only the latest reply avatar and settles when stopped", a
     { type: "start", messageId: "fur-answer" }, { type: "start-step" },
     { type: "text-start", id: "fur-first" }, { type: "text-delta", id: "fur-first", delta: "先确认你的干员池。" },
   ]);
-  const avatars = page.locator('[data-speaker="assistant"] [data-closure-fur-avatar]');
+  const avatars = page.locator(`[data-speaker="assistant"] [data-fur-avatar="${variant}"]`);
   await expect(avatars).toHaveCount(1);
   await expect(avatars.first()).toHaveAttribute("data-fur-motion", "animated");
   await emit(page, [
@@ -92,8 +99,9 @@ test("Closure animates only the latest reply avatar and settles when stopped", a
   await input.fill("停止后可以继续输入");
   expect(await avatars.last().locator("canvas").evaluate((canvas: HTMLCanvasElement) => canvas.toDataURL())).toBe(stopped);
 });
+}
 
-test("Agent keeps streaming across routes, restores its live request, and saves while away", async ({ page }) => {
+test("Agent keeps streaming across routes and restores its live request", async ({ page }) => {
   await prepare(page);
   await page.goto("/agent");
   const input = page.getByRole("textbox", { name: "发给可露希尔的消息" });
@@ -109,8 +117,26 @@ test("Agent keeps streaming across routes, restores its live request, and saves 
   await page.locator('[data-primary-navigation-page="agent"]').click();
   await expect(page.getByText("正在生成。", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "停止", exact: true })).toBeVisible();
+  await emit(page, [{ type: "text-delta", id: "reply", delta: "后台回答完成。" }, { type: "text-end", id: "reply" }, { type: "finish", finishReason: "stop" }], true);
+  await expect(spinner).toHaveCount(0);
+  await expect(page.getByText("正在生成。后台回答完成。", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => (window as typeof window & { agentTestAborts: number }).agentTestAborts)).toBe(0);
+  expect(await page.evaluate(() => (window as typeof window & { agentTestRequests: number }).agentTestRequests)).toBe(1);
+});
+
+test("Agent saves a reply completed while away and restores it after reload", async ({ page }) => {
+  await prepare(page);
+  await page.goto("/agent");
+  const input = page.getByRole("textbox", { name: "发给可露希尔的消息" });
+  await input.fill("后台继续回答");
+  await input.press("Enter");
+  const spinner = page.locator('[data-agent-history] a[aria-label="后台继续回答"] [data-agent-history-loading]');
+  await expect(spinner).toBeVisible();
+  await emit(page, [{ type: "start", messageId: "background" }, { type: "text-start", id: "reply" }, { type: "text-delta", id: "reply", delta: "正在生成。" }]);
   await page.locator('[data-primary-navigation-page="recruitment"]').click();
   await expect(page).toHaveURL(/\/recruitment$/);
+  await expect(page.locator("[data-agent-chat]")).toHaveCount(0);
+  await expect(spinner).toBeVisible();
   await emit(page, [{ type: "text-delta", id: "reply", delta: "后台回答完成。" }, { type: "text-end", id: "reply" }, { type: "finish", finishReason: "stop" }], true);
   await expect(spinner).toHaveCount(0);
   await page.locator('[data-primary-navigation-page="agent"]').click();
@@ -160,7 +186,7 @@ test("A timeout in the background clears loading and retries the same question, 
   await page.goto("/agent");
   await expect(page.getByRole("button", { name: "人格卡：重试人格" })).toBeVisible();
   await page.locator('input[aria-label="上传附件"]').setInputFiles({ name: "问题.txt", mimeType: "text/plain", buffer: Buffer.from("附件内容") });
-  const input = page.getByRole("textbox", { name: "发给可露希尔的消息" });
+  const input = page.getByRole("textbox", { name: "发给重试人格的消息" });
   await input.fill("超时测试问题");
   await input.press("Enter");
   await expect(page.locator('[data-agent-history] a[aria-label="超时测试问题"] [data-agent-history-loading]')).toBeVisible();
@@ -221,10 +247,13 @@ for (const scenario of [{ width: 1440, reducedMotion: "no-preference" }, { width
       await expect(image).toHaveAttribute("alt", "");
       await expect(image).toHaveCSS("width", "18px");
     }
-    const secondText = "能天使、红云、**红**。今年空闲时看夕阳。\n\n`阿米娅` [可露希尔](https://example.test/)\n\n```text\n银灰\n```\n\n| 干员 | 建议 |\n| --- | --- |\n| 阿米娅 | 稍后培养 |\n\n- 可露希尔";
+    const secondText = "能天使、红云、**红**。今年空闲时看夕阳。\n\n`阿米娅` [可露希尔](https://example.test/)\n\n```text\n银灰\n```\n\n| 干员 | 建议 |\n| --- | --- |\n| 阿米娅 | 稍后培养 |\n\n- 可露希尔\n\n让[干员:山]先守住，[干员:山]的身后是[干员:能天使]。";
     await emit(page, [{ type: "text-end", id: "first" }, { type: "tool-input-available", toolCallId: "account", toolName: "diagnose_account", input: {} }, { type: "tool-output-available", toolCallId: "account", output: {} }, { type: "finish-step" }, { type: "start-step" }, { type: "text-start", id: "second" }, { type: "text-delta", id: "second", delta: secondText }, { type: "text-end", id: "second" }, { type: "finish-step" }, { type: "finish", finishReason: "stop" }], true);
     await expect(text.last()).toHaveAttribute("data-streaming", "false");
-    await expect(mentions).toHaveText(["能天使", "银灰", "红云", "红", "阿米娅", "可露希尔"]);
+    await expect(mentions).toHaveText(["能天使", "银灰", "能天使", "红云", "红", "阿米娅", "可露希尔", "山", "山", "能天使"]);
+    await expect(mentions.last()).toHaveCSS("margin-left", "4px");
+    await expect(mentions.last()).toHaveCSS("margin-right", "4px");
+    await expect(text.last()).not.toContainText("[干员:");
     expect(await mentions.first().locator("[data-agent-operator-portrait]").evaluate((el) => el.getAnimations()[0]?.startTime ?? null)).toBe(portraitStartedAt);
     await expect(page.locator("code [data-agent-operator], a [data-agent-operator], [data-agent-thinking] [data-agent-operator], [data-speaker=user] [data-agent-operator]")).toHaveCount(0);
     expect(await text.last().locator("p").first().textContent()).toBe("能天使、红云、红。今年空闲时看夕阳。");
@@ -239,7 +268,7 @@ for (const scenario of [{ width: 1440, reducedMotion: "no-preference" }, { width
       };
     }))).toEqual(["能天使、银灰。\n\n继续说明。", secondText]);
     await page.reload();
-    await expect(mentions).toHaveText(["能天使", "银灰", "红云", "红", "阿米娅", "可露希尔"]);
+    await expect(mentions).toHaveText(["能天使", "银灰", "能天使", "红云", "红", "阿米娅", "可露希尔", "山", "山", "能天使"]);
     await expect(text.locator("[data-stream-chunk]")).toHaveCount(0);
     await expect(mentions.first().locator("[data-agent-operator-portrait]")).toHaveCSS("animation-name", "none");
     const firstName = mentions.first();

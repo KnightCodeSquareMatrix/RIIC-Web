@@ -5,10 +5,11 @@ import { assertSameOrigin, createRequestId, failureResponse, PublicApiError, suc
 import { requireFeatureSession } from "@/server/auth/feature-access";
 import { createAgentUsage, finalizeAgentUsage, getWallet } from "@/server/billing/service";
 import { SOLVE_TOOL_POINTS } from "@/server/billing/config";
-import { agentLlmSettings } from "@/server/agent/config";
+import { agentLlmSettings, agentModelChoices } from "@/server/agent/config";
 import { getAgentModel } from "@/server/agent/llm";
 import { createAgentStreamPolicy } from "@/server/agent/stream-policy";
 import { buildAgentSystemPrompt } from "@/server/agent/persona";
+import { listBuiltinAgentPersonas, resolveAgentPersonaContent } from "@/server/agent/persona-catalog";
 import { buildAgentTools } from "@/server/agent/tools";
 import { calculateAgentTokenCost } from "@/server/billing/pricing";
 
@@ -73,6 +74,7 @@ function monitorStep(step: unknown, index: number): unknown {
 }
 
 async function monitorLog(entry: Record<string, unknown>): Promise<void> {
+  if (process.env.NODE_ENV === "production") return;
   try {
     await appendFile(AGENT_MONITOR_LOG, `${JSON.stringify({ ts: new Date().toISOString(), ...entry })}\n`, "utf-8");
   } catch {
@@ -101,7 +103,8 @@ export async function GET(request: Request) {
         enabled: settings.configured,
         provider: settings.configured ? settings.provider : null,
         model: settings.configured ? settings.model : null,
-        baseURL: settings.configured ? settings.baseURL : null,
+        personas: await listBuiltinAgentPersonas(),
+        models: agentModelChoices(),
       },
       requestId
     );
@@ -116,7 +119,11 @@ export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
     const { session } = await requireAgentAccess(request);
-    const settings = agentLlmSettings();
+    const body = (await request.json()) as { model?: unknown; messages?: UIMessage[]; persona?: { id?: unknown; kind?: unknown; name?: unknown; content?: unknown } };
+    if (body.model !== undefined && body.model !== "deepseek" && body.model !== "glm") {
+      throw new PublicApiError("AIC-REQ-1001", { message: "请选择可用的模型。" });
+    }
+    const settings = agentLlmSettings(body.model);
     if (!settings.configured) {
       const response = failureResponse(
         new Error(`AGENT_LLM_API_KEY 未配置（provider=${settings.provider}），请在本机 .env.local 填入后重启开发服务。`),
@@ -126,12 +133,15 @@ export async function POST(request: Request) {
       );
       return new Response(response.body, { status: 503, headers: response.headers });
     }
-    const body = (await request.json()) as { messages?: UIMessage[]; persona?: { id?: unknown; name?: unknown; content?: unknown } };
     if (!Array.isArray(body.messages) || body.messages.length === 0) {
       const response = failureResponse(new Error("缺少对话消息。"), requestId, "/api/agent/chat", startedAt);
       return new Response(response.body, { status: 400, headers: response.headers });
     }
-    const personaContent = typeof body.persona?.content === "string" ? body.persona.content.trim().slice(0, 36_000) : undefined;
+    let personaContent: string | undefined;
+    try { personaContent = await resolveAgentPersonaContent(body.persona); }
+    catch (error) {
+      return failureResponse(new PublicApiError("AIC-REQ-1001", { message: "所选人格卡暂不可用，请重新选择。", cause: error }), requestId, "/api/agent/chat", startedAt);
+    }
     const fileParts = body.messages.flatMap((message) => message.parts.filter((part) => part.type === "file")).map((part) => part as unknown as { url?: unknown; mediaType?: unknown; filename?: unknown });
     if (fileParts.length > 4) {
       const response = failureResponse(new Error("一次最多发送 4 个附件。"), requestId, "/api/agent/chat", startedAt);
@@ -156,7 +166,7 @@ export async function POST(request: Request) {
     const streamPolicy = createAgentStreamPolicy(request.signal);
     const result = streamText({
       ...streamPolicy.options,
-      model: getAgentModel(),
+      model: getAgentModel(settings),
       system: await buildAgentSystemPrompt(personaContent),
       messages: await convertToModelMessages(body.messages, { tools }),
       tools,
@@ -228,7 +238,7 @@ export async function POST(request: Request) {
     });
     const stream = result.toUIMessageStream({
       onError: (error) => {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = streamPolicy.errorText(error);
         console.error(JSON.stringify({
           level: "error",
           event: "agent_stream_error",

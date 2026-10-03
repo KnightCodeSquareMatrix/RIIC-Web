@@ -68,7 +68,7 @@ async function readBilling(): Promise<BillingData> {
 export function BillingPrototype() {
   const locale = useLocale();
   const containerClass = `${styles.page} grid min-w-0 w-full content-start gap-4 pt-2 pb-8 md:gap-6 md:pt-5`;
-  const heading = <WorkbenchPageHeading page="billing">{locale === "en" ? "Payment plans" : "付费计划"}</WorkbenchPageHeading>;
+  const heading = <WorkbenchPageHeading page="billing" accentColor="var(--billing-highlight)">{locale === "en" ? "Payment plans" : "付费计划"}</WorkbenchPageHeading>;
   const [data, setData] = useState<BillingData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -170,7 +170,7 @@ export function BillingPrototype() {
   return (
     <section className={containerClass} data-billing-prototype>
       <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>{heading}<p className="mt-2 text-sm text-muted-foreground">求解工具每次 1 积分 · 纯对话按 Token 实际用量计费 · 金额统一为人民币</p></div>
+        <div>{heading}<p className="mt-2 text-sm text-muted-foreground">付费计划仅用于助理对话功能，基建计算器的求解功能保持免费。</p><p className="mt-1 text-xs text-muted-foreground">助理对话按 Token 实际用量计费，助理内调用求解工具每次 1 积分 · 金额统一为人民币</p></div>
         <Link className={buttonVariants({ variant: "outline", className: styles.pill })} href="/agent">返回助理<ArrowUpRight className="size-3.5" /></Link>
       </header>
 
@@ -181,7 +181,7 @@ export function BillingPrototype() {
         <div className={styles.available}>
           <h2 className={styles.caption}>可用积分</h2>
           <p className={`${styles.balance} font-number`}>{data.wallet.totalPoints.toLocaleString()}<small>积分</small></p>
-          <p className={`${styles.caption} mt-3`}>可用于助理对话与基建排班</p>
+          <p className={`${styles.caption} mt-3`}>仅用于助理对话 · 基建计算器求解免费</p>
         </div>
         <dl className={styles.walletDetails}>
           <div>
@@ -247,9 +247,6 @@ export function BillingPrototype() {
                   {item.toolFeePoints != null ? <div><dt>工具扣费</dt><dd>{item.toolFeePoints.toLocaleString()} 积分</dd></div> : null}
                   {item.tokenPoints != null ? <div><dt>Token 扣费</dt><dd>{item.tokenPoints.toLocaleString()} 积分</dd></div> : null}
                   <div><dt>结算状态</dt><dd>{usageStatusLabels[item.status] ?? "未知状态"}</dd></div>
-                  {item.inputTokens != null ? <><div><dt>输入 Token</dt><dd>{item.inputTokens.toLocaleString()}</dd></div><div><dt>输出 Token</dt><dd>{(item.outputTokens ?? 0).toLocaleString()}</dd></div><div><dt>缓存命中</dt><dd>{(item.cachedInputTokens ?? 0).toLocaleString()}</dd></div></> : null}
-                  {item.chargedCostRmb != null ? <div><dt>计费金额</dt><dd>￥{item.chargedCostRmb.toFixed(2)}</dd></div> : null}
-                  {item.upstreamCostRmb != null ? <div><dt>模型成本</dt><dd>￥{item.upstreamCostRmb.toFixed(2)}</dd></div> : null}
                 </dl>
               </details>
             </li>)}

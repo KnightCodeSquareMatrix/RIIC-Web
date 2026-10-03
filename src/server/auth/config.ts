@@ -10,6 +10,22 @@ export function configuredAdminIds(value = process.env.BETTER_AUTH_ADMIN_USER_ID
   return new Set((value ?? "").split(",").map((id) => id.trim()).filter(Boolean));
 }
 
+/** Accept the two loopback names for the same dev server, never arbitrary origins. */
+export function localAuthTrustedOrigins(
+  baseURL: string,
+  nodeEnv = process.env.NODE_ENV,
+  deploymentEnv = process.env.APP_DEPLOYMENT_ENV,
+): string[] {
+  if (nodeEnv !== "development" || deploymentEnv === "production") return [];
+  const url = new URL(baseURL);
+  if (!["localhost", "127.0.0.1"].includes(url.hostname)) return [];
+  return ["localhost", "127.0.0.1"].map((hostname) => {
+    const alias = new URL(url);
+    alias.hostname = hostname;
+    return alias.origin;
+  });
+}
+
 export function requireAuthBaseUrl(
   value = process.env.BETTER_AUTH_URL,
   deploymentEnv = process.env.APP_DEPLOYMENT_ENV ?? process.env.NODE_ENV,

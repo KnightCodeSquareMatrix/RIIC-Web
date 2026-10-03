@@ -78,7 +78,7 @@ test("an anonymous cold start probes the shared session once and does not touch 
 
 test("the anonymous sample trial fetches and solves once before showing the schedule", async ({ page }) => {
   await mockAnonymousWebsiteSession(page);
-  await mockApis(page, { taskQueueEnabled: true });
+  await mockApis(page, { taskQueueEnabled: true, dismissSolverWarning: false });
   let releasePlan!: () => void;
   const planGate = new Promise<void>((resolve) => {
     releasePlan = resolve;
@@ -118,6 +118,14 @@ test("the anonymous sample trial fetches and solves once before showing the sche
   await expect(page.locator("[data-plan-board]")).toHaveAttribute("data-plan-revision", diagnosticId);
   await expect(page.locator("[data-anonymous-sample-trial]")).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => window.localStorage.getItem("arknights-infra-calc-beta-onboarding-v1"))).toBe("completed");
+
+  // Acknowledge the completion notice before opening another modal. The result
+  // board can mount before the notice opens, so an automatic handler can race
+  // the login dialog and try to click an inert, underlying close button.
+  const completionNotice = page.getByRole("dialog", { name: "排班已生成", exact: true });
+  await expect(completionNotice).toBeVisible();
+  await completionNotice.getByRole("button", { name: "关闭", exact: true }).click();
+  await expect(completionNotice).toHaveCount(0);
 
   const adjustmentTrigger = page.getByRole("button", { name: "修改练度并重算", exact: true });
   await adjustmentTrigger.click();

@@ -8,16 +8,53 @@
   .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
+@media (min-width: 1024px) {
+  .cards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
 .preview {
   --dialogue-accent: #ffd800;
   --billing-accent-foreground: #302710;
 }
 
+.preview[data-selected="true"] { outline: 2px solid var(--dialogue-accent); outline-offset: -2px; }
+
+.cardSelect {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.cardSelect:focus-visible { outline: 2px solid var(--ring); outline-offset: -5px; }
+.cardSelect:disabled { cursor: not-allowed; }
+.preview button:not(.cardSelect) { position: relative; z-index: 3; }
+
 .closure {
+  --dialogue-accent: #bd354b;
+  --dialogue-name: #bd354b;
+  --billing-accent-foreground: #fff;
+}
+
+.sunny {
+  --dialogue-accent: #ffd800;
+  --dialogue-name: #8a6900;
+  --billing-accent-foreground: #302710;
+}
+
+:global(.dark) .sunny { --dialogue-name: #ffe16b; }
+
+.preview[data-persona-theme="red"] {
   --dialogue-accent: #bd354b;
   --billing-accent-foreground: #fff;
 }
 
+.preview[data-persona-theme="blue"] {
+  --dialogue-accent: var(--billing-monthly-accent);
+  --billing-accent-foreground: var(--billing-monthly-foreground);
+}
 .identity {
   display: flex;
   align-items: center;
@@ -27,6 +64,8 @@
 }
 
 .portrait {
+  position: relative;
+  z-index: 3;
   width: 80px;
   height: 80px;
   flex-shrink: 0;
