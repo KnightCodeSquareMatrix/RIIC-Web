@@ -17,7 +17,7 @@ import { AgentComposerMenu } from "./AgentComposerMenu";
 import { FluidOrb } from "@/components/ui/fluid-orb";
 import { accountOrbColor } from "@/account-orb";
 import { AgentConversationScrollArea } from "./AgentConversationScrollArea";
-import { Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ChatBubble, ChatPanel, LoadingState, PromptBar, StreamingText, ThinkingState, ToolChip } from "./beautiful/ChatPrimitives";
 import dialogueStyles from "./beautiful/Dialogue.module.css";
 import billingStyles from "@/components/billing/BillingPrototype.module.css";
@@ -688,8 +688,8 @@ export function AgentChat({ conversationId, initialMessages, userName, userId, b
       </ChatPanel>
 
       <Dialog open={personaOpen} onOpenChange={(open) => { if (!avatarSaving) setPersonaOpen(open); }}>
-        <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col sm:max-w-[min(1160px,calc(100vw-2rem))]">
-          <DialogHeader><DialogTitle>人格卡</DialogTitle><DialogDescription>只影响表达风格；站内工具、账号权限和事实规则仍由服务端控制。</DialogDescription></DialogHeader>
+        <DialogContent aria-describedby={undefined} className="flex max-h-[calc(100dvh-2rem)] flex-col sm:max-w-[min(1160px,calc(100vw-2rem))]">
+          <DialogHeader><DialogTitle>人格卡</DialogTitle></DialogHeader>
           <DialogBody className="min-h-0 overflow-y-auto overscroll-contain pb-5 sm:pb-7">
             <div className="grid gap-3">
               <div className={personaStyles.cards}>
