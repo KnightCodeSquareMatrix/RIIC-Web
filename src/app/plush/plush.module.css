@@ -20,7 +20,7 @@
   height: auto;
   max-height: calc(var(--plush-size) * 1.275);
   color: var(--dialogue-accent);
-  opacity: .55;
+  opacity: 1;
   overflow: visible;
   pointer-events: none;
   user-select: none;
