@@ -83,14 +83,28 @@ test("slow GPU motion samples fewer pixels and restores the full authored qualit
   await page.getByText("更多设置", { exact: true }).click();
   await expect(avatar).toHaveAttribute("data-fur-motion", "idle", { timeout: 20_000 });
   const fullPixels = Number(await avatar.getAttribute("data-fur-pixels"));
+  const direct = await avatar.getAttribute("data-fur-renderer") === "webgl";
+  const surface = page.locator("main canvas");
+  const fullSurface = await surface.evaluate(canvas => ({ width: (canvas as HTMLCanvasElement).width, height: (canvas as HTMLCanvasElement).height }));
+  await surface.evaluate(canvas => {
+    canvas.setAttribute("data-size-changes", "0");
+    new MutationObserver(records => {
+      canvas.setAttribute("data-size-changes", String(Number(canvas.getAttribute("data-size-changes")) + records.length));
+    }).observe(canvas, { attributes: true, attributeFilter: ["width", "height"] });
+  });
   const bounds = await avatar.boundingBox();
   await page.mouse.move(bounds!.x + bounds!.width / 2, bounds!.y + bounds!.height / 2);
   await page.mouse.down();
   await expect.poll(async () => Number(await avatar.getAttribute("data-fur-resolution-scale")), { timeout: 15_000 }).toBeLessThan(1);
   expect(Number(await avatar.getAttribute("data-fur-pixels"))).toBeLessThan(fullPixels);
   await expect(avatar).toHaveAttribute("data-fur-shells", "64");
+  if (direct) {
+    expect(await surface.evaluate(canvas => ({ width: (canvas as HTMLCanvasElement).width, height: (canvas as HTMLCanvasElement).height }))).toEqual(fullSurface);
+    await expect(surface).toHaveAttribute("data-size-changes", "0");
+  }
   await page.mouse.up();
   await expect(avatar).toHaveAttribute("data-fur-motion", "idle", { timeout: 20_000 });
   await expect(avatar).toHaveAttribute("data-fur-resolution-scale", "1.00");
   await expect(avatar).toHaveAttribute("data-fur-pixels", String(fullPixels));
+  if (direct) await expect(surface).toHaveAttribute("data-size-changes", "0");
 });
