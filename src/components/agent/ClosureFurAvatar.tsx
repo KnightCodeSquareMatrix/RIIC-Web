@@ -80,6 +80,7 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
     let yaw = 0, pitch = 0, press = 0, pressVelocity = 0;
     let lastX = 0, lastY = 0, lagX = 0, lagY = 0;
     let pixels = 0, canvasWidth = 0, drawCost = 0;
+    let presentationWidth = 0, presentationHeight = 0;
     let drawing = false, needsFrame = false, revision = 0;
     let announcedVariant: FurAvatarVariant | undefined;
     let engine: Awaited<ReturnType<typeof acquireFurRenderer>> | undefined;
@@ -102,7 +103,7 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
       const currentRevision = revision;
       try {
         const started = performance.now();
-        const drawn = await engine.draw(context, pixels, { yaw, pitch, press, lagX, lagY, inertiaX, time: time / 1000, active: animated && activeRef.current }, variantRef.current, settingsRef.current, () => !disposed && currentRevision === revision, canvasWidth);
+        const drawn = await engine.draw(context, pixels, { yaw, pitch, press, lagX, lagY, inertiaX, time: time / 1000, active: animated && activeRef.current }, variantRef.current, settingsRef.current, () => !disposed && currentRevision === revision, canvasWidth, { width: presentationWidth, height: presentationHeight });
         if (disposed || currentRevision !== revision) return true;
         // Shader compilation is a one-time cost, not the steady frame budget.
         if (!gallery || announcedVariant === variantRef.current) drawCost = drawCost * 0.75 + (performance.now() - started) * 0.25;
@@ -112,7 +113,7 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
         if (settingsRef.current) {
           root.dataset.furDrawMs = drawCost.toFixed(1);
           root.dataset.furPixels = String(pixels);
-          root.dataset.furWidth = String(canvas.width);
+          root.dataset.furWidth = String(canvasWidth);
           root.dataset.furShells = String(settingsRef.current.shells);
           root.dataset.furLength = String(settingsRef.current.length);
           root.dataset.furFps = String(settingsRef.current.fps);
@@ -185,7 +186,9 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
         const interactionSettling = Math.abs(yaw - nextYaw) + Math.abs(pitch - nextPitch) + Math.abs(press - targetPress) + Math.abs(pressVelocity) * 0.1 + Math.abs(inertiaX) > 0.02;
         const moving = Boolean(transition) || time - lastInteraction < 180 || (resolutionScale < 1 && interactionSettling);
         if (!moving || !wasMoving || time - lastQualityUpdate > 500) {
-          const nextScale = moving ? motionResolutionScale(engine.frameMs(), resolutionScale) : 1;
+          // During one gesture only step down if needed. Recover once it has
+          // settled, rather than pumping sharpness as individual frames vary.
+          const nextScale = moving ? Math.min(resolutionScale, motionResolutionScale(engine.frameMs(), resolutionScale)) : 1;
           if (Math.abs(nextScale - resolutionScale) >= 0.1 || nextScale === 1) {
             if (nextScale !== resolutionScale) { resolutionScale = nextScale; resizeCanvas(); }
           }
@@ -267,7 +270,10 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
       // Give fullscreen fur enough samples instead of stretching the avatar's
       // old 1 MP budget. Cap gallery at 4 MP / 4096 wide and Agent at 256 square.
       const limit = gallery ? Math.min(2048, 2048 / Math.sqrt(aspect), 4096 / aspect) : 256;
-      const next = Math.max(1, Math.round((settingsRef.current ? Math.min(limit, requested) : requested) * resolutionScale));
+      const fullSize = settingsRef.current ? Math.min(limit, requested) : requested;
+      presentationHeight = Math.max(1, Math.round(fullSize));
+      presentationWidth = Math.max(1, Math.round(fullSize * aspect));
+      const next = Math.max(1, Math.round(fullSize * resolutionScale));
       const width = Math.max(1, Math.round(next * aspect));
       if (next === pixels && canvasWidth === width) return;
       pixels = next;
