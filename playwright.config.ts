@@ -22,6 +22,16 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
+      testIgnore: ["production-profile.spec.ts", "plush-*.spec.ts"],
+      use: { ...devices["Desktop Chrome"] },
+    },
+    {
+      name: "chromium-plush",
+      testMatch: "plush-*.spec.ts",
+      // Full-quality fur uses software WebGL in CI. Two simultaneous galleries
+      // contend for the same CPU renderer and turn idle waits into load tests.
+      // Keep every visual assertion while serializing GPU-heavy cases per shard.
+      workers: 1,
       use: { ...devices["Desktop Chrome"] },
     },
     {
