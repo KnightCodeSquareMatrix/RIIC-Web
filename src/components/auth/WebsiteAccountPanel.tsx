@@ -59,7 +59,7 @@ type AccountAction = "signout" | "sessions" | "delete";
 const AUTH_INPUT_CLASS = "border-[#d5d7da] bg-white shadow-none dark:border-[#d5d7da] dark:bg-white dark:text-[#242424] dark:placeholder:text-[#737373]";
 const AUTH_PASSWORD_TOGGLE_CLASS = "text-[#737373] hover:text-[#242424] dark:text-[#737373] dark:hover:text-[#242424]";
 
-interface WebsiteAccountPanelProps {
+export interface WebsiteAccountPanelProps {
   onSessionChanged?: (authenticated: boolean) => void | Promise<void>;
   loadingMode?: "page" | "dialog";
   cloudWorkspace?: CloudWorkspaceData | null;

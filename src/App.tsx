@@ -30,7 +30,6 @@ import { SetupDialogSkeleton } from "@/components/setup/SetupDialogSkeleton";
 import { LiveActivity, usePlanActivity } from "@/components/ui/live-activity";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { trackTelemetry } from "@/lib/telemetry-dispatch";
-import { loadClientFeature } from "@/client-lazy-loader";
 import { WorkbenchContext } from "@/workbench-context";
 import { WORKBENCH_PAGE_PATHS, workbenchHref, workbenchPageFromPathname, type AppPage } from "@/workbench-routes";
 import { useWebsiteSession } from "@/website-session";
@@ -100,7 +99,6 @@ import { DEFAULT_ROTATION_PROFILE, isRotationProfile, rotationDurations } from "
 import { MOTION_DURATION } from "./motion";
 import { emptySklandBindingSummary } from "./skland-binding-state";
 import { createSklandRestoreGuard } from "./skland-restore-guard";
-import { setupConfigurationFingerprint } from "./setup-configuration";
 import {
   BaseBlueprint,
   BoxSource,
@@ -140,9 +138,9 @@ function bindingSummaryFromSession(session: Pick<SklandSessionData, "accounts" |
   };
 }
 
-const loadWebsiteAccountDialog = () => loadClientFeature("websiteAccountDialog");
-const loadSetupDialog = () => loadClientFeature("setupDialog");
-const loadComponents = () => loadClientFeature("sharedComponents");
+const loadWebsiteAccountDialog = () => import("@/components/auth/WebsiteAccountDialog");
+const loadSetupDialog = () => import("./setup-dialog");
+const loadComponents = () => import("./components");
 const SklandTrainingSyncBridge = lazy(() => import("@/components/workbench/SklandTrainingSyncBridge"));
 const ReleaseAnnouncement = lazy(() => import("@/components/changelog/ReleaseAnnouncement").then((module) => ({
   default: module.ReleaseAnnouncement,
@@ -512,7 +510,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   const effectiveManualFiammettaEnabled = Boolean(
     manualFiammettaEnabled && operbox?.some((operator) => operator.own && operator.name === "菲亚梅塔")
   );
-  const setupConfigurationKey = useMemo(() => setupConfigurationFingerprint({
+  const setupConfigurationKey = useMemo(() => JSON.stringify({
     layout,
     rotationProfile,
     fiammettaEnabled,
@@ -2149,7 +2147,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
     if (page !== "calculator" || !result?.maa) return;
     let cancelled = false;
     let cancelPreload: (() => void) | undefined;
-    void loadClientFeature("schedulePortraitPreload").then((module) => {
+    void import("@/schedule-portrait-preload").then((module) => {
       if (!cancelled) cancelPreload = module.scheduleNextShiftPortraitPreload(result.maa, activeShift);
     });
     return () => {
