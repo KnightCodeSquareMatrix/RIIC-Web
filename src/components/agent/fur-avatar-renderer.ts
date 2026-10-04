@@ -1,9 +1,10 @@
 import {
   AmbientLight, BufferGeometry, CatmullRomCurve3, Color, CubeUVReflectionMapping, DataTexture, DirectionalLight, ExtrudeGeometry, Float32BufferAttribute, Group, HalfFloatType, InstancedBufferAttribute,
   InstancedBufferGeometry, LinearFilter, LinearSRGBColorSpace, LineBasicMaterial, LineSegments, Mesh, MeshBasicMaterial, MeshPhysicalMaterial, OrthographicCamera, RGBAFormat,
-  Scene, ShaderMaterial, Shape, SphereGeometry, TubeGeometry, Vector2, Vector3, Vector4, WebGLRenderer,
+  Scene, ShaderMaterial, Shape, SphereGeometry, SRGBColorSpace, TubeGeometry, Vector2, Vector3, Vector4, WebGLRenderer, WebGLRenderTarget,
 } from "three";
 import { mergeVertices } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { createExusiaiCoat } from "./exusiai-coat";
 import { createExusiaiEmbroidery } from "./exusiai-embroidery";
 import { createSaileachCoat } from "./saileach-coat";
@@ -300,6 +301,16 @@ function buildRenderer(environmentData: Uint16Array, canvas?: HTMLCanvasElement)
   // A visible software-WebGL canvas can stall the browser compositor itself.
   // Keep its expensive draw offscreen and yield until ready, as chat does.
   const direct = Boolean(canvas) && !/SwiftShader|llvmpipe|Software|Microsoft Basic Render/i.test(device);
+  // Adaptive sampling must not resize/clear the visible drawing buffer. Render
+  // into one reusable GPU target, then present the complete image in one pass.
+  const presentationTarget = direct ? new WebGLRenderTarget(1, 1, {
+    colorSpace: SRGBColorSpace,
+    samples: Math.min(gl.getParameter(gl.SAMPLES) as number, renderer.capabilities.maxSamples),
+    minFilter: LinearFilter, magFilter: LinearFilter,
+  }) : null;
+  const outputPass = direct ? new OutputPass() : null;
+  if (outputPass) outputPass.renderToScreen = true;
+  let surfaceWidth = 0, surfaceHeight = 0;
   let pendingDraw: Promise<unknown> = Promise.resolve();
   const compiledVariants = new Set<FurAvatarVariant>();
   // A canvas copy waits synchronously for unfinished GPU work. On software WebGL
@@ -830,18 +841,21 @@ function buildRenderer(environmentData: Uint16Array, canvas?: HTMLCanvasElement)
       const nextRig = variantRig(variant);
       const visible = nextRig.visible;
       nextRig.visible = true;
+      renderer.setRenderTarget(presentationTarget);
       const compilation = renderer.compileAsync(nextRig, camera, scene);
+      renderer.setRenderTarget(null);
       nextRig.visible = Boolean(existed && visible);
       await compilation;
       if (!disposed && !lost) compiledVariants.add(variant);
     },
-    draw(context: CanvasRenderingContext2D | null, pixels: number, pose: FurAvatarPose, variant: FurAvatarVariant = "closure", settings: FurSettings = DEFAULT_FUR_SETTINGS, isCurrent = () => true, requestedWidth?: number) {
+    draw(context: CanvasRenderingContext2D | null, pixels: number, pose: FurAvatarPose, variant: FurAvatarVariant = "closure", settings: FurSettings = DEFAULT_FUR_SETTINGS, isCurrent = () => true, requestedWidth?: number, presentation?: { width: number; height: number }) {
       const output = direct ? canvas! : context!.canvas;
       const canvasWidth = requestedWidth ?? output.width;
       const draw = async () => {
       if (lost || disposed || !isCurrent()) return false;
       if (size !== pixels || width !== canvasWidth) {
-        renderer.setSize(canvasWidth, pixels, false);
+        if (presentationTarget) presentationTarget.setSize(canvasWidth, pixels);
+        else renderer.setSize(canvasWidth, pixels, false);
         size = pixels;
         width = canvasWidth;
         camera.left = -1.35 * canvasWidth / pixels;
@@ -933,12 +947,24 @@ function buildRenderer(environmentData: Uint16Array, canvas?: HTMLCanvasElement)
         material.uniforms.uLag.value.set(pose.lagX * 4 + (pose.inertiaX ?? 0), pose.lagY * 4);
       }
       if (!compiledVariants.has(variant)) {
-        await renderer.compileAsync(activeRig, camera, scene);
+        renderer.setRenderTarget(presentationTarget);
+        try { await renderer.compileAsync(activeRig, camera, scene); }
+        finally { renderer.setRenderTarget(null); }
         compiledVariants.add(variant);
         if (disposed || !isCurrent()) return false;
       }
       submittedAt = performance.now();
-      renderer.render(scene, camera);
+      if (presentationTarget && outputPass) {
+        const nextWidth = presentation?.width ?? canvasWidth;
+        const nextHeight = presentation?.height ?? pixels;
+        if (surfaceWidth !== nextWidth || surfaceHeight !== nextHeight) {
+          renderer.setSize(nextWidth, nextHeight, false);
+          surfaceWidth = nextWidth; surfaceHeight = nextHeight;
+        }
+        renderer.setRenderTarget(presentationTarget);
+        renderer.render(scene, camera);
+        outputPass.render(renderer, presentationTarget, presentationTarget, 0, false);
+      } else renderer.render(scene, camera);
       if (direct) {
         if (submitted) gl.deleteSync(submitted);
         submitted = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
@@ -970,6 +996,8 @@ function buildRenderer(environmentData: Uint16Array, canvas?: HTMLCanvasElement)
       for (const material of materials) material.dispose();
       for (const texture of textures) texture.dispose();
       environment.dispose();
+      presentationTarget?.dispose();
+      outputPass?.dispose();
       renderer.dispose();
       renderer.forceContextLoss();
     },
