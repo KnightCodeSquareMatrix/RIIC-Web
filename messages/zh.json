@@ -337,6 +337,7 @@
   },
   "components_cloud_CloudDataSync": {
     "status": {
+      "local-only": "仅使用本地 · 云同步已关闭",
       "idle": "尚未同步",
       "pending": "有待同步的修改",
       "syncing": "正在同步…",
@@ -359,6 +360,7 @@
     "syncError_session": "登录已过期，请重新登录以恢复云同步。本地数据已保留。",
     "syncError_paused": "云同步遇到错误，已暂停重试。本地数据已保留，可以稍后再试。",
     "resumeSync": "恢复云同步",
+    "useLocalOnly": "仅使用本地",
     "cloudSyncIsTemporarilyUnavailableCurrentDataRemainsStored": "云端同步暂不可用，当前数据仍保存在本地。",
     "cloudSyncFailedALocalCopyHasBeenRetained": "云端同步失败，已保留本地副本。",
     "couldNotSaveConsentTryAgainLater": "无法保存同意状态，请稍后重试。"
