@@ -4,7 +4,7 @@ import { useContext, useEffect, useId, useRef } from "react";
 import type { acquireFurRenderer, FurAvatarVariant } from "./fur-avatar-renderer";
 import { FurSettingsContext } from "./FurSettingsContext";
 import { useAgentFurSettings } from "./fur-settings-store";
-import { plushFurInertia } from "./plush-motion";
+import { plushFurInertia, plushGazeStep } from "./plush-motion";
 import { motionResolutionScale } from "./fur-frame-budget";
 
 // One interactive avatar at a time, even when the history contains many replies.
@@ -88,8 +88,10 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
     let resolutionScale = 1, lastQualityUpdate = 0, lastInteraction = -Infinity;
     let wasMoving = false;
     const prewarm = () => {
-      if (disposed || !gallery || document.hidden || !nextVariantRef.current) return;
-      if (pressed || transition || drawing || !engine?.ready()) {
+      // Software shader compilation competes with the current frame on the CPU.
+      // Compile its next character only when selected, not during idle settling.
+      if (disposed || !gallery || !engine?.direct || document.hidden || !nextVariantRef.current) return;
+      if (hovering || pressed || transition || drawing || !engine.ready()) {
         warmTimer = setTimeout(prewarm, 1000); return;
       }
       void engine.prewarm(nextVariantRef.current).catch(() => {});
@@ -159,14 +161,15 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
       const working = animate && activeRef.current;
       const nextYaw = animate ? (interactive ? targetX : 0) + (working ? Math.sin(time / 1100) * 0.045 : 0) : 0;
       const nextPitch = animate ? (interactive ? targetY : 0) + (working ? Math.sin(time / 1400) * 0.025 : 0) : 0;
-      const ease = 1 - Math.exp(-14 * dt);
       const targetInertia = animate && transition ? plushFurInertia(Number(transition.animation.currentTime ?? 0), transition.width, transition.direction) : 0;
       inertiaX += (targetInertia - inertiaX) * (1 - Math.exp(-12 * dt));
       if (!transition && Math.abs(inertiaX) < 0.001) inertiaX = 0;
-      lagX += ((nextYaw - yaw) - lagX) * ease;
-      lagY += ((nextPitch - pitch) - lagY) * ease;
-      yaw += (nextYaw - yaw) * ease;
-      pitch += (nextPitch - pitch) * ease;
+      // A frame-sized lag update leaves a full stale trail after a long GPU
+      // frame. Exact integration settles both channels in real elapsed time.
+      const horizontal = plushGazeStep(yaw, lagX, nextYaw, dt);
+      const vertical = plushGazeStep(pitch, lagY, nextPitch, dt);
+      yaw = horizontal.position; lagX = horizontal.lag;
+      pitch = vertical.position; lagY = vertical.lag;
       // A damped spring keeps a second press continuous with the first release.
       const targetPress = animate && interactive && pressed ? 1 : 0;
       // Exact damped-spring step: preserve real elapsed time even when rendering
