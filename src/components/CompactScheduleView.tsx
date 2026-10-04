@@ -32,7 +32,6 @@ import {
   COMPACT_ROOM_TITLE_CLASS,
   compactFactoryAccent,
   compactTradeAccent,
-  isCompactScheduleGroupVisible,
   roomGridTone,
 } from "@/schedule-view-presentation";
 import type { RoomRow } from "@/schedule";
@@ -455,7 +454,7 @@ export function CompactScheduleView(props: CompactScheduleViewProps) {
 
   const byGroup = new Map<string, RoomRow[]>();
   for (const row of rows) {
-    if (!isCompactScheduleGroupVisible(row.group)) continue;
+    if (!row.group) continue;
     const list = byGroup.get(row.group) ?? [];
     list.push(row);
     byGroup.set(row.group, list);
