@@ -35,7 +35,11 @@ test(`${variant} eyes press into ovals and recover without a static backing`, as
     }), { timeout: 15_000 }).toMatchObject({ motion: "idle", visibility: "visible" });
     const eyePixels = () => page.locator("main canvas").evaluate((element, { character, scale }) => {
       const canvas = element as HTMLCanvasElement;
-      const image = canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height);
+      const copy = document.createElement("canvas");
+      copy.width = canvas.width; copy.height = canvas.height;
+      const context = copy.getContext("2d", { willReadFrequently: true })!;
+      canvas.closest("[data-fur-avatar]")!.dispatchEvent(new CustomEvent("fur-snapshot", { detail: context }));
+      const image = context.getImageData(0, 0, canvas.width, canvas.height);
       let pixels = 0;
       for (let y = 0; y < image.height; y += 2) for (let x = 0; x < image.width; x += 2) {
         if (character !== "closure") {
@@ -64,6 +68,8 @@ test(`${variant} eyes press into ovals and recover without a static backing`, as
     await expect.poll(eyePixels, { timeout: 20_000 }).toBeLessThan(open * 0.75);
     await expect(avatar).toHaveAttribute("data-fur-motion", "idle", { timeout: 15_000 });
     const pressed = await eyePixels();
+    await expect(avatar).toHaveAttribute("data-fur-resolution-scale", "1.00");
+    expect(pressed).toBeLessThan(open * 0.75);
     expect(pressed).toBeGreaterThan(open * 0.3);
     await page.mouse.up();
     await expect.poll(eyePixels, { timeout: 20_000 }).toBeGreaterThan(open * 0.85);
