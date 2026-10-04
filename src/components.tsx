@@ -33,7 +33,6 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
-import { loadClientFeature } from "@/client-lazy-loader";
 import { localizedBuildingSkill, localizedOperatorName, localizedRoomTitle } from "@/i18n/game-data";
 import { useGameCatalog } from "@/i18n/game-data-client";
 import {
@@ -101,7 +100,7 @@ import {
   RotationJson,
 } from "./types";
 
-const OperatorSkillTooltip = lazy(() => loadClientFeature("operatorSkillTooltip").then((module) => ({
+const OperatorSkillTooltip = lazy(() => import("@/components/OperatorSkillTooltip").then((module) => ({
   default: module.OperatorSkillTooltip,
 })));
 
@@ -1376,7 +1375,7 @@ export function ScheduleBoard({
     if ((viewMode !== "compact" && !(supportsCompactLayout && prepareInactiveView)) || CompactScheduleView || compactScheduleLoadFailed) return;
 
     let cancelled = false;
-    void loadClientFeature("compactScheduleView").then(
+    void import("@/components/CompactScheduleView").then(
       (module) => {
         if (!cancelled) setCompactScheduleView(() => module.CompactScheduleView);
       },
@@ -1393,7 +1392,7 @@ export function ScheduleBoard({
     let compactComponent = CompactScheduleView;
     if (nextViewMode === "compact" && !compactComponent) {
       try {
-        compactComponent = (await loadClientFeature("compactScheduleView")).CompactScheduleView;
+        compactComponent = (await import("@/components/CompactScheduleView")).CompactScheduleView;
       } catch {
         setCompactScheduleLoadFailed(true);
       }

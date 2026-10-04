@@ -683,7 +683,6 @@ test("the Skland entry is request-rendered so releases cannot retain stale login
 test("the critical calculator board stays initial while the compact view loads on demand", async () => {
   const calculator = await readRepoFile("src/components/pages/InfraCalculator.tsx");
   const calculatorRoute = await readRepoFile("src/components/workbench/CalculatorRoute.tsx");
-  const lazyLoader = await readRepoFile("src/client-lazy-loader.ts");
   const app = await readRepoFile("src/App.tsx");
 
   assert.match(calculator, /import \{ ScheduleBoard, ShiftTabs \} from "@\/components"/);
@@ -696,8 +695,7 @@ test("the critical calculator board stays initial while the compact view loads o
   assert.match(components, /useState<ScheduleViewMode \| null>\(null\)/);
   assert.match(components, /useState<boolean \| null>\(null\)/);
   assert.match(components, /window\.matchMedia\("\(min-width: 1024px\)"\)/);
-  assert.match(components, /viewMode !== "compact"[\s\S]{0,300}loadClientFeature\("compactScheduleView"\)/);
-  assert.match(lazyLoader, /case "compactScheduleView":[\s\S]{0,100}import\("@\/components\/CompactScheduleView"\)/);
+  assert.match(components, /viewMode !== "compact"[\s\S]{0,300}import\("@\/components\/CompactScheduleView"\)/);
   assert.doesNotMatch(components, /import \{ CompactScheduleView \} from "@\/components\/CompactScheduleView"/);
   assert.doesNotMatch(calculator, /onViewModeChange|showBetaSidebar|showBetaPanels/);
   assert.match(app, /const hasRenderedCalculator = useRef\(false\)/);
@@ -718,6 +716,7 @@ test("heavy account, operator, and scrollbar modules stay behind runtime boundar
   assert.doesNotMatch(app, /import \{\s*createManualScheduleDraftFromCalculator/);
   assert.doesNotMatch(schedule, /operatorPresentationFor/);
   assert.doesNotMatch(components, /from "@\/operatorPortraits"/);
+  assert.match(app, /const loadWebsiteAccountDialog = \(\) => import\("@\/components\/auth\/WebsiteAccountDialog"\)/);
   assert.match(scrollbar, /import\("overlayscrollbars"\)/);
 });
 

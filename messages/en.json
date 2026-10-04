@@ -547,11 +547,6 @@
     "loadFailedSelectToRetry": "Load failed. Select to retry",
     "allResultsShown": "All results shown"
   },
-  "components_ui_pagination": {
-    "previous": "Previous",
-    "next": "Next",
-    "morePages": "More pages"
-  },
   "components_workbench_WorkbenchRouteSkeleton": {
     "loadingTrainingAdvice": "Loading training advice",
     "loadingSkillReference": "Loading skill reference",
