@@ -337,6 +337,7 @@
   },
   "components_cloud_CloudDataSync": {
     "status": {
+      "local-only": "Local only · Cloud sync is off",
       "idle": "Not synced yet",
       "pending": "Changes waiting to sync",
       "syncing": "Syncing…",
@@ -359,6 +360,7 @@
     "syncError_session": "Your login has expired. Sign in again to resume cloud sync. Your local data is retained.",
     "syncError_paused": "Cloud sync is paused after an error. Your local data is retained; you can try again later.",
     "resumeSync": "Resume cloud sync",
+    "useLocalOnly": "Use local only",
     "cloudSyncIsTemporarilyUnavailableCurrentDataRemainsStored": "Cloud sync is temporarily unavailable. Current data remains stored locally.",
     "cloudSyncFailedALocalCopyHasBeenRetained": "Cloud sync failed. A local copy has been retained.",
     "couldNotSaveConsentTryAgainLater": "Could not save consent. Try again later."

@@ -4,7 +4,8 @@ import { useContext, useEffect, useId, useRef } from "react";
 import type { acquireFurRenderer, FurAvatarVariant } from "./fur-avatar-renderer";
 import { FurSettingsContext } from "./FurSettingsContext";
 import { useAgentFurSettings } from "./fur-settings-store";
-import { plushFurInertia } from "./plush-motion";
+import { plushFurInertia, plushGazeStep } from "./plush-motion";
+import { motionResolutionScale } from "./fur-frame-budget";
 
 // One interactive avatar at a time, even when the history contains many replies.
 const interactionOwners = new EventTarget();
@@ -30,10 +31,10 @@ export function MountainFurAvatar({ active = false }: { active?: boolean }) {
   return <FurAvatar active={active} variant="mountain" />;
 }
 
-export function FurAvatar({ active = false, variant, preview = false, fullWidth = false }: { active?: boolean; variant: FurAvatarVariant; preview?: boolean; fullWidth?: boolean }) {
+export function FurAvatar({ active = false, variant, preview = false, fullWidth = false, nextVariant }: { active?: boolean; variant: FurAvatarVariant; preview?: boolean; fullWidth?: boolean; nextVariant?: FurAvatarVariant }) {
   const gradientId = useId().replaceAll(":", "");
   const rootRef = useRef<HTMLSpanElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasRef = useRef<HTMLSpanElement>(null);
   const activeRef = useRef(active);
   const variantRef = useRef(variant);
   const override = useContext(FurSettingsContext);
@@ -41,6 +42,9 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
   const settings = override ?? agentSettings;
   const gallery = Boolean(override);
   const settingsRef = useRef(settings);
+  const nextVariantRef = useRef(nextVariant);
+
+  useEffect(() => { nextVariantRef.current = nextVariant; }, [nextVariant]);
 
   useEffect(() => {
     variantRef.current = variant;
@@ -59,10 +63,14 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
 
   useEffect(() => {
     if (preview) return;
-    const root = rootRef.current, canvas = canvasRef.current;
-    if (!root || !canvas) return;
-    const context = canvas.getContext("2d");
-    if (!context) return;
+    const root = rootRef.current, mount = canvasRef.current;
+    if (!root || !mount) return;
+    let canvas = document.createElement("canvas");
+    const rendererCanvas = canvas;
+    canvas.className = fullWidth ? "absolute left-0 -top-[22%] h-[144%] w-full" : "absolute -left-[22%] -top-[22%] size-[144%]";
+    mount.append(canvas);
+    let context = gallery ? null : canvas.getContext("2d");
+    if (!gallery && !context) return;
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
     const finePointer = window.matchMedia("(hover: hover) and (pointer: fine)");
     let visible = gallery, disposed = false, pressed = false, hovering = false;
@@ -71,19 +79,36 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
     let frame = 0, lastFrame = 0, targetX = 0, targetY = 0;
     let yaw = 0, pitch = 0, press = 0, pressVelocity = 0;
     let lastX = 0, lastY = 0, lagX = 0, lagY = 0;
-    let pixels = 0, drawCost = 0;
+    let pixels = 0, canvasWidth = 0, drawCost = 0;
     let drawing = false, needsFrame = false, revision = 0;
     let announcedVariant: FurAvatarVariant | undefined;
     let engine: Awaited<ReturnType<typeof acquireFurRenderer>> | undefined;
+    let warmTimer: ReturnType<typeof setTimeout> | undefined;
+    let submittedFrames = 0;
+    let resolutionScale = 1, lastQualityUpdate = 0, lastInteraction = -Infinity;
+    let wasMoving = false;
+    const prewarm = () => {
+      // Software shader compilation competes with the current frame on the CPU.
+      // Compile its next character only when selected, not during idle settling.
+      if (disposed || !gallery || !engine?.direct || document.hidden || !nextVariantRef.current) return;
+      if (hovering || pressed || transition || drawing || !engine.ready()) {
+        warmTimer = setTimeout(prewarm, 1000); return;
+      }
+      void engine.prewarm(nextVariantRef.current).catch(() => {});
+    };
 
     const paint = async (time: number, animated: boolean) => {
       if (!engine) return false;
       const currentRevision = revision;
       try {
         const started = performance.now();
-        const drawn = await engine.draw(context, pixels, { yaw, pitch, press, lagX, lagY, inertiaX, time: time / 1000, active: animated && activeRef.current }, variantRef.current, settingsRef.current, () => !disposed && currentRevision === revision);
+        const drawn = await engine.draw(context, pixels, { yaw, pitch, press, lagX, lagY, inertiaX, time: time / 1000, active: animated && activeRef.current }, variantRef.current, settingsRef.current, () => !disposed && currentRevision === revision, canvasWidth);
         if (disposed || currentRevision !== revision) return true;
-        drawCost = drawCost * 0.75 + (performance.now() - started) * 0.25;
+        // Shader compilation is a one-time cost, not the steady frame budget.
+        if (!gallery || announcedVariant === variantRef.current) drawCost = drawCost * 0.75 + (performance.now() - started) * 0.25;
+        root.dataset.furFrames = String(++submittedFrames);
+        root.dataset.furResolutionScale = resolutionScale.toFixed(2);
+        root.dataset.furRenderer = engine.direct ? "webgl" : gallery ? "software-2d" : "shared-2d";
         if (settingsRef.current) {
           root.dataset.furDrawMs = drawCost.toFixed(1);
           root.dataset.furPixels = String(pixels);
@@ -100,13 +125,15 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
         if (announcedVariant !== variantRef.current) {
           announcedVariant = variantRef.current;
           root.dispatchEvent(new Event("fur-rendered", { bubbles: true }));
+          clearTimeout(warmTimer);
+          if (gallery) warmTimer = setTimeout(prewarm, 1500);
         }
-        if (!drawn) context.clearRect(0, 0, canvas.width, canvas.height);
+        if (!drawn) context?.clearRect(0, 0, canvas.width, canvas.height);
         return drawn;
       } catch {
         if (disposed || currentRevision !== revision) return true;
         root.dataset.furReady = "false";
-        context.clearRect(0, 0, canvas.width, canvas.height);
+        context?.clearRect(0, 0, canvas.width, canvas.height);
         if (announcedVariant !== variantRef.current) {
           announcedVariant = variantRef.current;
           root.dispatchEvent(new Event("fur-rendered", { bubbles: true }));
@@ -120,9 +147,11 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
       if (drawing) { needsFrame = true; return; }
       if (disposed || (!visible && !transition) || document.hidden) { root.dataset.furMotion = "paused"; return; }
       if (!engine) return;
+      if (!engine.ready()) { frame = requestAnimationFrame(render); return; }
       // Leave time for streaming text and input on devices with slow/software WebGL.
-      const interval = Math.max(1000 / Math.min(settingsRef.current?.fps ?? 30, transition ? 24 : 60), Math.min(250, drawCost * 4));
-      if (lastFrame && time - lastFrame < interval) { frame = requestAnimationFrame(render); return; }
+      const interval = gallery ? 1000 / 60 : Math.max(1000 / (settingsRef.current?.fps ?? 30), Math.min(250, drawCost * 4));
+      // Allow RAF timestamp jitter around 60 Hz rather than accidentally halving it.
+      if (lastFrame && time - lastFrame < interval - 1) { frame = requestAnimationFrame(render); return; }
       // On a slow GPU, an initial near-rest pose would consume an entire frame
       // before any press became visible. Account for its measured presentation latency.
       const dt = lastFrame ? Math.min((time - lastFrame) / 1000, 5) : Math.max(1 / 30, Math.min(0.5, drawCost / 1000));
@@ -132,14 +161,15 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
       const working = animate && activeRef.current;
       const nextYaw = animate ? (interactive ? targetX : 0) + (working ? Math.sin(time / 1100) * 0.045 : 0) : 0;
       const nextPitch = animate ? (interactive ? targetY : 0) + (working ? Math.sin(time / 1400) * 0.025 : 0) : 0;
-      const ease = 1 - Math.exp(-14 * dt);
       const targetInertia = animate && transition ? plushFurInertia(Number(transition.animation.currentTime ?? 0), transition.width, transition.direction) : 0;
       inertiaX += (targetInertia - inertiaX) * (1 - Math.exp(-12 * dt));
       if (!transition && Math.abs(inertiaX) < 0.001) inertiaX = 0;
-      lagX += ((nextYaw - yaw) - lagX) * ease;
-      lagY += ((nextPitch - pitch) - lagY) * ease;
-      yaw += (nextYaw - yaw) * ease;
-      pitch += (nextPitch - pitch) * ease;
+      // A frame-sized lag update leaves a full stale trail after a long GPU
+      // frame. Exact integration settles both channels in real elapsed time.
+      const horizontal = plushGazeStep(yaw, lagX, nextYaw, dt);
+      const vertical = plushGazeStep(pitch, lagY, nextPitch, dt);
+      yaw = horizontal.position; lagX = horizontal.lag;
+      pitch = vertical.position; lagY = vertical.lag;
       // A damped spring keeps a second press continuous with the first release.
       const targetPress = animate && interactive && pressed ? 1 : 0;
       // Exact damped-spring step: preserve real elapsed time even when rendering
@@ -151,7 +181,20 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
       pressVelocity = decay * ((amplitude * frequency - 5 * offset) * cosine - (offset * frequency + 5 * amplitude) * sine);
       if (!animate) { yaw = 0; pitch = 0; press = 0; pressVelocity = 0; lagX = 0; lagY = 0; inertiaX = 0; }
       const settling = Math.abs(yaw - nextYaw) + Math.abs(pitch - nextPitch) + Math.abs(press - targetPress) + Math.abs(pressVelocity) + Math.abs(lagX) + Math.abs(lagY) + Math.abs(inertiaX) > 0.003;
-      const motion = reduce.matches ? "still" : working || settling || transition ? "animated" : "idle";
+      if (gallery) {
+        const interactionSettling = Math.abs(yaw - nextYaw) + Math.abs(pitch - nextPitch) + Math.abs(press - targetPress) + Math.abs(pressVelocity) * 0.1 + Math.abs(inertiaX) > 0.02;
+        const moving = Boolean(transition) || time - lastInteraction < 180 || (resolutionScale < 1 && interactionSettling);
+        if (!moving || !wasMoving || time - lastQualityUpdate > 500) {
+          const nextScale = moving ? motionResolutionScale(engine.frameMs(), resolutionScale) : 1;
+          if (Math.abs(nextScale - resolutionScale) >= 0.1 || nextScale === 1) {
+            if (nextScale !== resolutionScale) { resolutionScale = nextScale; resizeCanvas(); }
+          }
+          lastQualityUpdate = time;
+        }
+        wasMoving = moving;
+      }
+      const restoringQuality = gallery && resolutionScale < 1;
+      const motion = reduce.matches ? "still" : working || settling || transition || restoringQuality ? "animated" : "idle";
       drawing = true;
       needsFrame = false;
       const drawn = await paint(time, animate);
@@ -161,10 +204,13 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
       // GPU queue. A newer pose requested during this draw must settle first.
       if (drawn && !needsFrame) root.dataset.furMotion = motion;
       if (!drawn && !needsFrame) { root.dataset.furMotion = "fallback"; return; }
-      if (!frame && (needsFrame || (animate && (working || settling || transition)))) frame = requestAnimationFrame(render);
+      if (!frame && (needsFrame || restoringQuality || (animate && (working || settling || transition)))) frame = requestAnimationFrame(render);
     };
     const wake = () => {
       if (disposed) return;
+      // Idle means the requested pose has actually been presented, including
+      // the final full-resolution frame after an interaction.
+      root.dataset.furMotion = "animated";
       if (drawing) { needsFrame = true; return; }
       if (!frame) { lastFrame = 0; frame = requestAnimationFrame(render); }
     };
@@ -180,6 +226,7 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
     const move = (event: PointerEvent) => {
       if (!(gallery && pressed) && (event.pointerType !== "mouse" || !finePointer.matches || reduce.matches)) return;
       hovering = true;
+      lastInteraction = performance.now();
       claim();
       if (pressed) {
         targetX += (event.clientX - lastX) * 0.018;
@@ -197,6 +244,7 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
     const down = (event: PointerEvent) => {
       if (event.button !== 0 || (reduce.matches && !gallery)) return;
       pressed = true;
+      lastInteraction = performance.now();
       lastX = event.clientX;
       lastY = event.clientY;
       if (gallery || event.pointerType === "mouse") root.setPointerCapture(event.pointerId);
@@ -206,11 +254,12 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
     const up = () => {
       if (!pressed) return;
       pressed = false;
+      lastInteraction = performance.now();
       if (!hovering) releaseOwner();
       wake();
     };
     const leave = () => { reset(); releaseOwner(); wake(); };
-    const resize = () => {
+    const resizeCanvas = () => {
       const bounds = root.getBoundingClientRect();
       const aspect = fullWidth ? bounds.width / Math.max(1, bounds.height * 1.44) : 1;
       const requestedRatio = Math.min(devicePixelRatio || 1, 2) * (settingsRef.current?.resolution ?? 1);
@@ -218,15 +267,25 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
       // Give fullscreen fur enough samples instead of stretching the avatar's
       // old 1 MP budget. Cap gallery at 4 MP / 4096 wide and Agent at 256 square.
       const limit = gallery ? Math.min(2048, 2048 / Math.sqrt(aspect), 4096 / aspect) : 256;
-      const next = Math.max(1, Math.round(settingsRef.current ? Math.min(limit, requested) : requested));
+      const next = Math.max(1, Math.round((settingsRef.current ? Math.min(limit, requested) : requested) * resolutionScale));
       const width = Math.max(1, Math.round(next * aspect));
-      if (next === pixels && canvas.width === width) return;
+      if (next === pixels && canvasWidth === width) return;
       pixels = next;
+      canvasWidth = width;
       revision++;
-      canvas.width = width;
-      canvas.height = pixels;
-      wake();
+      if (context && Math.abs(canvas.width / canvas.height - width / pixels) > 0.005) {
+        // A viewport aspect change must fit immediately, even on a software GPU.
+        // Preserve its old bitmap while the correctly projected frame is queued.
+        const previous = document.createElement("canvas");
+        previous.width = canvas.width; previous.height = canvas.height;
+        previous.getContext("2d", { willReadFrequently: true })?.drawImage(canvas, 0, 0);
+        canvas.width = width; canvas.height = pixels;
+        context.drawImage(previous, 0, 0, width, pixels);
+      }
+      // The renderer owns physical resizing. WebGL waits for its previous GPU
+      // frame; copied portraits keep their last bitmap until the new one is ready.
     };
+    const resize = () => { resizeCanvas(); wake(); };
     const visibility = () => {
       if (document.hidden) { stop(); reset(); releaseOwner(); root.dataset.furMotion = "paused"; }
       else wake();
@@ -239,14 +298,22 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
     };
     const settingsChange = () => { revision++; resize(); wake(); };
     const variantChange = () => {
+      clearTimeout(warmTimer);
       revision++;
       reset(); releaseOwner();
       yaw = pitch = press = pressVelocity = lagX = lagY = 0;
       inertiaX = 0;
       root.dataset.furReady = "false";
       announcedVariant = undefined;
-      context.clearRect(0, 0, canvas.width, canvas.height);
+      context?.clearRect(0, 0, canvas.width, canvas.height);
       wake();
+    };
+    const snapshot = (event: Event) => {
+      const target = (event as CustomEvent<CanvasRenderingContext2D>).detail;
+      if (gallery && target) {
+        if (engine?.direct) engine.snapshot(target);
+        else target.drawImage(canvas, 0, 0);
+      }
     };
     const observer = new IntersectionObserver(([entry]) => {
       // The dedicated gallery fills the viewport. Layout changes in its debug
@@ -269,19 +336,31 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
     root.addEventListener("fur-settings", settingsChange);
     root.addEventListener("fur-variant", variantChange);
     root.addEventListener("fur-transition", transitionChange);
+    root.addEventListener("fur-snapshot", snapshot);
+    rendererCanvas.addEventListener("fur-context-restored", wake);
     window.addEventListener("pointerup", up);
     document.addEventListener("visibilitychange", visibility);
     reduce.addEventListener("change", motionChange);
     interactionOwners.addEventListener("change", wake);
-    void import("./fur-avatar-renderer").then(async ({ acquireFurRenderer }) => {
+    void import("./fur-avatar-renderer").then(async ({ acquireFurRenderer, acquireGalleryFurRenderer }) => {
       if (disposed) return;
-      const acquired = await acquireFurRenderer();
+      const acquired = await (gallery ? acquireGalleryFurRenderer(canvas) : acquireFurRenderer());
       if (disposed) { acquired.release(); return; }
       engine = acquired;
+      if (acquired.surface && acquired.surface !== canvas) {
+        acquired.surface.className = canvas.className;
+        canvas = acquired.surface;
+        // Software fallback must not send its bitmap back through the busy GPU
+        // compositor. Keep presentation and viewport resizing on a CPU surface.
+        context = canvas.getContext("2d", { willReadFrequently: true });
+        mount.replaceChildren(canvas);
+      }
+      if (!acquired.direct) { canvas.width = canvasWidth; canvas.height = pixels; }
       wake();
     }).catch(() => { if (!disposed) root.dataset.furMotion = "fallback"; });
     return () => {
       disposed = true;
+      clearTimeout(warmTimer);
       stop();
       observer.disconnect();
       resizer.disconnect();
@@ -293,12 +372,15 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
       root.removeEventListener("fur-settings", settingsChange);
       root.removeEventListener("fur-variant", variantChange);
       root.removeEventListener("fur-transition", transitionChange);
+      root.removeEventListener("fur-snapshot", snapshot);
+      rendererCanvas.removeEventListener("fur-context-restored", wake);
       window.removeEventListener("pointerup", up);
       document.removeEventListener("visibilitychange", visibility);
       reduce.removeEventListener("change", motionChange);
       interactionOwners.removeEventListener("change", wake);
       releaseOwner();
       engine?.release();
+      mount.replaceChildren();
     };
   }, [preview, fullWidth, gallery]);
 
@@ -387,6 +469,6 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
       <ellipse fill="#b63445" cx="57" cy="51" rx="3.3" ry="5.6" transform="rotate(8 57 51)" />
       </>}
     </svg>
-    {!preview && <canvas ref={canvasRef} aria-hidden="true" className={fullWidth ? "absolute left-0 -top-[22%] h-[144%] w-full" : "absolute -left-[22%] -top-[22%] size-[144%]"} />}
+    {!preview && <span ref={canvasRef} aria-hidden="true" className="contents" />}
   </span>;
 }

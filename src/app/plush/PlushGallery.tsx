@@ -57,13 +57,17 @@ export function PlushGallery({ debug = false }: { debug?: boolean }) {
 
   useEffect(() => {
     if (!debug || !open) return;
+    let previousFrames = 0, previousTime = performance.now();
     const update = () => {
       if (document.hidden) return;
       const avatar = galleryRef.current?.querySelector<HTMLElement>(`[data-plush-card="${selected}"] [data-fur-avatar]`);
       if (!avatar) return;
-      const { furReady, furDrawMs, furPixels, furWidth, furMotion } = avatar.dataset;
+      const { furReady, furDrawMs, furPixels, furWidth, furMotion, furFrames, furRenderer } = avatar.dataset;
+      const now = performance.now(), frames = Number(furFrames ?? 0);
+      const fps = previousFrames ? Math.max(0, frames - previousFrames) * 1000 / (now - previousTime) : 0;
+      previousFrames = frames; previousTime = now;
       setMetrics(furReady !== "true" ? "3D 加载中或已回退静态图" :
-        `${furWidth ?? furPixels} × ${furPixels} px · 提交 ${furDrawMs} ms · ${furMotion === "animated" ? "动态绘制" : "静止 / 暂停"}`);
+        `${furWidth ?? furPixels} × ${furPixels} px · ${fps.toFixed(0)} fps · ${furRenderer === "webgl" ? "CPU 提交" : "绘制等待"} ${furDrawMs} ms · ${furMotion === "animated" ? "动态绘制" : "静止 / 暂停"}`);
     };
     update();
     const timer = window.setInterval(update, 500);
@@ -105,7 +109,7 @@ export function PlushGallery({ debug = false }: { debug?: boolean }) {
         </svg>
         <div className={styles.plush} role="img" aria-label={`${persona.name}毛绒形象`}>
           <FurSettingsContext.Provider value={values}>
-            <FurAvatar variant={persona.avatar ?? "closure"} active={animate} fullWidth />
+            <FurAvatar variant={persona.avatar ?? "closure"} nextVariant={companions[(selectedIndex + 1) % companions.length].avatar ?? "closure"} active={animate} fullWidth />
           </FurSettingsContext.Provider>
         </div>
       </article>
