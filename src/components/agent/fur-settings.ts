@@ -35,7 +35,7 @@ export function agentFurSettings(input: unknown): FurSettings {
 }
 
 export function galleryFurSettings(input: unknown): FurSettings {
-  return { ...normalizeFurSettings(input), shells: 64, resolution: 1.2, fps: 30 };
+  return { ...normalizeFurSettings(input), shells: 64, resolution: 1.2, fps: 60 };
 }
 
 export function savedFurSettings(serialized: string, variant: string): FurSettings {
