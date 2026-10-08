@@ -513,6 +513,31 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
     await expect(page.getByRole("button", { name: "复制回答" })).toHaveCount(0);
     await expect(page.locator('[data-running="true"]')).toHaveCount(0);
     await expect(loader).toHaveCount(0);
+  });
+
+  test(`Agent restores completed reasoning, tools and text as static history (${reducedMotion})`, async ({ page }) => {
+    // Keep the full animation flow and persisted-history flow independent: two
+    // software-WebGL page loads should not consume one 30-second test budget.
+    await page.emulateMedia({ reducedMotion });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await prepare(page);
+    await page.goto("/agent");
+    const input = page.getByRole("textbox", { name: "发给可露希尔的消息" });
+    await input.fill("检查我的账号");
+    await input.press("Enter");
+    await expect(page.locator("[data-agent-loading]")).toBeVisible();
+    await emit(page, [
+      { type: "start", messageId: "restored-motion-reply" }, { type: "start-step" },
+      { type: "reasoning-start", id: "reason" }, { type: "reasoning-delta", id: "reason", delta: "先检查账号资料。" }, { type: "reasoning-end", id: "reason" },
+      { type: "tool-input-available", toolCallId: "check", toolName: "diagnose_account", input: {} },
+      { type: "tool-output-available", toolCallId: "check", output: { skland: { connected: false, reason: "尚未绑定" }, operatorPool: { sourceName: "MAA", owned: 98, elite2: 32 } } },
+      { type: "text-start", id: "answer" }, { type: "text-delta", id: "answer", delta: "你好，**博士**。 可以继续安排基建。" }, { type: "text-end", id: "answer" },
+      { type: "finish-step" }, { type: "finish", finishReason: "stop" },
+    ], true);
+    const text = page.locator("[data-agent-streaming-text]");
+    const thinking = page.locator("[data-agent-thinking]");
+    const tool = page.locator('[data-agent-tool="diagnose_account"]');
+    await expect(text).toHaveAttribute("data-streaming", "false");
     // Wait for the real IndexedDB checkpoint, then verify restored history is static.
     await expect.poll(() => page.evaluate(() => new Promise<number>((resolve) => {
       const request = indexedDB.open("riic-agent-history-v1", 1);
