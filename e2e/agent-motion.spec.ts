@@ -459,6 +459,9 @@ for (const scenario of [{ width: 1440, reducedMotion: "no-preference" }, { width
 
 for (const reducedMotion of ["no-preference", "reduce"] as const) {
   test(`Agent animates actual loading, reasoning, tools and streaming text (${reducedMotion})`, async ({ page }) => {
+    // Includes a real IndexedDB checkpoint and a reload with fresh WebGL state.
+    // Keep individual assertions bounded while allowing the full software-GPU flow.
+    test.setTimeout(60_000);
     await page.emulateMedia({ reducedMotion });
     await page.setViewportSize({ width: 1440, height: 900 });
     await prepare(page);

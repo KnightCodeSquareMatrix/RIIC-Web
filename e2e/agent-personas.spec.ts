@@ -339,7 +339,8 @@ for (const mobile of [false, true]) {
     const card = page.locator('[data-persona-card="saileach"]');
     await card.scrollIntoViewIfNeeded();
     await expect(card).toHaveCSS("--dialogue-accent", "#ffd800");
-    await expect(card.locator('[data-fur-avatar="saileach"]')).toHaveAttribute("data-fur-ready", "true");
+    // First frame includes cold shaders and the shared queue of 40-shell portraits.
+    await expect(card.locator('[data-fur-avatar="saileach"]')).toHaveAttribute("data-fur-ready", "true", { timeout: 30_000 });
     await card.getByRole("button", { name: "使用琴柳" }).click();
     await expect(card).toHaveAttribute("data-selected", "true");
     await expect(card).toHaveCSS("outline-width", "2px");
@@ -405,7 +406,8 @@ for (const mobile of [false, true]) {
     const card = page.locator('[data-persona-card="mountain"]');
     await card.scrollIntoViewIfNeeded();
     await expect(card).toHaveCSS("--dialogue-accent", "#84bfff");
-    await expect(card.locator('[data-fur-avatar="mountain"]')).toHaveAttribute("data-fur-ready", "true");
+    // First frame includes cold shaders and the shared queue of 40-shell portraits.
+    await expect(card.locator('[data-fur-avatar="mountain"]')).toHaveAttribute("data-fur-ready", "true", { timeout: 30_000 });
     await card.getByRole("button", { name: "使用山", exact: true }).click();
     await expect(card).toHaveAttribute("data-selected", "true");
     await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
