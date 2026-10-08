@@ -1,6 +1,10 @@
 import { expect, test } from "@playwright/test";
 import { mockApis } from "./production-readiness.fixture";
 
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("riic.plush.performance.v1", "quality"));
+});
+
 test("gallery appearances persist to Agent and sync between tabs with separate quality", async ({ page, context }) => {
   test.setTimeout(120_000);
   // Settings synchronization does not need a desktop-sized GPU framebuffer.

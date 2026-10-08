@@ -8,6 +8,8 @@
     "test:billing-integration": "node --experimental-transform-types --test src/server/billing/cdk.integration.test.mjs",
     "posttest:auth-integration": "npm run test:billing-integration",
     "test:billing-cdk": "node --experimental-strip-types --experimental-test-module-mocks --test src/server/billing/cdk.test.ts src/server/billing/admin-cdk.test.ts src/server/billing/admin-cdk-api.test.ts",
+    "pretest": "npm run test:plush-performance",
+    "test:plush-performance": "node --test --experimental-strip-types src/components/agent/fur-adaptive-quality.test.ts src/components/agent/fur-performance.test.ts src/components/agent/fur-gpu-timer.test.ts src/components/agent/fur-frame-budget.test.ts src/components/agent/plush-motion.test.ts src/components/agent/fur-settings.test.ts src/components/agent/fur-detail.test.ts",
     "dev:admin-preview": "node scripts/start-admin-preview.mjs",
     "test:admin-preview": "node --test --experimental-strip-types src/admin-preview-policy.test.ts src/admin-preview-data.test.ts",
     "test:feature-access": "node --test --experimental-strip-types --experimental-test-module-mocks src/server/auth/feature-access.test.ts src/server/billing/webhook.test.ts",
