@@ -4,6 +4,7 @@ import { useContext, useEffect, useId, useRef, useState } from "react";
 import type { acquireFurRenderer, FurAvatarVariant } from "./fur-avatar-renderer";
 import { FurSettingsContext } from "./FurSettingsContext";
 import { useAgentFurSettings } from "./fur-settings-store";
+import type { AgentFurSurface } from "./fur-settings";
 import { plushFurInertia, plushGazeStep } from "./plush-motion";
 import { agentFrameInterval, motionResolutionScale } from "./fur-frame-budget";
 import { performanceSettings, resolvePerformanceTier } from "./fur-performance";
@@ -34,7 +35,7 @@ export function MountainFurAvatar({ active = false }: { active?: boolean }) {
   return <FurAvatar active={active} variant="mountain" />;
 }
 
-export function FurAvatar({ active = false, variant, preview = false, fullWidth = false, nextVariant }: { active?: boolean; variant: FurAvatarVariant; preview?: boolean; fullWidth?: boolean; nextVariant?: FurAvatarVariant }) {
+export function FurAvatar({ active = false, variant, preview = false, fullWidth = false, nextVariant, surface = "chat" }: { active?: boolean; variant: FurAvatarVariant; preview?: boolean; fullWidth?: boolean; nextVariant?: FurAvatarVariant; surface?: AgentFurSurface }) {
   const gradientId = useId().replaceAll(":", "");
   const rootRef = useRef<HTMLSpanElement>(null);
   const canvasRef = useRef<HTMLSpanElement>(null);
@@ -44,7 +45,7 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
   const activeRef = useRef(active);
   const variantRef = useRef(variant);
   const override = useContext(FurSettingsContext);
-  const agentSettings = useAgentFurSettings(variant, !preview && !override);
+  const agentSettings = useAgentFurSettings(variant, !preview && !override, surface);
   const settings = override ?? agentSettings;
   const gallery = Boolean(override);
   const settingsRef = useRef(settings);
@@ -122,7 +123,7 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
     let submittedFrames = 0;
     let resolutionScale = 1, lastQualityUpdate = 0, lastInteraction = -Infinity;
     let wasMoving = false;
-    const runtimeSettings = () => performanceSettings(settingsRef.current, tier, gallery);
+    const runtimeSettings = () => performanceSettings(settingsRef.current, tier, gallery, surface);
     const continuous = () => tier === "quality" && activeRef.current;
     const enterStatic = () => {
       tier = "static";
@@ -325,9 +326,12 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
         targetY = Math.max(-0.6, Math.min(0.6, targetY + (event.clientY - lastY) * 0.01));
       } else {
         const bounds = root.getBoundingClientRect();
-        // Noticeable gaze at the edges: about 32° sideways and 20° vertically.
-        targetX = Math.max(-0.55, Math.min(0.55, ((event.clientX - bounds.left) / bounds.width - 0.5) * 1.10));
-        targetY = Math.max(-0.34, Math.min(0.34, ((event.clientY - bounds.top) / bounds.height - 0.5) * 0.68));
+        // A small portrait should acknowledge the pointer without turning its
+        // asymmetric silhouette away. Full rotations remain available by drag.
+        const yawRange = gallery ? 0.55 : 0.14;
+        const pitchRange = gallery ? 0.34 : 0.10;
+        targetX = Math.max(-yawRange, Math.min(yawRange, ((event.clientX - bounds.left) / bounds.width - 0.5) * yawRange * 2));
+        targetY = Math.max(-pitchRange, Math.min(pitchRange, ((event.clientY - bounds.top) / bounds.height - 0.5) * pitchRange * 2));
       }
       lastX = event.clientX;
       lastY = event.clientY;
@@ -481,7 +485,7 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
       engine?.release();
       mount.replaceChildren();
     };
-  }, [preview, fullWidth, gallery, performanceMode, retry]);
+  }, [preview, fullWidth, gallery, performanceMode, retry, surface]);
 
   return <span ref={rootRef} data-fur-avatar={preview ? undefined : variant} data-fur-preview={preview ? variant : undefined} data-closure-fur-avatar={variant === "closure" ? "" : undefined} data-silverash-fur-avatar={variant === "silverash" ? "" : undefined} data-fur-ready="false" data-fur-motion="idle" className={`group/fur relative block size-full ${gallery ? "touch-none" : "touch-pan-y"} cursor-grab active:cursor-grabbing`}>
     {!preview && <img ref={staticImageRef} alt="" aria-hidden="true" draggable={false}
