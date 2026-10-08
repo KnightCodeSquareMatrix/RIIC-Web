@@ -1030,7 +1030,11 @@ test("Skland status center keeps profile and recruitment in overview and support
   await expect(page.getByRole("heading", { name: "当前基建", exact: true })).toBeVisible();
   await expect(page.getByText("按计算器布局排列，快速核对进驻、心情与生产状态。", { exact: true })).toHaveCount(0);
   await expect(page.locator("[data-skland-compact-layout]")).toBeVisible();
-  await expect(page.locator('[data-skland-compact-layout] article[data-room-group]')).toHaveCount(8);
+  await expect(page.locator('[data-skland-compact-layout] article[data-room-group]')).toHaveCount(9);
+  const recycling = page.locator('[data-skland-compact-layout] [data-room-group="recycling"]');
+  await expect(recycling).toContainText("森空岛暂未提供数据");
+  await expect(recycling.locator('.infra-operator-slot')).toHaveCount(2);
+  await expect(recycling.getByText("未知", { exact: true })).toHaveCount(2);
   const currentTrainingRoom = page.locator('[data-skland-compact-layout] [data-room-group="training"]');
   await expect(currentTrainingRoom).toBeVisible();
   await expect(currentTrainingRoom).toContainText("2/2");
@@ -1041,7 +1045,7 @@ test("Skland status center keeps profile and recruitment in overview and support
   await expect(currentTrainingRoom.locator('img[title^="职业："]')).toHaveCount(2);
   await expect(page.locator('[data-skland-compact-layout] [data-room-group="processing"]')).toBeVisible();
   await expect(page.getByText(/^线索板：/)).toHaveCount(0);
-  const auxiliaryRoomBoxes = await page.locator(".skland-auxiliary-grid article").evaluateAll((rooms) => Object.fromEntries(
+  const auxiliaryRoomBoxes = await page.locator("[data-skland-functional-rooms] article").evaluateAll((rooms) => Object.fromEntries(
     rooms.map((room) => {
       const bounds = room.getBoundingClientRect();
       return [room.dataset.roomGroup, { x: bounds.x, width: bounds.width }];
@@ -1192,10 +1196,17 @@ test("Skland base metrics reuse the existing technical card grid and keyboard ta
   await expect(overviewTab).toBeFocused();
 });
 
-test("Skland compact layout aligns both column endings when production is taller", async ({ page }) => {
+for (const includeProcessing of [false, true]) {
+test(`Skland compact layout aligns both column endings when production is taller (${includeProcessing ? "with" : "without"} workshop)`, async ({ page }) => {
   await mockApis(page, {
     sklandConfigured: true,
-    sklandSnapshot: productionHeavySklandSnapshot,
+    sklandSnapshot: includeProcessing ? {
+      ...productionHeavySklandSnapshot,
+      infrastructure: {
+        ...productionHeavySklandSnapshot.infrastructure,
+        rooms: [...productionHeavySklandSnapshot.infrastructure.rooms, authenticatedSklandSnapshot.infrastructure.rooms.find((room) => room.group === "processing")!],
+      },
+    } : productionHeavySklandSnapshot,
   });
   await seedPreferences(page);
   await page.setViewportSize({ width: 1440, height: 1000 });
@@ -1226,15 +1237,27 @@ test("Skland compact layout aligns both column endings when production is taller
       controlBottom: group("control")[0]?.bottom,
       tradeTop: group("trading")[0]?.top,
       trainingTop: group("training")[0]?.top,
+      meetingBottom: group("meeting")[0]?.bottom,
+      recyclingTop: group("recycling")[0]?.top,
+      recyclingBottom: group("recycling")[0]?.bottom,
+      processingBottom: group("processing")[0]?.bottom,
+      trainingBottom: group("training")[0]?.bottom,
       trainingHeight: group("training")[0]?.height,
       meetingHeight: group("meeting")[0]?.height,
       lastManufactureBottom: group("manufacture").at(-1)?.bottom,
       powerTop: group("power")[0]?.top,
     };
   });
-  expect(Math.abs((alignedRoomBoxes.tradeTop ?? 0) - (alignedRoomBoxes.trainingTop ?? 0))).toBeLessThanOrEqual(1);
+  expect((alignedRoomBoxes.trainingTop ?? 0) - (alignedRoomBoxes.meetingBottom ?? 0)).toBeCloseTo(12, 0);
+  expect((alignedRoomBoxes.recyclingTop ?? 0) - (alignedRoomBoxes.trainingBottom ?? 0)).toBeCloseTo(12, 0);
+  if (includeProcessing) {
+    expect(alignedRoomBoxes.processingBottom).toBeDefined();
+    expect(Math.abs((alignedRoomBoxes.recyclingBottom ?? 0) - (alignedRoomBoxes.processingBottom ?? 0))).toBeLessThanOrEqual(1);
+  } else {
+    expect(alignedRoomBoxes.processingBottom).toBeUndefined();
+  }
   expect((alignedRoomBoxes.tradeTop ?? 0) - (alignedRoomBoxes.controlBottom ?? 0)).toBeCloseTo(12, 0);
-  expect(alignedRoomBoxes.trainingHeight).toBeLessThan(alignedRoomBoxes.meetingHeight ?? 0);
+  expect(alignedRoomBoxes.trainingHeight).toBeCloseTo(alignedRoomBoxes.meetingHeight ?? 0, 0);
   expect(alignedRoomBoxes.meetingHeight).toBeLessThanOrEqual(150);
   expect(alignedRoomBoxes.trainingHeight).toBeLessThanOrEqual(112);
   expect((alignedRoomBoxes.powerTop ?? 0) - (alignedRoomBoxes.lastManufactureBottom ?? 0)).toBeCloseTo(12, 0);
@@ -1252,6 +1275,8 @@ test("Skland compact layout aligns both column endings when production is taller
     await expect(page.locator('[data-skland-compact-layout] [data-skland-power-efficiency]')).toHaveCount(3);
   }
 });
+
+}
 
 test("Skland supports adding, switching, and individually logging out multiple accounts", async ({ page }) => {
   const secondarySnapshot = {
