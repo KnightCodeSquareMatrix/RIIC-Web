@@ -184,7 +184,9 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
       const settling = Math.abs(yaw - nextYaw) + Math.abs(pitch - nextPitch) + Math.abs(press - targetPress) + Math.abs(pressVelocity) + Math.abs(lagX) + Math.abs(lagY) + Math.abs(inertiaX) > 0.003;
       if (gallery) {
         const interactionSettling = Math.abs(yaw - nextYaw) + Math.abs(pitch - nextPitch) + Math.abs(press - targetPress) + Math.abs(pressVelocity) * 0.1 + Math.abs(inertiaX) > 0.02;
-        const moving = Boolean(transition) || time - lastInteraction < 180 || (resolutionScale < 1 && interactionSettling);
+        // A press can arrive while a slow software frame is still rendering.
+        // Consume it on the next quality update even if its grace period elapsed.
+        const moving = Boolean(transition) || lastInteraction > lastQualityUpdate || time - lastInteraction < 180 || (resolutionScale < 1 && interactionSettling);
         if (!moving || !wasMoving || time - lastQualityUpdate > 500) {
           // During one gesture only step down if needed. Recover once it has
           // settled, rather than pumping sharpness as individual frames vary.
@@ -229,9 +231,11 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
     const move = (event: PointerEvent) => {
       if (!(gallery && pressed) && (event.pointerType !== "mouse" || !finePointer.matches || reduce.matches)) return;
       hovering = true;
-      lastInteraction = performance.now();
       claim();
       if (pressed) {
+        // Passive gaze keeps its authored resolution: brief cursor pauses must
+        // not repeatedly switch fur coverage between half and full sampling.
+        lastInteraction = performance.now();
         targetX += (event.clientX - lastX) * 0.018;
         targetY = Math.max(-0.6, Math.min(0.6, targetY + (event.clientY - lastY) * 0.01));
       } else {
