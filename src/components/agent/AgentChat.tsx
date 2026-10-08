@@ -23,6 +23,7 @@ import dialogueStyles from "./beautiful/Dialogue.module.css";
 import billingStyles from "@/components/billing/BillingPrototype.module.css";
 import personaStyles from "./PersonaPreview.module.css";
 import { AgentCreditBalance } from "./AgentCreditBalance";
+import { subscribeBillingUpdates } from "@/lib/billing-events";
 import { PersonaAvatar, readPersonaAvatar } from "./PersonaAvatar";
 import { parsePersonaAvatar } from "@/agent-persona-avatar";
 import { AGENT_PERSONA_SELECTION_KEY, builtinAgentPersona, resolveAgentPersonaSelection, type AgentPersona, type BuiltinAgentPersona, type UploadedAgentPersona } from "@/agent-personas";
@@ -294,6 +295,10 @@ export function AgentChat({ conversationId, initialMessages, userName, userId, b
   const intl = useTranslations();
   const { store: historyStore, error: historyError } = useAgentHistory();
   const [agentStatus, setAgentStatus] = useState<AgentStatus>("loading");
+  const [creditRevision, setCreditRevision] = useState(0);
+  useEffect(() => subscribeBillingUpdates(() => {
+    if (agentStatus === "payment_required") setCreditRevision(value => value + 1);
+  }), [agentStatus]);
   const [modelChoices, setModelChoices] = useState<AgentModelChoice[]>([]);
   const [selectedModel, setSelectedModel] = useState<AgentModelChoice["id"]>();
   const [draft, setDraft] = useState("");
@@ -403,7 +408,7 @@ export function AgentChat({ conversationId, initialMessages, userName, userId, b
     return () => {
       cancelled = true;
     };
-  }, [runtimeConversation]);
+  }, [runtimeConversation, creditRevision]);
 
   useEffect(() => {
     const container = conversationRef.current;

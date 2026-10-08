@@ -545,7 +545,15 @@ export const billingCdk = appSchema.table("billing_cdk", {
   status: text("status").notNull().default("issued"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   redeemedAt: timestamp("redeemed_at", { withTimezone: true }),
+  batchId: text("batch_id"),
+  batchLabel: text("batch_label"),
+  startsAt: timestamp("starts_at", { withTimezone: true }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  revokedBy: text("revoked_by").references(() => user.id, { onDelete: "set null" }),
+  revokeReason: text("revoke_reason"),
 }, (table) => [
   uniqueIndex("billing_cdk_code_hash_uidx").on(table.codeHash),
   index("billing_cdk_issuer_created_idx").on(table.issuerUserId, table.createdAt),
+  index("billing_cdk_batch_idx").on(table.batchId),
 ]);

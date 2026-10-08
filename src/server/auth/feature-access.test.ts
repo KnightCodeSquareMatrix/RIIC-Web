@@ -32,6 +32,7 @@ test("database roles guard all Agent/billing APIs before reads, writes or model 
   const statusFor = (code: string) => code === "AIC-AUTH-2008" ? 401 : code === "AIC-AUTH-2007" ? 404 : 403;
   await t.mock.module(new URL("../api-contract.ts", import.meta.url), { namedExports: {
     PublicApiError: ApiError, assertSameOrigin: () => {}, createRequestId: () => "test",
+    enforceRateLimit: () => {},
     readJsonBody: (request: Request) => request.json(),
     failureResponse: (error: ApiError) => Response.json({ code: error.code }, { status: statusFor(error.code) }),
     successResponse: (data: unknown) => Response.json({ data }),
