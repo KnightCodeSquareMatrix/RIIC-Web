@@ -315,77 +315,82 @@ html.schedule-layout-return::view-transition-new(.schedule-room-entering) {
   box-shadow: var(--shadow-border);
 }
 
-.dialog-acrylic {
-  background-color: color-mix(in oklch, var(--popover) 88%, transparent);
-  -webkit-backdrop-filter: blur(36px) saturate(1.06);
-  backdrop-filter: blur(36px) saturate(1.06);
+.dialog-surface {
+  /* Same opaque base and corner texture as the billing price cards. */
+  background-color: var(--muted);
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.72),
-    inset 0 -1px 0 rgb(15 23 42 / 0.06),
-    inset 0 0 0 1px rgb(255 255 255 / 0.38),
-    0 30px 76px rgb(12 19 24 / 0.28),
-    0 12px 30px rgb(12 19 24 / 0.15),
-    0 0 44px rgb(12 19 24 / 0.12);
+    0 18px 48px rgb(12 19 24 / 0.16),
+    0 2px 6px rgb(12 19 24 / 0.08);
 }
 
-.dialog-acrylic::before {
+.dialog-surface::before {
   content: "";
   pointer-events: none;
   position: absolute;
-  z-index: 0;
-  inset: 0;
-  border-radius: inherit;
-  background-image:
-    linear-gradient(
-      180deg,
-      rgb(255 255 255 / 0.34) 0%,
-      rgb(255 255 255 / 0.24) 18%,
-      rgb(248 250 252 / 0.17) 38%,
-      rgb(226 232 240 / 0.11) 60%,
-      rgb(148 163 184 / 0.065) 82%,
-      rgb(15 23 42 / 0.045) 100%
-    ),
-    repeating-linear-gradient(
-      90deg,
-      rgb(255 255 255 / 0.42) 0,
-      rgb(255 255 255 / 0.13) 1px,
-      transparent 6px,
-      rgb(15 23 42 / 0.065) 9px,
-      rgb(15 23 42 / 0.022) 13px,
-      rgb(255 255 255 / 0.18) 17px,
-      transparent 22px
-    ),
-    repeating-linear-gradient(
-      90deg,
-      transparent 0 40px,
-      rgb(15 23 42 / 0.04) 46px,
-      rgb(255 255 255 / 0.145) 51px,
-      transparent 60px
-    );
-  box-shadow:
-    inset 0 0 54px rgb(255 255 255 / 0.16),
-    inset 0 -18px 36px rgb(15 23 42 / 0.025);
-  opacity: 0.3;
+  z-index: -1;
+  right: 0;
+  bottom: 0;
+  width: min(42%, 280px);
+  height: min(100%, 108px);
+  border-bottom-right-radius: inherit;
+  background:
+    repeating-linear-gradient(90deg, transparent 0, rgb(255 255 255 / .48) 1px, rgb(255 255 255 / .08) 4px, rgb(88 69 12 / .09) 8px, transparent 12px),
+    radial-gradient(ellipse at 100% 110%, color-mix(in srgb, var(--dialog-accent, #FFD800) 48%, transparent), color-mix(in srgb, var(--dialog-accent, #FFD800) 12%, transparent) 48%, transparent 75%);
+  mask-image: radial-gradient(ellipse at 100% 100%, black 8%, rgb(0 0 0 / .7) 36%, transparent 74%);
 }
 
-.dialog-acrylic[data-setup-dialog] {
-  /* Keep the large sheet visually continuous: lower opacity lets the page's
-     card gutters read as horizontal seams through the glass. */
-  background-color: color-mix(in oklch, var(--popover) 92%, transparent);
+.dialog-popup {
+  transform-origin: center;
+  /* Unlike transitions, keyframes restart if a scrollbar enhancement moves
+     this node. Base UI can then finish the exit instead of awaiting a cancelled
+     transition with no replacement and leaving an invisible modal mounted. */
+  animation: dialog-enter 200ms var(--motion-ease-out) both;
 }
 
-.dialog-acrylic[data-website-account-dialog] [data-website-account-panel] {
+@keyframes dialog-enter {
+  from { opacity: 0; transform: scale(var(--dialog-enter-scale, 0.97)); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes dialog-exit {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.97); }
+}
+
+.dialog-popup[data-from-skeleton] {
+  --dialog-enter-scale: 0.99;
+}
+
+.dialog-popup[data-ending-style] {
+  animation: dialog-exit 150ms var(--motion-ease-out) both;
+}
+
+.dialog-overlay {
+  opacity: 1;
+  transition: opacity 150ms var(--motion-ease-out);
+}
+
+.dialog-overlay[data-starting-style],
+.dialog-overlay[data-ending-style] {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dialog-popup,
+  .dialog-popup[data-ending-style] {
+    transform: none !important;
+    animation-duration: 100ms;
+    animation-timing-function: linear;
+  }
+
+  .dialog-overlay {
+    transition-duration: 100ms;
+  }
+}
+
+.dialog-surface[data-website-account-dialog] [data-website-account-panel] {
   background-color: transparent;
   box-shadow: none;
-}
-
-.dialog-acrylic[data-dialog-layer="nested"] {
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.64),
-    inset 0 -1px 0 rgb(15 23 42 / 0.045),
-    inset 0 0 0 1px rgb(255 255 255 / 0.32),
-    0 18px 44px rgb(12 19 24 / 0.16),
-    0 6px 16px rgb(12 19 24 / 0.08);
 }
 
 .setup-dialog-footer {
@@ -422,29 +427,6 @@ html.schedule-layout-return::view-transition-new(.schedule-room-entering) {
 [data-setup-dialog] .infra-preset-surface[aria-pressed="true"],
 [data-setup-dialog] .infra-preset-surface[data-state="on"] {
   box-shadow: none;
-}
-
-@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
-  .dialog-acrylic {
-    background-color: var(--popover);
-  }
-}
-
-@media (max-width: 767px) {
-  .dialog-acrylic {
-    -webkit-backdrop-filter: blur(28px) saturate(1.06);
-    backdrop-filter: blur(28px) saturate(1.06);
-  }
-
-  .dialog-acrylic::before {
-    opacity: 0.24;
-  }
-
-  .dialog-acrylic[data-website-account-dialog] {
-    background-color: var(--background);
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-  }
 }
 
 .interactive-surface-shadow {
