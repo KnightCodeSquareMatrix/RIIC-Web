@@ -323,9 +323,8 @@ function buildRenderer(environmentData: Uint16Array, canvas?: HTMLCanvasElement)
   let surfaceWidth = 0, surfaceHeight = 0;
   let pendingDraw: Promise<unknown> = Promise.resolve();
   const compiledVariants = new Set<FurAvatarVariant>();
-  // A canvas copy waits synchronously for unfinished GPU work. On software WebGL
-  // that can freeze input for seconds. Fence the submitted frame and yield the
-  // main thread until it is ready; serialize copies because all portraits share it.
+  // A software canvas copy can freeze input for seconds. Fence its submitted
+  // frame and yield until ready; hardware copies use the ordered GPU queue.
   const waitForGpu = async () => {
     const gl = renderer.getContext() as WebGL2RenderingContext;
     const fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
@@ -1001,7 +1000,10 @@ function buildRenderer(environmentData: Uint16Array, canvas?: HTMLCanvasElement)
         gl.flush();
         return true;
       }
-      if (!await waitForGpu() || disposed || !isCurrent()) return false;
+      // Hardware canvas-to-canvas copies stay on the GPU and preserve command
+      // ordering. A CPU fence here stalls Chromium's offscreen submission queue.
+      // Software copies can block input, so they still need an asynchronous fence.
+      if ((software && !await waitForGpu()) || disposed || !isCurrent()) return false;
       if (!context) return false;
       // Keep the last presented bitmap visible while a resized frame is on the
       // GPU. Clearing the 2D canvas earlier would flash during quality changes.
@@ -1009,7 +1011,9 @@ function buildRenderer(environmentData: Uint16Array, canvas?: HTMLCanvasElement)
       if (context.canvas.height !== pixels) context.canvas.height = pixels;
       context.clearRect(0, 0, canvasWidth, pixels);
       context.drawImage(renderer.domElement, 0, 0, canvasWidth, pixels);
-      frameMs = performance.now() - submittedAt;
+      // Hardware copies are asynchronous; keep completed GPU timing in the
+      // device budget so slow cards still downgrade even if submission is cheap.
+      frameMs = Math.max(performance.now() - submittedAt, gpuTimer.milliseconds() ?? 0);
       return true;
       };
       const result = pendingDraw.then(draw);
