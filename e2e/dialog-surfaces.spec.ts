@@ -11,6 +11,7 @@ for (const [path, accent] of [["/", "#FFD800"], ["/mastery", "#B8F03A"], ["/skil
   test(`portalled dialogs use the ${path} page accent and an opaque card surface`, async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await gotoStable(page, path!);
+    await expect(page.locator('[data-workbench-hydrated="true"]')).toBeVisible({ timeout: 30_000 });
     const trigger = page.getByRole("button", { name: "账号管理", exact: true });
     await trigger.click();
     const dialog = page.locator('[data-website-account-dialog]:not([data-website-account-dialog-loading])');
@@ -57,6 +58,7 @@ test("mobile reduced-motion dialogs do not scale and restore page interaction", 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.emulateMedia({ reducedMotion: "reduce" });
   await gotoStable(page, "/mastery");
+  await expect(page.locator('[data-workbench-hydrated="true"]')).toBeVisible({ timeout: 30_000 });
   const trigger = page.getByRole("button", { name: "选择干员", exact: true });
   await trigger.click();
   const dialog = page.locator("[data-mastery-target-picker]");
@@ -72,6 +74,7 @@ test("mobile reduced-motion dialogs do not scale and restore page interaction", 
 test("resizing during dialog exit removes the popup and restores page interaction", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await gotoStable(page, "/");
+  await expect(page.locator('[data-workbench-hydrated="true"]')).toBeVisible({ timeout: 30_000 });
   const trigger = page.getByRole("button", { name: "账号管理", exact: true });
   await trigger.click();
   const dialog = page.locator('[data-website-account-dialog]:not([data-website-account-dialog-loading])');
@@ -88,4 +91,32 @@ test("resizing during dialog exit removes the popup and restores page interactio
   await expect(dialog).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
+});
+
+test("cancelled exit animations still release the modal and its backdrop", async ({ page }) => {
+  await gotoStable(page, "/");
+  await expect(page.locator('[data-workbench-hydrated="true"]')).toBeVisible({ timeout: 30_000 });
+  const trigger = page.getByRole("button", { name: "账号管理", exact: true });
+  await trigger.click();
+  const dialog = page.locator('[data-website-account-dialog]:not([data-website-account-dialog-loading])');
+  await expect(dialog).toBeVisible();
+  await waitForOwnAnimations(dialog);
+  await dialog.evaluate((element) => {
+    const observer = new MutationObserver(() => {
+      if (!element.hasAttribute("data-ending-style")) return;
+      observer.disconnect();
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const animations = element.getAnimations();
+        document.documentElement.dataset.cancelledDialogAnimations = String(animations.length);
+        for (const animation of animations) animation.cancel();
+      }));
+    });
+    observer.observe(element, { attributes: true, attributeFilter: ["data-ending-style"] });
+  });
+  await page.keyboard.press("Escape");
+  await expect(page.locator("html")).toHaveAttribute("data-cancelled-dialog-animations", /^[1-9]\d*$/);
+  await expect(dialog).toHaveCount(0);
+  await expect(page.locator('[data-slot="dialog-overlay"]')).toHaveCount(0);
+  await trigger.click();
+  await expect(dialog).toBeVisible();
 });
