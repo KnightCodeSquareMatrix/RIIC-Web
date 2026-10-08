@@ -30,8 +30,10 @@ export const FUR_PRESETS = {
 export const FUR_STORAGE_KEY = "riic.plush.lab.v2";
 
 /** Appearance is shared; rendering budgets belong to the consuming surface. */
-export function agentFurSettings(input: unknown): FurSettings {
-  return { ...normalizeFurSettings(input), shells: 20, resolution: 0.8, fps: 24 };
+export type AgentFurSurface = "chat" | "portrait";
+
+export function agentFurSettings(input: unknown, surface: AgentFurSurface = "chat"): FurSettings {
+  return { ...normalizeFurSettings(input), shells: surface === "portrait" ? 40 : 28, resolution: surface === "portrait" ? 1.5 : 1.1, fps: 60 };
 }
 
 export function galleryFurSettings(input: unknown): FurSettings {
