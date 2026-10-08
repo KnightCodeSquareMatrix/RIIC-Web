@@ -1,5 +1,10 @@
 import { expect, test } from "@playwright/test";
 
+test.beforeEach(async ({ page }) => {
+  // These regressions exercise the authored gallery quality explicitly.
+  await page.addInitScript(() => localStorage.setItem("riic.plush.performance.v1", "quality"));
+});
+
 test("pointer following keeps its sampling stable across brief pauses", async ({ page }) => {
   test.setTimeout(90_000);
   await page.setViewportSize({ width: 400, height: 540 });
