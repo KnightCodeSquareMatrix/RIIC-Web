@@ -27,6 +27,7 @@ import { DotDistortionBackground } from "@/components/layout/DotDistortionBackgr
 import { AppMotionProvider } from "@/components/MotionProvider";
 import { PrimaryPageTransition } from "@/components/layout/PrimaryPageTransition";
 import { SetupDialogSkeleton } from "@/components/setup/SetupDialogSkeleton";
+import { WebsiteAccountDialogLoading } from "@/components/auth/WebsiteAccountDialogLoading";
 import { LiveActivity, usePlanActivity } from "@/components/ui/live-activity";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { trackTelemetry } from "@/lib/telemetry-dispatch";
@@ -2531,30 +2532,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
       </Suspense> : null}
 
       {websiteAuthDialogMounted ? <Suspense fallback={(
-        websiteAuthDialogOpen ? (
-          <div
-            className="fixed inset-0 z-50 grid place-items-center bg-black/55 p-2"
-          >
-            <div
-              className="grid min-h-72 w-full max-w-[min(880px,calc(100vw-2rem))] place-items-center bg-background px-6 py-12 text-center shadow-xl"
-              role="dialog"
-              aria-modal="true"
-              aria-label={intl("App.websiteAccountSignIn")}
-              aria-busy="true"
-              data-website-account-dialog
-              data-website-account-dialog-loading
-            >
-              <div className="grid justify-items-center gap-3" role="status" aria-live="polite" aria-busy="true" data-website-account-loading>
-                <span
-                  className="size-8 animate-spin rounded-full border-2 border-muted border-t-muted-foreground motion-reduce:animate-none"
-                  aria-hidden="true"
-                  data-website-account-loading-spinner
-                />
-                <p className="text-sm text-muted-foreground">{intl("App.loadingSignIn")}</p>
-              </div>
-            </div>
-          </div>
-        ) : null
+        <WebsiteAccountDialogLoading open={websiteAuthDialogOpen} onOpenChange={handleWebsiteAuthDialogOpenChange} />
       )}><WebsiteAccountDialog
           open={websiteAuthDialogOpen}
           onOpenChange={handleWebsiteAuthDialogOpenChange}
