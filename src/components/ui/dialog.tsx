@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
+import { useRender } from "@base-ui/react/use-render"
 import { usePathname } from "next/navigation"
 
 import { cn } from "@/lib/utils"
@@ -9,8 +10,43 @@ import { Button } from "@/components/ui/button"
 import { dialogAccentForPathname } from "@/workbench-accent"
 import { XIcon } from "lucide-react"
 
-function Dialog({ ...props }: DialogPrimitive.Root.Props) {
-  return <DialogPrimitive.Root data-slot="dialog" {...props} />
+const DialogExitActions = React.createContext<React.RefObject<DialogPrimitive.Root.Actions | null> | null>(null)
+
+function Dialog({ actionsRef, ...props }: DialogPrimitive.Root.Props) {
+  const exitActions = React.useRef<DialogPrimitive.Root.Actions | null>(null)
+  return (
+    <DialogExitActions value={actionsRef ? null : exitActions}>
+      <DialogPrimitive.Root data-slot="dialog" actionsRef={actionsRef ?? exitActions} {...props} />
+    </DialogExitActions>
+  )
+}
+
+function DialogPopupElement({ open, ref, ...props }: React.ComponentPropsWithRef<"div"> & { open: boolean }) {
+  const popupRef = React.useRef<HTMLDivElement | null>(null)
+  const exitActions = React.useContext(DialogExitActions)
+  React.useEffect(() => {
+    const popup = popupRef.current
+    // Explicit actionsRef callers own their external animation lifecycle.
+    if (open || !popup || !exitActions) return
+    let active = true
+    let frame = 0
+    function finishExit() {
+      if (!active || !popup?.isConnected || !popup.hasAttribute("data-closed")) return
+      const animations = popup.getAnimations().filter((animation) => animation.pending || animation.playState === "running")
+      if (animations.length) {
+        // Base UI 1.6 may not complete a close if every awaited animation was
+        // cancelled. Wait for replacements too, without a fixed unmount timer.
+        void Promise.allSettled(animations.map((animation) => animation.finished)).then(() => {
+          if (active) frame = requestAnimationFrame(finishExit)
+        })
+      } else {
+        exitActions?.current?.unmount()
+      }
+    }
+    frame = requestAnimationFrame(finishExit)
+    return () => { active = false; cancelAnimationFrame(frame) }
+  }, [open, exitActions])
+  return useRender({ defaultTagName: "div", ref: ref ? [ref, popupRef] : popupRef, props })
 }
 
 function DialogTrigger({ ...props }: DialogPrimitive.Trigger.Props) {
@@ -67,6 +103,7 @@ function DialogContent({
     <DialogPortal>
       <DialogOverlay layer={layer} />
       <DialogPrimitive.Popup
+        render={(popupProps, state) => <DialogPopupElement {...popupProps} open={state.open} />}
         data-yeye-scroll="auto"
         data-slot="dialog-content"
         data-dialog-layer={layer}
