@@ -125,7 +125,7 @@
     "globals": "^15.15.0",
     "pinyin-pro": "^3.29.4",
     "react-test-renderer": "^19.2.8",
-    "sharp": "0.35.4",
+    "sharp": "0.35.5",
     "tailwindcss": "4.3.3",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.65.0"
@@ -133,6 +133,6 @@
   "overrides": {
     "postcss": "8.5.24",
     "esbuild": "0.25.12",
-    "sharp": "0.35.4"
+    "sharp": "0.35.5"
   }
 }
