@@ -1,11 +1,14 @@
 "use client";
 
-import { useContext, useEffect, useId, useRef } from "react";
+import { useContext, useEffect, useId, useRef, useState } from "react";
 import type { acquireFurRenderer, FurAvatarVariant } from "./fur-avatar-renderer";
 import { FurSettingsContext } from "./FurSettingsContext";
 import { useAgentFurSettings } from "./fur-settings-store";
 import { plushFurInertia, plushGazeStep } from "./plush-motion";
 import { motionResolutionScale } from "./fur-frame-budget";
+import { performanceSettings, resolvePerformanceTier } from "./fur-performance";
+import { readFurPerformanceMode, useFurPerformanceMode } from "./fur-performance-store";
+import { newFurQualityObservation, observeFurQuality } from "./fur-adaptive-quality";
 
 // One interactive avatar at a time, even when the history contains many replies.
 const interactionOwners = new EventTarget();
@@ -35,6 +38,9 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
   const gradientId = useId().replaceAll(":", "");
   const rootRef = useRef<HTMLSpanElement>(null);
   const canvasRef = useRef<HTMLSpanElement>(null);
+  const staticImageRef = useRef<HTMLImageElement>(null);
+  const [performanceMode] = useFurPerformanceMode();
+  const [retry, setRetry] = useState(0);
   const activeRef = useRef(active);
   const variantRef = useRef(variant);
   const override = useContext(FurSettingsContext);
@@ -43,6 +49,13 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
   const gallery = Boolean(override);
   const settingsRef = useRef(settings);
   const nextVariantRef = useRef(nextVariant);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    const restart = () => setRetry(value => value + 1);
+    root?.addEventListener("fur-retry", restart);
+    return () => root?.removeEventListener("fur-retry", restart);
+  }, []);
 
   useEffect(() => { nextVariantRef.current = nextVariant; }, [nextVariant]);
 
@@ -65,12 +78,33 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
     if (preview) return;
     const root = rootRef.current, mount = canvasRef.current;
     if (!root || !mount) return;
+    // Read synchronously: persisted static mode must not initialize WebGL during hydration.
+    const mode = readFurPerformanceMode();
+    let tier = resolvePerformanceTier(mode, false);
+    const observation = newFurQualityObservation();
+    root.dataset.furPerformance = tier;
+    root.dataset.furReady = "false";
+    delete root.dataset.furStaticPreview;
+    const showStatic = () => {
+      root.dataset.furPerformance = "static";
+      root.dataset.furMotion = "static";
+      root.dataset.furReady = "false";
+      root.dataset.furRenderer = "static";
+      if (staticImageRef.current) staticImageRef.current.src = `/images/plush/${variantRef.current}.webp`;
+      root.dispatchEvent(new Event("fur-rendered", { bubbles: true }));
+    };
+    if (tier === "static") {
+      showStatic();
+      const changed = () => { delete root.dataset.furStaticPreview; showStatic(); };
+      root.addEventListener("fur-variant", changed);
+      return () => root.removeEventListener("fur-variant", changed);
+    }
     let canvas = document.createElement("canvas");
     const rendererCanvas = canvas;
     canvas.className = fullWidth ? "absolute left-0 -top-[22%] h-[144%] w-full" : "absolute -left-[22%] -top-[22%] size-[144%]";
     mount.append(canvas);
     let context = gallery ? null : canvas.getContext("2d");
-    if (!gallery && !context) return;
+    if (!gallery && !context) { canvas.remove(); showStatic(); return; }
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
     const finePointer = window.matchMedia("(hover: hover) and (pointer: fine)");
     let visible = gallery, disposed = false, pressed = false, hovering = false;
@@ -88,10 +122,23 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
     let submittedFrames = 0;
     let resolutionScale = 1, lastQualityUpdate = 0, lastInteraction = -Infinity;
     let wasMoving = false;
+    const runtimeSettings = () => performanceSettings(settingsRef.current, tier, gallery);
+    const continuous = () => tier === "quality" && activeRef.current;
+    const enterStatic = () => {
+      tier = "static";
+      revision++;
+      clearTimeout(warmTimer);
+      stop();
+      releaseOwner();
+      engine?.release();
+      engine = undefined;
+      mount.replaceChildren();
+      showStatic();
+    };
     const prewarm = () => {
       // Software shader compilation competes with the current frame on the CPU.
       // Compile its next character only when selected, not during idle settling.
-      if (disposed || !gallery || !engine?.direct || document.hidden || !nextVariantRef.current) return;
+      if (disposed || tier !== "quality" || !gallery || !engine?.direct || document.hidden || !nextVariantRef.current) return;
       if (hovering || pressed || transition || drawing || !engine.ready()) {
         warmTimer = setTimeout(prewarm, 1000); return;
       }
@@ -103,24 +150,31 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
       const currentRevision = revision;
       try {
         const started = performance.now();
-        const drawn = await engine.draw(context, pixels, { yaw, pitch, press, lagX, lagY, inertiaX, time: time / 1000, active: animated && activeRef.current }, variantRef.current, settingsRef.current, () => !disposed && currentRevision === revision, canvasWidth, { width: presentationWidth, height: presentationHeight });
+        const effective = runtimeSettings();
+        const drawn = await engine.draw(context, pixels, { yaw, pitch, press, lagX, lagY, inertiaX, time: time / 1000, active: animated && continuous() }, variantRef.current, effective, () => !disposed && currentRevision === revision, canvasWidth, { width: presentationWidth, height: presentationHeight }, tier === "quality" ? "full" : "lite");
         if (disposed || currentRevision !== revision) return true;
         // Shader compilation is a one-time cost, not the steady frame budget.
         if (!gallery || announcedVariant === variantRef.current) drawCost = drawCost * 0.75 + (performance.now() - started) * 0.25;
         root.dataset.furFrames = String(++submittedFrames);
         root.dataset.furResolutionScale = resolutionScale.toFixed(2);
+        root.dataset.furPerformance = tier;
+        root.dataset.furFrameMs = engine.frameMs().toFixed(1);
+        const gpuMs = engine.gpuMs();
+        if (gpuMs !== null) root.dataset.furGpuMs = gpuMs.toFixed(1);
+        else delete root.dataset.furGpuMs;
         root.dataset.furRenderer = engine.direct ? "webgl" : gallery ? "software-2d" : "shared-2d";
         if (settingsRef.current) {
           root.dataset.furDrawMs = drawCost.toFixed(1);
           root.dataset.furPixels = String(pixels);
           root.dataset.furWidth = String(canvasWidth);
-          root.dataset.furShells = String(settingsRef.current.shells);
+          root.dataset.furShells = String(effective.shells);
           root.dataset.furLength = String(settingsRef.current.length);
-          root.dataset.furFps = String(settingsRef.current.fps);
+          root.dataset.furFps = String(effective.fps);
           root.dataset.furQuality = gallery ? "gallery" : "agent";
           root.dataset.furInertia = inertiaX.toFixed(3);
           root.dataset.furYaw = yaw.toFixed(3);
           root.dataset.furPitch = pitch.toFixed(3);
+          root.dataset.furPress = press.toFixed(3);
         }
         root.dataset.furReady = String(drawn);
         if (announcedVariant !== variantRef.current) {
@@ -147,10 +201,11 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
       frame = 0;
       if (drawing) { needsFrame = true; return; }
       if (disposed || (!visible && !transition) || document.hidden) { root.dataset.furMotion = "paused"; return; }
+      if (tier === "static") { showStatic(); return; }
       if (!engine) return;
       if (!engine.ready()) { frame = requestAnimationFrame(render); return; }
       // Leave time for streaming text and input on devices with slow/software WebGL.
-      const interval = gallery ? 1000 / 60 : Math.max(1000 / (settingsRef.current?.fps ?? 30), Math.min(250, drawCost * 4));
+      const interval = gallery ? 1000 / runtimeSettings().fps : Math.max(1000 / runtimeSettings().fps, Math.min(250, drawCost * 4));
       // Allow RAF timestamp jitter around 60 Hz rather than accidentally halving it.
       if (lastFrame && time - lastFrame < interval - 1) { frame = requestAnimationFrame(render); return; }
       // On a slow GPU, an initial near-rest pose would consume an entire frame
@@ -159,7 +214,7 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
       lastFrame = time;
       const interactive = interactionOwner === root;
       const animate = (!reduce.matches || (gallery && pressed)) && (!interactionOwner || interactive);
-      const working = animate && activeRef.current;
+      const working = animate && continuous();
       const nextYaw = animate ? (interactive ? targetX : 0) + (working ? Math.sin(time / 1100) * 0.045 : 0) : 0;
       const nextPitch = animate ? (interactive ? targetY : 0) + (working ? Math.sin(time / 1400) * 0.025 : 0) : 0;
       const targetInertia = animate && transition ? plushFurInertia(Number(transition.animation.currentTime ?? 0), transition.width, transition.direction) : 0;
@@ -182,7 +237,7 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
       pressVelocity = decay * ((amplitude * frequency - 5 * offset) * cosine - (offset * frequency + 5 * amplitude) * sine);
       if (!animate) { yaw = 0; pitch = 0; press = 0; pressVelocity = 0; lagX = 0; lagY = 0; inertiaX = 0; }
       const settling = Math.abs(yaw - nextYaw) + Math.abs(pitch - nextPitch) + Math.abs(press - targetPress) + Math.abs(pressVelocity) + Math.abs(lagX) + Math.abs(lagY) + Math.abs(inertiaX) > 0.003;
-      if (gallery) {
+      if (gallery && tier === "quality") {
         const interactionSettling = Math.abs(yaw - nextYaw) + Math.abs(pitch - nextPitch) + Math.abs(press - targetPress) + Math.abs(pressVelocity) * 0.1 + Math.abs(inertiaX) > 0.02;
         // A press can arrive while a slow software frame is still rendering.
         // Consume it on the next quality update even if its grace period elapsed.
@@ -205,6 +260,18 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
       const drawn = await paint(time, animate);
       drawing = false;
       if (disposed) return;
+      if (mode === "auto" && drawn) {
+        // GPU duration avoids RAF polling quantization; software copy cost is included.
+        const measuredMs = engine.direct ? engine.gpuMs() ?? engine.frameMs() : engine.frameMs();
+        const nextTier = observeFurQuality(tier, observation, measuredMs, performance.now());
+        if (nextTier !== tier) {
+          if (nextTier === "static") { enterStatic(); return; }
+          tier = nextTier; resolutionScale = 1; wasMoving = false;
+          clearTimeout(warmTimer);
+          resizeCanvas();
+          needsFrame = true;
+        }
+      }
       // Publish the state of the frame actually presented, not one still in the
       // GPU queue. A newer pose requested during this draw must settle first.
       if (drawn && !needsFrame) root.dataset.furMotion = motion;
@@ -213,6 +280,7 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
     };
     const wake = () => {
       if (disposed) return;
+      if (tier === "static") { showStatic(); return; }
       // Idle means the requested pose has actually been presented, including
       // the final full-resolution frame after an interaction.
       root.dataset.furMotion = "animated";
@@ -224,11 +292,12 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
       if (interactionOwner === root) { interactionOwner = null; interactionOwners.dispatchEvent(new Event("change")); }
     };
     const claim = () => {
-      if ((reduce.matches && !gallery) || interactionOwner === root) return;
+      if (tier === "static" || (reduce.matches && !gallery) || interactionOwner === root) return;
       interactionOwner = root;
       interactionOwners.dispatchEvent(new Event("change"));
     };
     const move = (event: PointerEvent) => {
+      if (tier === "static") return;
       if (!(gallery && pressed) && (event.pointerType !== "mouse" || !finePointer.matches || reduce.matches)) return;
       hovering = true;
       claim();
@@ -249,7 +318,7 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
       wake();
     };
     const down = (event: PointerEvent) => {
-      if (event.button !== 0 || (reduce.matches && !gallery)) return;
+      if (tier === "static" || event.button !== 0 || (reduce.matches && !gallery)) return;
       pressed = true;
       lastInteraction = performance.now();
       lastX = event.clientX;
@@ -269,7 +338,7 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
     const resizeCanvas = () => {
       const bounds = root.getBoundingClientRect();
       const aspect = fullWidth ? bounds.width / Math.max(1, bounds.height * 1.44) : 1;
-      const requestedRatio = Math.min(devicePixelRatio || 1, 2) * (settingsRef.current?.resolution ?? 1);
+      const requestedRatio = Math.min(devicePixelRatio || 1, 2) * runtimeSettings().resolution;
       const requested = (fullWidth ? bounds.height : bounds.width) * 1.44 * (gallery ? Math.min(2, requestedRatio) : requestedRatio);
       // Give fullscreen fur enough samples instead of stretching the avatar's
       // old 1 MP budget. Cap gallery at 4 MP / 4096 wide and Agent at 256 square.
@@ -315,6 +384,7 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
       inertiaX = 0;
       root.dataset.furReady = "false";
       announcedVariant = undefined;
+      if (tier === "static") { delete root.dataset.furStaticPreview; showStatic(); return; }
       context?.clearRect(0, 0, canvas.width, canvas.height);
       wake();
     };
@@ -357,6 +427,9 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
       const acquired = await (gallery ? acquireGalleryFurRenderer(canvas) : acquireFurRenderer());
       if (disposed) { acquired.release(); return; }
       engine = acquired;
+      tier = resolvePerformanceTier(mode, acquired.software);
+      root.dataset.furPerformance = tier;
+      resizeCanvas();
       if (acquired.surface && acquired.surface !== canvas) {
         acquired.surface.className = canvas.className;
         canvas = acquired.surface;
@@ -367,7 +440,7 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
       }
       if (!acquired.direct) { canvas.width = canvasWidth; canvas.height = pixels; }
       wake();
-    }).catch(() => { if (!disposed) root.dataset.furMotion = "fallback"; });
+    }).catch(() => { if (!disposed) enterStatic(); });
     return () => {
       disposed = true;
       clearTimeout(warmTimer);
@@ -392,10 +465,14 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
       engine?.release();
       mount.replaceChildren();
     };
-  }, [preview, fullWidth, gallery]);
+  }, [preview, fullWidth, gallery, performanceMode, retry]);
 
   return <span ref={rootRef} data-fur-avatar={preview ? undefined : variant} data-fur-preview={preview ? variant : undefined} data-closure-fur-avatar={variant === "closure" ? "" : undefined} data-silverash-fur-avatar={variant === "silverash" ? "" : undefined} data-fur-ready="false" data-fur-motion="idle" className={`group/fur relative block size-full ${gallery ? "touch-none" : "touch-pan-y"} cursor-grab active:cursor-grabbing`}>
-    <svg viewBox="0 0 100 100" aria-hidden="true" className="pointer-events-none absolute -left-[22%] -top-[22%] size-[144%] group-data-[fur-ready=true]/fur:invisible" data-fur-fallback>
+    {!preview && <img ref={staticImageRef} alt="" aria-hidden="true" draggable={false}
+      onLoad={() => { if (rootRef.current?.dataset.furPerformance === "static") rootRef.current.dataset.furStaticPreview = "true"; }}
+      onError={() => { if (rootRef.current) delete rootRef.current.dataset.furStaticPreview; }}
+      className="pointer-events-none absolute -left-[22%] -top-[22%] hidden size-[144%] object-contain group-data-[fur-performance=static]/fur:block" />}
+    <svg viewBox="0 0 100 100" aria-hidden="true" className="pointer-events-none absolute -left-[22%] -top-[22%] size-[144%] group-data-[fur-ready=true]/fur:invisible group-data-[fur-static-preview=true]/fur:invisible" data-fur-fallback>
       {variant === "mountain" ? <g data-mountain-fallback transform="translate(50 50) scale(1.10) translate(-50 -50)">
         <defs><radialGradient id={`${gradientId}-tiger`}><stop stopColor="#f8f8f5" /><stop offset="1" stopColor="#c8cbca" /></radialGradient></defs>
         <path d="M62 70Q85 76 83 53Q82 45 76 49" fill="none" stroke="#dfe1de" strokeWidth="7" strokeLinecap="round" />
