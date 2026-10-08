@@ -176,7 +176,9 @@ test("Agent starts without WebGL in static mode and follows gallery performance 
     const original = HTMLCanvasElement.prototype.getContext;
     Object.assign(window, { staticWebglContexts: 0 });
     HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, ...args: Parameters<typeof original>) {
-      if (args[0] === "webgl2" || args[0] === "webgl" || args[0] === "experimental-webgl") {
+      // Fur uses WebGL2. The account FluidOrb independently uses WebGL1 and
+      // is outside this portrait preference's scope.
+      if (args[0] === "webgl2") {
         (window as typeof window & { staticWebglContexts: number }).staticWebglContexts++;
       }
       return original.apply(this, args);
