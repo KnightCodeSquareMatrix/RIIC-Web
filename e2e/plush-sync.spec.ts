@@ -37,8 +37,8 @@ test("gallery appearances persist to Agent and sync between tabs with separate q
   const portrait = agent.locator('[data-persona-card="silverash"] [data-fur-avatar="silverash"]');
   await expect(portrait).toHaveAttribute("data-fur-ready", "true", { timeout: 30_000 });
   await expect(portrait).toHaveAttribute("data-fur-length", "1.6");
-  await expect(portrait).toHaveAttribute("data-fur-shells", "20");
-  await expect(portrait).toHaveAttribute("data-fur-fps", "24");
+  await expect(portrait).toHaveAttribute("data-fur-shells", "40");
+  await expect(portrait).toHaveAttribute("data-fur-fps", "60");
   expect(Number(await portrait.getAttribute("data-fur-pixels"))).toBeLessThanOrEqual(256);
   // Let initial card shader compilation finish before testing a subsequent edit.
   await expect(agent.locator('[data-persona-card] [data-fur-ready="true"][data-fur-avatar]')).toHaveCount(5, { timeout: 30_000 });
@@ -49,7 +49,7 @@ test("gallery appearances persist to Agent and sync between tabs with separate q
   await expect.poll(() => agent.evaluate(() => JSON.parse(localStorage.getItem("riic.plush.lab.v2")!).personas.silverash.length)).toBe(1.8);
   await agent.bringToFront();
   await expect(portrait).toHaveAttribute("data-fur-length", "1.8", { timeout: 30_000 });
-  await expect(portrait).toHaveAttribute("data-fur-shells", "20");
+  await expect(portrait).toHaveAttribute("data-fur-shells", "40");
   await expect(gallery).toHaveAttribute("data-fur-shells", "64");
   await page.bringToFront();
   await page.reload();

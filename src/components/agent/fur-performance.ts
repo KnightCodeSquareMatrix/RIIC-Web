@@ -1,4 +1,4 @@
-import type { FurSettings } from "./fur-settings.ts";
+import type { AgentFurSurface, FurSettings } from "./fur-settings.ts";
 
 export type FurPerformanceMode = "auto" | "quality" | "balanced" | "saver" | "static";
 export type FurPerformanceTier = Exclude<FurPerformanceMode, "auto">;
@@ -16,12 +16,23 @@ export function resolvePerformanceTier(mode: FurPerformanceMode, software: boole
 }
 
 /** Apply a device budget without mutating or renormalizing authored appearance. */
-export function performanceSettings(settings: FurSettings, tier: FurPerformanceTier, gallery: boolean): FurSettings {
+export function performanceSettings(settings: FurSettings, tier: FurPerformanceTier, gallery: boolean, surface: AgentFurSurface = "chat"): FurSettings {
   if (tier === "quality" || tier === "static") return { ...settings };
   const saver = tier === "saver";
+  if (!gallery) {
+    const portrait = surface === "portrait";
+    // Preserve the inexpensive chat fallback on software GPUs. Larger portraits
+    // get a little more detail without inheriting the high-quality rendering cost.
+    return {
+      ...settings,
+      shells: Math.min(settings.shells, saver ? portrait ? 16 : 12 : portrait ? 28 : 24),
+      resolution: Math.min(settings.resolution, saver ? portrait ? 0.6 : 0.4 : portrait ? 1.1 : 0.9),
+      fps: Math.min(settings.fps, saver ? 24 : 30),
+    };
+  }
   return {
     ...settings,
-    shells: Math.min(settings.shells, gallery ? saver ? 20 : 36 : saver ? 12 : 20),
+    shells: Math.min(settings.shells, saver ? 20 : 36),
     resolution: settings.resolution * (saver ? 0.5 : 0.75),
     fps: Math.min(settings.fps, saver ? 24 : 30),
   };
