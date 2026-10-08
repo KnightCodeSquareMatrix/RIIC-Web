@@ -1,5 +1,9 @@
 import { expect, test } from "@playwright/test";
 
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("riic.plush.performance.v1", "quality"));
+});
+
 test("painted face, woven headband, badge and embroidery render at gallery quality", async ({ page }) => {
   test.setTimeout(120_000);
   // Keep all 64 shells and actual material sampling, with a bounded software-GPU
