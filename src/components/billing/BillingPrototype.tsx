@@ -14,7 +14,6 @@ import { notifyBillingUpdated, subscribeBillingUpdates } from "@/lib/billing-eve
 type Product = { id: string; name: string; amountFen: number; points: number; badge?: string; description: string; kind: string; checkoutConfigured: boolean };
 type BillingData = {
   canSimulatePayment?: boolean;
-  canManageCodes?: boolean;
   products: Product[];
   wallet: { paidPoints: number; monthlyPoints: number; monthlyExpiresAt: string | null; totalPoints: number };
   ledger: Array<{ id: string; kind: string; pointsDelta: number; createdAt: string; metadata?: Record<string, unknown> | null }>;
@@ -237,7 +236,7 @@ export function BillingPrototype() {
       </div>
 
       <BillingCard id="billing-redeem" className={styles.redemption} aria-labelledby="billing-redeem-heading">
-        <div><h2 id="billing-redeem-heading" className="text-sm font-semibold">{locale === "en" ? "Redeem a code" : "核销兑换码"}</h2><p className={`${styles.caption} mt-1`}>{locale === "en" ? "Each code can be redeemed once within its validity period, for permanent credits." : "每码限兑一次，请在有效期内兑换，到账后为永久积分。"}</p>{data.canManageCodes && <Link href="/admin/billing" className="mt-2 inline-block text-xs underline underline-offset-4">{locale === "en" ? "Manage credit codes" : "管理积分兑换码"}</Link>}</div>
+        <div><h2 id="billing-redeem-heading" className="text-sm font-semibold">{locale === "en" ? "Redeem a code" : "核销兑换码"}</h2><p className={`${styles.caption} mt-1`}>{locale === "en" ? "Each code can be redeemed once within its validity period, for permanent credits." : "每码限兑一次，请在有效期内兑换，到账后为永久积分。"}</p></div>
         <form className={styles.redemptionForm} onSubmit={(event) => { event.preventDefault(); if (busy === null && cdkCode.trim()) void cdkAction(); }}>
           <Input ref={codeInput} aria-label={locale === "en" ? "Credit code" : "积分兑换码"} placeholder="RIIC-..." maxLength={64} autoComplete="off" autoCapitalize="characters" spellCheck={false} value={cdkCode} onChange={(event) => setCdkCode(event.target.value)} />
           <Button type="submit" className={`${styles.pill} ${styles.primary}`} disabled={busy !== null || !cdkCode.trim()}>{busy === "cdk-redeem" ? "兑换中…" : "核销并入账"}</Button>
