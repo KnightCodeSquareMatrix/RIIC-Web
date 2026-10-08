@@ -68,3 +68,24 @@ test("mobile reduced-motion dialogs do not scale and restore page interaction", 
   await trigger.click();
   await expect(dialog).toBeVisible();
 });
+
+test("resizing during dialog exit removes the popup and restores page interaction", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await gotoStable(page, "/");
+  const trigger = page.getByRole("button", { name: "账号管理", exact: true });
+  await trigger.click();
+  const dialog = page.locator('[data-website-account-dialog]:not([data-website-account-dialog-loading])');
+  await expect(dialog).toBeVisible();
+  await waitForOwnAnimations(dialog);
+  await dialog.getByRole("button", { name: "Close", exact: true }).click();
+  // Crossing the scrollbar breakpoint while the exit is running must not
+  // detach/reinsert the animated shell or leave an invisible click blocker.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(dialog).toHaveCount(0);
+  await expect(page.locator('[data-slot="dialog-overlay"]')).toHaveCount(0);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await trigger.click();
+  await expect(dialog).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+});

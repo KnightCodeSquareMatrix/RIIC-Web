@@ -340,24 +340,29 @@ html.schedule-layout-return::view-transition-new(.schedule-room-entering) {
 }
 
 .dialog-popup {
-  opacity: 1;
-  transform: scale(1);
   transform-origin: center;
-  transition: opacity 200ms var(--motion-ease-out), transform 200ms var(--motion-ease-out);
+  /* Unlike transitions, keyframes restart if a scrollbar enhancement moves
+     this node. Base UI can then finish the exit instead of awaiting a cancelled
+     transition with no replacement and leaving an invisible modal mounted. */
+  animation: dialog-enter 200ms var(--motion-ease-out) both;
 }
 
-.dialog-popup[data-starting-style],
+@keyframes dialog-enter {
+  from { opacity: 0; transform: scale(var(--dialog-enter-scale, 0.97)); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes dialog-exit {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.97); }
+}
+
+.dialog-popup[data-from-skeleton] {
+  --dialog-enter-scale: 0.99;
+}
+
 .dialog-popup[data-ending-style] {
-  opacity: 0;
-  transform: scale(0.97);
-}
-
-.dialog-popup[data-from-skeleton][data-starting-style] {
-  transform: scale(0.99);
-}
-
-.dialog-popup[data-ending-style] {
-  transition-duration: 150ms;
+  animation: dialog-exit 150ms var(--motion-ease-out) both;
 }
 
 .dialog-overlay {
@@ -372,11 +377,10 @@ html.schedule-layout-return::view-transition-new(.schedule-room-entering) {
 
 @media (prefers-reduced-motion: reduce) {
   .dialog-popup,
-  .dialog-popup[data-starting-style],
-  .dialog-popup[data-ending-style],
-  .dialog-popup[data-from-skeleton][data-starting-style] {
-    transform: none;
-    transition: opacity 100ms linear;
+  .dialog-popup[data-ending-style] {
+    transform: none !important;
+    animation-duration: 100ms;
+    animation-timing-function: linear;
   }
 
   .dialog-overlay {
