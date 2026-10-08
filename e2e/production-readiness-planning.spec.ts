@@ -953,14 +953,14 @@ test("dialog and mobile sheet motion preserve direction, exit timing, and focus"
   await expect(setupDialog).toHaveCount(0);
   await expect(setupTrigger).toBeFocused();
 
-  await armMotionCapture(page, '[role="dialog"]', "setup-enter", 300);
+  await armMotionCapture(page, '[role="dialog"]', "setup-enter", 200);
   await setupTrigger.click();
-  await expectCapturedMotion(page, "setup-enter", 300);
+  await expectCapturedMotion(page, "setup-enter", 200);
   await expect(setupDialog).toHaveCSS("transform-origin", /.+/);
   await page.setViewportSize({ width: 768, height: 900 });
   await armEndingTransitionCapture(setupDialog, "setup");
   await setupDialog.getByRole("button", { name: "Close" }).click();
-  await expectCapturedExitDuration(page, "setup", 180);
+  await expectCapturedExitDuration(page, "setup", 150);
   await expect(setupDialog).toHaveCount(0);
   await expect(setupTrigger).toBeFocused();
 
@@ -974,12 +974,12 @@ test("dialog and mobile sheet motion preserve direction, exit timing, and focus"
   await expect(feedbackDialog).toHaveCount(0);
   await expect(issueTrigger).toBeFocused();
 
-  await armMotionCapture(page, '[role="dialog"]', "feedback-enter", 300);
+  await armMotionCapture(page, '[role="dialog"]', "feedback-enter", 200);
   await issueTrigger.click();
-  await expectCapturedMotion(page, "feedback-enter", 300);
+  await expectCapturedMotion(page, "feedback-enter", 200);
   await armEndingTransitionCapture(feedbackDialog, "feedback");
   await feedbackDialog.getByRole("button", { name: "取消" }).click();
-  await expectCapturedExitDuration(page, "feedback", 180);
+  await expectCapturedExitDuration(page, "feedback", 150);
   await expect(feedbackDialog).toHaveCount(0);
   await expect(issueTrigger).toBeFocused();
 

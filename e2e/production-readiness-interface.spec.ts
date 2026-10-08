@@ -468,7 +468,7 @@ test("setup exposes and persists only worker-supported rotation profiles", async
   await page.goto("/");
   await page.getByRole("button", { name: "配置Box与布局" }).first().click();
   const dialog = page.getByRole("dialog");
-  await expect(dialog).toHaveClass(/dialog-acrylic/);
+  await expect(dialog).toHaveClass(/dialog-surface/);
   await expect(dialog.locator("[data-setup-top]")).toBeVisible();
   await expect(dialog.getByText("导入干员数据，再确认换班方式与基建设施。修改会立即应用，但不会自动生成排班。")).toHaveCount(0);
   await expect(dialog.locator("[data-setup-footer]")).toBeVisible();
