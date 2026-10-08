@@ -27,6 +27,7 @@ test("agent cards group sources, expose only knowledge subjects, and render fail
           export const useAgentRuntime=()=>({});
           export const useAgentHistory=()=>({});
           export const useAgentViewport=()=>{};
+          export const subscribeBillingUpdates=()=>()=>{};
           export const useIsMobile=()=>false;
           export const AGENT_PERSONA_SELECTION_KEY="test-persona";
           export const builtinAgentPersona=()=>undefined;
