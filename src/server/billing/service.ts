@@ -6,7 +6,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { getDatabase } from "@/server/db";
 import { agentUsage, billingCdk, billingLedger, billingOrder, billingWallet } from "@/server/db/schema";
 import { afdianCheckoutUrl, billingProduct, billingTestProductEnabled, type BillingProduct } from "./config";
-import { hashCdk, randomCdk, validCdk } from "./cdk";
+import { cdkAvailability, hashCdk, randomCdk, validCdk } from "./cdk";
 
 export type BillingWalletView = {
   paidPoints: number;
@@ -416,7 +416,17 @@ export async function redeemGiftCdk(userId: string, code: string) {
   const db = getDatabase();
   return db.transaction(async (tx) => {
     const [cdk] = await tx.select().from(billingCdk).where(eq(billingCdk.codeHash, hashCdk(code))).for("update").limit(1);
-    if (!cdk || cdk.status !== "issued") throw new BillingError("invalid_cdk", "兑换码不存在或已核销。");
+    if (!cdk) throw new BillingError("invalid_cdk", "兑换码不存在，请检查后重试。");
+    // Use the database clock after acquiring the row lock, so delayed requests
+    // and application-host clock skew cannot redeem an expired code.
+    const clock = await tx.execute<{ now: Date }>(sql`select clock_timestamp() as now`);
+    const now = new Date(clock.rows[0].now);
+    const availability = cdkAvailability(cdk, now);
+    if (availability === "revoked") throw new BillingError("invalid_cdk", "兑换码已作废，请联系发放方。");
+    if (availability === "redeemed") throw new BillingError("invalid_cdk", "兑换码已被使用，不能重复兑换。");
+    if (availability === "expired") throw new BillingError("invalid_cdk", "兑换码已过期，请联系发放方。");
+    if (availability === "scheduled") throw new BillingError("invalid_cdk", "兑换码尚未到启用时间，请稍后再试。");
+    if (availability !== "issued") throw new BillingError("invalid_cdk", "兑换码当前不可用。");
     await ensureWallet(tx, userId);
     const current = await expireWalletIfNeeded(tx, userId, await lockWallet(tx, userId));
     const paidPoints = current.paidPoints + cdk.points;

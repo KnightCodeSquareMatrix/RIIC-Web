@@ -23,7 +23,7 @@ test("admin issuance writes one atomic batch of hashes with stable retry keys an
   assert.equal(new Set(result.codes).size, 20);
   assert.equal(inserts[0].reduce((sum, row) => sum + row.points, 0), 600);
   for (const [index, row] of inserts[0].entries()) {
-    assert.deepEqual(row, { id: `admin:${input.batchId}:${index}`, issuerUserId: "admin-1", codeHash: hashCdk(result.codes[index]), points: 30 });
+    assert.deepEqual(row, { id: `admin:${input.batchId}:${index}`, issuerUserId: "admin-1", codeHash: hashCdk(result.codes[index]), points: 30, batchId: input.batchId });
     assert.ok(!JSON.stringify(row).includes(result.codes[index]));
   }
   await assert.rejects(issueAdminCdks("admin-1", { ...input, points: -30 }));

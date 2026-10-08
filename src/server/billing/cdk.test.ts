@@ -1,8 +1,27 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { hashCdk, normalizeCdk, parseAdminCdkInput, randomCdk, validCdk } from "./cdk.ts";
+import { cdkAvailability, hashCdk, normalizeCdk, parseAdminCdkInput, parseCdkRevocation, randomCdk, validCdk } from "./cdk.ts";
 
 const batchId = "ccdc31bf-3dc0-4d65-9fb9-6b55eabf5678";
+
+test("validity boundaries and terminal states determine redeemability", () => {
+  const now = new Date("2030-01-01T00:00:00Z");
+  assert.equal(cdkAvailability({ status: "issued", startsAt: now }, now), "issued");
+  assert.equal(cdkAvailability({ status: "issued", expiresAt: now }, now), "expired");
+  assert.equal(cdkAvailability({ status: "issued", startsAt: new Date(now.getTime() + 1) }, now), "scheduled");
+  for (const status of ["revoked", "redeemed"]) assert.equal(cdkAvailability({ status, expiresAt: now }, now), status);
+  assert.equal(cdkAvailability({ status: "issued" }, now), "issued", "legacy codes have no expiry");
+  const input = { batchId, count: 1, points: 30 };
+  for (const dates of [{ expiresAt: "2000-01-01T00:00:00Z" }, { startsAt: "2030-01-01T00:00" }, { startsAt: "2030-01-02T00:00:00Z", expiresAt: "2030-01-01T00:00:00Z" }]) assert.throws(() => parseAdminCdkInput({ ...input, ...dates }));
+  assert.equal(parseAdminCdkInput({ ...input, batchLabel: " campaign ", expiresAt: "2099-01-01T00:00:00Z" }).batchLabel, "campaign");
+});
+
+test("revocation accepts one promotional target and requires an audit reason", () => {
+  assert.deepEqual(parseCdkRevocation({ batchId, reason: " stop " }), { batchId, reason: "stop" });
+  const id = `admin:${batchId}:0`;
+  assert.deepEqual(parseCdkRevocation({ id, reason: "stop" }), { id, reason: "stop" });
+  for (const value of [{ id: "user-gift", reason: "stop" }, { id, batchId, reason: "stop" }, { batchId, reason: " " }, { batchId, reason: "x".repeat(201) }, { batchId: "invalid", reason: "stop" }]) assert.throws(() => parseCdkRevocation(value));
+});
 
 test("admin batch accepts 20 codes with 30 points, bounded positive integer amounts only", () => {
   assert.deepEqual(parseAdminCdkInput({ batchId, count: 20, points: 30 }), { batchId, count: 20, points: 30 });

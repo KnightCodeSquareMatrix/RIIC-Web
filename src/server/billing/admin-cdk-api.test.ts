@@ -30,10 +30,12 @@ test("admin code endpoints require administrator access, origin checks and rate 
   await t.mock.module(new URL("./admin-cdk.ts", import.meta.url), { namedExports: {
     listAdminCdks: async () => { calls.push("list"); return []; },
     issueAdminCdks: async (issuer: string, input: unknown) => { calls.push("issue"); assert.equal(issuer, "authenticated-admin"); assert.ok(input); if (invalidInput) throw new CdkValidationError("invalid"); return { codes: ["PROMOTION-30"], points: 30 }; },
+    revokeAdminCdks: async (issuer: string) => { calls.push("revoke"); assert.equal(issuer, "authenticated-admin"); return { revoked: 1 }; },
   } });
-  const { GET, POST } = await import("../../app/api/admin/billing/cdk/route.ts");
+  const { GET, POST, PATCH } = await import("../../app/api/admin/billing/cdk/route.ts");
   const request = () => new Request("https://riic.test/api/admin/billing/cdk", { method: "POST", body: JSON.stringify({ issuerUserId: "forged", count: 20, points: 30 }) });
   for (role of ["guest", "user", "reviewer"]) {
+    assert.equal((await PATCH(new Request(request(), { method: "PATCH" }))).status, 403);
     calls.length = 0;
     assert.equal((await POST(request())).status, 403);
     assert.deepEqual(calls, ["auth"]);
@@ -64,4 +66,7 @@ test("admin code endpoints require administrator access, origin checks and rate 
   calls.length = 0;
   assert.equal((await GET(new Request("https://riic.test/api/admin/billing/cdk"))).status, 200);
   assert.deepEqual(calls, ["auth", "list"]);
+  calls.length = 0;
+  assert.equal((await PATCH(new Request(request(), { method: "PATCH" }))).status, 200);
+  assert.deepEqual(calls, ["auth", "origin", "rate", "revoke"]);
 });

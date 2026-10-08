@@ -1,7 +1,7 @@
 "use client";
 import { WorkbenchPageHeading } from "@/components/workbench/WorkbenchPageHeading";
 
-import { useCallback, useEffect, useMemo, useState, type ComponentProps } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
 import { useLocale } from "next-intl";
 import Link from "next/link";
 import { ArrowUpRight, ChevronDown } from "lucide-react";
@@ -9,10 +9,12 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import dialogueStyles from "@/components/agent/beautiful/Dialogue.module.css";
 import styles from "./BillingPrototype.module.css";
+import { notifyBillingUpdated, subscribeBillingUpdates } from "@/lib/billing-events";
 
 type Product = { id: string; name: string; amountFen: number; points: number; badge?: string; description: string; kind: string; checkoutConfigured: boolean };
 type BillingData = {
   canSimulatePayment?: boolean;
+  canManageCodes?: boolean;
   products: Product[];
   wallet: { paidPoints: number; monthlyPoints: number; monthlyExpiresAt: string | null; totalPoints: number };
   ledger: Array<{ id: string; kind: string; pointsDelta: number; createdAt: string; metadata?: Record<string, unknown> | null }>;
@@ -74,6 +76,8 @@ export function BillingPrototype() {
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [cdkCode, setCdkCode] = useState("");
+  const redeemBusy = useRef(false);
+  const codeInput = useRef<HTMLInputElement>(null);
 
   const reload = useCallback(async () => {
     try {
@@ -85,6 +89,21 @@ export function BillingPrototype() {
   }, []);
 
   useEffect(() => { void reload(); }, [reload]);
+  useEffect(() => subscribeBillingUpdates(() => void reload()), [reload]);
+  useEffect(() => {
+    const readLink = () => {
+      const value = new URLSearchParams(window.location.hash.slice(1)).get("redeem");
+      if (!value || !/^[a-z0-9][a-z0-9_-]{7,63}$/i.test(value.trim())) return;
+      setCdkCode(value.trim().toUpperCase());
+      // Fragments stay out of server logs; remove the code from browser history
+      // after prefilling. Redemption always requires an explicit submit.
+      window.history.replaceState(window.history.state, "", `${window.location.pathname}${window.location.search}#billing-redeem`);
+      codeInput.current?.focus();
+    };
+    readLink();
+    window.addEventListener("hashchange", readLink);
+    return () => window.removeEventListener("hashchange", readLink);
+  }, []);
 
   // The API is ordered newest first; show the latest order so an older duplicate
   // pending order cannot hide a newer paid callback.
@@ -143,21 +162,27 @@ export function BillingPrototype() {
   };
 
   const cdkAction = async () => {
+    if (redeemBusy.current) return;
+    redeemBusy.current = true;
     setBusy("cdk-redeem");
+    setError(null);
     setNotice(null);
     try {
       const response = await fetch("/api/billing/cdk", {
         method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "redeem", code: cdkCode }),
+        body: JSON.stringify({ action: "redeem", code: cdkCode.trim().toUpperCase() }),
       });
-      const payload = await response.json() as { data?: { code?: string; points?: number }; error?: { message?: string } };
+      const payload = await response.json() as { data?: { points: number; wallet: BillingData["wallet"] }; error?: { message?: string } };
       if (!response.ok || !payload.data) throw new Error(payload.error?.message ?? "兑换码操作失败。");
       setCdkCode("");
-      setNotice(`兑换成功，已到账 ${payload.data.points ?? 0} 积分。`);
-      await reload();
+      const result = payload.data;
+      setData(current => current ? { ...current, wallet: result.wallet } : current);
+      setNotice(locale === "en" ? `Redeemed ${result.points} permanent credits.` : `兑换成功，已到账 ${result.points} 永久积分。`);
+      notifyBillingUpdated();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "兑换码操作失败。");
     } finally {
+      redeemBusy.current = false;
       setBusy(null);
     }
   };
@@ -211,10 +236,10 @@ export function BillingPrototype() {
         ))}
       </div>
 
-      <BillingCard className={styles.redemption} aria-labelledby="billing-redeem-heading">
-        <div><h2 id="billing-redeem-heading" className="text-sm font-semibold">核销兑换码</h2><p className={`${styles.caption} mt-1`}>赠送码兑换后计入永久积分。爱发电购买无需兑换码。</p></div>
+      <BillingCard id="billing-redeem" className={styles.redemption} aria-labelledby="billing-redeem-heading">
+        <div><h2 id="billing-redeem-heading" className="text-sm font-semibold">{locale === "en" ? "Redeem a code" : "核销兑换码"}</h2><p className={`${styles.caption} mt-1`}>{locale === "en" ? "Each code can be redeemed once within its validity period, for permanent credits." : "每码限兑一次，请在有效期内兑换，到账后为永久积分。"}</p>{data.canManageCodes && <Link href="/admin/billing" className="mt-2 inline-block text-xs underline underline-offset-4">{locale === "en" ? "Manage credit codes" : "管理积分兑换码"}</Link>}</div>
         <form className={styles.redemptionForm} onSubmit={(event) => { event.preventDefault(); if (busy === null && cdkCode.trim()) void cdkAction(); }}>
-          <Input aria-label="积分兑换码" placeholder="RIIC-..." value={cdkCode} onChange={(event) => setCdkCode(event.target.value)} />
+          <Input ref={codeInput} aria-label={locale === "en" ? "Credit code" : "积分兑换码"} placeholder="RIIC-..." maxLength={64} autoComplete="off" autoCapitalize="characters" spellCheck={false} value={cdkCode} onChange={(event) => setCdkCode(event.target.value)} />
           <Button type="submit" className={`${styles.pill} ${styles.primary}`} disabled={busy !== null || !cdkCode.trim()}>{busy === "cdk-redeem" ? "兑换中…" : "核销并入账"}</Button>
         </form>
       </BillingCard>
