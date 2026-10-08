@@ -5,7 +5,7 @@ import type { acquireFurRenderer, FurAvatarVariant } from "./fur-avatar-renderer
 import { FurSettingsContext } from "./FurSettingsContext";
 import { useAgentFurSettings } from "./fur-settings-store";
 import { plushFurInertia, plushGazeStep } from "./plush-motion";
-import { motionResolutionScale } from "./fur-frame-budget";
+import { agentFrameInterval, motionResolutionScale } from "./fur-frame-budget";
 import { performanceSettings, resolvePerformanceTier } from "./fur-performance";
 import { readFurPerformanceMode, useFurPerformanceMode } from "./fur-performance-store";
 import { newFurQualityObservation, observeFurQuality } from "./fur-adaptive-quality";
@@ -153,8 +153,13 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
         const effective = runtimeSettings();
         const drawn = await engine.draw(context, pixels, { yaw, pitch, press, lagX, lagY, inertiaX, time: time / 1000, active: animated && continuous() }, variantRef.current, effective, () => !disposed && currentRevision === revision, canvasWidth, { width: presentationWidth, height: presentationHeight }, tier === "quality" ? "full" : "lite");
         if (disposed || currentRevision !== revision) return true;
-        // Shader compilation is a one-time cost, not the steady frame budget.
-        if (!gallery || announcedVariant === variantRef.current) drawCost = drawCost * 0.75 + (performance.now() - started) * 0.25;
+        // Exclude the first draw/compile for both gallery and chat. Shared chat
+        // rendering reports this completed frame's GPU wait + copy cost, without
+        // time spent queued behind other portraits inflating its steady budget.
+        if (drawn && announcedVariant === variantRef.current) {
+          const completedCost = gallery ? performance.now() - started : engine.frameMs();
+          drawCost = drawCost * 0.75 + completedCost * 0.25;
+        }
         root.dataset.furFrames = String(++submittedFrames);
         root.dataset.furResolutionScale = resolutionScale.toFixed(2);
         root.dataset.furPerformance = tier;
@@ -204,15 +209,17 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
       if (tier === "static") { showStatic(); return; }
       if (!engine) return;
       if (!engine.ready()) { frame = requestAnimationFrame(render); return; }
-      // Leave time for streaming text and input on devices with slow/software WebGL.
-      const interval = gallery ? 1000 / runtimeSettings().fps : Math.max(1000 / runtimeSettings().fps, Math.min(250, drawCost * 4));
+      const interactive = interactionOwner === root;
+      // The hovered/pressed portrait follows its chosen FPS. Awaiting drawing
+      // already prevents overlapping work; only background motion needs extra
+      // throttling to leave time for streaming text on slow/software WebGL.
+      const interval = gallery ? 1000 / runtimeSettings().fps : agentFrameInterval(runtimeSettings().fps, drawCost, interactive);
       // Allow RAF timestamp jitter around 60 Hz rather than accidentally halving it.
       if (lastFrame && time - lastFrame < interval - 1) { frame = requestAnimationFrame(render); return; }
       // On a slow GPU, an initial near-rest pose would consume an entire frame
       // before any press became visible. Account for its measured presentation latency.
       const dt = lastFrame ? Math.min((time - lastFrame) / 1000, 5) : Math.max(1 / 30, Math.min(0.5, drawCost / 1000));
       lastFrame = time;
-      const interactive = interactionOwner === root;
       const animate = (!reduce.matches || (gallery && pressed)) && (!interactionOwner || interactive);
       const working = animate && continuous();
       const nextYaw = animate ? (interactive ? targetX : 0) + (working ? Math.sin(time / 1100) * 0.045 : 0) : 0;
@@ -286,6 +293,15 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
       root.dataset.furMotion = "animated";
       if (drawing) { needsFrame = true; return; }
       if (!frame) { lastFrame = 0; frame = requestAnimationFrame(render); }
+    };
+    const ownerChange = () => {
+      if (disposed || tier === "static" || (!visible && !transition) || document.hidden) return;
+      // A new owner must not enqueue every already-idle history portrait. Keep
+      // the old owner's final rest pose and resume active animation on release.
+      const awayFromRest = Math.abs(yaw) + Math.abs(pitch) + Math.abs(press)
+        + Math.abs(pressVelocity) + Math.abs(lagX) + Math.abs(lagY) + Math.abs(inertiaX) > 0.003;
+      const resumeActive = !interactionOwner && continuous() && !reduce.matches;
+      if (interactionOwner === root || awayFromRest || resumeActive || transition) wake();
     };
     const reset = () => { pressed = false; hovering = false; targetX = 0; targetY = 0; };
     const releaseOwner = () => {
@@ -421,7 +437,7 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
     window.addEventListener("pointerup", up);
     document.addEventListener("visibilitychange", visibility);
     reduce.addEventListener("change", motionChange);
-    interactionOwners.addEventListener("change", wake);
+    interactionOwners.addEventListener("change", ownerChange);
     void import("./fur-avatar-renderer").then(async ({ acquireFurRenderer, acquireGalleryFurRenderer }) => {
       if (disposed) return;
       const acquired = await (gallery ? acquireGalleryFurRenderer(canvas) : acquireFurRenderer());
@@ -460,7 +476,7 @@ export function FurAvatar({ active = false, variant, preview = false, fullWidth 
       window.removeEventListener("pointerup", up);
       document.removeEventListener("visibilitychange", visibility);
       reduce.removeEventListener("change", motionChange);
-      interactionOwners.removeEventListener("change", wake);
+      interactionOwners.removeEventListener("change", ownerChange);
       releaseOwner();
       engine?.release();
       mount.replaceChildren();
