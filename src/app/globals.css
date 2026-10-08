@@ -584,6 +584,49 @@ html[data-agent-keyboard] [data-agent-composer] {
   grid-row: 2;
 }
 
+/* Three two-slot facilities share one edge with two one-slot facilities. */
+.compact-auxiliary-grid:has(> [data-room-group="recycling"]) {
+  grid-template-rows: repeat(6, minmax(0, 1fr));
+}
+.compact-auxiliary-grid:has(> [data-room-group="recycling"]) > [data-room-group="meeting"] { grid-row: 1 / 3; }
+.compact-auxiliary-grid:has(> [data-room-group="recycling"]) > [data-room-group="training"] { grid-row: 3 / 5; }
+.compact-auxiliary-grid > [data-room-group="recycling"] { grid-column: 1; grid-row: 5 / 7; }
+.compact-auxiliary-grid:has(> [data-room-group="recycling"]) > [data-room-group="hire"] { grid-row: 1 / 4; }
+.compact-auxiliary-grid:has(> [data-room-group="recycling"]) > [data-room-group="processing"] { grid-row: 4 / 7; }
+
+@container (max-width: 539px) {
+  .compact-auxiliary-grid:has(> [data-room-group="recycling"]) {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  }
+  .compact-auxiliary-grid [data-compact-room-heading] {
+    height: auto;
+    min-height: 1.75rem;
+    flex-wrap: wrap;
+  }
+  .compact-auxiliary-grid [data-compact-room-heading] > .font-number {
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    flex-shrink: 1;
+  }
+  .compact-auxiliary-grid h4 {
+    white-space: normal;
+    height: auto;
+    min-height: 1.75rem;
+  }
+}
+
+@container (max-width: 359px) {
+  .compact-auxiliary-grid:has(> [data-room-group="recycling"]) {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
+  }
+  .compact-auxiliary-grid:has(> [data-room-group="recycling"]) > [data-room-group] {
+    grid-column: auto;
+    grid-row: auto;
+  }
+}
+
 @container (max-width: 539px) {
   .compact-auxiliary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
