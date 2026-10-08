@@ -733,6 +733,7 @@ test("layout level steppers respect bounds and expose the power-safe 342 default
   expect(mediumOverflow.scrollWidth).toBeLessThanOrEqual(mediumOverflow.clientWidth);
 
   await page.setViewportSize({ width: 390, height: 844 });
+  await waitForOwnAnimations(dialog);
   const footerBox = await dialog.locator("[data-setup-footer]").boundingBox();
   expect(footerBox?.height ?? Infinity).toBeLessThanOrEqual(68);
   expect((footerBox?.y ?? Infinity) + (footerBox?.height ?? Infinity)).toBeLessThanOrEqual(844);
