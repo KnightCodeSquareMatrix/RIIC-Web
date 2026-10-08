@@ -1,11 +1,12 @@
 import "server-only";
 
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { and, desc, eq, sql } from "drizzle-orm";
 
 import { getDatabase } from "@/server/db";
 import { agentUsage, billingCdk, billingLedger, billingOrder, billingWallet } from "@/server/db/schema";
 import { afdianCheckoutUrl, billingProduct, billingTestProductEnabled, type BillingProduct } from "./config";
+import { hashCdk, randomCdk, validCdk } from "./cdk";
 
 export type BillingWalletView = {
   paidPoints: number;
@@ -19,10 +20,6 @@ export class BillingError extends Error {
     super(message);
     this.name = "BillingError";
   }
-}
-
-function hashCdk(code: string): string {
-  return createHash("sha256").update(code.trim().toUpperCase()).digest("hex");
 }
 
 type LockedWallet = {
@@ -394,7 +391,7 @@ export async function finalizeAgentUsage(input: {
 
 export async function issueGiftCdk(userId: string, points: number) {
   if (points !== 50 && points !== 110) throw new BillingError("invalid_cdk", "目前只可生成 50 或 110 积分赠送码。");
-  const code = `RIIC-${randomBytes(18).toString("hex").toUpperCase()}`;
+  const code = randomCdk();
   const cdkId = randomUUID();
   const db = getDatabase();
   const wallet = await db.transaction(async (tx) => {
@@ -415,7 +412,7 @@ export async function issueGiftCdk(userId: string, points: number) {
 }
 
 export async function redeemGiftCdk(userId: string, code: string) {
-  if (!/^RIIC-[A-F0-9]{36}$/i.test(code.trim())) throw new BillingError("invalid_cdk", "兑换码格式无效。");
+  if (!validCdk(code)) throw new BillingError("invalid_cdk", "兑换码格式无效。");
   const db = getDatabase();
   return db.transaction(async (tx) => {
     const [cdk] = await tx.select().from(billingCdk).where(eq(billingCdk.codeHash, hashCdk(code))).for("update").limit(1);

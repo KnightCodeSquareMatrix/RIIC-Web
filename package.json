@@ -5,6 +5,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:billing-cdk": "node --experimental-strip-types --experimental-test-module-mocks --test src/server/billing/cdk.test.ts src/server/billing/admin-cdk.test.ts src/server/billing/admin-cdk-api.test.ts",
     "dev:admin-preview": "node scripts/start-admin-preview.mjs",
     "test:admin-preview": "node --test --experimental-strip-types src/admin-preview-policy.test.ts src/admin-preview-data.test.ts",
     "test:feature-access": "node --test --experimental-strip-types --experimental-test-module-mocks src/server/auth/feature-access.test.ts src/server/billing/webhook.test.ts",
