@@ -1,5 +1,49 @@
 import { expect, test } from "@playwright/test";
 
+test("pointer following keeps its sampling stable across brief pauses", async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.setViewportSize({ width: 400, height: 540 });
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.addInitScript(() => {
+    const waits = new WeakMap<WebGLSync, number>();
+    const original = WebGL2RenderingContext.prototype.clientWaitSync;
+    WebGL2RenderingContext.prototype.clientWaitSync = function (sync, flags, timeout) {
+      if (!waits.has(sync)) waits.set(sync, performance.now());
+      if (performance.now() - waits.get(sync)! < 50) return this.TIMEOUT_EXPIRED;
+      return original.call(this, sync, flags, timeout);
+    };
+  });
+  await page.route("**/api/telemetry", route => route.fulfill({ json: { success: true } }));
+  await page.goto("/plush?debug=1");
+  const avatar = page.locator('[data-fur-avatar="closure"]');
+  await expect(avatar).toHaveAttribute("data-fur-ready", "true", { timeout: 30_000 });
+  await page.getByText("更多设置", { exact: true }).click();
+  await page.getByLabel("持续动画", { exact: true }).uncheck();
+  await page.getByText("更多设置", { exact: true }).click();
+  await page.mouse.move(0, 0);
+  await expect(avatar).toHaveAttribute("data-fur-motion", "idle", { timeout: 20_000 });
+  const bounds = (await avatar.boundingBox())!;
+  await avatar.evaluate(root => {
+    const scales: string[] = [];
+    Object.assign(window, { hoverScales: scales });
+    new MutationObserver(() => {
+      const scale = root.getAttribute("data-fur-resolution-scale")!;
+      if (scales.at(-1) !== scale) scales.push(scale);
+    }).observe(root, { attributes: true, attributeFilter: ["data-fur-resolution-scale"] });
+  });
+  // Small changes and short pauses mimic reading while moving the cursor over
+  // the toy, without ever pressing or dragging it.
+  for (const offset of [0.02, 0.04, 0.01, 0.03]) {
+    await page.mouse.move(bounds.x + bounds.width * (0.5 + offset), bounds.y + bounds.height * 0.5);
+    await page.waitForTimeout(450);
+  }
+  await expect(avatar).toHaveAttribute("data-fur-motion", "idle", { timeout: 20_000 });
+  const scales = await page.evaluate(() => (window as unknown as { hoverScales: string[] }).hoverScales);
+  expect(scales.length).toBeGreaterThan(0);
+  expect([...new Set(scales)]).toEqual(["1.00"]);
+  expect(Math.abs(Number(await avatar.getAttribute("data-fur-yaw")))).toBeGreaterThan(0.01);
+});
+
 test("gallery uses direct GPU rendering or responsive software fallback, sleeps and restores WebGL", async ({ page }) => {
   test.setTimeout(120_000);
   // This exercises GPU lifecycle/scheduling, not screenshot fidelity. Keep its
