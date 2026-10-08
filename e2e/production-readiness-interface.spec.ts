@@ -476,11 +476,14 @@ test("setup exposes and persists only worker-supported rotation profiles", async
   await expect(dialog).toHaveCSS("border-radius", "32px");
   const dialogMaterial = await dialog.evaluate((element) => ({
     shadow: getComputedStyle(element).boxShadow,
+    backdrop: getComputedStyle(element).backdropFilter,
     texture: getComputedStyle(element, "::before").backgroundImage,
   }));
   expect(dialogMaterial.texture).toContain("repeating-linear-gradient");
-  expect(dialogMaterial.texture).toContain("60px");
-  expect(dialogMaterial.shadow).toContain("0px 0px 44px");
+  expect(dialogMaterial.texture).toContain("radial-gradient");
+  expect(dialogMaterial.texture).toContain("12px");
+  expect(dialogMaterial.shadow).toContain("0px 18px 48px");
+  expect(dialogMaterial.backdrop).toBe("none");
   await expect(dialog).toHaveCSS("width", "960px");
   const setupPrimaryAction = dialog.getByRole("button", { name: "继续", exact: true });
   await expect(setupPrimaryAction).toHaveCSS("width", "196px");
