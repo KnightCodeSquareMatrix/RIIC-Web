@@ -13,6 +13,8 @@ async function personaControl(page: Page, name: string) {
 const savedUpload = { version: 1, id: "upload-existing", name: "原有人格", content: "原来的自定义人格内容", description: "保留上传内容" };
 
 async function prepare(page: Page, available = true) {
+  // Preserve the authored rendering budget for the existing pixel assertions.
+  await page.addInitScript(() => localStorage.setItem("riic.plush.performance.v1", "quality"));
   await mockApis(page);
   await page.route("**/api/account/data-consent", route => route.fulfill({ json: { success: true, data: { current: false, cloudSyncEnabled: false } } }));
   await page.route("**/api/billing", route => route.fulfill({ json: { data: { wallet: { totalPoints: 100 } } } }));
@@ -51,7 +53,7 @@ for (const mobile of [false, true]) {
     const card = page.locator('[data-persona-card="silverash"]');
     await expect(card).toHaveCSS("--dialogue-accent", "#84bfff");
     await expect(card.locator("[data-silverash-fur-avatar]")).toHaveAttribute("data-fur-ready", "true");
-    await expect(card.locator("img")).toHaveCount(0);
+    await expect(card.locator("img:visible")).toHaveCount(0);
     await card.getByRole("button", { name: "使用银灰" }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
     await expect(page.locator("[data-agent-chat]")).toHaveCSS("--dialogue-accent", "#84bfff");
@@ -389,6 +391,7 @@ for (const mobile of [false, true]) {
 
 test("Mountain keeps a usable SVG fallback without WebGL", async ({ page }) => {
   await prepare(page);
+  await page.route("**/images/plush/*.webp", route => route.abort());
   await page.addInitScript(() => {
     localStorage.setItem("riic.agent.persona.selection.v1", "mountain");
     const original = HTMLCanvasElement.prototype.getContext;
@@ -401,6 +404,7 @@ test("Mountain keeps a usable SVG fallback without WebGL", async ({ page }) => {
   await (await personaControl(page, "人格卡：山")).click();
   const avatar = page.locator('[data-persona-card="mountain"] [data-fur-avatar="mountain"]');
   await avatar.scrollIntoViewIfNeeded();
+  await expect(avatar).toHaveAttribute("data-fur-performance", "static");
   await expect(avatar).toHaveAttribute("data-fur-ready", "false");
   await expect(avatar.locator("[data-mountain-fallback]")).toBeVisible();
   await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
@@ -422,6 +426,7 @@ test("Mountain missing private card blocks sending and allows another persona", 
 
 test("Saileach has a usable SVG fallback without WebGL", async ({ page }) => {
   await prepare(page);
+  await page.route("**/images/plush/*.webp", route => route.abort());
   await page.addInitScript(() => {
     localStorage.setItem("riic.agent.persona.selection.v1", "saileach");
     const original = HTMLCanvasElement.prototype.getContext;
@@ -434,6 +439,7 @@ test("Saileach has a usable SVG fallback without WebGL", async ({ page }) => {
   await (await personaControl(page, "人格卡：琴柳")).click();
   const avatar = page.locator('[data-persona-card="saileach"] [data-fur-avatar="saileach"]');
   await avatar.scrollIntoViewIfNeeded();
+  await expect(avatar).toHaveAttribute("data-fur-performance", "static");
   await expect(avatar).toHaveAttribute("data-fur-ready", "false");
   await expect(avatar.locator("[data-saileach-fallback]")).toBeVisible();
   await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
@@ -442,6 +448,7 @@ test("Saileach has a usable SVG fallback without WebGL", async ({ page }) => {
 
 test("Exusiai retains a halo and usable chat without WebGL", async ({ page }) => {
   await prepare(page);
+  await page.route("**/images/plush/*.webp", route => route.abort());
   await page.addInitScript(() => {
     localStorage.setItem("riic.agent.persona.selection.v1", "exusiai");
     const original = HTMLCanvasElement.prototype.getContext;
@@ -454,6 +461,7 @@ test("Exusiai retains a halo and usable chat without WebGL", async ({ page }) =>
   await (await personaControl(page, "人格卡：能天使")).click();
   const avatar = page.locator('[data-persona-card="exusiai"] [data-fur-avatar="exusiai"]');
   await avatar.scrollIntoViewIfNeeded();
+  await expect(avatar).toHaveAttribute("data-fur-performance", "static");
   await expect(avatar).toHaveAttribute("data-fur-ready", "false");
   await expect(avatar.locator("[data-fur-fallback]")).toBeVisible();
   await expect(avatar.locator('[data-plush-halo]')).toBeVisible();
@@ -465,6 +473,7 @@ test("Exusiai retains a halo and usable chat without WebGL", async ({ page }) =>
 
 test("SilverAsh keeps its gray and white silhouette when WebGL is unavailable", async ({ page }) => {
   await prepare(page);
+  await page.route("**/images/plush/*.webp", route => route.abort());
   await page.addInitScript(() => {
     localStorage.setItem("riic.agent.persona.selection.v1", "silverash");
     const original = HTMLCanvasElement.prototype.getContext;
@@ -476,6 +485,7 @@ test("SilverAsh keeps its gray and white silhouette when WebGL is unavailable", 
   await page.goto("/agent");
   await (await personaControl(page, "人格卡：银灰")).click();
   const silverash = page.locator('[data-persona-card="silverash"] [data-silverash-fur-avatar]');
+  await expect(silverash).toHaveAttribute("data-fur-performance", "static");
   await expect(silverash.locator("[data-fur-fallback]")).toBeVisible();
   await expect(silverash).toHaveAttribute("data-fur-ready", "false");
   await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();

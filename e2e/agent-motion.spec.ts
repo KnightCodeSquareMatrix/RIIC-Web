@@ -2,6 +2,8 @@ import { expect, test, type Page } from "@playwright/test";
 import { mockApis } from "./production-readiness.fixture";
 
 async function prepare(page: Page) {
+  // These existing motion regressions exercise continuous high-quality avatars.
+  await page.addInitScript(() => localStorage.setItem("riic.plush.performance.v1", "quality"));
   await mockApis(page);
   await page.route("**/api/account/data-consent", route => route.fulfill({ json: { success: true, data: { current: false, cloudSyncEnabled: false } } }));
   await page.route("**/api/billing", route => route.fulfill({ json: { data: { wallet: { totalPoints: 100 } } } }));
@@ -101,6 +103,16 @@ test(`${variant} animates only the latest reply avatar and settles when stopped`
   const stopped = await avatars.last().locator("canvas").evaluate((canvas: HTMLCanvasElement) => canvas.toDataURL());
   await input.fill("停止后可以继续输入");
   expect(await avatars.last().locator("canvas").evaluate((canvas: HTMLCanvasElement) => canvas.toDataURL())).toBe(stopped);
+  // Claiming and releasing one portrait must not queue unchanged historical
+  // portraits ahead of the user's pointer response on the shared renderer.
+  await expect(avatars.first()).toHaveAttribute("data-fur-motion", "idle");
+  const historicalFrames = await avatars.first().getAttribute("data-fur-frames");
+  await avatars.last().hover({ position: { x: 2, y: 2 } });
+  await expect.poll(async () => Math.abs(Number(await avatars.last().getAttribute("data-fur-yaw")))).toBeGreaterThan(0.03);
+  expect(await avatars.first().getAttribute("data-fur-frames")).toBe(historicalFrames);
+  await input.hover();
+  await expect(avatars.last()).toHaveAttribute("data-fur-motion", "idle");
+  expect(await avatars.first().getAttribute("data-fur-frames")).toBe(historicalFrames);
 });
 }
 
