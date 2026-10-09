@@ -307,6 +307,8 @@ jobs:
           remote_base_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$BASE_BRANCH" --jq '.object.sha')"
           test "$pull_request_base_sha" = "$remote_base_sha"
 
+          echo "base_sha=$remote_base_sha" >> "$GITHUB_OUTPUT"
+
           merge_json="$(gh api --method PUT "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/merge" \
             -f merge_method=squash \
             -f sha="$EXPECTED_HEAD_SHA" \
@@ -330,13 +332,14 @@ jobs:
             --ref "$BASE_BRANCH" \
             -f run_webkit=false \
             -f deploy=true \
-            -f expected_sha="$MERGED_SHA"
+            -f expected_sha="$MERGED_SHA" \
+            -f operator_data_base_sha="${{ steps.merge.outputs.base_sha }}"
           {
             echo "## arkntools 资源已自动合并"
             echo
             echo "- PR: #${{ steps.pull-request.outputs.number }}"
             echo "- main: \`$MERGED_SHA\`"
-            echo "- 已触发完整 main 质量门禁和 production 部署；生产环境审批规则保持生效。"
+            echo "- 已触发 main 干员数据质量门禁和 production 部署；跳过浏览器 E2E，保留资源、静态、单元、数据库、构建和健康检查。"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Report publication failure
@@ -464,6 +467,7 @@ jobs:
           pull_request_base_sha="$(jq -r '.base.sha' <<< "$pr_json")"
           remote_base_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$BASE_BRANCH" --jq '.object.sha')"
           test "$pull_request_base_sha" = "$remote_base_sha"
+          echo "base_sha=$remote_base_sha" >> "$GITHUB_OUTPUT"
           merge_json="$(gh api --method PUT "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/merge" \
             -f merge_method=squash \
             -f sha="$EXPECTED_HEAD_SHA" \
@@ -487,7 +491,8 @@ jobs:
             --ref "$BASE_BRANCH" \
             -f run_webkit=false \
             -f deploy=true \
-            -f expected_sha="$MERGED_SHA"
+            -f expected_sha="$MERGED_SHA" \
+            -f operator_data_base_sha="${{ steps.merge.outputs.base_sha }}"
           echo "develop parity PR #${{ steps.pull-request.outputs.number }} merged at \`$MERGED_SHA\`." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Report develop parity failure
