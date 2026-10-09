@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { RecyclingRoomPlaceholder } from "@/components/RecyclingRoomPlaceholder";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -935,17 +936,7 @@ function InfrastructureTab({ snapshot }: { snapshot: SklandStatusSnapshot }) {
   const { infrastructure } = snapshot;
   const now = useMinuteTimestamp(infrastructure.currentTs);
   const buildingMetrics = useMemo(() => deriveSklandBuildingMetrics(snapshot, now, en), [en, snapshot, now]);
-  const controlRooms = infrastructure.rooms.filter((room) => room.group === "control");
-  const workRooms = infrastructure.rooms.filter((room) => room.group === "trading" || room.group === "manufacture");
-  const powerRooms = infrastructure.rooms.filter((room) => room.group === "power");
-  const primaryFunctionRooms = infrastructure.rooms.filter(
-    (room) => room.group === "meeting" || room.group === "training",
-  );
-  const secondaryFunctionRooms = infrastructure.rooms.filter(
-    (room) => room.group === "hire" || room.group === "processing",
-  );
-  const dormitoryRooms = infrastructure.rooms.filter((room) => room.group === "dormitory");
-  const alignDenseInfrastructureRows = powerRooms.length >= 2 && workRooms.length >= 6 && dormitoryRooms.length >= 4;
+
 
   return (
     <div className="grid gap-7">
@@ -1009,12 +1000,32 @@ function InfrastructureTab({ snapshot }: { snapshot: SklandStatusSnapshot }) {
         </Alert>
       ) : null}
 
+      <SklandInfrastructureLayout rooms={infrastructure.rooms} />
+
+    </div>
+  );
+}
+
+export function SklandInfrastructureLayout({ rooms }: { rooms: SklandInfrastructureRoom[] }) {
+  const intl = useTranslations();
+  const controlRooms = rooms.filter((room) => room.group === "control");
+  const workRooms = rooms.filter((room) => room.group === "trading" || room.group === "manufacture");
+  const powerRooms = rooms.filter((room) => room.group === "power");
+  const primaryFunctionRooms = rooms.filter(
+    (room) => room.group === "meeting" || room.group === "training",
+  );
+  const secondaryFunctionRooms = rooms.filter(
+    (room) => room.group === "hire" || room.group === "processing",
+  );
+  const dormitoryRooms = rooms.filter((room) => room.group === "dormitory");
+  const alignDenseInfrastructureRows = powerRooms.length >= 2 && workRooms.length >= 6 && dormitoryRooms.length >= 4;
+  return (
       <section aria-labelledby="skland-compact-layout-title">
         <div className="mb-3 flex min-w-0 items-end justify-between gap-3 border-b border-border/70 pb-3">
           <h3 id="skland-compact-layout-title" className="min-w-0 text-lg font-semibold tracking-[-0.025em]">
             {intl("components_pages_SklandStatus.currentInfrastructure")}
           </h3>
-          <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{infrastructure.rooms.length} {intl("components_pages_SklandStatus.facilities")}</span>
+          <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{rooms.length} {intl("components_pages_SklandStatus.facilities")}</span>
         </div>
 
         <div
@@ -1027,7 +1038,7 @@ function InfrastructureTab({ snapshot }: { snapshot: SklandStatusSnapshot }) {
           >
             {controlRooms.map((room) => <RoomCard key={room.key} room={room} />)}
 
-            {workRooms.length ? <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+            {workRooms.length ? <div className="grid min-w-0 flex-1 gap-3 sm:grid-cols-2">
               {workRooms.map((room) => <RoomCard key={room.key} room={room} />)}
             </div> : null}
 
@@ -1040,11 +1051,10 @@ function InfrastructureTab({ snapshot }: { snapshot: SklandStatusSnapshot }) {
             className={`flex min-w-0 flex-col gap-3 ${alignDenseInfrastructureRows ? "skland-dense-auxiliary-column" : "xl:justify-between"}`}
             data-skland-compact-column="auxiliary"
           >
-            {primaryFunctionRooms.length || secondaryFunctionRooms.length ? <div className="skland-auxiliary-grid min-w-0">
-              <div className="skland-auxiliary-column skland-auxiliary-primary">
+            {primaryFunctionRooms.length || secondaryFunctionRooms.length ? <div className="compact-auxiliary-container min-w-0">
+              <div className="compact-auxiliary-grid" data-skland-functional-rooms>
                 {primaryFunctionRooms.map((room) => <RoomCard key={room.key} room={room} />)}
-              </div>
-              <div className="skland-auxiliary-column skland-auxiliary-secondary">
+                <RecyclingRoomPlaceholder />
                 {secondaryFunctionRooms.map((room) => <RoomCard key={room.key} room={room} />)}
               </div>
             </div> : null}
@@ -1053,8 +1063,6 @@ function InfrastructureTab({ snapshot }: { snapshot: SklandStatusSnapshot }) {
           </div>
         </div>
       </section>
-
-    </div>
   );
 }
 

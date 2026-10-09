@@ -730,9 +730,10 @@ test("plan completion reveals status, metrics, and schedule once without resetti
   const auxiliaryGrid = compactView.locator(".compact-auxiliary-grid");
   await expect.poll(() => auxiliaryGrid.evaluate((element) => ({
     columns: getComputedStyle(element).gridTemplateColumns.split(" ").length,
-    rows: new Set(Array.from(element.children).map((child) => child.getBoundingClientRect().y)).size,
+    leftRows: new Set(Array.from(element.querySelectorAll(':scope > [data-room-group="meeting"], :scope > [data-room-group="training"], :scope > [data-room-group="recycling"]')).map((child) => child.getBoundingClientRect().y)).size,
+    rightRows: new Set(Array.from(element.querySelectorAll(':scope > [data-room-group="hire"], :scope > [data-room-group="processing"]')).map((child) => child.getBoundingClientRect().y)).size,
     fits: element.scrollWidth <= element.clientWidth + 1,
-  }))).toEqual({ columns: 2, rows: 2, fits: true });
+  }))).toEqual({ columns: 2, leftRows: 3, rightRows: 2, fits: true });
   for (const group of ["hire", "processing"]) {
     const avatar = auxiliaryGrid.locator(`[data-room-group="${group}"] .infra-operator-slot`).first();
     await expect.poll(() => avatar.evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThanOrEqual(64);
