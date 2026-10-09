@@ -588,15 +588,21 @@ test("asset synchronization isolates untrusted generation from repository write 
   assert.doesNotMatch(publish, /npm (?:ci|run)|node scripts\//);
 });
 
-test("mastery generated data follows every managed-resource publication and parity gate", async () => {
+test("mastery data and the full fixture follow every managed-resource publication and parity gate", async () => {
   const workflow = await readRepoFile(".github/workflows/sync-arkntools-assets.yml");
-  assert.match(workflow, /npm run assets:mastery -- \.tmp\/arknights-game-resource\/gamedata\/excel\/character_table\.json/);
+  assert.match(workflow, /npm run assets:mastery -- \.tmp\/arknights-game-data\/zh_CN\/gamedata\/excel\/character_table\.json --game-source-sha=/);
+  assert.match(workflow, /game_sha=\$\(git -C \.tmp\/arknights-game-data rev-parse HEAD\)/);
+  assert.match(workflow, /\/assets\/img\/avatar/);
+  assert.match(workflow, /\/item\/AP_BASE\.png/);
   const guards = workflow.match(/public\/images\/operator-portraits\/\*\|[^\n]+;;/g) ?? [];
   assert.equal(guards.length, 4);
-  for (const guard of guards) assert.match(guard, /\|src\/generated\/mastery-data\.json\) ;;/);
+  for (const guard of guards) assert.match(guard, /\|src\/generated\/mastery-data\.json\|fixtures\/operbox_full_e2\.json\) ;;/);
   const regularFileChecks = workflow.match(/git ls-files -s --[^\n]+/g) ?? [];
   assert.equal(regularFileChecks.length, 3);
-  for (const check of regularFileChecks) assert.ok(check.includes("src/generated/mastery-data.json"));
+  for (const check of regularFileChecks) {
+    assert.ok(check.includes("src/generated/mastery-data.json"));
+    assert.ok(check.includes("fixtures/operbox_full_e2.json"));
+  }
   assert.match(workflow, /git restore --source[^\n]+[\s\S]*?src\/generated\/arkntools \\\n\s+src\/generated\/mastery-data\.json/);
 });
 
