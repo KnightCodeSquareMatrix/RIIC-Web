@@ -22,7 +22,7 @@ export function SklandAccountSelect({ accounts, accountId, uid, disabled, onRole
   const selectedValue = `${accountId}:${uid}`;
   const selected = groups.flatMap((group) => group.items).find((item) => item.value === selectedValue) ?? null;
   const filtered = query === null ? groups : groups.map((group) => ({ ...group,
-    items: group.items.filter((item) => item.label.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())),
+    items: group.items.filter((item) => `${item.label} ${item.uid}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())),
   })).filter((group) => group.items.length > 0);
   return <Combobox items={groups} filteredItems={filtered} value={selected} inputValue={query ?? selected?.label ?? ""} disabled={disabled}
     itemToStringValue={(item) => item.label} isItemEqualToValue={(item, current) => item.value === current.value}
