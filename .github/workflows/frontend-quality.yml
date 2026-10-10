@@ -480,6 +480,9 @@ jobs:
       - name: WebKit Skland QR smoke test
         run: npm run test:e2e:webkit:skland-qr
 
+      - name: WebKit gacha number outline regression
+        run: npx playwright test e2e/production-readiness-skland.spec.ts --project=webkit --grep "zero glyph"
+
       - name: Production profile enabled boundary
         run: npm run test:e2e:production-profile
 

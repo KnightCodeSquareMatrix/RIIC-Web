@@ -180,6 +180,13 @@
 
 .poolStatMobile { display: none; }
 
+.poolStatMobile text {
+  /* Bender Bold is registered as 400. WebKit's synthetic bold paints multiple
+     offset contours when this 1px SVG text is scaled up to the mobile header. */
+  font-weight: 400;
+  font-synthesis: none;
+}
+
 @media (forced-colors: active) {
   .poolStatOutline text {
     stroke: CanvasText;
