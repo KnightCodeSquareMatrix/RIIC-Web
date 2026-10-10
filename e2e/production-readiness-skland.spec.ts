@@ -707,6 +707,23 @@ test("mobile gacha keeps the zero glyph the same width in 10 and 40 without chan
     }
     await expect(values.first()).toHaveCSS("font-size", "128px");
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width + 1);
+    if (width === 390) {
+      // WebKit paints synthetic bold as multiple offset contours on scaled SVG
+      // text. Compare the actual pixels with synthesis disabled, within the same
+      // browser, so this catches duplicate outlines without platform snapshots.
+      const outline = values.first().locator("svg").first();
+      const actual = await outline.screenshot({ animations: "disabled" });
+      const mobileText = outline.locator("svg text");
+      const previousSynthesis = await mobileText.evaluate((node) => {
+        const text = node as SVGTextElement;
+        const previous = text.style.fontSynthesis;
+        text.style.fontSynthesis = "none";
+        return previous;
+      });
+      const withoutSynthesis = await outline.screenshot({ animations: "disabled" });
+      expect(actual.equals(withoutSynthesis), "mobile outlines must match the font without synthetic bold").toBe(true);
+      await mobileText.evaluate((node, previous) => { (node as SVGTextElement).style.fontSynthesis = previous; }, previousSynthesis);
+    }
   }
   await page.setViewportSize({ width: 1280, height: 844 });
   for (const value of await values.all()) {
