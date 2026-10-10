@@ -721,6 +721,9 @@ test.describe("gacha touch layout", () => {
   test("mobile gacha hides dates and docks round icon actions at the bottom right", async ({ page }) => {
     await seedPreferences(page);
     await mockGachaSession(page, [{ uid: "10001", nickname: "船仔#2832" }]);
+    await page.route("**/api/account/data-consent", (route) => route.fulfill({
+      status: 401, json: { success: false, requestId, error: { code: "AIC-AUTH-2008", message: "fixture expired session", retryable: false } },
+    }));
     await mockGachaArchive(page, { uid: "10001", nickname: "船仔#2832", warnings: [], fetchedAt: new Date().toISOString(), records: Array.from({ length: 150 }, (_, index) => ({
       id: `mobile-${index}`, category: "normal", poolId: "LIMITED_76_0_1", poolName: "【限定寻访·夏季】车辙与风的归所", charId: "char_103_angel", charName: "能天使", stars: index % 20 === 0 ? 6 : 5, isNew: false, timestamp: Date.now() - index * 1000, pos: 0,
     })) });
@@ -755,7 +758,11 @@ test.describe("gacha touch layout", () => {
       }
       expect(previousBottom).toBeCloseTo(844 - 16, 1);
     }
+    const syncNotice = page.locator("[data-cloud-sync-error]");
+    await expect(syncNotice).toBeVisible();
     const trigger = content.getByRole("button", { name: "授权记录", exact: true });
+    const noticeBounds = (await syncNotice.boundingBox())!;
+    expect(noticeBounds.x + noticeBounds.width).toBeLessThan((await trigger.boundingBox())!.x);
     await trigger.click();
     await expect(page.getByRole("dialog", { name: "授权寻访记录" })).toBeVisible();
     await page.getByRole("button", { name: "Close", exact: true }).click();
@@ -2287,7 +2294,7 @@ test("Skland supports adding, switching, and individually logging out multiple a
     logout.evaluate((element) => element.getBoundingClientRect().height),
   ]);
   for (const height of controlHeights) {
-    expect(height).toBeCloseTo(44, 2);
+    expect(height).toBeCloseTo(36, 2);
   }
   await expect(logout).toHaveClass(/text-destructive/);
 

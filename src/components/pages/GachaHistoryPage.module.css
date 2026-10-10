@@ -188,6 +188,8 @@
 
 @media (max-width: 639px) {
   .page [data-skland-synced-at], .page [data-gacha-record-start] { display: none; }
+  /* Keep cloud-sync notices and their actions clear of the floating toolbar. */
+  :global(body):has(.page) :global([data-cloud-sync-error]) { right: calc(5rem + env(safe-area-inset-right, 0px)); }
   .page [data-status-center-actions] { display: contents; }
   .actionToolbar { position: fixed; z-index: 30; right: calc(1rem + env(safe-area-inset-right, 0px)); bottom: calc(1rem + env(safe-area-inset-bottom, 0px)); flex-direction: column; flex-wrap: nowrap; width: auto; margin: 0; gap: .5rem; }
   .toolbarAction { width: 48px; height: 48px; padding: 0; margin: 0; border-radius: 50% !important; box-shadow: 0 3px 12px rgb(0 0 0 / .16); }
