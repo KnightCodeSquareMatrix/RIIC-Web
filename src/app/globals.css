@@ -106,6 +106,7 @@
     --infra-room-shadow-soft: oklch(0.12 0.012 220 / 0.12);
     --infra-room-text: oklch(0.97 0.006 220);
     --infra-room-text-muted: oklch(0.82 0.01 220);
+    --surface-fluted-texture: repeating-linear-gradient(90deg, transparent 0, rgb(255 255 255 / .48) 1px, rgb(255 255 255 / .08) 4px, rgb(88 69 12 / .09) 8px, transparent 12px);
     --motion-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
     --motion-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
     --motion-ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
@@ -334,7 +335,7 @@ html.schedule-layout-return::view-transition-new(.schedule-room-entering) {
   height: min(100%, 108px);
   border-bottom-right-radius: inherit;
   background:
-    repeating-linear-gradient(90deg, transparent 0, rgb(255 255 255 / .48) 1px, rgb(255 255 255 / .08) 4px, rgb(88 69 12 / .09) 8px, transparent 12px),
+    var(--surface-fluted-texture),
     radial-gradient(ellipse at 100% 110%, color-mix(in srgb, var(--dialog-accent, #FFD800) 48%, transparent), color-mix(in srgb, var(--dialog-accent, #FFD800) 12%, transparent) 48%, transparent 75%);
   mask-image: radial-gradient(ellipse at 100% 100%, black 8%, rgb(0 0 0 / .7) 36%, transparent 74%);
 }

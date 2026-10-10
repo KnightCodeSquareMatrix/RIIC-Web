@@ -40,6 +40,7 @@ import { SkeletonRouteFallback } from "@/components/ui/skeleton-swap";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { SetupActionButton } from "@/components/setup/SetupActionButton";
 import { Card, CardContent } from "@/components/ui/card";
 import { FluidOrb } from "@/components/ui/fluid-orb";
 import { Input } from "@/components/ui/input";
@@ -319,16 +320,16 @@ export function WebsiteAccountPanel({
             </div>
           )}
           actions={(
-            <Button
+            <SetupActionButton
               type="button"
               variant="outline"
-              className="h-11 w-full sm:w-auto"
+              className="!min-w-0 max-w-full max-md:!h-auto max-md:min-h-11 max-md:whitespace-normal max-md:!px-3 max-md:py-2"
               disabled={busyAction !== null}
               onClick={() => void runAccountAction("signout")}
               data-account-logout
             >
               <LogOut />{busyAction === "signout" ? (intl("components_auth_WebsiteAccountPanel.signingOut")) : (intl("components_auth_WebsiteAccountPanel.signOutOnThisDevice"))}
-            </Button>
+            </SetupActionButton>
           )}
         />
 
