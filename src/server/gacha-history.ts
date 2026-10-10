@@ -6,6 +6,9 @@ import type { GachaHistory, GachaRecord } from "@/gacha-history";
 import { mergeGachaRecords, parseGachaRecord } from "@/gacha-history";
 import { DeviceIdCache } from "./skland/device-id-cache";
 import { PublicApiError } from "./api-contract";
+import { recentSklandOAuth } from "./skland/recent-oauth";
+import type { SklandSessionPayload } from "./skland/session";
+import { classifySklandUpstreamError } from "./skland/upstream-error";
 
 const BINDING_ORIGIN = "https://binding-api-account-prod.hypergryph.com";
 const GAME_ORIGIN = "https://ak.hypergryph.com";
@@ -65,7 +68,12 @@ export async function startGachaScan(owner: string) {
 }
 
 async function exchangeRoles(client: Client, accountToken: string): Promise<Role[]> {
-  const grant = object(await client.collections.hypergryph.grantAuthorizeCode(accountToken, { appCode: APP_CODE, type: 1 }));
+  const grant = object(await client.collections.hypergryph.grantAuthorizeCode(accountToken, { appCode: APP_CODE, type: 1 }).catch((error: unknown) => {
+    if (classifySklandUpstreamError(error) === "AUTH_EXPIRED") {
+      throw new PublicApiError("AIC-AUTH-2008", { message: "寻访授权已失效，请点击“生成二维码”重新授权。" });
+    }
+    throw error;
+  }));
   const oauthToken = String(grant.token ?? "");
   if (!oauthToken) throw new GachaServiceError("明日方舟用户中心未授权寻访记录，请重新扫码确认。");
   const query = new URLSearchParams({ token: oauthToken, appCode: "arknights" });
@@ -121,6 +129,20 @@ export async function pollGachaScan(scanId: string, owner: string) {
 }
 
 export function gachaCookieName() { return COOKIE; }
+
+export async function authorizeGachaFromSkland(owner: string, skland: SklandSessionPayload) {
+  cleanup();
+  const token = skland.accountOAuthToken ?? recentSklandOAuth.get(owner, skland.cred);
+  if (!token) throw new PublicApiError("AIC-AUTH-2008", { message: "当前森空岛登录未保存寻访所需的授权，请点击“生成二维码”完成授权。" });
+  const client = createClient({ timeout: 20_000 });
+  await client.storage.setItem(STORAGE_DID_KEY, skland.dId);
+  const roles = await exchangeRoles(client, token);
+  if (!roles.some((role) => role.uid === skland.selectedUid)) throw new GachaServiceError("寻访授权与当前森空岛角色不一致，请重新扫码。");
+  const sessionId = randomUUID();
+  const session = { owner, roles, expiresAt: Date.now() + SESSION_TTL_MS };
+  sessions.set(sessionId, session);
+  return { sessionId, roles: publicGachaRoles(session), selectedUid: skland.selectedUid };
+}
 
 export function publicGachaRoles(session: Session) {
   return session.roles.map(({ uid, nickname }) => ({ uid, nickname }));

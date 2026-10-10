@@ -18,6 +18,7 @@ const PAGE_CATEGORIES: Record<AppPage, keyof typeof CATEGORY_ACCENTS> = {
   mastery: "progression",
   recruitment: "progression",
   inventory: "progression",
+  gacha: "progression",
   "skill-query": "skills",
   skland: "personal",
   account: "personal",

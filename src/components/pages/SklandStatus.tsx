@@ -1,6 +1,9 @@
 "use client";
 import { localize as localize_components_pages_SklandStatus } from "../../i18n/helpers/components_pages_SklandStatus.ts";
 import { useTranslations, useLocale } from "next-intl";
+import { usePathname } from "next/navigation";
+import Link from "next/link";
+import { sklandTabHref, sklandTabFromPathname } from "@/workbench-routes";
 import { messageRecord } from "@/i18n/translate";
 
 import { lazy, Suspense, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
@@ -10,7 +13,6 @@ import {
   Boxes,
   Building2,
   Check,
-  Clipboard,
   Database,
   DoorOpen,
   HeartPulse,
@@ -28,18 +30,17 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { RecyclingRoomPlaceholder } from "@/components/RecyclingRoomPlaceholder";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { SetupActionButton } from "@/components/setup/SetupActionButton";
+import { SklandAccountSelect } from "@/components/skland/SklandAccountSelect";
+import { SklandPlayerIdentity } from "@/components/skland/SklandPlayerIdentity";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Combobox,
-  ComboboxCollection,
   ComboboxContent,
   ComboboxEmpty,
-  ComboboxGroup,
   ComboboxInput,
   ComboboxItem,
-  ComboboxLabel,
   ComboboxList,
-  ComboboxSeparator,
 } from "@/components/ui/combobox";
 import {
   Dialog,
@@ -51,7 +52,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { RemoteAvatar } from "@/components/ui/remote-avatar";
 const InventoryPage = lazy(() => import("@/components/pages/InventoryPage"));
 import { Skeleton } from "@/components/ui/skeleton";
 import { SkeletonRouteFallback } from "@/components/ui/skeleton-swap";
@@ -73,7 +73,6 @@ import { useGameCatalog } from "@/i18n/game-data-client";
 import { operatorPortraitFor, operatorProfessionFor } from "@/operatorPortraits";
 import { roomGridTone } from "@/schedule-view-presentation";
 const SklandLoginPanel = lazy(() => import("@/skland-components").then((module) => ({ default: module.SklandLoginPanel })));
-const GachaHistoryTab = lazy(() => import("@/components/pages/GachaHistoryTab"));
 import {
   deriveSklandBuildingMetrics,
   sklandTradingOrderRewardLabel,
@@ -290,11 +289,6 @@ function useMinuteTimestamp(baseTimestamp: number): number {
     return () => window.clearInterval(timer);
   }, [baseTimestamp]);
   return baseTimestamp + elapsedMinutes * 60;
-}
-
-function maskedUid(uid: string): string {
-  if (uid.length <= 6) return `${uid.slice(0, 2)}••${uid.slice(-2)}`;
-  return `${uid.slice(0, 3)}••••${uid.slice(-3)}`;
 }
 
 function roomLabel(room: SklandInfrastructureRoom, en = false): string {
@@ -1205,8 +1199,8 @@ export function OperatorsTab({ snapshot }: { snapshot: SklandStatusSnapshot }) {
       </div>
 
       <Tabs defaultValue="operators">
-        <div data-yeye-scroll="auto" className="overflow-x-auto pb-1">
-          <TabsList variant="line" className="min-w-max">
+        <div className="min-w-0 pb-1">
+          <TabsList data-yeye-scroll={undefined} variant="line" className="max-w-full flex-wrap">
             <TabsTrigger value="operators" className="h-10 px-4">
               <UsersRound />干员 <span className="font-number">{filteredOperators.length}</span>
             </TabsTrigger>
@@ -1454,8 +1448,8 @@ export function SklandStatus({
   const locale = useLocale();
   const en = locale === "en";
   const [addAccountOpen, setAddAccountOpen] = useState(false);
-  const [loginView, setLoginView] = useState("skland");
-  const [accountQuery, setAccountQuery] = useState<string | null>(null);
+  const pathname = usePathname();
+  const selectedTab = sklandTabFromPathname(pathname) ?? "overview";
   const bindingState = deriveSklandBindingState(bindingSummary, accounts.length);
   if (sessionLoading) return <LoadingState />;
 
@@ -1467,13 +1461,13 @@ export function SklandStatus({
         className="min-h-[calc(100dvh-7rem)] place-items-center py-8 sm:py-12"
         data-skland-page
       >
-        <div className={cn("grid w-full justify-items-center gap-7 text-center", loginView === "gacha" ? "max-w-7xl" : "max-w-4xl")}>
+        <div className="grid w-full max-w-4xl justify-items-center gap-7 text-center">
           <header className="grid max-w-lg gap-3" data-skland-login-copy>
             <p className="text-xs font-medium tracking-wide text-primary">{intl("components_pages_SklandStatus.sklandStatus")}</p>
-            <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">{loginView === "gacha" ? (en ? "Headhunting history" : "寻访记录") : loginTitle}</h2>
-            <p className="text-pretty text-sm leading-6 text-muted-foreground">{loginView === "gacha" ? (en ? "Scan to authorize access to your Arknights headhunting history." : "扫码授权后查看明日方舟寻访记录，无需先连接森空岛状态数据。") : loginDescription}</p>
+            <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">{loginTitle}</h2>
+            <p className="text-pretty text-sm leading-6 text-muted-foreground">{loginDescription}</p>
             <p className="text-xs leading-5 text-muted-foreground/80">
-              {loginView === "gacha" ? (en ? "Credentials stay in server memory for one hour" : "寻访凭证仅在服务端内存保留一小时") : intl("components_pages_SklandStatus.credentialsStayInThisBrowserAndExpireAfter7")}
+              {intl("components_pages_SklandStatus.credentialsStayInThisBrowserAndExpireAfter7")}
             </p>
           </header>
           {error ? (
@@ -1481,20 +1475,9 @@ export function SklandStatus({
               <AlertDescription>{error.message}{intl("components_pages_SklandStatus.label", { code: error.code })}</AlertDescription>
             </Alert>
           ) : null}
-          <Tabs value={loginView} onValueChange={setLoginView} className="w-full text-start">
-            <TabsList data-skland-view-tabs>
-              <TabsTrigger value="skland">{en ? "Skland" : "森空岛"}</TabsTrigger>
-              <TabsTrigger value="gacha">{en ? "Headhunting" : "寻访记录"}</TabsTrigger>
-            </TabsList>
-            <TabsContent value="skland" className="pt-5">
-              <Suspense fallback={<Skeleton className="h-80 w-full max-w-4xl" />}>
-                <SklandLoginPanel className="max-w-4xl" configured={configured} disabledReason={disabledReason} onAuthenticated={onAuthenticated} />
-              </Suspense>
-            </TabsContent>
-            <TabsContent value="gacha" className="pt-5">
-              <Suspense fallback={<Skeleton className="h-64 w-full" />}><GachaHistoryTab /></Suspense>
-            </TabsContent>
-          </Tabs>
+          <Suspense fallback={<Skeleton className="h-80 w-full max-w-4xl" />}>
+            <SklandLoginPanel className="max-w-4xl" configured={configured} disabledReason={disabledReason} onAuthenticated={onAuthenticated} />
+          </Suspense>
         </div>
       </StatusCenterPage>
     );
@@ -1540,138 +1523,40 @@ export function SklandStatus({
 
   if (!snapshot || !activeAccount) return <LoadingState />;
 
-  const selectionGroups = accounts.map((account, accountIndex) => {
-    const selectedRole = account.roles.find((role) => role.uid === account.selectedUid) ?? account.roles[0];
-    return {
-      value: account.accountId,
-      label: `${intl("components_pages_SklandStatus.sklandAccount")} ${accountIndex + 1}${selectedRole ? ` · ${selectedRole.nickname}` : ""}`,
-      items: account.roles.map((role) => ({
-        value: `${account.accountId}:${role.uid}`,
-        label: `${role.nickname} · ${role.channelName}`,
-        accountId: account.accountId,
-        uid: role.uid,
-      })),
-    };
-  });
-  const selectionItems = selectionGroups.flatMap((group) => group.items);
-  const selectedValue = activeAccountId ? `${activeAccountId}:${snapshot.player.uid}` : "";
-  const selectedItem = selectionItems.find((item) => item.value === selectedValue) ?? null;
 
   return (
     <StatusCenterPage className="pb-0 sm:pb-0" data-skland-page>
       <StatusCenterHeader
         data-ui-number-font
-        identity={(
-          <div className="flex min-w-0 items-center gap-4">
-            <RemoteAvatar
-              src={snapshot.player.avatarUrl}
-              alt={intl("components_pages_SklandStatus.sSklandAvatar", { nickname: snapshot.player.nickname })}
-              pixelSize={56}
-              className="size-14 rounded-xl ring-1 ring-foreground/10"
-              imageClassName="rounded-xl"
-              loadingFallback={<Skeleton className="size-full rounded-xl" />}
-              emptyFallback={(
-                <div
-                className="grid size-14 shrink-0 place-items-center rounded-xl bg-primary text-lg font-semibold text-primary-foreground"
-                role="img"
-                aria-label={intl("components_pages_SklandStatus.sSklandAvatar", { nickname: snapshot.player.nickname })}
-              >
-                {snapshot.player.nickname.slice(0, 1)}
-                </div>
-              )}
-            />
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="truncate text-2xl font-semibold tracking-tight">{snapshot.player.nickname}</h2>
-                {snapshot.player.level !== null ? <Badge variant="secondary">Lv.{snapshot.player.level}</Badge> : null}
-              </div>
-              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                <span>{snapshot.player.channelName}</span>
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-1 rounded-sm hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                  onClick={() => onCopyUid(snapshot.player.uid)}
-                aria-label={intl("components_pages_SklandStatus.copyFullUid")}
-                >
-                  UID {maskedUid(snapshot.player.uid)} <Clipboard className="size-3" />
-                </button>
-                <span>{intl("components_pages_SklandStatus.synced2")} {formatDateTime(snapshot.infrastructure.storeTs, en)}</span>
-              </div>
-            </div>
-          </div>
-        )}
+        identity={<SklandPlayerIdentity player={snapshot.player} syncedAt={snapshot.infrastructure.storeTs} onCopyUid={onCopyUid} />}
         actions={(
-          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
+          <div className="flex flex-wrap items-center justify-end gap-2">
           <div
-              className="col-span-2 h-11 w-full sm:w-56"
+              className="h-11 w-full sm:h-9 sm:w-64"
             data-skland-account-select
           >
-            <Combobox
-              items={selectionGroups}
-              value={selectedItem}
-              inputValue={accountQuery ?? selectedItem?.label ?? ""}
-              disabled={busy}
-              itemToStringValue={(item) => item.label}
-              isItemEqualToValue={(item, current) => item.value === current.value}
-              filter={(item, query) => item.label.toLocaleLowerCase("zh-CN").includes(query.trim().toLocaleLowerCase("zh-CN"))}
-              autoHighlight
-              onInputValueChange={(inputValue) => setAccountQuery(inputValue)}
-              onOpenChange={(open) => {
-                if (!open) setAccountQuery(null);
-              }}
-              onValueChange={(selection) => {
-                if (selection && selection.value !== selectedValue) {
-                  setAccountQuery(null);
-                  void onRoleChange(selection.accountId, selection.uid);
-                }
-              }}
-            >
-              <ComboboxInput
-                className="h-full w-full"
-                aria-label={intl("components_pages_SklandStatus.selectAccountAndCharacter")}
-                placeholder={intl("components_pages_SklandStatus.searchAccountsAndCharacters")}
-              />
-              <ComboboxContent>
-                <ComboboxEmpty>{intl("components_pages_SklandStatus.noMatchingAccountOrCharacter")}</ComboboxEmpty>
-                <ComboboxList>
-                  {(group, groupIndex) => (
-                    <ComboboxGroup key={group.value} items={group.items}>
-                      {groupIndex > 0 ? <ComboboxSeparator /> : null}
-                      <ComboboxLabel>{group.label}</ComboboxLabel>
-                      <ComboboxCollection>
-                        {(item) => (
-                          <ComboboxItem key={item.value} value={item}>
-                            {item.label}
-                          </ComboboxItem>
-                        )}
-                      </ComboboxCollection>
-                    </ComboboxGroup>
-                  )}
-                </ComboboxList>
-              </ComboboxContent>
-            </Combobox>
+            <SklandAccountSelect accounts={accounts} accountId={activeAccountId} uid={snapshot.player.uid} disabled={busy} onRoleChange={(accountId, uid) => { void onRoleChange(accountId, uid); }} />
           </div>
-            <Button
+            <SetupActionButton
               type="button"
-              className="h-11"
-            variant="outline"
+              className="!min-w-0 max-w-full max-md:!h-auto max-md:min-h-11 max-md:whitespace-normal max-md:!px-3 max-md:py-2"
             disabled={busy || accounts.length >= 5}
             title={accounts.length >= 5 ? (intl("components_pages_SklandStatus.upTo5SklandAccounts")) : undefined}
             onClick={() => setAddAccountOpen(true)}
             data-skland-add-account
           >
             <UserPlus />{intl("components_pages_SklandStatus.addAccount")}
-            </Button>
-            <Button
+            </SetupActionButton>
+            <SetupActionButton
               type="button"
-              className="h-11"
-            variant="destructive"
+              className="!min-w-0 max-w-full text-muted-foreground hover:text-destructive max-md:!h-auto max-md:min-h-11 max-md:whitespace-normal max-md:!px-3 max-md:py-2"
+            variant="ghost"
             disabled={busy}
             onClick={() => void onLogout()}
             data-skland-logout
           >
             <LogOut />{intl("components_pages_SklandStatus.signOut2")}
-            </Button>
+            </SetupActionButton>
           </div>
         )}
       />
@@ -1725,14 +1610,13 @@ export function SklandStatus({
         </Alert>
       ) : null}
 
-      <Tabs defaultValue="overview">
+      <Tabs value={selectedTab}>
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-3" data-skland-view-header>
-          <div data-yeye-scroll="auto" className="-mx-3 min-w-0 overflow-x-auto overflow-y-hidden px-3 pb-1">
-            <TabsList className="min-w-max" data-skland-view-tabs>
-              <TabsTrigger value="overview">{intl("components_pages_SklandStatus.overview")}</TabsTrigger>
-              <TabsTrigger value="inventory">{en ? "Backpack" : "背包"}</TabsTrigger>
-              <TabsTrigger value="gacha">{en ? "Headhunting" : "寻访记录"}</TabsTrigger>
-              <TabsTrigger value="infrastructure">{intl("components_pages_SklandStatus.infrastructure")}</TabsTrigger>
+          <div className="min-w-0 max-w-full pb-1">
+            <TabsList data-yeye-scroll={undefined} className="max-w-full flex-wrap" data-skland-view-tabs>
+              <TabsTrigger value="overview" nativeButton={false} render={<Link href={sklandTabHref("overview")} scroll={false} />}>{intl("components_pages_SklandStatus.overview")}</TabsTrigger>
+              <TabsTrigger value="inventory" nativeButton={false} render={<Link href={sklandTabHref("inventory")} scroll={false} />}>{en ? "Backpack" : "背包"}</TabsTrigger>
+              <TabsTrigger value="infrastructure" nativeButton={false} render={<Link href={sklandTabHref("infrastructure")} scroll={false} />}>{intl("components_pages_SklandStatus.infrastructure")}</TabsTrigger>
             </TabsList>
           </div>
           <LayoutSyncControl
@@ -1750,9 +1634,6 @@ export function SklandStatus({
         </TabsContent>
         <TabsContent value="inventory" className="pt-5">
           <Suspense fallback={<Skeleton className="h-64 w-full" />}><InventoryPage /></Suspense>
-        </TabsContent>
-        <TabsContent value="gacha" className="pt-5">
-          <Suspense fallback={<Skeleton className="h-64 w-full" />}><GachaHistoryTab uid={snapshot.player.uid} /></Suspense>
         </TabsContent>
       </Tabs>
 

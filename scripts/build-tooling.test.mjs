@@ -318,7 +318,7 @@ test("CI gates releases on Chromium and a WebKit Skland smoke test, then schedul
   assert.doesNotMatch(workflow, /^\s*pull_request\s*:/m);
   assert.match(workflow, /cancel-in-progress: false/);
   assert.equal(readinessSpecs.length, 4);
-  assert.equal(readinessTestCount, 104);
+  assert.equal(readinessTestCount, 117);
   assert.equal(e2eFiles.includes("production-readiness.spec.ts"), false);
   assert.match(playwrightConfig, /fullyParallel: true/);
   assert.match(playwrightConfig, /workers: process\.env\.CI \? 2 : undefined/);
@@ -591,7 +591,7 @@ test("asset synchronization isolates untrusted generation from repository write 
   assert.doesNotMatch(publish, /npm (?:ci|run)|node scripts\//);
 });
 
-test("mastery data and the full fixture follow every managed-resource publication and parity gate", async () => {
+test("mastery, gacha UP data and the full fixture follow every managed-resource publication and parity gate", async () => {
   const workflow = await readRepoFile(".github/workflows/sync-arkntools-assets.yml");
   assert.match(workflow, /npm run assets:mastery -- \.tmp\/arknights-game-data\/zh_CN\/gamedata\/excel\/character_table\.json --game-source-sha=/);
   assert.match(workflow, /game_sha=\$\(git -C \.tmp\/arknights-game-data rev-parse HEAD\)/);
@@ -601,14 +601,22 @@ test("mastery data and the full fixture follow every managed-resource publicatio
   assert.equal((workflow.match(/-f operator_data_base_sha="\$\{\{ steps\.merge\.outputs\.base_sha \}\}"/g) ?? []).length, 2);
   const guards = workflow.match(/public\/images\/operator-portraits\/\*\|[^\n]+;;/g) ?? [];
   assert.equal(guards.length, 4);
-  for (const guard of guards) assert.match(guard, /\|src\/generated\/mastery-data\.json\|fixtures\/operbox_full_e2\.json\) ;;/);
+  for (const guard of guards) assert.match(guard, /\|src\/generated\/mastery-data\.json\|src\/generated\/gacha-up\.json\|fixtures\/operbox_full_e2\.json\) ;;/);
   const regularFileChecks = workflow.match(/git ls-files -s --[^\n]+/g) ?? [];
   assert.equal(regularFileChecks.length, 3);
   for (const check of regularFileChecks) {
     assert.ok(check.includes("src/generated/mastery-data.json"));
+    assert.ok(check.includes("src/generated/gacha-up.json"));
     assert.ok(check.includes("fixtures/operbox_full_e2.json"));
   }
   assert.match(workflow, /git restore --source[^\n]+[\s\S]*?src\/generated\/arkntools \\\n\s+src\/generated\/mastery-data\.json/);
+  const generateStep = workflow.slice(workflow.indexOf("      - name: Generate and validate assets"), workflow.indexOf("      - name: Run pre-PR quality gates"));
+  assert.ok(generateStep.indexOf("npm run assets:gacha-up") > generateStep.indexOf("npm run assets:sync:arkntools"));
+  assert.match(workflow, /git status --porcelain --[^\n]*src\/generated\/gacha-up\.json/);
+  assert.match(workflow, /git add --[^\n]*src\/generated\/gacha-up\.json/);
+  assert.match(workflow, /src\/generated\/gacha-up\.json \\\n\s+fixtures\/operbox_full_e2\.json/);
+  assert.match(workflow, /git show HEAD:src\/generated\/gacha-up\.json/);
+  assert.match(workflow, /--before-gacha-up "\$RUNNER_TEMP\/gacha-up-before\.json"/);
 });
 
 test("CI browser jobs use the matching pinned Playwright image without runtime apt installs", async () => {

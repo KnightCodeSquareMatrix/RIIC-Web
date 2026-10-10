@@ -111,6 +111,8 @@ test("managed operator updates keep core checks, build and deploy without browse
     ["src/generated/arkntools/operator-catalog.json", "public/images/operator-portraits/393_toledo.webp", "fixtures/operbox_full_e2.json"],
     ["src/generated/mastery-data.json", "public/images/building-skills/bskill_recycle_spd&cost1.png", "docs/data.md"],
     ["public/images/products/gold.webp"],
+    ["src/generated/gacha-up.json"],
+    ["src/generated/gacha-up.json", "src/generated/arkntools/operator-catalog.json"],
     [".\\src\\generated\\arkntools\\operator-rarities.json"],
   ]) {
     assertScope(paths, {
@@ -126,6 +128,8 @@ test("data mixed with UI, logic, dependencies, generator changes or unrecognized
     assert.equal(classifyChanges(["src/generated/arkntools/operator-catalog.json", changed]).runBrowser, true, changed);
   }
   assert.equal(classifyChanges(["src/generated/arkntools/operator-catalog.json"], { forceFull: true }).runBrowser, true);
+  assert.equal(classifyChanges(["src/generated/gacha-up.json", "scripts/sync-gacha-up.mjs"]).runBrowser, true);
+  assert.equal(classifyChanges(["src/generated/gacha-up.json", "src/gacha-history.ts"]).runBrowser, true);
 });
 
 test("manual data mode rejects non-data and empty diffs before emitting gate outputs", async (context) => {

@@ -148,6 +148,13 @@
       "when": 1791469108976,
       "tag": "0020_billing_cdk_controls",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1791606703987,
+      "tag": "0021_gacha_archive",
+      "breakpoints": true
     }
   ]
 }
