@@ -27,6 +27,7 @@ const OPERATOR_DATA_FILES = new Set([
   "src/generated/arkntools/term-catalog.json",
   "src/generated/arkntools/source.json",
   "src/generated/mastery-data.json",
+  "src/generated/gacha-up.json",
   "fixtures/operbox_full_e2.json",
 ]);
 

@@ -925,6 +925,7 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
 
     const shouldLoadFullSklandSession = (
       page === "skland"
+      || page === "gacha"
       || initialBoxSource.current === "skland"
       || !initialOperbox.current
       || setupOpen
@@ -1003,9 +1004,9 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (
       !CLIENT_SKLAND_ENABLED
-      || page !== "skland"
+      || (page !== "skland" && page !== "gacha")
       || !activeSklandAccount
-      || sklandStatusSnapshot
+      || sklandStatusSnapshot?.player.uid === activeSklandAccount.selectedUid
       || sklandFullRestorePending.current
       || sklandSessionLoading
       || sklandError
@@ -1069,6 +1070,13 @@ function WorkbenchAppContent({ children }: { children: ReactNode }) {
   }
 
   function applySklandSession(session: SklandSessionData, applyLayoutWhenClean = true) {
+    // Role changes and sign-out are authoritative for this restore generation.
+    // Route renders must not start another restore over the completed mutation.
+    sklandFullRestore.current = {
+      generation: sklandRestoreGuard.current.current(),
+      reloadKey: websiteAuthReloadKey,
+      result: Promise.resolve({ session }),
+    };
     setSklandAccounts(session.accounts);
     setSklandActiveAccountId(session.activeAccountId);
     setSklandBindingSummary(bindingSummaryFromSession(session));

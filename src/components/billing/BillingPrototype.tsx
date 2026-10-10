@@ -6,6 +6,7 @@ import { useLocale } from "next-intl";
 import Link from "next/link";
 import { ArrowUpRight, ChevronDown } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { SetupActionButton } from "@/components/setup/SetupActionButton";
 import { Input } from "@/components/ui/input";
 import dialogueStyles from "@/components/agent/beautiful/Dialogue.module.css";
 import styles from "./BillingPrototype.module.css";
@@ -195,7 +196,7 @@ export function BillingPrototype() {
     <section className={containerClass} data-billing-prototype>
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>{heading}<p className="mt-2 text-sm text-muted-foreground">付费计划仅用于助理对话功能，基建计算器的求解功能保持免费。</p><p className="mt-1 text-xs text-muted-foreground">助理对话按 Token 实际用量计费，助理内调用求解工具每次 1 积分 · 金额统一为人民币</p></div>
-        <Link className={buttonVariants({ variant: "outline", className: styles.pill })} href="/agent">返回助理<ArrowUpRight className="size-3.5" /></Link>
+        <SetupActionButton nativeButton={false} variant="outline" className="!min-w-0 max-w-full max-md:!h-auto max-md:min-h-11 max-md:whitespace-normal max-md:!px-3 max-md:py-2" render={<Link href="/agent" />}>返回助理<ArrowUpRight className="size-3.5" /></SetupActionButton>
       </header>
 
       {notice ? <div role="status" className="rounded-xl bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-300">{notice}</div> : null}

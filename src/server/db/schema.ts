@@ -93,6 +93,26 @@ export const sklandBinding = pgTable("skland_binding", {
 
 export const appSchema = pgSchema("app");
 
+// Archival ownership is independent of expiring Skland / gacha credentials.
+export const gachaArchive = appSchema.table("gacha_archive", {
+  uid: text("uid").primaryKey(),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  nickname: text("nickname").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  savedAt: timestamp("saved_at", { withTimezone: true }),
+  warnings: jsonb("warnings").$type<string[]>().default([]).notNull(),
+}, (table) => [index("gacha_archive_user_idx").on(table.userId)]);
+
+export const gachaDraw = appSchema.table("gacha_draw", {
+  uid: text("uid").notNull().references(() => gachaArchive.uid, { onDelete: "cascade" }),
+  drawKey: text("draw_key").notNull(),
+  record: jsonb("record").$type<import("../../gacha-history.ts").GachaRecord>().notNull(),
+  source: text("source").$type<"official" | "browser">().notNull(),
+}, (table) => [
+  uniqueIndex("gacha_draw_uid_key_idx").on(table.uid, table.drawKey),
+  check("gacha_draw_source_check", sql`${table.source} IN ('official', 'browser')`),
+]);
+
 export const releaseNote = appSchema.table("release_note", {
   id: text("id").primaryKey(),
   environment: text("environment").$type<ReleaseEnvironment>().notNull(),

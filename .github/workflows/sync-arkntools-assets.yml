@@ -97,6 +97,7 @@ jobs:
         run: |
           git show HEAD:src/generated/arkntools/operator-catalog.json > "$RUNNER_TEMP/operators-before.json" || printf '[]\n' > "$RUNNER_TEMP/operators-before.json"
           git show HEAD:src/generated/arkntools/building-skill-catalog.json > "$RUNNER_TEMP/skills-before.json" || printf '{}\n' > "$RUNNER_TEMP/skills-before.json"
+          git show HEAD:src/generated/gacha-up.json > "$RUNNER_TEMP/gacha-up-before.json" || printf '{}\n' > "$RUNNER_TEMP/gacha-up-before.json"
 
       - name: Read upstream commit
         id: upstream
@@ -116,6 +117,7 @@ jobs:
           fi
           npm run assets:sync:arkntools -- "${arguments[@]}"
           npm run assets:mastery -- .tmp/arknights-game-data/zh_CN/gamedata/excel/character_table.json --game-source-sha="${{ steps.upstream.outputs.game_sha }}"
+          npm run assets:gacha-up
 
       - name: Run pre-PR quality gates
         run: |
@@ -126,11 +128,11 @@ jobs:
         id: changes
         shell: bash
         run: |
-          if [[ -n "$(git status --porcelain -- public/images/operator-portraits public/images/building-skills public/images/products src/generated/arkntools src/generated/mastery-data.json fixtures/operbox_full_e2.json)" ]]; then
+          if [[ -n "$(git status --porcelain -- public/images/operator-portraits public/images/building-skills public/images/products src/generated/arkntools src/generated/mastery-data.json src/generated/gacha-up.json fixtures/operbox_full_e2.json)" ]]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "No arkntools asset changes for ${{ steps.upstream.outputs.sha }}." >> "$GITHUB_STEP_SUMMARY"
+            echo "No operator asset or gacha UP changes for ${{ steps.upstream.outputs.sha }}." >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Build reviewed publication artifact
@@ -143,9 +145,10 @@ jobs:
           node scripts/arkntools-pr-summary.mjs \
             --before-operators "$RUNNER_TEMP/operators-before.json" \
             --before-skills "$RUNNER_TEMP/skills-before.json" \
+            --before-gacha-up "$RUNNER_TEMP/gacha-up-before.json" \
             > "$publication/pull-request-body.md"
-          git add -- public/images/operator-portraits public/images/building-skills public/images/products src/generated/arkntools src/generated/mastery-data.json fixtures/operbox_full_e2.json
-          if git ls-files -s -- public/images/operator-portraits public/images/building-skills public/images/products src/generated/arkntools src/generated/mastery-data.json fixtures/operbox_full_e2.json \
+          git add -- public/images/operator-portraits public/images/building-skills public/images/products src/generated/arkntools src/generated/mastery-data.json src/generated/gacha-up.json fixtures/operbox_full_e2.json
+          if git ls-files -s -- public/images/operator-portraits public/images/building-skills public/images/products src/generated/arkntools src/generated/mastery-data.json src/generated/gacha-up.json fixtures/operbox_full_e2.json \
             | awk '$1 != "100644" { found = 1 } END { exit found ? 0 : 1 }'; then
             echo "Managed asset paths must contain only regular non-executable files." >&2
             exit 1
@@ -222,13 +225,13 @@ jobs:
           changed_count=0
           while IFS= read -r -d '' changed_path; do
             case "$changed_path" in
-              public/images/operator-portraits/*|public/images/building-skills/*|public/images/products/*|src/generated/arkntools/*|src/generated/mastery-data.json|fixtures/operbox_full_e2.json) ;;
+              public/images/operator-portraits/*|public/images/building-skills/*|public/images/products/*|src/generated/arkntools/*|src/generated/mastery-data.json|src/generated/gacha-up.json|fixtures/operbox_full_e2.json) ;;
               *) echo "Publication artifact changed a forbidden path: $changed_path" >&2; exit 1 ;;
             esac
             changed_count=$((changed_count + 1))
           done < <(git diff --cached --name-only -z)
           (( changed_count > 0 ))
-          if git ls-files -s -- public/images/operator-portraits public/images/building-skills public/images/products src/generated/arkntools src/generated/mastery-data.json fixtures/operbox_full_e2.json \
+          if git ls-files -s -- public/images/operator-portraits public/images/building-skills public/images/products src/generated/arkntools src/generated/mastery-data.json src/generated/gacha-up.json fixtures/operbox_full_e2.json \
             | awk '$1 != "100644" { found = 1 } END { exit found ? 0 : 1 }'; then
             echo "Managed asset paths must contain only regular non-executable files." >&2
             exit 1
@@ -296,7 +299,7 @@ jobs:
           changed_count=0
           while IFS= read -r changed_path; do
             case "$changed_path" in
-              public/images/operator-portraits/*|public/images/building-skills/*|public/images/products/*|src/generated/arkntools/*|src/generated/mastery-data.json|fixtures/operbox_full_e2.json) ;;
+              public/images/operator-portraits/*|public/images/building-skills/*|public/images/products/*|src/generated/arkntools/*|src/generated/mastery-data.json|src/generated/gacha-up.json|fixtures/operbox_full_e2.json) ;;
               *) echo "Resource pull request changed a forbidden path: $changed_path" >&2; exit 1 ;;
             esac
             changed_count=$((changed_count + 1))
@@ -387,6 +390,7 @@ jobs:
             public/images/products \
             src/generated/arkntools \
             src/generated/mastery-data.json \
+            src/generated/gacha-up.json \
             fixtures/operbox_full_e2.json
 
           if git diff --cached --quiet; then
@@ -398,13 +402,13 @@ jobs:
           changed_count=0
           while IFS= read -r -d '' changed_path; do
             case "$changed_path" in
-              public/images/operator-portraits/*|public/images/building-skills/*|public/images/products/*|src/generated/arkntools/*|src/generated/mastery-data.json|fixtures/operbox_full_e2.json) ;;
+              public/images/operator-portraits/*|public/images/building-skills/*|public/images/products/*|src/generated/arkntools/*|src/generated/mastery-data.json|src/generated/gacha-up.json|fixtures/operbox_full_e2.json) ;;
               *) echo "Resource pull request changed a forbidden path: $changed_path" >&2; exit 1 ;;
             esac
             changed_count=$((changed_count + 1))
           done < <(git diff --cached --name-only -z)
           (( changed_count > 0 ))
-          if git ls-files -s -- public/images/operator-portraits public/images/building-skills public/images/products src/generated/arkntools src/generated/mastery-data.json fixtures/operbox_full_e2.json \
+          if git ls-files -s -- public/images/operator-portraits public/images/building-skills public/images/products src/generated/arkntools src/generated/mastery-data.json src/generated/gacha-up.json fixtures/operbox_full_e2.json \
             | awk '$1 != "100644" { found = 1 } END { exit found ? 0 : 1 }'; then
             echo "Managed asset paths must contain only regular non-executable files." >&2
             exit 1
@@ -457,7 +461,7 @@ jobs:
           changed_count=0
           while IFS= read -r changed_path; do
             case "$changed_path" in
-              public/images/operator-portraits/*|public/images/building-skills/*|public/images/products/*|src/generated/arkntools/*|src/generated/mastery-data.json|fixtures/operbox_full_e2.json) ;;
+              public/images/operator-portraits/*|public/images/building-skills/*|public/images/products/*|src/generated/arkntools/*|src/generated/mastery-data.json|src/generated/gacha-up.json|fixtures/operbox_full_e2.json) ;;
               *) echo "Resource pull request changed a forbidden path: $changed_path" >&2; exit 1 ;;
             esac
             changed_count=$((changed_count + 1))
